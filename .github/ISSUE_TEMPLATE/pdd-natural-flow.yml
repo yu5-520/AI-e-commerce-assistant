@@ -1,0 +1,18 @@
+name: 自然流测试
+
+description: 适合低预算、白牌、小商家，先测标题、主图、价格和基础流通性。
+title: "[自然流] "
+labels: ["运营分析"]
+body:
+  - type: textarea
+    id: brief
+    attributes:
+      label: 自然流输入
+      description: 不用填完整上架资料，只写当前最关键的信息。
+      value: |
+        商品是什么：
+        现在卡在哪里：
+        想先测什么：标题 / 主图 / 价格 / SKU
+        已有信息（可空）：标题、主图、售价、竞品、曝光、点击、成交
+    validations:
+      required: true
