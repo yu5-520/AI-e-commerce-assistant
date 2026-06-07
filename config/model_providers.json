@@ -7,9 +7,9 @@
   },
   "deepseek": {
     "type": "openai_compatible",
-    "base_url": "https://api.deepseek.com/v1",
+    "base_url": "https://api.deepseek.com",
     "api_key_env": "DEEPSEEK_API_KEY",
-    "default_model": "deepseek-chat"
+    "default_model": "deepseek-v4-pro"
   },
   "qwen_dashscope": {
     "type": "openai_compatible",
