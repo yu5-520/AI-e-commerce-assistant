@@ -1,21 +1,15 @@
 name: 自然流测试
-about: 轻输入，适合先测标题、主图、价格和基础流通性。
+about: 先测标题、主图、价格和基础流通性。
 title: "[自然流] "
 labels: ["自然流"]
 body:
   - type: textarea
-    id: core
+    id: input
     attributes:
-      label: 最少输入
-      description: 只写商品和当前问题，不需要完整上架资料。
+      label: 自然流轻输入
       value: |
         商品一句话：
         当前问题：
-        想测试方向：标题 / 主图 / 价格 / SKU / 竞品
+        想测试：标题 / 主图 / 价格 / SKU / 竞品
     validations:
       required: true
-  - type: textarea
-    id: optional
-    attributes:
-      label: 可选补充
-      description: 有就填，没有可以
