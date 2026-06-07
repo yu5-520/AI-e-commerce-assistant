@@ -11,4 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python scripts
+      - run: python scripts/pdd_operation_analyzer.py result.md
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+      - run:
