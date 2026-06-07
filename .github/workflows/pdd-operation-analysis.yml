@@ -18,5 +18,10 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_BODY: ${{ github.event.comment.body }}
+          LLM_ENABLED: ${{ vars.LLM_ENABLED }}
+          LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       - run: gh issue comment ${{ github.event.issue.number }} --body-file result.md
         env: {GH_TOKEN: "${{ github.token }}"}
