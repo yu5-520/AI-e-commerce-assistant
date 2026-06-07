@@ -14,6 +14,11 @@ if '强付费' in t:
 elif '爆品' in t:
     mode='hot-product'; name='爆品打造'
 
+next_step=('下一步' in comment) or ('执行包' in comment) or ('生成标题' in comment)
+extra=''
+if next_step and mode=='natural-flow':
+    extra='用户正在请求下一步执行包。必须直接输出10个拼多多风格标题、3套主图文案方向、价格测试建议、观察指标。不要只重复“先测标题和主图”。'
+
 num=r'(\d+(?:\.\d+)?)'
 def pick(keys):
     for k in keys:
@@ -38,8 +43,8 @@ llm_note='## API 大模型状态\n- 未启用 API 大模型，当前输出为确
 llm_result=None
 if llm_enabled():
     p,_,_,m=load_provider()
-    system='你是拼多多电商运营产品助手。严格按输出模板生成结果卡，不要编造缺失数据。'
-    user=f'模式:{name}\n\n输出模板:\n{tpl}\n\n模块说明:\n{mod}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
+    system='你是拼多多电商运营产品助手。严格按输出模板生成可执行结果卡。信息不足时先基于现有信息输出第一版，不要卡住。'
+    user=f'模式:{name}\n\n额外指令:{extra}\n\n输出模板:\n{tpl}\n\n模块说明:\n{mod}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
     try:
         llm_result=chat(system,user)
         llm_note=f'## API 大模型状态\n- 已调用 provider: {p}\n- model: {m}\n'
