@@ -1,26 +1,17 @@
-name: PDD Operation Analysis
-
+name: PDD Analysis
 on:
   issues:
     types: [opened, edited]
-
 permissions:
   contents: read
   issues: write
-
 jobs:
-  analyze:
+  run:
     if: startsWith(github.event.issue.title, '[运营分析]')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Save issue body
-        run: |
-          cat > issue_body.md <<'EOF'
-          ${{ github.event.issue.body }}
-          EOF
-
-      - name: Run analyzer
-        run: python scripts
+      - uses: actions/checkout@v4
+      - run: python scripts/pdd_operation_analyzer.py result.md
+      - run: gh issue comment ${{ github.event.issue.number }} --body-file result.md
+        env:
+          GH_TOKEN: ${{ github.token }}
