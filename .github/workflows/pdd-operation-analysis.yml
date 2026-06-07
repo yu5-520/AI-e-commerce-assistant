@@ -2,11 +2,14 @@ name: PDD
 on:
   issues:
     types: [opened, edited]
+  issue_comment:
+    types: [created]
 permissions:
   contents: read
   issues: write
 jobs:
   x:
+    if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,5 +17,6 @@ jobs:
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
       - run: gh issue comment ${{ github.event.issue.number }} --body-file result.md
         env: {GH_TOKEN: "${{ github.token }}"}
