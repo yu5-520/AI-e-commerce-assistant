@@ -1,0 +1,20 @@
+name: 爆品打造
+
+description: 适合爆品孵化、爆品拆解、流量承接、备货和活动放量前判断。
+title: "[爆品] "
+labels: ["运营分析"]
+body:
+  - type: textarea
+    id: brief
+    attributes:
+      label: 爆品打造输入
+      description: 只写爆品判断需要的信息，不用填完整上架资料。
+      value: |
+        自家商品是什么：
+        参考爆品 / 竞品是什么：
+        想走哪种路线：低价承接 / 差异化升级 / 细分人群
+        是否有备货能力：
+        当前测试数据（可空）：曝光、点击、成交、ROI
+        当前目标：测流通性 / 准备备货 / 活动放量 / 清货复制
+    validations:
+      required: true
