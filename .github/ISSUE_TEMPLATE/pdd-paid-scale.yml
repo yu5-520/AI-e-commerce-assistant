@@ -1,0 +1,20 @@
+name: 强付费放量
+
+description: 适合已有转化基础、有库存、有预算，准备测试投放或放量。
+title: "[强付费] "
+labels: ["运营分析"]
+body:
+  - type: textarea
+    id: brief
+    attributes:
+      label: 强付费输入
+      description: 只写影响投放判断的关键信息，不用填完整商品资料。
+      value: |
+        商品是什么：
+        准备投多少预算：
+        售价 / 成本 / 物流（可空）：
+        库存和发货能力：
+        当前数据（可空）：点击、成交、转化、ROI、退款
+        当前问题：不确定能不能投 / 想放量 / ROI 太低 / 素材不行
+    validations:
+      required: true
