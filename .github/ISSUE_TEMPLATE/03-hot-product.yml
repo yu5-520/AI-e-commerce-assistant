@@ -1,0 +1,18 @@
+name: 爆品打造
+about: 拆解爆品、测试流通性、判断备货和放量。
+title: "[爆品] "
+labels: ["爆品"]
+body:
+  - type: textarea
+    id: input
+    attributes:
+      label: 爆品打造轻输入
+      value: |
+        自家商品：
+        参考爆品/竞品：
+        想走路线：低价承接 / 差异化升级 / 细分人群
+        备货能力：
+        当前数据：
+        目标：
+    validations:
+      required: true
