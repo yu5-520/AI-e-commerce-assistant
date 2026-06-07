@@ -7,11 +7,10 @@ permissions:
   issues: write
 jobs:
   run:
-    if: startsWith(github.event.issue.title, '[运营分析]')
+    if: startsWith(github.event.issue.title, '[自然流]') || startsWith(github.event.issue.title, '[强付费]') || startsWith(github.event.issue.title, '[爆品]')
     runs-on: ubuntu-latest
+    env:
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
     steps:
-      - uses: actions/checkout@v4
-      - run: python scripts/pdd_operation_analyzer.py result.md
-      - run: gh issue comment ${{ github.event.issue.number }} --body-file result.md
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: actions
