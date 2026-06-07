@@ -14,4 +14,6 @@ jobs:
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-      - run
+      - run: gh issue comment ${{ github.event.issue.number }} --body-file result.md
+        env:
+          GH
