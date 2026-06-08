@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.4.0
+Current Version: v0.5.0
 
 ## Version History
 
@@ -8,6 +8,7 @@ Current Version: v0.4.0
 - v0.2.0: Runtime module chain was introduced through `runtime/module_chain.json`.
 - v0.3.0: Version governance layer was added to control AI edits, update logs, and module boundaries.
 - v0.4.0: Feedback flow and knowledge base modules were added for template backflow and reusable operation patterns.
+- v0.5.0: Vector store module and vector retrieval chain were added for future RAG retrieval.
 
 ## Version Rules
 
