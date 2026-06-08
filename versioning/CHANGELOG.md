@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.0 - 2026-06-08
+
+### Added
+- Added `modules/knowledge_base/` for title, image, SKU, price, operation case, and feedback-level knowledge.
+- Added `modules/feedback/` for feedback schema, feedback flow, usage metrics, and effectiveness metrics.
+- Added `runtime/feedback_chain.json` and `runtime/knowledge_retrieval_chain.json`.
+- Added frontend feedback UI schema and backend feedback/knowledge storage contracts.
+- Added sample data folders under `data/feedback_samples/` and `data/knowledge_samples/`.
+
+### Preserved
+- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
+- Existing `scripts/pdd_operation_analyzer.py` remains unchanged in this update.
+- Existing `runtime/module_chain.json` remains the active generation chain.
+
+### Risk
+- Feedback and knowledge modules are structural definitions only; they are not yet connected to runtime generation.
+
 ## v0.3.0 - 2026-06-08
 
 ### Added
