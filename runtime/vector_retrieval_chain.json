@@ -1,0 +1,28 @@
+{
+  "vector_retrieval_chain_version": "0.1.0",
+  "goal": "Retrieve semantically similar reusable ecommerce operation patterns before LLM generation.",
+  "stage": "structure-only",
+  "steps": [
+    "extract_query_keys",
+    "filter_by_metadata",
+    "semantic_vector_search",
+    "rerank_by_business_value",
+    "build_small_context_pack",
+    "send_context_to_llm"
+  ],
+  "input_modules": [
+    "modules/vector_store/embedding_schema.md",
+    "modules/vector_store/metadata_schema.md",
+    "modules/vector_store/chunking_rules.md",
+    "modules/vector_store/retrieval_rules.md",
+    "modules/vector_store/rerank_rules.md"
+  ],
+  "knowledge_sources": [
+    "modules/knowledge_base/title_patterns.md",
+    "modules/knowledge_base/image_patterns.md",
+    "modules/knowledge_base/sku_patterns.md",
+    "modules/knowledge_base/price_patterns.md",
+    "modules/knowledge_base/operation_cases.md"
+  ],
+  "rule": "Vector retrieval is not yet connected to active generation. Do not vectorize raw AI outputs without feedback filtering."
+}
