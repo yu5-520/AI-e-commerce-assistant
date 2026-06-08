@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0 - 2026-06-08
+
+### Added
+- Added `modules/rag/` for RAG design.
+- Added query schema, retrieval pipeline, context pack rules, prompt assembly rules, and fallback rules.
+- Added `runtime/rag_chain.json` to connect runtime modules, knowledge retrieval, vector retrieval, context pack, and LLM prompt assembly.
+
+### Preserved
+- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
+- Existing `scripts/pdd_operation_analyzer.py` remains unchanged in this update.
+- Existing `runtime/module_chain.json` remains the active generation chain.
+- Existing vector, feedback, and knowledge-base modules remain structural definitions.
+
+### Risk
+- RAG chain is a structural definition only; it is not yet connected to runtime generation.
+
 ## v0.5.0 - 2026-06-08
 
 ### Added
