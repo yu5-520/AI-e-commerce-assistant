@@ -1,5 +1,5 @@
 from pathlib import Path
-import os, sys, re
+import os, sys, re, json
 from llm_client import chat, llm_enabled, load_provider
 
 t=os.getenv('ISSUE_TITLE','')
@@ -13,10 +13,27 @@ if '强付费' in t:
 elif '爆品' in t:
     mode='hot-product'; name='爆品打造'
 
-product=re.sub(r'^\s*\[[^\]]+\]\s*','',t).strip()
-if not product:
-    product='未识别商品类型'
+product=re.sub(r'^\s*\[[^\]]+\]\s*','',t).strip() or '未识别商品类型'
 text=f'商品类型/标题输入：{product}\n\nIssue正文：\n{body}\n\n最新评论：\n{comment}'
+
+chain=json.loads(Path('runtime/module_chain.json').read_text(encoding='utf-8'))
+conf=chain.get(mode) or chain['natural-flow']
+
+def read_key(key):
+    p=conf.get(key)
+    if not p:
+        return ''
+    path=Path(p)
+    return path.read_text(encoding='utf-8') if path.exists() else ''
+
+platform=read_key('platform')
+platform_title=read_key('platform_title')
+platform_image=read_key('platform_image')
+mode_doc=read_key('mode')
+input_schema=read_key('input_schema')
+prompt_doc=read_key('prompt')
+tpl=read_key('template').replace('{product}', product)
+frontend_schema=read_key('frontend_schema')
 
 next_step=('下一步' in comment) or ('执行包' in comment) or ('生成标题' in comment)
 extra=''
@@ -40,21 +57,20 @@ if cost is not None and price is not None:
 else:
     finance+='- 成本/售价不足，暂不计算毛利率。\n'
 
-mod=Path(f'docs/modules/{mode}.md').read_text(encoding='utf-8')
-tpl=Path(f'docs/output-templates/{mode}-result.md').read_text(encoding='utf-8')
+module_context='\n\n'.join([x for x in [platform, platform_title, platform_image, mode_doc, input_schema, prompt_doc, frontend_schema] if x])
 base=f'{tpl}\n\n---\n\n{finance}\n'
 
 llm_note='## API 大模型状态\n- 未启用 API 大模型，当前输出为确定性模板。\n'
 llm_result=None
 if llm_enabled():
     p,_,_,m=load_provider()
-    system='你是拼多多电商运营产品助手。严格按输出模板生成可执行结果卡。信息不足时先基于现有信息输出第一版，不要卡住。'
-    user=f'模式:{name}\n商品类型:{product}\n\n额外指令:{extra}\n\n输出模板:\n{tpl}\n\n模块说明:\n{mod}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
+    system='你是拼多多电商运营产品助手。严格按模块链和输出模板生成可执行结果卡。信息不足时先给第一版，不要卡住。'
+    user=f'模式:{name}\n商品类型:{product}\n\n额外指令:{extra}\n\n输出模板:\n{tpl}\n\n模块链上下文:\n{module_context}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
     try:
         llm_result=chat(system,user)
         llm_note=f'## API 大模型状态\n- 已调用 provider: {p}\n- model: {m}\n'
     except Exception as e:
         llm_note=f'## API 大模型状态\n- 调用失败，已回退确定性模板：{type(e).__name__}\n'
 
-res=(llm_result if llm_result else base)+'\n\n---\n\n'+llm_note+'\n## 已读取模块\n'+mod+'\n\n## 本次输入摘要\n'+(text[:900] if text.strip() else '未填写正文')+'\n'
+res=(llm_result if llm_result else base)+'\n\n---\n\n'+llm_note+'\n<details>\n<summary>调试信息</summary>\n\n## 已读取模块\n'+module_context+'\n\n## 本次输入摘要\n'+(text[:900] if text.strip() else '未填写正文')+'\n\n</details>\n'
 Path(out).write_text(res,encoding='utf-8')
