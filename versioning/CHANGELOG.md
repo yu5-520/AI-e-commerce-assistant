@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0 - 2026-06-08
+
+### Added
+- Added `modules/vector_store/` for vector store design.
+- Added embedding schema, metadata schema, chunking rules, retrieval rules, rerank rules, and storage options.
+- Added `runtime/vector_retrieval_chain.json` for future RAG retrieval.
+
+### Preserved
+- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
+- Existing `scripts/pdd_operation_analyzer.py` remains unchanged in this update.
+- Existing `runtime/module_chain.json` remains the active generation chain.
+- Existing feedback and knowledge-base modules remain structural definitions.
+
+### Risk
+- Vector store and retrieval chain are structural definitions only; they are not yet connected to runtime generation.
+
 ## v0.4.0 - 2026-06-08
 
 ### Added
