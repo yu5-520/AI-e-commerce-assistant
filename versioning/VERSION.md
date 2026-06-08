@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.6.0
+Current Version: v0.6.1
 
 ## Version History
 
@@ -10,6 +10,7 @@ Current Version: v0.6.0
 - v0.4.0: Feedback flow and knowledge base modules were added for template backflow and reusable operation patterns.
 - v0.5.0: Vector store module and vector retrieval chain were added for future RAG retrieval.
 - v0.6.0: RAG module and RAG chain were added to connect knowledge base, vector retrieval, context pack, and LLM prompt assembly.
+- v0.6.1: Issue workflow was adjusted so first input directly generates a full result package; follow-up info only improves precision.
 
 ## Version Rules
 
