@@ -1,0 +1,14 @@
+{
+  "runtime_version": "0.3.0",
+  "active_chain": "runtime/module_chain.json",
+  "active_platform": "pinduoduo",
+  "active_modes": [
+    "natural-flow",
+    "paid-growth",
+    "hot-product"
+  ],
+  "active_llm_interface": "openai-compatible",
+  "active_workflow": ".github/workflows/pdd-operation-analysis.yml",
+  "last_verified": "2026-06-08",
+  "notes": "GitHub Issue -> Actions -> DeepSeek/OpenAI-compatible model -> Issue comment is active. Version governance added in v0.3.0."
+}
