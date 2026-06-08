@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.1 - 2026-06-08
+
+### Changed
+- Updated `scripts/pdd_operation_analyzer.py` so the first Issue input directly requests a full executable result package from the LLM.
+- Updated all Issue templates to explain that more detailed input produces clearer output, while light input still generates a first version.
+- Reframed follow-up comments such as “下一步” as refinement/continuation, not as a required second step for first output.
+
+### Preserved
+- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
+- Existing LLM provider configuration remains unchanged.
+- Existing runtime module, RAG, vector, feedback, and knowledge-base structures remain unchanged.
+
+### Risk
+- The first output may be longer because it now directly generates the full execution package instead of waiting for a follow-up command.
+
 ## v0.6.0 - 2026-06-08
 
 ### Added
