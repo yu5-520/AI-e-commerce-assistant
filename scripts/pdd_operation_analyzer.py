@@ -35,10 +35,16 @@ prompt_doc=read_key('prompt')
 tpl=read_key('template').replace('{product}', product)
 frontend_schema=read_key('frontend_schema')
 
-next_step=('下一步' in comment) or ('执行包' in comment) or ('生成标题' in comment)
-extra=''
-if next_step and mode=='natural-flow':
-    extra='用户正在请求下一步执行包。必须围绕商品类型生成10个拼多多风格标题、3套主图文案方向、价格测试建议、观察指标。不要只重复“先测标题和主图”。'
+continue_request=('下一步' in comment) or ('执行包' in comment) or ('生成标题' in comment) or ('继续' in comment)
+extra='本次必须直接输出完整可执行结果卡。不要把“补充信息”当成阻断条件；信息不足时先按现有信息生成第一版，并在末尾用“补充这些信息会更精准”列出最多3项。用户输入越详细，输出越清晰。'
+if mode=='natural-flow':
+    extra+=' 自然流模式必须包含：拼多多标题测试包、主图文案方向、价格测试建议、观察指标。'
+elif mode=='paid-growth':
+    extra+=' 强付费模式必须包含：放量条件检查、预算节奏、素材方向、ROI警戒线、停投条件。'
+elif mode=='hot-product':
+    extra+=' 爆品打造模式必须包含：爆品结构拆解、流通性测试、差异化承接、备货/清货建议、风险提醒。'
+if continue_request:
+    extra+=' 用户正在继续补充或要求下一步，请基于 Issue 原始输入和最新评论更新/细化结果，而不是重复空泛提示。'
 
 num=r'(\d+(?:\.\d+)?)'
 def pick(keys):
@@ -58,13 +64,13 @@ else:
     finance+='- 成本/售价不足，暂不计算毛利率。\n'
 
 module_context='\n\n'.join([x for x in [platform, platform_title, platform_image, mode_doc, input_schema, prompt_doc, frontend_schema] if x])
-base=f'{tpl}\n\n---\n\n{finance}\n'
+base=f'{tpl}\n\n---\n\n{finance}\n\n## 输出说明\n- 当前为确定性模板回退结果。接入 API 大模型后，会按现有信息直接生成完整执行包。\n- 补充商品卖点、竞品价格、当前数据，会让输出更精准。\n'
 
 llm_note='## API 大模型状态\n- 未启用 API 大模型，当前输出为确定性模板。\n'
 llm_result=None
 if llm_enabled():
     p,_,_,m=load_provider()
-    system='你是拼多多电商运营产品助手。严格按模块链和输出模板生成可执行结果卡。信息不足时先给第一版，不要卡住。'
+    system='你是拼多多电商运营产品助手。严格按模块链和输出模板生成可执行结果卡。第一次输入就直接输出完整结果，不要求用户再输入下一步。信息不足时先给第一版，不要卡住。'
     user=f'模式:{name}\n商品类型:{product}\n\n额外指令:{extra}\n\n输出模板:\n{tpl}\n\n模块链上下文:\n{module_context}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
     try:
         llm_result=chat(system,user)
