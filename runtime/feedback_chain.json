@@ -1,0 +1,27 @@
+{
+  "feedback_chain_version": "0.1.0",
+  "goal": "Collect user usage, execution, and operation effect feedback after AI output.",
+  "steps": [
+    "identify_result_section",
+    "collect_usage_feedback",
+    "collect_execution_feedback",
+    "collect_effect_feedback",
+    "classify_feedback_level",
+    "write_candidate_knowledge",
+    "promote_effective_pattern"
+  ],
+  "input_modules": [
+    "modules/feedback/feedback_schema.md",
+    "modules/feedback/feedback_flow.md",
+    "modules/feedback/usage_metrics.md",
+    "modules/feedback/effectiveness_metrics.md",
+    "modules/knowledge_base/feedback_levels.md"
+  ],
+  "output_modules": [
+    "modules/knowledge_base/title_patterns.md",
+    "modules/knowledge_base/image_patterns.md",
+    "modules/knowledge_base/sku_patterns.md",
+    "modules/knowledge_base/price_patterns.md",
+    "modules/knowledge_base/operation_cases.md"
+  ]
+}
