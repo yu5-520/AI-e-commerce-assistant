@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7.0 - 2026-06-08
+
+### Added
+- Added `frontend/` static UI prototype.
+- Added `frontend/index.html` with cloud-console style product workspace.
+- Added `frontend/styles.css` with white/dark theme variables and responsive card layout.
+- Added `frontend/app.js` for theme switching, mode selection, and mock result rendering.
+- Added `frontend/README.md` to document UI status and boundaries.
+
+### Preserved
+- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
+- Existing `scripts/pdd_operation_analyzer.py` remains unchanged in this update.
+- Existing backend, RAG, vector, feedback, and knowledge-base structures remain unchanged.
+
+### Risk
+- Frontend is a static prototype only; it is not yet connected to backend API, GitHub Issue workflow, RAG, or model generation.
+
 ## v0.6.1 - 2026-06-08
 
 ### Changed
