@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI 电商运营控制台</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">E</span>
+      <div>
+        <strong>AI 电商运营控制台</strong>
+        <small>Pinduoduo Operation Assistant</small>
+      </div>
+    </div>
+    <nav class="topnav">
+      <a href="#workspace">工作台</a>
+      <a href="#vip">VIP 跟进</a>
+      <a href="#credits">积分钱包</a>
+      <a href="#knowledge">知识库</a>
+    </nav>
+    <button id="themeToggle" class="ghost-btn" type="button">切换深色</button>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-title">产品导航</div>
+      <a class="side-item active" href="#workspace">运营生成</a>
+      <a class="side-item" href="#vip">商品持续跟进</a>
+      <a class="side-item" href="#credits">图片积分</a>
+      <a class="side-item" href="#knowledge">私人知识库</a>
+      <a class="side-item" href="#settings">接口配置</a>
+    </aside>
+
+    <main class="main">
+      <section class="hero" id="workspace">
+        <div>
+          <p class="eyebrow">AI E-COMMERCE ASSISTANT</p>
+          <h1>一次输入，直接生成完整运营执行包</h1>
+          <p class="hero-text">普通功能用于引流输出；VIP 持续跟进商品数据；图片生成等高成本能力通过积分结算。</p>
+        </div>
+        <div class="hero-card">
+          <span>当前模式</span>
+          <strong id="modeName">自然流</strong>
+          <small>标题 / 主图结构 / SKU / 价格 / 活动建议</small>
+        </div>
+      </section>
+
+      <section class="mode-grid" aria-label="模式选择">
+        <button class="mode-card selected" data-mode="自然流" type="button">
+          <span>自然流</span>
+          <strong>测标题、主图、价格感</strong>
+          <small>适合白牌、小库存、低预算测试</small>
+        </button>
+        <button class="mode-card" data-mode="强付费" type="button">
+          <span>强付费</span>
+          <strong>预算节奏与 ROI 警戒线</strong>
+          <small>适合已有转化基础的商品</small>
+        </button>
+        <button class="mode-card" data-mode="爆品打造" type="button">
+          <span>爆品打造</span>
+          <strong>拆爆品结构与承接路线</strong>
+          <small>适合测试流通性与备货判断</small>
+        </button>
+      </section>
+
+      <section class="panel-grid">
+        <form class="panel input-panel" id="operationForm">
+          <div class="panel-head">
+            <div>
+              <h2>商品输入</h2>
+              <p>可以轻输入；信息越详细，输出越清晰。</p>
+            </div>
+            <span class="badge">首次直接输出</span>
+          </div>
+
+          <label>
+            商品标题 / 类型
+            <input id="productInput" type="text" placeholder="例如：防晒衣" value="防晒衣" />
+          </label>
+
+          <label>
+            商品与运营信息
+            <textarea id="detailInput" rows="8" placeholder="例如：成本19，卖39，库存200，运费3，目标卖完库存。卖点：轻薄、防晒、透气。"></textarea>
+          </label>
+
+          <div class="form-row">
+            <label>
+              成本
+              <input id="costInput" type="number" placeholder="19" />
+            </label>
+            <label>
+              售价
+              <input id="priceInput" type="number" placeholder="39" />
+            </label>
+            <label>
+              库存
+              <input id="stockInput" type="number" placeholder="200" />
+            </label>
+          </div>
+
+          <button class="primary-btn" type="submit">生成运营执行包</button>
+        </form>
+
+        <section class="panel output-panel" aria-label="结果预览">
+          <div class="panel-head">
+            <div>
+              <h2>结果预览</h2>
+              <p>前端 UI 预览，后续接入后端与 RAG。</p>
+            </div>
+            <span class="status-dot">Ready</span>
+          </div>
+
+          <div id="resultBox" class="result-box">
+            <article class="result-card">
+              <h3>自然流执行包｜防晒衣</h3>
+              <p>输入后直接输出标题测试包、主图结构、价格建议和观察指标。</p>
+            </article>
+            <article class="result-card muted">
+              <h3>补充信息会更精准</h3>
+              <p>竞品价格、商品卖点、当前曝光/点击/成交数据。</p>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel wide" id="vip">
+        <div class="panel-head">
+          <div>
+            <h2>VIP 商品持续跟进</h2>
+            <p>记录每天销售情况、标题表现、SKU 组合、活动反馈，形成私人店铺数据记忆。</p>
+          </div>
+          <span class="badge vip">VIP</span>
+        </div>
+        <div class="tracking-grid">
+          <div class="tracking-card"><strong>商品档案</strong><span>成本、售价、库存、卖点、竞品</span></div>
+          <div class="tracking-card"><strong>每日数据</strong><span>曝光、点击、成交、退款、库存变化</span></div>
+          <div class="tracking-card"><strong>执行记录</strong><span>用了哪个标题、主图、SKU、活动建议</span></div>
+          <div class="tracking-card"><strong>私人优化</strong><span>基于你的店铺数据持续给出下一步建议</span></div>
+        </div>
+      </section>
+
+      <section class="panel-grid two">
+        <section class="panel" id="credits">
+          <div class="panel-head">
+            <div>
+              <h2>积分钱包</h2>
+              <p>图片生成、改图、批量素材使用积分结算。</p>
+            </div>
+          </div>
+          <ul class="price-list">
+            <li><span>生成 1 张主图</span><strong>10 积分</strong></li>
+            <li><span>4 张主图方案</span><strong>35 积分</strong></li>
+            <li><span>商品图换背景</span><strong>8 积分</strong></li>
+            <li><span>活动图 / 高清重绘</span><strong>15 积分</strong></li>
+          </ul>
+        </section>
+
+        <section class="panel" id="knowledge">
+          <div class="panel-head">
+            <div>
+              <h2>私人知识库</h2>
+              <p>沉淀用户实际使用后有效的标题结构、主图结构、SKU 与价格策略。</p>
+            </div>
+          </div>
+          <div class="knowledge-tags">
+            <span>标题结构</span><span>主图结构</span><span>SKU 组合</span><span>价格带</span><span>活动反馈</span><span>RAG 检索</span>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
