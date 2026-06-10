@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.8.3 - 2026-06-08
+
+### Changed
+- Updated `frontend/styles.css` to improve desktop, tablet, and mobile page experience.
+- Desktop now keeps the left navigation and input panel sticky for long result pages.
+- Tablet layout now compresses the sidebar and keeps an efficient two-column workspace.
+- Mobile layout now uses a single-column flow, horizontal navigation, swipeable mode cards, and a bottom-sticky generate button.
+- Form controls now include `select` styling and 16px mobile input text to avoid mobile browser zoom-in.
+
+### Desktop Experience
+- Wider control-console workspace.
+- Sticky sidebar.
+- Sticky input panel.
+- Larger output area for productized cards.
+
+### Tablet Experience
+- Narrower sidebar.
+- Two-column input/output layout retained.
+- Hero decoration reduced to preserve working space.
+- Tracking cards collapse to two columns.
+
+### Mobile Experience
+- Single-column flow.
+- Sidebar becomes horizontal scroll navigation.
+- Mode cards become horizontal swipe cards.
+- Generate button stays near the bottom for thumb operation.
+- Smaller spacing and card radius to reduce visual pressure.
+
+### Preserved
+- Existing productized rendering from v0.8.1 remains active.
+- Existing generation configuration from v0.8.2 remains active.
+- Existing backend API paths and local backflow folders remain unchanged.
+
+### Risk
+- Responsive layout has not yet been validated against real device screenshots from production browsers.
+
 ## v0.8.2 - 2026-06-08
 
 ### Added
