@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.8.0
+Current Version: v0.8.1
 
 ## Version History
 
@@ -13,6 +13,7 @@ Current Version: v0.8.0
 - v0.6.1: Issue workflow was adjusted so first input directly generates a full result package; follow-up info only improves precision.
 - v0.7.0: Static frontend UI prototype was added with light/dark theme switch and cloud-console style layout.
 - v0.8.0: Local backend API was added so frontend input can generate results, return AI output to UI, and write result/feedback backflow records.
+- v0.8.1: Productized rendering cleanup was added so frontend displays copyable titles, image directions, SKU plans, price advice, and next actions instead of engineering output.
 
 ## Version Rules
 
