@@ -16,6 +16,61 @@ elif '爆品' in t:
 product=re.sub(r'^\s*\[[^\]]+\]\s*','',t).strip() or '未识别商品类型'
 text=f'商品类型/标题输入：{product}\n\nIssue正文：\n{body}\n\n最新评论：\n{comment}'
 
+FREE_LIMITS={
+    'title_count': {3,5},
+    'image_plan_count': {1,2},
+    'image_generate_count': {0,1,2},
+}
+VIP_LIMITS={
+    'title_count': {3,5,10,15},
+    'image_plan_count': {1,2,3,5},
+    'image_generate_count': {0,1,2,3,5},
+}
+IMAGE_CREDIT_COST={0:0,1:10,2:18,3:25,5:40}
+
+def pick_config_int(labels, default):
+    patterns=[]
+    for label in labels:
+        patterns.extend([
+            label+r'\s*[:：=]\s*(\d+)',
+            label+r'\D{0,6}(\d+)\s*(?:条|个|张)?',
+        ])
+    for pattern in patterns:
+        m=re.search(pattern, text, flags=re.I)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                return default
+    return default
+
+def nearest_allowed(value, allowed):
+    if value in allowed:
+        return value
+    return max([item for item in allowed if item <= value] or [min(allowed)])
+
+def parse_generation_config():
+    membership='vip' if re.search(r'\bvip\b|VIP|会员|付费版', text, flags=re.I) else 'free'
+    requested={
+        'title_count': pick_config_int(['title_count','标题数量','标题条数','生成标题'], 3),
+        'image_plan_count': pick_config_int(['image_plan_count','主图方案','主图方向','主图数量'], 1),
+        'image_generate_count': pick_config_int(['image_generate_count','图片生成','生成图片','生图数量'], 0),
+    }
+    limits=VIP_LIMITS if membership=='vip' else FREE_LIMITS
+    applied={key: nearest_allowed(value, limits[key]) for key,value in requested.items()}
+    adjustments=[]
+    for key,value in requested.items():
+        if value!=applied[key]:
+            adjustments.append(f'{key}: requested {value}, applied {applied[key]}')
+    return {
+        'membership': membership,
+        'requested': requested,
+        'applied': applied,
+        'adjustments': adjustments,
+        'image_credits': IMAGE_CREDIT_COST.get(applied['image_generate_count'],0),
+    }
+
+generation_config=parse_generation_config()
 chain=json.loads(Path('runtime/module_chain.json').read_text(encoding='utf-8'))
 conf=chain.get(mode) or chain['natural-flow']
 
@@ -36,7 +91,21 @@ tpl=read_key('template').replace('{product}', product)
 frontend_schema=read_key('frontend_schema')
 
 continue_request=('下一步' in comment) or ('执行包' in comment) or ('生成标题' in comment) or ('继续' in comment)
+applied=generation_config['applied']
+config_summary=(
+    f"## 生成配置\n"
+    f"- 权益：{'VIP版' if generation_config['membership']=='vip' else '普通版'}\n"
+    f"- 标题数量：{applied['title_count']} 条\n"
+    f"- 主图方案：{applied['image_plan_count']} 个\n"
+    f"- 图片生成：{applied['image_generate_count']} 张，预计 {generation_config['image_credits']} 积分\n"
+)
+if generation_config['adjustments']:
+    config_summary += '- 配置修正：' + '；'.join(generation_config['adjustments']) + '\n'
+
 extra='本次必须直接输出完整可执行结果卡。不要把“补充信息”当成阻断条件；信息不足时先按现有信息生成第一版，并在末尾用“补充这些信息会更精准”列出最多3项。用户输入越详细，输出越清晰。'
+extra+=f" 必须按生成配置输出：标题{applied['title_count']}条，主图方案{applied['image_plan_count']}个。不要额外堆叠更多标题或主图方案。"
+if applied['image_generate_count']:
+    extra+=f" 用户选择了图片生成{applied['image_generate_count']}张，仅输出图片生成计划和积分估算，不要假装已经生成图片。"
 if mode=='natural-flow':
     extra+=' 自然流模式必须包含：拼多多标题测试包、主图文案方向、价格测试建议、观察指标。'
 elif mode=='paid-growth':
@@ -64,14 +133,14 @@ else:
     finance+='- 成本/售价不足，暂不计算毛利率。\n'
 
 module_context='\n\n'.join([x for x in [platform, platform_title, platform_image, mode_doc, input_schema, prompt_doc, frontend_schema] if x])
-base=f'{tpl}\n\n---\n\n{finance}\n\n## 输出说明\n- 当前为确定性模板回退结果。接入 API 大模型后，会按现有信息直接生成完整执行包。\n- 补充商品卖点、竞品价格、当前数据，会让输出更精准。\n'
+base=f'{tpl}\n\n---\n\n{config_summary}\n{finance}\n\n## 输出说明\n- 当前为确定性模板回退结果。接入 API 大模型后，会按现有信息和生成配置直接生成完整执行包。\n- 补充商品卖点、竞品价格、当前数据，会让输出更精准。\n'
 
 llm_note='## API 大模型状态\n- 未启用 API 大模型，当前输出为确定性模板。\n'
 llm_result=None
 if llm_enabled():
     p,_,_,m=load_provider()
-    system='你是拼多多电商运营产品助手。严格按模块链和输出模板生成可执行结果卡。第一次输入就直接输出完整结果，不要求用户再输入下一步。信息不足时先给第一版，不要卡住。'
-    user=f'模式:{name}\n商品类型:{product}\n\n额外指令:{extra}\n\n输出模板:\n{tpl}\n\n模块链上下文:\n{module_context}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
+    system='你是拼多多电商运营产品助手。严格按模块链、输出模板和生成配置生成可执行结果卡。第一次输入就直接输出完整结果，不要求用户再输入下一步。信息不足时先给第一版，不要卡住。不要输出超过配置数量的标题和主图方案。'
+    user=f'模式:{name}\n商品类型:{product}\n\n生成配置:\n{config_summary}\n\n额外指令:{extra}\n\n输出模板:\n{tpl}\n\n模块链上下文:\n{module_context}\n\n基础财务:\n{finance}\n\n用户输入:\n{text}'
     try:
         llm_result=chat(system,user)
         llm_note=f'## API 大模型状态\n- 已调用 provider: {p}\n- model: {m}\n'
