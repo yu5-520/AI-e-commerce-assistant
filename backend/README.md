@@ -20,7 +20,7 @@ http://localhost:3000
 Health check.
 
 ### POST /api/generate
-Frontend product input -> backend generation -> productized cleanup -> result backflow -> frontend result.
+Frontend product input -> generation configuration -> backend generation -> productized cleanup -> result backflow -> frontend result.
 
 Input example:
 
@@ -31,19 +31,44 @@ Input example:
   "detail": "成本19，卖39，库存200，目标清库存",
   "cost": 19,
   "price": 39,
-  "stock": 200
+  "stock": 200,
+  "membership": "free",
+  "title_count": 3,
+  "image_plan_count": 1,
+  "image_generate_count": 0
 }
 ```
+
+Generation configuration fields:
+- `membership`: `free` or `vip`
+- `title_count`: number of title options requested
+- `image_plan_count`: number of image direction plans requested
+- `image_generate_count`: number of real image generations requested; currently only used for credit estimate
+
+Free limits:
+- title_count: 3 or 5
+- image_plan_count: 1 or 2
+- image_generate_count: 0, 1, or 2
+
+VIP limits:
+- title_count: 3, 5, 10, or 15
+- image_plan_count: 1, 2, 3, or 5
+- image_generate_count: 0, 1, 2, 3, or 5
+
+If a free request asks for VIP-only counts, the backend automatically applies the nearest allowed free value and records the adjustment in `generation_config.adjustments`.
 
 Output includes:
 - `result_id`
 - `product_result`: cleaned user-facing fields for frontend cards
+- `product_result.generation_config`: requested/applied generation configuration and adjustments
+- `product_result.image_generation_plan`: selected image count and estimated credits
 - `markdown`: readable backup version generated from `product_result`
-- `debug`: result id, model status, and local backflow status
+- `debug`: result id, model status, local backflow status, and generation config
 
 `product_result` includes:
 - titles
 - image_directions
+- image_generation_plan
 - sku_plans
 - price_advice
 - activity_suggestions
@@ -82,7 +107,7 @@ data/runtime_feedback/
 
 The backend reuses `scripts/llm_client.py`.
 
-If `LLM_ENABLED=true` and provider environment variables are configured, it asks the model to return productized JSON.
+If `LLM_ENABLED=true` and provider environment variables are configured, it asks the model to return productized JSON and to respect the applied generation counts.
 If the model is not enabled, fails, or returns non-JSON, the backend returns a deterministic productized fallback result so the frontend remains usable.
 
 ## Product Cleanup Boundary
@@ -92,4 +117,4 @@ Engineering details such as `result_id`, `llm_status`, `backflow_status`, fallba
 
 ## Current Boundary
 
-This backend is a local MVP API layer. It is not yet a production authentication, billing, storage, or multi-user permission system.
+This backend is a local MVP API layer. It is not yet a production authentication, billing, real image generation, storage, or multi-user permission system.
