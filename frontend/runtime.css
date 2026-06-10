@@ -10,6 +10,59 @@
   color: var(--muted);
 }
 
+.config-panel {
+  margin: 18px 0 6px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.config-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.config-head h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.config-head p,
+.config-hint,
+.config-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.config-head select {
+  width: auto;
+  min-width: 108px;
+  margin: 0;
+  color: var(--brand);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--brand) 9%, var(--surface));
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.config-grid label {
+  margin: 0;
+}
+
+.config-grid select {
+  margin-top: 8px;
+}
+
 .product-result {
   display: grid;
   gap: 18px;
@@ -120,11 +173,28 @@
   gap: 12px;
 }
 
-.product-card {
+.product-card,
+.credit-card {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface-2);
+}
+
+.credit-card {
+  border-color: color-mix(in srgb, var(--brand) 32%, var(--line));
+  background: color-mix(in srgb, var(--brand) 8%, var(--surface));
+}
+
+.credit-card strong {
+  display: block;
+  color: var(--brand);
+  line-height: 1.6;
+}
+
+.credit-card p {
+  margin-top: 8px;
+  color: var(--muted);
 }
 
 .card-kicker {
@@ -235,17 +305,34 @@
   font-size: 13px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1180px) and (min-width: 761px) {
+  .config-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .config-head,
   .product-head,
   .section-title,
   .copy-item,
   .simple-item,
   .sku-row {
     grid-template-columns: 1fr;
+    display: grid;
   }
 
+  .config-grid,
   .card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .config-head select {
+    width: 100%;
   }
 
   .copy-actions,
