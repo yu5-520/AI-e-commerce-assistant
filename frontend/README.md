@@ -3,10 +3,10 @@
 This folder contains the frontend UI for the AI ecommerce operation console.
 
 ## Files
-- `index.html`: page structure and product sections
+- `index.html`: page structure, product sections, and generation configuration controls
 - `styles.css`: cloud-console style UI with light/dark theme variables
-- `runtime.css`: productized result cards, copy buttons, feedback button, and debug panel styles
-- `app.js`: theme switch, mode selection, backend API calls, product result cleanup, productized rendering, copy actions, and feedback backflow
+- `runtime.css`: configuration controls, productized result cards, copy buttons, feedback button, and debug panel styles
+- `app.js`: theme switch, mode selection, generation configuration, backend API calls, product result cleanup, productized rendering, copy actions, and feedback backflow
 
 ## Design Direction
 - white / black theme switch
@@ -20,6 +20,28 @@ This folder contains the frontend UI for the AI ecommerce operation console.
 - VIP product tracking
 - credit wallet for image generation
 - private knowledge base
+
+## Generation Configuration
+Before generation, users can choose the output range:
+
+```text
+membership: free / vip
+title_count: 3 / 5 / 10 VIP / 15 VIP
+image_plan_count: 1 / 2 / 3 VIP / 5 VIP
+image_generate_count: 0 / 1 / 2 / 3 VIP / 5 VIP
+```
+
+Free users are limited to:
+- title_count: 3 or 5
+- image_plan_count: 1 or 2
+- image_generate_count: 0, 1, or 2
+
+VIP users can choose:
+- title_count: 3, 5, 10, or 15
+- image_plan_count: 1, 2, 3, or 5
+- image_generate_count: 0, 1, 2, 3, or 5
+
+Image generation is currently only estimated by credits. Real image generation is not connected yet.
 
 ## Backend Connection
 The frontend calls the local backend APIs:
@@ -35,15 +57,15 @@ GET /api/health
 ```text
 Frontend product input
 ↓
+User selects generation configuration
+↓
 POST /api/generate
 ↓
-Backend reads mode, product, detail, cost, price, stock
-↓
-Backend returns product_result instead of exposing raw engineering output
+Backend applies free/VIP limits and returns product_result
 ↓
 Frontend normalizes product_result
 ↓
-Frontend renders productized cards: titles, image directions, SKU plans, price advice, next actions
+Frontend renders productized cards according to selected counts
 ↓
 User copies or marks specific items as used
 ↓
@@ -62,4 +84,4 @@ Backend stores item-level feedback under data/runtime_feedback/
 - Feedback should be attached to the exact copied/used item when possible.
 
 ## Current Status
-This is an MVP frontend-backend connection. It can generate and display cleaned product results through the local backend, and it can write item-level feedback backflow records. It is not yet connected to authentication, billing, production storage, or VIP user isolation.
+This is an MVP frontend-backend connection. It can generate and display cleaned product results through the local backend, respect generation count choices, estimate image generation credits, and write item-level feedback backflow records. It is not yet connected to authentication, billing, real image generation, production storage, or VIP user isolation.
