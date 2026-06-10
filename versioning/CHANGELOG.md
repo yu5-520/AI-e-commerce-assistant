@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.8.0 - 2026-06-08
+
+### Added
+- Added `backend/server.py` as a local zero-dependency backend API server.
+- Added `backend/README.md` with API and run instructions.
+- Added `data/runtime_results/README.md` for generated result backflow storage.
+- Added `data/runtime_feedback/README.md` for frontend feedback backflow storage.
+- Added `frontend/runtime.css` for runtime result, markdown, and feedback button styles.
+
+### Changed
+- Updated `frontend/app.js` so UI buttons call backend APIs instead of only rendering mock results.
+- Updated `frontend/index.html` to load runtime styles and describe backend result return.
+- Updated `frontend/README.md` to document the frontend-backend runtime flow.
+
+### Runtime Flow
+- Frontend product input calls `POST /api/generate`.
+- Backend reads mode, product, detail, cost, price, and stock.
+- Backend calls the configured LLM when enabled, otherwise returns deterministic fallback results.
+- Backend stores generated results under `data/runtime_results/`.
+- Frontend displays returned operation results.
+- Frontend feedback buttons call `POST /api/feedback`.
+- Backend stores feedback records under `data/runtime_feedback/`.
+
+### Preserved
+- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
+- Existing `scripts/pdd_operation_analyzer.py` remains unchanged in this update.
+- Existing `scripts/llm_client.py` is reused but not modified.
+- Existing RAG, vector, feedback, and knowledge-base structures remain unchanged.
+
+### Risk
+- This is still a local MVP backend. It does not yet include authentication, billing, VIP user isolation, production database, object storage, or permission management.
+
 ## v0.7.0 - 2026-06-08
 
 ### Added
