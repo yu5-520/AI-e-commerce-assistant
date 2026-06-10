@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI 电商运营控制台</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./runtime.css" />
 </head>
 <body>
   <header class="topbar">
@@ -108,7 +109,7 @@
           <div class="panel-head">
             <div>
               <h2>结果预览</h2>
-              <p>前端 UI 预览，后续接入后端与 RAG。</p>
+              <p>前端会调用后端 API，返回 AI 输出并写入回流记录。</p>
             </div>
             <span class="status-dot">Ready</span>
           </div>
@@ -116,7 +117,7 @@
           <div id="resultBox" class="result-box">
             <article class="result-card">
               <h3>自然流执行包｜防晒衣</h3>
-              <p>输入后直接输出标题测试包、主图结构、价格建议和观察指标。</p>
+              <p>点击“生成运营执行包”后，前端会请求后端生成标题、主图结构、SKU、价格建议，并返回到这里。</p>
             </article>
             <article class="result-card muted">
               <h3>补充信息会更精准</h3>
