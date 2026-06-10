@@ -6,12 +6,24 @@ const form = document.getElementById('operationForm');
 const resultBox = document.getElementById('resultBox');
 const sideItems = document.querySelectorAll('.side-item');
 
+const membershipInput = document.getElementById('membershipInput');
+const titleCountInput = document.getElementById('titleCountInput');
+const imagePlanCountInput = document.getElementById('imagePlanCountInput');
+const imageGenerateCountInput = document.getElementById('imageGenerateCountInput');
+const configHint = document.getElementById('configHint');
+
 const savedTheme = localStorage.getItem('theme') || 'light';
 root.dataset.theme = savedTheme;
 themeToggle.textContent = savedTheme === 'dark' ? '切换浅色' : '切换深色';
 
 let currentMode = '自然流';
 let currentResultId = null;
+
+const FREE_ALLOWED = {
+  titleCount: ['3', '5'],
+  imagePlanCount: ['1', '2'],
+  imageGenerateCount: ['0', '1', '2'],
+};
 
 function setTheme(nextTheme) {
   root.dataset.theme = nextTheme;
@@ -55,6 +67,8 @@ function normalizeProductResult(payload) {
   return {
     title: cleanText(productResult.title || `${payload.mode || currentMode}执行包｜${payload.product || '未填写商品'}`),
     summary: cleanText(productResult.summary || '已生成可复制、可执行、可回流的运营结果。'),
+    generationConfig: productResult.generation_config || {},
+    creditEstimate: productResult.image_generation_plan || {},
     titles: Array.isArray(productResult.titles) ? productResult.titles : [],
     imageDirections: Array.isArray(productResult.image_directions) ? productResult.image_directions : [],
     skuPlans: Array.isArray(productResult.sku_plans) ? productResult.sku_plans : [],
@@ -78,7 +92,7 @@ function renderTitleCards(titles) {
   if (!titles.length) return '';
   return `
     <section class="product-section">
-      <div class="section-title"><h3>标题测试包</h3><span>可直接复制上架测试</span></div>
+      <div class="section-title"><h3>标题测试包</h3><span>按选择数量生成，可直接复制测试</span></div>
       <div class="copy-list">
         ${titles.map((item, index) => {
           const text = cleanText(item.text || item);
@@ -107,7 +121,7 @@ function renderImageDirections(items) {
   if (!items.length) return '';
   return `
     <section class="product-section">
-      <div class="section-title"><h3>主图结构</h3><span>给美工或生成图工具直接使用</span></div>
+      <div class="section-title"><h3>主图结构</h3><span>按选择数量生成，给美工或生图工具使用</span></div>
       <div class="card-grid">
         ${items.map(item => {
           const name = cleanText(item.name || '主图方向');
@@ -129,6 +143,20 @@ function renderImageDirections(items) {
           `;
         }).join('')}
       </div>
+    </section>
+  `;
+}
+
+function renderImageCreditPlan(plan) {
+  if (!plan || !Number(plan.count)) return '';
+  const text = `选择生成 ${plan.count} 张图片，预计消耗 ${plan.credits || 0} 积分。${plan.note || ''}`;
+  return `
+    <section class="product-section">
+      <div class="section-title"><h3>图片生成积分</h3><span>当前仅估算，不直接扣费</span></div>
+      <article class="credit-card">
+        <strong>${escapeHtml(text)}</strong>
+        <p>图片生成属于高成本能力，后续接入图片模型后按积分结算。</p>
+      </article>
     </section>
   `;
 }
@@ -181,6 +209,13 @@ function renderSimpleList(title, subtitle, items, action) {
   `;
 }
 
+function renderConfigSummary(config) {
+  const applied = config?.applied || {};
+  const membership = config?.membership === 'vip' ? 'VIP 版' : '普通版';
+  if (!applied.title_count) return '';
+  return `<p class="config-summary">${membership} · 标题 ${applied.title_count} 条 · 主图方案 ${applied.image_plan_count} 个 · 图片 ${applied.image_generate_count} 张</p>`;
+}
+
 function renderResult(payload) {
   currentResultId = payload.result_id || null;
   const product = normalizeProductResult(payload);
@@ -190,11 +225,13 @@ function renderResult(payload) {
         <div>
           <h3>${escapeHtml(product.title)}</h3>
           <p>${escapeHtml(product.summary)}</p>
+          ${renderConfigSummary(product.generationConfig)}
         </div>
         <span class="saved-pill">已保存用于后续跟进</span>
       </div>
       ${renderTitleCards(product.titles)}
       ${renderImageDirections(product.imageDirections)}
+      ${renderImageCreditPlan(product.creditEstimate)}
       ${renderSkuPlans(product.skuPlans)}
       ${renderSimpleList('价格与活动建议', '直接给动作，不显示工程字段', [...product.priceAdvice, ...product.activitySuggestions], 'used_activity')}
       ${renderSimpleList('下一步操作', '按顺序执行并回填数据', product.nextActions, 'done_next_action')}
@@ -229,21 +266,57 @@ async function copyToClipboard(text) {
   }
 }
 
+function getGenerationConfig() {
+  return {
+    membership: membershipInput?.value || 'free',
+    title_count: Number(titleCountInput?.value || 3),
+    image_plan_count: Number(imagePlanCountInput?.value || 1),
+    image_generate_count: Number(imageGenerateCountInput?.value || 0),
+  };
+}
+
+function optionAllowed(select, allowedValues) {
+  Array.from(select.options).forEach(option => {
+    const locked = !allowedValues.includes(option.value);
+    option.disabled = locked;
+    option.textContent = option.textContent.replace('（需VIP）', '') + (locked ? '（需VIP）' : '');
+  });
+  if (!allowedValues.includes(select.value)) {
+    select.value = allowedValues[allowedValues.length - 1];
+  }
+}
+
+function updateMembershipLimits() {
+  const isVip = membershipInput?.value === 'vip';
+  if (!isVip) {
+    optionAllowed(titleCountInput, FREE_ALLOWED.titleCount);
+    optionAllowed(imagePlanCountInput, FREE_ALLOWED.imagePlanCount);
+    optionAllowed(imageGenerateCountInput, FREE_ALLOWED.imageGenerateCount);
+    configHint.textContent = '普通版支持标题 3/5 条、主图方案 1/2 个、图片生成 0/1/2 张。更多测试范围需 VIP。';
+  } else {
+    optionAllowed(titleCountInput, ['3', '5', '10', '15']);
+    optionAllowed(imagePlanCountInput, ['1', '2', '3', '5']);
+    optionAllowed(imageGenerateCountInput, ['0', '1', '2', '3', '5']);
+    configHint.textContent = 'VIP 可生成更多标题和主图方案；图片生成仍按积分估算和结算。';
+  }
+}
+
 async function generateOperation() {
   const product = document.getElementById('productInput').value;
   const detail = document.getElementById('detailInput').value;
   const cost = document.getElementById('costInput').value;
   const price = document.getElementById('priceInput').value;
   const stock = document.getElementById('stockInput').value;
+  const generationConfig = getGenerationConfig();
 
   setLoading(true);
-  renderSystemMessage('正在生成', '后端正在清洗输出，返回可复制、可执行、可回流的产品化结果。');
+  renderSystemMessage('正在生成', '后端会按你选择的数量生成，不做全量堆叠。');
 
   try {
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: currentMode, product, detail, cost, price, stock })
+      body: JSON.stringify({ mode: currentMode, product, detail, cost, price, stock, ...generationConfig })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
@@ -290,7 +363,7 @@ modeButtons.forEach(button => {
     button.classList.add('selected');
     currentMode = button.dataset.mode;
     modeName.textContent = currentMode;
-    renderSystemMessage(`${currentMode}模式已选择`, '输入商品信息后，点击“生成运营执行包”即可调用后端生成产品化结果。');
+    renderSystemMessage(`${currentMode}模式已选择`, '选择生成范围后，点击“生成运营执行包”即可调用后端生成产品化结果。');
   });
 });
 
@@ -300,6 +373,9 @@ sideItems.forEach(item => {
     item.classList.add('active');
   });
 });
+
+membershipInput?.addEventListener('change', updateMembershipLimits);
+updateMembershipLimits();
 
 form.addEventListener('submit', event => {
   event.preventDefault();
