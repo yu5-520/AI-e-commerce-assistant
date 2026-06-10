@@ -4,7 +4,7 @@ This folder contains the frontend UI for the AI ecommerce operation console.
 
 ## Files
 - `index.html`: page structure, product sections, and generation configuration controls
-- `styles.css`: cloud-console style UI with light/dark theme variables
+- `styles.css`: cloud-console style UI with light/dark theme variables and responsive desktop/tablet/mobile layout
 - `runtime.css`: configuration controls, productized result cards, copy buttons, feedback button, and debug panel styles
 - `app.js`: theme switch, mode selection, generation configuration, backend API calls, product result cleanup, productized rendering, copy actions, and feedback backflow
 
@@ -14,6 +14,25 @@ This folder contains the frontend UI for the AI ecommerce operation console.
 - top navigation + left sidebar + card workspace
 - orange accent color inspired by cloud product dashboards
 - no third-party logo or copied vendor assets
+
+## Responsive Experience
+
+### Desktop
+- Keeps the left sidebar as a sticky navigation rail.
+- Keeps the product input panel sticky so long result pages do not force users to scroll back up to regenerate.
+- Uses a wider output area so product result cards feel like a dashboard instead of a chat transcript.
+
+### Tablet
+- Compresses the sidebar width and keeps a two-column input/output workspace.
+- Hides the decorative hero card to preserve working space.
+- Keeps mode cards in three compact columns and tracking cards in two columns.
+
+### Mobile
+- Converts the layout into a single-column flow.
+- Moves sidebar navigation into a horizontal scroll bar.
+- Converts mode cards into horizontal swipe cards.
+- Makes the generate button sticky near the bottom for easier thumb operation.
+- Uses 16px form input text to avoid mobile browser zoom-in.
 
 ## Product Sections
 - operation generation workspace
@@ -84,4 +103,4 @@ Backend stores item-level feedback under data/runtime_feedback/
 - Feedback should be attached to the exact copied/used item when possible.
 
 ## Current Status
-This is an MVP frontend-backend connection. It can generate and display cleaned product results through the local backend, respect generation count choices, estimate image generation credits, and write item-level feedback backflow records. It is not yet connected to authentication, billing, real image generation, production storage, or VIP user isolation.
+This is an MVP frontend-backend connection. It can generate and display cleaned product results through the local backend, respect generation count choices, estimate image generation credits, write item-level feedback backflow records, and adapt page layout across desktop, tablet, and mobile. It is not yet connected to authentication, billing, real image generation, production storage, or VIP user isolation.
