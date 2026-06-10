@@ -20,7 +20,7 @@ http://localhost:3000
 Health check.
 
 ### POST /api/generate
-Frontend product input -> backend generation -> result backflow -> frontend result.
+Frontend product input -> backend generation -> productized cleanup -> result backflow -> frontend result.
 
 Input example:
 
@@ -36,13 +36,22 @@ Input example:
 ```
 
 Output includes:
-- result_id
-- markdown result
-- llm_status
-- backflow_status
+- `result_id`
+- `product_result`: cleaned user-facing fields for frontend cards
+- `markdown`: readable backup version generated from `product_result`
+- `debug`: result id, model status, and local backflow status
+
+`product_result` includes:
+- titles
+- image_directions
+- sku_plans
+- price_advice
+- activity_suggestions
+- next_actions
+- precision_tips
 
 ### POST /api/feedback
-Frontend feedback button -> feedback record.
+Frontend copy/use/action button -> item-level feedback record.
 
 Input example:
 
@@ -50,7 +59,8 @@ Input example:
 {
   "result_id": "res_xxx",
   "action": "used_title",
-  "section": "frontend_result_card"
+  "section": "product_result_card",
+  "item_text": "夏季轻薄防晒衣女外套透气防晒服"
 }
 ```
 
@@ -72,8 +82,13 @@ data/runtime_feedback/
 
 The backend reuses `scripts/llm_client.py`.
 
-If `LLM_ENABLED=true` and provider environment variables are configured, it calls the configured OpenAI-compatible model.
-If the model is not enabled or fails, the backend returns a deterministic fallback result so the frontend remains usable.
+If `LLM_ENABLED=true` and provider environment variables are configured, it asks the model to return productized JSON.
+If the model is not enabled, fails, or returns non-JSON, the backend returns a deterministic productized fallback result so the frontend remains usable.
+
+## Product Cleanup Boundary
+
+User-facing frontend output should use `product_result` only.
+Engineering details such as `result_id`, `llm_status`, `backflow_status`, fallback state, and API details belong in `debug` or backend logs, not in the main product result area.
 
 ## Current Boundary
 
