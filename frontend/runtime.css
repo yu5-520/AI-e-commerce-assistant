@@ -1,0 +1,71 @@
+.primary-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+}
+
+.result-meta {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.markdown-result {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.markdown-result h3,
+.markdown-result h4 {
+  margin: 14px 0 8px;
+  color: var(--text);
+}
+
+.markdown-result h3:first-child,
+.markdown-result h4:first-child {
+  margin-top: 0;
+}
+
+.markdown-result p {
+  margin: 0;
+}
+
+.markdown-result li {
+  margin: 6px 0;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.small-btn {
+  border: 1px solid color-mix(in srgb, var(--brand) 32%, var(--line));
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.small-btn:hover {
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+}
+
+.small-btn.ghost {
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.feedback-status {
+  margin-top: 12px !important;
+  font-size: 13px;
+}
