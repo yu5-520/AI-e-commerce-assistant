@@ -39,8 +39,8 @@
       <section class="hero" id="workspace">
         <div>
           <p class="eyebrow">AI E-COMMERCE ASSISTANT</p>
-          <h1>一次输入，直接生成完整运营执行包</h1>
-          <p class="hero-text">普通功能用于引流输出；VIP 持续跟进商品数据；图片生成等高成本能力通过积分结算。</p>
+          <h1>选择生成范围，输出可测试方案</h1>
+          <p class="hero-text">先选择标题数量、主图方案和图片积分消耗，再生成可复制、可执行、可回流的运营结果。</p>
         </div>
         <div class="hero-card">
           <span>当前模式</span>
@@ -72,7 +72,7 @@
           <div class="panel-head">
             <div>
               <h2>商品输入</h2>
-              <p>可以轻输入；信息越详细，输出越清晰。</p>
+              <p>可以轻输入；生成数量越克制，结果越清晰。</p>
             </div>
             <span class="badge">首次直接输出</span>
           </div>
@@ -102,6 +102,50 @@
             </label>
           </div>
 
+          <section class="config-panel" aria-label="生成配置">
+            <div class="config-head">
+              <div>
+                <h3>生成配置</h3>
+                <p>用户先选范围，AI 按选择生成，不做全量堆叠。</p>
+              </div>
+              <select id="membershipInput" aria-label="权益类型">
+                <option value="free">普通版</option>
+                <option value="vip">VIP 版</option>
+              </select>
+            </div>
+            <div class="config-grid">
+              <label>
+                标题数量
+                <select id="titleCountInput">
+                  <option value="3">3 条</option>
+                  <option value="5">5 条</option>
+                  <option value="10" data-vip="true">10 条｜VIP</option>
+                  <option value="15" data-vip="true">15 条｜VIP</option>
+                </select>
+              </label>
+              <label>
+                主图方案
+                <select id="imagePlanCountInput">
+                  <option value="1">1 个</option>
+                  <option value="2">2 个</option>
+                  <option value="3" data-vip="true">3 个｜VIP</option>
+                  <option value="5" data-vip="true">5 个｜VIP</option>
+                </select>
+              </label>
+              <label>
+                图片生成积分
+                <select id="imageGenerateCountInput">
+                  <option value="0">不生成图片</option>
+                  <option value="1">1 张｜10积分</option>
+                  <option value="2">2 张｜18积分</option>
+                  <option value="3" data-vip="true">3 张｜VIP｜25积分</option>
+                  <option value="5" data-vip="true">5 张｜VIP｜40积分</option>
+                </select>
+              </label>
+            </div>
+            <p id="configHint" class="config-hint">普通版支持标题 3/5 条、主图方案 1/2 个；VIP 可选择更大的测试范围。</p>
+          </section>
+
           <button class="primary-btn" type="submit">生成运营执行包</button>
         </form>
 
@@ -109,7 +153,7 @@
           <div class="panel-head">
             <div>
               <h2>结果预览</h2>
-              <p>前端会调用后端 API，返回 AI 输出并写入回流记录。</p>
+              <p>按你选择的生成范围返回结果，避免标题和主图方案过多影响体验。</p>
             </div>
             <span class="status-dot">Ready</span>
           </div>
@@ -117,7 +161,7 @@
           <div id="resultBox" class="result-box">
             <article class="result-card">
               <h3>自然流执行包｜防晒衣</h3>
-              <p>点击“生成运营执行包”后，前端会请求后端生成标题、主图结构、SKU、价格建议，并返回到这里。</p>
+              <p>选择标题数量、主图方案数量和图片积分后，点击生成即可返回可复制结果。</p>
             </article>
             <article class="result-card muted">
               <h3>补充信息会更精准</h3>
@@ -153,9 +197,9 @@
           </div>
           <ul class="price-list">
             <li><span>生成 1 张主图</span><strong>10 积分</strong></li>
-            <li><span>4 张主图方案</span><strong>35 积分</strong></li>
-            <li><span>商品图换背景</span><strong>8 积分</strong></li>
-            <li><span>活动图 / 高清重绘</span><strong>15 积分</strong></li>
+            <li><span>生成 2 张主图</span><strong>18 积分</strong></li>
+            <li><span>生成 3 张主图｜VIP</span><strong>25 积分</strong></li>
+            <li><span>生成 5 张主图｜VIP</span><strong>40 积分</strong></li>
           </ul>
         </section>
 
