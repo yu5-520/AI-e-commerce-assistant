@@ -1,0 +1,20 @@
+name: Runtime Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax check
+        run: python -m py_compile scripts/pdd_operation_analyzer.py scripts/llm_client.py backend/server.py scripts/smoke_test_runtime.py
+      - name: Runtime API smoke test
+        run: python scripts/smoke_test_runtime.py
