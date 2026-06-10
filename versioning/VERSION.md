@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.8.1
+Current Version: v0.8.2
 
 ## Version History
 
@@ -14,6 +14,7 @@ Current Version: v0.8.1
 - v0.7.0: Static frontend UI prototype was added with light/dark theme switch and cloud-console style layout.
 - v0.8.0: Local backend API was added so frontend input can generate results, return AI output to UI, and write result/feedback backflow records.
 - v0.8.1: Productized rendering cleanup was added so frontend displays copyable titles, image directions, SKU plans, price advice, and next actions instead of engineering output.
+- v0.8.2: Generation configuration controls were added for title counts, image plan counts, image generation credit estimates, and free/VIP output limits.
 
 ## Version Rules
 
