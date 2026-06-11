@@ -10,7 +10,6 @@ const membershipInput = document.getElementById('membershipInput');
 const titleCountInput = document.getElementById('titleCountInput');
 const imagePlanCountInput = document.getElementById('imagePlanCountInput');
 const imageGenerateCountInput = document.getElementById('imageGenerateCountInput');
-const configHint = document.getElementById('configHint');
 
 const savedTheme = localStorage.getItem('theme') || 'light';
 root.dataset.theme = savedTheme;
@@ -42,7 +41,8 @@ function escapeHtml(value) {
 
 function cleanText(value) {
   return String(value || '')
-    .replace(/result_id|backflow|llm_status|fallback|debug|api|POST|GET/gi, '')
+    .replace(/result_id|backflow|llm_status|fallback|debug|api|POST|GET|后端|接口|回流|全量堆叠/gi, '')
+    .replace(/可执行、可、可/g, '可')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -50,14 +50,14 @@ function cleanText(value) {
 function setLoading(isLoading) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = isLoading;
-  button.textContent = isLoading ? '生成中...' : '生成运营执行包';
+  button.textContent = isLoading ? '生成中...' : '生成方案';
 }
 
-function renderSystemMessage(title, message) {
+function renderSystemMessage(title, message = '') {
   resultBox.innerHTML = `
     <article class="result-card muted">
       <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(message)}</p>
+      ${message ? `<p>${escapeHtml(message)}</p>` : ''}
     </article>
   `;
 }
@@ -65,8 +65,8 @@ function renderSystemMessage(title, message) {
 function normalizeProductResult(payload) {
   const productResult = payload.product_result || {};
   return {
-    title: cleanText(productResult.title || `${payload.mode || currentMode}执行包｜${payload.product || '未填写商品'}`),
-    summary: cleanText(productResult.summary || '已生成可复制、可执行、可回流的运营结果。'),
+    title: cleanText(productResult.title || `${payload.mode || currentMode}方案｜${payload.product || '未填写商品'}`),
+    summary: cleanText(productResult.summary || '已生成一版可测试方案。'),
     generationConfig: productResult.generation_config || {},
     creditEstimate: productResult.image_generation_plan || {},
     titles: Array.isArray(productResult.titles) ? productResult.titles : [],
@@ -76,11 +76,10 @@ function normalizeProductResult(payload) {
     activitySuggestions: Array.isArray(productResult.activity_suggestions) ? productResult.activity_suggestions : [],
     nextActions: Array.isArray(productResult.next_actions) ? productResult.next_actions : [],
     precisionTips: Array.isArray(productResult.precision_tips) ? productResult.precision_tips : [],
-    debug: payload.debug || {},
   };
 }
 
-function productItemButton(action, text, label = '标记使用') {
+function productItemButton(action, text, label = '已使用') {
   return `<button class="small-btn" data-feedback="${escapeHtml(action)}" data-item-text="${escapeHtml(text)}" type="button">${escapeHtml(label)}</button>`;
 }
 
@@ -92,7 +91,7 @@ function renderTitleCards(titles) {
   if (!titles.length) return '';
   return `
     <section class="product-section">
-      <div class="section-title"><h3>标题测试包</h3><span>按选择数量生成，可直接复制测试</span></div>
+      <div class="section-title"><h3>标题测试包</h3></div>
       <div class="copy-list">
         ${titles.map((item, index) => {
           const text = cleanText(item.text || item);
@@ -107,7 +106,7 @@ function renderTitleCards(titles) {
               </div>
               <div class="copy-actions">
                 ${copyButton(text)}
-                ${productItemButton('used_title', text, '已使用')}
+                ${productItemButton('used_title', text)}
               </div>
             </article>
           `;
@@ -121,7 +120,7 @@ function renderImageDirections(items) {
   if (!items.length) return '';
   return `
     <section class="product-section">
-      <div class="section-title"><h3>主图结构</h3><span>按选择数量生成，给美工或生图工具使用</span></div>
+      <div class="section-title"><h3>主图方向</h3></div>
       <div class="card-grid">
         ${items.map(item => {
           const name = cleanText(item.name || '主图方向');
@@ -137,7 +136,7 @@ function renderImageDirections(items) {
               <div class="structure-box">${escapeHtml(structure)}</div>
               <div class="action-row">
                 ${copyButton(copyText)}
-                ${productItemButton('used_image_direction', copyText, '已使用')}
+                ${productItemButton('used_image_direction', copyText)}
               </div>
             </article>
           `;
@@ -152,10 +151,9 @@ function renderImageCreditPlan(plan) {
   const text = `选择生成 ${plan.count} 张图片，预计消耗 ${plan.credits || 0} 积分。${plan.note || ''}`;
   return `
     <section class="product-section">
-      <div class="section-title"><h3>图片生成积分</h3><span>当前仅估算，不直接扣费</span></div>
+      <div class="section-title"><h3>图片积分</h3></div>
       <article class="credit-card">
-        <strong>${escapeHtml(text)}</strong>
-        <p>图片生成属于高成本能力，后续接入图片模型后按积分结算。</p>
+        <strong>${escapeHtml(cleanText(text))}</strong>
       </article>
     </section>
   `;
@@ -165,7 +163,7 @@ function renderSkuPlans(items) {
   if (!items.length) return '';
   return `
     <section class="product-section">
-      <div class="section-title"><h3>SKU 组合建议</h3><span>可用于商品规格设计</span></div>
+      <div class="section-title"><h3>SKU 组合</h3></div>
       <div class="sku-table">
         <div class="sku-row sku-head"><span>SKU 类型</span><span>示例</span><span>作用</span><span>操作</span></div>
         ${items.map(item => {
@@ -178,7 +176,7 @@ function renderSkuPlans(items) {
               <span>${escapeHtml(type)}</span>
               <span>${escapeHtml(example)}</span>
               <span>${escapeHtml(purpose)}</span>
-              <span class="table-actions">${copyButton(copyText)}${productItemButton('used_sku', copyText, '已用')}</span>
+              <span class="table-actions">${copyButton(copyText)}${productItemButton('used_sku', copyText)}</span>
             </div>
           `;
         }).join('')}
@@ -187,11 +185,11 @@ function renderSkuPlans(items) {
   `;
 }
 
-function renderSimpleList(title, subtitle, items, action) {
+function renderSimpleList(title, items, action) {
   if (!items.length) return '';
   return `
     <section class="product-section">
-      <div class="section-title"><h3>${escapeHtml(title)}</h3><span>${escapeHtml(subtitle)}</span></div>
+      <div class="section-title"><h3>${escapeHtml(title)}</h3></div>
       <div class="simple-list">
         ${items.map(item => {
           const label = typeof item === 'string' ? '' : cleanText(item.label || '建议');
@@ -200,7 +198,7 @@ function renderSimpleList(title, subtitle, items, action) {
           return `
             <article class="simple-item">
               <div>${label ? `<strong>${escapeHtml(label)}</strong>` : ''}<p>${escapeHtml(value)}</p></div>
-              <div class="copy-actions">${copyButton(copyText)}${productItemButton(action, copyText, '已执行')}</div>
+              <div class="copy-actions">${copyButton(copyText)}${productItemButton(action, copyText, '已完成')}</div>
             </article>
           `;
         }).join('')}
@@ -213,7 +211,7 @@ function renderConfigSummary(config) {
   const applied = config?.applied || {};
   const membership = config?.membership === 'vip' ? 'VIP 版' : '普通版';
   if (!applied.title_count) return '';
-  return `<p class="config-summary">${membership} · 标题 ${applied.title_count} 条 · 主图方案 ${applied.image_plan_count} 个 · 图片 ${applied.image_generate_count} 张</p>`;
+  return `<p class="config-summary">${membership} · 标题 ${applied.title_count} 条 · 主图 ${applied.image_plan_count} 个 · 图片 ${applied.image_generate_count} 张</p>`;
 }
 
 function renderResult(payload) {
@@ -224,27 +222,22 @@ function renderResult(payload) {
       <div class="product-head">
         <div>
           <h3>${escapeHtml(product.title)}</h3>
-          <p>${escapeHtml(product.summary)}</p>
+          ${product.summary ? `<p>${escapeHtml(product.summary)}</p>` : ''}
           ${renderConfigSummary(product.generationConfig)}
         </div>
-        <span class="saved-pill">已保存用于后续跟进</span>
+        <span class="saved-pill">已保存</span>
       </div>
       ${renderTitleCards(product.titles)}
       ${renderImageDirections(product.imageDirections)}
       ${renderImageCreditPlan(product.creditEstimate)}
       ${renderSkuPlans(product.skuPlans)}
-      ${renderSimpleList('价格与活动建议', '直接给动作，不显示工程字段', [...product.priceAdvice, ...product.activitySuggestions], 'used_activity')}
-      ${renderSimpleList('下一步操作', '按顺序执行并回填数据', product.nextActions, 'done_next_action')}
-      ${renderSimpleList('补充这些信息会更精准', '不是必填项，只用于提高下一版质量', product.precisionTips, 'precision_tip')}
+      ${renderSimpleList('价格与活动', [...product.priceAdvice, ...product.activitySuggestions], 'used_activity')}
+      ${renderSimpleList('下一步操作', product.nextActions, 'done_next_action')}
+      ${renderSimpleList('补充信息', product.precisionTips, 'precision_tip')}
     </article>
-    <article class="result-card">
-      <h3>结果回流</h3>
-      <p>复制、使用、执行反馈都会写入回流记录，后续可进入 VIP 私人商品跟进。</p>
-      <p id="feedbackStatus" class="feedback-status">等待反馈。</p>
-      <details class="debug-panel">
-        <summary>开发调试信息</summary>
-        <pre>${escapeHtml(JSON.stringify(product.debug, null, 2))}</pre>
-      </details>
+    <article class="result-card usage-record">
+      <h3>使用记录</h3>
+      <p id="feedbackStatus" class="feedback-status">等待操作。</p>
     </article>
   `;
 
@@ -260,9 +253,9 @@ async function copyToClipboard(text) {
   const status = document.getElementById('feedbackStatus');
   try {
     await navigator.clipboard.writeText(text);
-    status.textContent = '已复制，可直接粘贴使用。';
+    if (status) status.textContent = '已复制。';
   } catch {
-    status.textContent = '复制失败，请手动选中文案复制。';
+    if (status) status.textContent = '复制失败，请手动复制。';
   }
 }
 
@@ -276,6 +269,7 @@ function getGenerationConfig() {
 }
 
 function optionAllowed(select, allowedValues) {
+  if (!select) return;
   Array.from(select.options).forEach(option => {
     const locked = !allowedValues.includes(option.value);
     option.disabled = locked;
@@ -292,12 +286,10 @@ function updateMembershipLimits() {
     optionAllowed(titleCountInput, FREE_ALLOWED.titleCount);
     optionAllowed(imagePlanCountInput, FREE_ALLOWED.imagePlanCount);
     optionAllowed(imageGenerateCountInput, FREE_ALLOWED.imageGenerateCount);
-    configHint.textContent = '普通版支持标题 3/5 条、主图方案 1/2 个、图片生成 0/1/2 张。更多测试范围需 VIP。';
   } else {
     optionAllowed(titleCountInput, ['3', '5', '10', '15']);
     optionAllowed(imagePlanCountInput, ['1', '2', '3', '5']);
     optionAllowed(imageGenerateCountInput, ['0', '1', '2', '3', '5']);
-    configHint.textContent = 'VIP 可生成更多标题和主图方案；图片生成仍按积分估算和结算。';
   }
 }
 
@@ -310,7 +302,7 @@ async function generateOperation() {
   const generationConfig = getGenerationConfig();
 
   setLoading(true);
-  renderSystemMessage('正在生成', '后端会按你选择的数量生成，不做全量堆叠。');
+  renderSystemMessage('正在生成方案');
 
   try {
     const response = await fetch('/api/generate', {
@@ -324,7 +316,7 @@ async function generateOperation() {
     }
     renderResult(data);
   } catch (error) {
-    renderSystemMessage('生成失败', `后端接口暂不可用或返回异常：${error.message}。请确认已运行 backend/server.py。`);
+    renderSystemMessage('生成失败，请稍后再试。');
   } finally {
     setLoading(false);
   }
@@ -333,10 +325,10 @@ async function generateOperation() {
 async function sendFeedback(action, itemText = '') {
   const status = document.getElementById('feedbackStatus');
   if (!currentResultId) {
-    status.textContent = '没有可回流的结果，请先生成运营执行包。';
+    if (status) status.textContent = '请先生成方案。';
     return;
   }
-  status.textContent = '正在写入反馈...';
+  if (status) status.textContent = '已记录。';
   try {
     const response = await fetch('/api/feedback', {
       method: 'POST',
@@ -347,9 +339,9 @@ async function sendFeedback(action, itemText = '') {
     if (!response.ok || !data.ok) {
       throw new Error(data.error || 'feedback_failed');
     }
-    status.textContent = `反馈已回流：${action}。`;
+    if (status) status.textContent = '已记录。';
   } catch (error) {
-    status.textContent = `反馈写入失败：${error.message}`;
+    if (status) status.textContent = '记录失败，请稍后再试。';
   }
 }
 
@@ -363,7 +355,6 @@ modeButtons.forEach(button => {
     button.classList.add('selected');
     currentMode = button.dataset.mode;
     modeName.textContent = currentMode;
-    renderSystemMessage(`${currentMode}模式已选择`, '选择生成范围后，点击“生成运营执行包”即可调用后端生成产品化结果。');
   });
 });
 
