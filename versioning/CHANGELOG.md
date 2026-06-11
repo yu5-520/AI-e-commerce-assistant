@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.8.5 - 2026-06-10
+
+### Changed
+- Reduced explanatory microcopy across the main frontend page.
+- Simplified the hero section to focus on the user action: input a product and generate a testable operation plan.
+- Removed unnecessary small text under mode cards, input panels, generation configuration, and result preview.
+- Simplified runtime result sections so cards read like product output instead of system documentation.
+- Replaced user-facing engineering terms such as backend, interface, debug, fallback, and backflow with simpler product language.
+
+### Product Language Rule
+- Titles carry the main meaning.
+- Buttons carry the action.
+- Cards carry the choice.
+- Small text appears only when it prevents confusion or confirms status.
+
+### Preserved
+- Existing generation configuration controls remain active.
+- Existing backend API paths remain unchanged.
+- Existing responsive layout from v0.8.3 remains unchanged.
+- Existing workflow breakpoint fixes from v0.8.4 remain unchanged.
+
+### Risk
+- The page is now cleaner, but some first-time users may need clearer onboarding later if they do not understand the generation options.
+
 ## v0.8.4 - 2026-06-08
 
 ### Fixed
@@ -84,30 +108,3 @@
 
 ### Risk
 - Image generation is still only an estimated credit plan. No real image generation model, billing, or deduction system is connected yet.
-
-## v0.8.1 - 2026-06-08
-
-### Changed
-- Updated `backend/server.py` to return a cleaned `product_result` structure for frontend rendering.
-- Updated `frontend/app.js` to render productized cards instead of exposing raw markdown as the main result.
-- Updated `frontend/runtime.css` to style copyable title cards, image direction cards, SKU tables, price/action lists, and debug panels.
-- Updated `frontend/README.md` and `backend/README.md` to document the productized rendering cleanup boundary.
-
-### Product Result Fields
-- `titles`: copyable title cards with tag and use case.
-- `image_directions`: main text, sub text, visual structure, and use case.
-- `sku_plans`: SKU type, example, and purpose.
-- `price_advice`: direct price actions.
-- `activity_suggestions`: activity or paid-growth suggestions.
-- `next_actions`: operational next steps.
-- `precision_tips`: optional fields that improve the next generation.
-
-### Product Cleanup Rules
-- Main frontend result does not expose `result_id`, `llm_status`, `backflow_status`, fallback state, API names, or other engineering fields.
-- Engineering fields are available only inside the developer debug panel.
-- Copy/use feedback is attached to the exact item text where possible.
-
-### Preserved
-- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
-- Existing backend API paths remain unchanged: `POST /api/generate`, `POST /api/feedback`, `GET /api/health`.
-- Existing local backflow folders remain unchanged.
