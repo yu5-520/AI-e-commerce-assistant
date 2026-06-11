@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.8.6 - 2026-06-11
+
+### Changed
+- Simplified navigation so the top bar no longer duplicates the sidebar module list.
+- Top bar now acts as a light product header with brand, navigation toggle, and theme switch.
+- Sidebar navigation now uses unified product names: 生成方案、商品跟进、图片积分、知识库、系统设置。
+- Added collapsible sidebar behavior for desktop and drawer-style navigation for tablet/mobile.
+- Main workspace gets more usable space when navigation is collapsed.
+
+### Product Experience Rule
+- Top bar identifies the product and holds lightweight controls.
+- Sidebar carries product modules.
+- Navigation can be hidden when the user is focused on generation and result reading.
+- Tablet and mobile screens should not be permanently squeezed by two navigation layers.
+
+### Preserved
+- Existing v0.8.5 UI microcopy reduction remains active.
+- Existing generation configuration controls remain active.
+- Existing backend API paths remain unchanged.
+- Existing responsive layout remains compatible with the new navigation shell.
+
+### Risk
+- Collapsed navigation depends on `frontend/nav.js`. If the file is not deployed with `index.html`, the navigation toggle will not work.
+
 ## v0.8.5 - 2026-06-10
 
 ### Changed
@@ -82,29 +106,3 @@
 
 ### Risk
 - Responsive layout has not yet been validated against real device screenshots from production browsers.
-
-## v0.8.2 - 2026-06-08
-
-### Added
-- Added generation configuration controls in `frontend/index.html`.
-- Added free/VIP option handling in `frontend/app.js`.
-- Added backend generation limit enforcement in `backend/server.py`.
-- Added image generation credit estimate handling through `image_generation_plan`.
-
-### Changed
-- Frontend now sends `membership`, `title_count`, `image_plan_count`, and `image_generate_count` to `POST /api/generate`.
-- Backend now generates only the selected number of title and image direction options instead of generating full output and relying on frontend trimming.
-- Free users are limited to title counts 3/5, image plan counts 1/2, and image generation counts 0/1/2.
-- VIP users can select title counts 10/15, image plan counts 3/5, and image generation counts 3/5.
-- Result output now includes a generation configuration summary and image credit estimate when image generation is selected.
-
-### Product Rule
-- The UI does not use a “recommended execution” block. It lets users choose the generation range, receive selectable schemes, copy items, and feed back what they actually used.
-
-### Preserved
-- Existing GitHub Issue -> Actions -> DeepSeek -> Issue comment workflow remains unchanged.
-- Existing backend API paths remain unchanged: `POST /api/generate`, `POST /api/feedback`, `GET /api/health`.
-- Existing productized rendering cleanup from v0.8.1 remains active.
-
-### Risk
-- Image generation is still only an estimated credit plan. No real image generation model, billing, or deduction system is connected yet.
