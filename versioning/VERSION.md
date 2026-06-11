@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.8.5
+Current Version: v0.8.6
 
 ## Version History
 
@@ -18,6 +18,7 @@ Current Version: v0.8.5
 - v0.8.3: Responsive page experience was optimized for desktop, tablet, and mobile layouts.
 - v0.8.4: Workflow breakpoints were reduced by adding runtime smoke checks, fixing DeepSeek provider configuration, and aligning Issue workflow templates with generation configuration limits.
 - v0.8.5: UI microcopy was reduced so the page behaves more like a product tool and less like an engineering explanation page.
+- v0.8.6: Navigation was simplified with a non-fixed top bar, unified product naming, and collapsible/sidebar-drawer behavior.
 
 ## Version Rules
 
