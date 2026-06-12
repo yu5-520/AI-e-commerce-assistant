@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.9.0 - 2026-06-11
+
+### Added
+- Added a pre-generation “观察素材” button next to the material reference input.
+- Added `frontend/material-sampler.js` and `frontend/material-sampler.css`.
+- Users can now preview wording signals, title structures, and sampling suggestions before generating a full product plan.
+- The sampler uses the same product/mode/material context as the generation flow, preparing the UI for a future backend search/API sampling source.
+
+### Product Experience Rule
+- Users should be able to inspect market wording signals before committing to generation.
+- Material sampling is a step before generation, not hidden only inside the final result.
+- This remains a compliant light sampler: it does not scrape platform pages.
+
+### Preserved
+- Existing material observation Agent output from v0.8.9 remains active.
+- Existing title stale-year filtering from v0.8.8 remains active.
+- Existing anonymous page memory from v0.8.7 remains active.
+
+### Risk
+- This version is frontend-side pre-sampling only; it does not yet call a dedicated backend `/api/material-observe` endpoint.
+- Future versions should connect this UI to legal search APIs, uploaded screenshots, or merchant-owned data sources.
+
 ## v0.8.9 - 2026-06-11
 
 ### Added
@@ -48,50 +70,3 @@
 ### Risk
 - This is still a lightweight material layer, not a full autonomous market-observation Agent.
 - If users do not provide material references and no external data source is connected, the system still relies on its built-in rules plus current time context.
-
-## v0.8.7 - 2026-06-11
-
-### Added
-- Added anonymous browser memory through `client_id` so one browser can restore its own recent product plans after refresh.
-- Added backend result listing through `GET /api/results?client_id=...`.
-- Added client-aware result loading through `GET /api/results/<result_id>?client_id=...`.
-- Added frontend automatic restoration of the last generated result through `localStorage`.
-- Added a lightweight “最近方案” panel so users can reopen recent generated plans.
-
-### Product Experience Rule
-- Refreshing the page should not erase the last generated product plan.
-- Multiple people using the same website should not share one global result screen.
-- MVP memory is anonymous and browser-based; it is not yet a full account or shop login system.
-
-### Preserved
-- Existing generation configuration controls remain active.
-- Existing AI generation and fallback behavior remain active.
-- Existing navigation reduction from v0.8.6 remains active.
-
-### Risk
-- Memory is isolated by browser `localStorage` client ID, not by formal user login.
-- Clearing browser data or changing devices will create a new anonymous history.
-
-## v0.8.6 - 2026-06-11
-
-### Changed
-- Simplified navigation so the top bar no longer duplicates the sidebar module list.
-- Top bar now acts as a light product header with brand, navigation toggle, and theme switch.
-- Sidebar navigation now uses unified product names: 生成方案、商品跟进、图片积分、知识库、系统设置。
-- Added collapsible sidebar behavior for desktop and drawer-style navigation for tablet/mobile.
-- Main workspace gets more usable space when navigation is collapsed.
-
-### Product Experience Rule
-- Top bar identifies the product and holds lightweight controls.
-- Sidebar carries product modules.
-- Navigation can be hidden when the user is focused on generation and result reading.
-- Tablet and mobile screens should not be permanently squeezed by two navigation layers.
-
-### Preserved
-- Existing v0.8.5 UI microcopy reduction remains active.
-- Existing generation configuration controls remain active.
-- Existing backend API paths remain unchanged.
-- Existing responsive layout remains compatible with the new navigation shell.
-
-### Risk
-- Collapsed navigation depends on `frontend/nav.js`. If the file is not deployed with `index.html`, the navigation toggle will not work.
