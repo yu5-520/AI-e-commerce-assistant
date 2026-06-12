@@ -62,6 +62,10 @@ function cleanText(value) {
     .trim();
 }
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function setLoading(isLoading) {
   const button = form.querySelector('button[type="submit"]');
   button.disabled = isLoading;
@@ -403,7 +407,9 @@ async function generateOperation() {
   const generationConfig = getGenerationConfig();
 
   setLoading(true);
-  renderSystemMessage('正在生成方案');
+  renderSystemMessage('正在整理商品素材', '正在结合商品信息和参考素材，准备生成可测试方案。');
+  await wait(450);
+  renderSystemMessage('正在生成可测试方案', '正在生成可复制的标题、主图方向、SKU 和价格建议。');
 
   try {
     const response = await fetch('/api/generate', {
