@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.8.9 - 2026-06-11
+
+### Added
+- Added the light version of a material observation Agent layer.
+- The backend now builds a material pack from user-provided competitor titles, main-image selling points, or platform phrases.
+- The generation prompt now receives the material pack together with the current time and season context.
+- The model is instructed to extract wording structure and current phrase feel, not to copy competitor titles directly.
+- Runtime manifest now tracks the material observation layer as a bridge toward future autonomous market observation.
+
+### Product Experience Rule
+- The product should move from static template generation toward current-market wording calibration.
+- User-provided material is treated as market signal, not as copy text.
+- This version prepares the architecture for future search/API-based observation without scraping platforms directly.
+
+### Preserved
+- Existing title stale-year filtering from v0.8.8 remains active.
+- Existing anonymous page memory from v0.8.7 remains active.
+- Existing navigation reduction from v0.8.6 remains active.
+
+### Risk
+- This is still a light Agent layer. It does not yet autonomously search the web or platform pages.
+- If no material reference is provided, the system uses time context and built-in title structures only.
+
 ## v0.8.8 - 2026-06-11
 
 ### Added
@@ -69,18 +92,3 @@
 
 ### Risk
 - Collapsed navigation depends on `frontend/nav.js`. If the file is not deployed with `index.html`, the navigation toggle will not work.
-
-## v0.8.5 - 2026-06-10
-
-### Changed
-- Reduced explanatory microcopy across the main frontend page.
-- Simplified the hero section to focus on the user action: input a product and generate a testable operation plan.
-- Removed unnecessary small text under mode cards, input panels, generation configuration, and result preview.
-- Simplified runtime result sections so cards read like product output instead of system documentation.
-- Replaced user-facing engineering terms such as backend, interface, debug, fallback, and backflow with simpler product language.
-
-### Product Language Rule
-- Titles carry the main meaning.
-- Buttons carry the action.
-- Cards carry the choice.
-- Small text appears only when it prevents confusion or confirms status.
