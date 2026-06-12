@@ -44,13 +44,17 @@ def main() -> None:
     assert_true(len(product_result.get("image_directions", [])) == 1, "free image_plan_count=1 should return 1 image direction")
     assert_true("generation_config" in product_result, "product_result should include generation_config")
     assert_true("image_generation_plan" in product_result, "product_result should include image_generation_plan")
+    assert_true("market_context" in product_result, "product_result should include market_context")
+    observation = product_result.get("material_observation") or {}
+    assert_true(observation.get("agent_name") == "素材观察 Agent", "product_result should include material observer output")
+    assert_true(observation.get("search_tasks"), "material observer should provide search tasks")
+    assert_true(observation.get("title_structures"), "material observer should provide title structures")
     serialized = json.dumps(product_result, ensure_ascii=False)
     assert_true("2024" not in serialized, "stale year 2024 should be removed from product result")
-    assert_true("market_context" in product_result, "product_result should include market_context")
     recent = list_recent_results(client_id)
     assert_true(any(item.get("result_id") == result.get("result_id") for item in recent), "recent results should include the generated result for the same client")
     assert_true(not list_recent_results("another_client_should_not_see_this"), "another client should not see this smoke result")
-    print(json.dumps({"ok": True, "result_id": result.get("result_id"), "recent_count": len(recent)}, ensure_ascii=False))
+    print(json.dumps({"ok": True, "result_id": result.get("result_id"), "recent_count": len(recent), "observer": observation.get("status")}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
