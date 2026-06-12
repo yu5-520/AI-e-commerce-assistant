@@ -11,18 +11,32 @@ const titleCountInput = document.getElementById('titleCountInput');
 const imagePlanCountInput = document.getElementById('imagePlanCountInput');
 const imageGenerateCountInput = document.getElementById('imageGenerateCountInput');
 
+const CLIENT_ID_KEY = 'ai_ecommerce_client_id';
+const LAST_RESULT_KEY = 'ai_ecommerce_last_result_id';
+const clientId = getClientId();
+
 const savedTheme = localStorage.getItem('theme') || 'light';
 root.dataset.theme = savedTheme;
 themeToggle.textContent = savedTheme === 'dark' ? '切换浅色' : '切换深色';
 
 let currentMode = '自然流';
 let currentResultId = null;
+let recentResults = [];
 
 const FREE_ALLOWED = {
   titleCount: ['3', '5'],
   imagePlanCount: ['1', '2'],
   imageGenerateCount: ['0', '1', '2'],
 };
+
+function getClientId() {
+  let value = localStorage.getItem(CLIENT_ID_KEY);
+  if (value) return value;
+  const suffix = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  value = `client_${suffix}`;
+  localStorage.setItem(CLIENT_ID_KEY, value);
+  return value;
+}
 
 function setTheme(nextTheme) {
   root.dataset.theme = nextTheme;
@@ -53,13 +67,46 @@ function setLoading(isLoading) {
   button.textContent = isLoading ? '生成中...' : '生成方案';
 }
 
+function rememberResult(payload) {
+  if (!payload?.result_id) return;
+  localStorage.setItem(LAST_RESULT_KEY, payload.result_id);
+}
+
+function renderRecentResults() {
+  if (!recentResults.length) return '';
+  return `
+    <article class="result-card recent-card">
+      <div class="recent-head">
+        <h3>最近方案</h3>
+        <span>${recentResults.length} 条</span>
+      </div>
+      <div class="recent-list">
+        ${recentResults.map(item => `
+          <button class="recent-item" data-load-result="${escapeHtml(item.result_id)}" type="button">
+            <strong>${escapeHtml(item.product || '未填写商品')}</strong>
+            <span>${escapeHtml(item.mode || '方案')} · ${escapeHtml(formatTime(item.created_at))}</span>
+          </button>
+        `).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function bindRecentButtons() {
+  document.querySelectorAll('[data-load-result]').forEach(button => {
+    button.addEventListener('click', () => loadResult(button.dataset.loadResult));
+  });
+}
+
 function renderSystemMessage(title, message = '') {
   resultBox.innerHTML = `
     <article class="result-card muted">
       <h3>${escapeHtml(title)}</h3>
       ${message ? `<p>${escapeHtml(message)}</p>` : ''}
     </article>
+    ${renderRecentResults()}
   `;
+  bindRecentButtons();
 }
 
 function normalizeProductResult(payload) {
@@ -216,6 +263,7 @@ function renderConfigSummary(config) {
 
 function renderResult(payload) {
   currentResultId = payload.result_id || null;
+  rememberResult(payload);
   const product = normalizeProductResult(payload);
   resultBox.innerHTML = `
     <article class="result-card product-result">
@@ -239,6 +287,7 @@ function renderResult(payload) {
       <h3>使用记录</h3>
       <p id="feedbackStatus" class="feedback-status">等待操作。</p>
     </article>
+    ${renderRecentResults()}
   `;
 
   document.querySelectorAll('[data-copy]').forEach(button => {
@@ -247,6 +296,7 @@ function renderResult(payload) {
   document.querySelectorAll('[data-feedback]').forEach(button => {
     button.addEventListener('click', () => sendFeedback(button.dataset.feedback, button.dataset.itemText || ''));
   });
+  bindRecentButtons();
 }
 
 async function copyToClipboard(text) {
@@ -293,6 +343,55 @@ function updateMembershipLimits() {
   }
 }
 
+function formatTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+async function refreshRecentResults({ rerender = false } = {}) {
+  try {
+    const response = await fetch(`/api/results?client_id=${encodeURIComponent(clientId)}`);
+    const data = await response.json();
+    if (response.ok && data.ok && Array.isArray(data.results)) {
+      recentResults = data.results;
+    }
+  } catch {
+    recentResults = [];
+  }
+  if (rerender) {
+    if (currentResultId) {
+      const lastId = currentResultId;
+      await loadResult(lastId, { quiet: true });
+    } else {
+      renderSystemMessage('等待生成方案');
+    }
+  }
+}
+
+async function loadResult(resultId, { quiet = false } = {}) {
+  if (!resultId) return;
+  try {
+    const response = await fetch(`/api/results/${encodeURIComponent(resultId)}?client_id=${encodeURIComponent(clientId)}`);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'result_not_found');
+    renderResult(data);
+  } catch {
+    if (!quiet) renderSystemMessage('方案读取失败', '请重新生成。');
+  }
+}
+
+async function restoreLastResult() {
+  await refreshRecentResults();
+  const lastId = localStorage.getItem(LAST_RESULT_KEY);
+  if (lastId) {
+    await loadResult(lastId, { quiet: true });
+    if (currentResultId) return;
+  }
+  renderSystemMessage('等待生成方案');
+}
+
 async function generateOperation() {
   const product = document.getElementById('productInput').value;
   const detail = document.getElementById('detailInput').value;
@@ -308,13 +407,15 @@ async function generateOperation() {
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: currentMode, product, detail, cost, price, stock, ...generationConfig })
+      body: JSON.stringify({ client_id: clientId, mode: currentMode, product, detail, cost, price, stock, ...generationConfig })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
       throw new Error(data.error || 'generate_failed');
     }
+    await refreshRecentResults();
     renderResult(data);
+    await refreshRecentResults({ rerender: true });
   } catch (error) {
     renderSystemMessage('生成失败，请稍后再试。');
   } finally {
@@ -333,7 +434,7 @@ async function sendFeedback(action, itemText = '') {
     const response = await fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ result_id: currentResultId, action, item_text: itemText, section: 'product_result_card' })
+      body: JSON.stringify({ client_id: clientId, result_id: currentResultId, action, item_text: itemText, section: 'product_result_card' })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
@@ -367,6 +468,7 @@ sideItems.forEach(item => {
 
 membershipInput?.addEventListener('change', updateMembershipLimits);
 updateMembershipLimits();
+restoreLastResult();
 
 form.addEventListener('submit', event => {
   event.preventDefault();
