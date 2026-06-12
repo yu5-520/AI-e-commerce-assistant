@@ -10,6 +10,7 @@ const membershipInput = document.getElementById('membershipInput');
 const titleCountInput = document.getElementById('titleCountInput');
 const imagePlanCountInput = document.getElementById('imagePlanCountInput');
 const imageGenerateCountInput = document.getElementById('imageGenerateCountInput');
+const marketMaterialInput = document.getElementById('marketMaterialInput');
 
 const CLIENT_ID_KEY = 'ai_ecommerce_client_id';
 const LAST_RESULT_KEY = 'ai_ecommerce_last_result_id';
@@ -395,6 +396,7 @@ async function restoreLastResult() {
 async function generateOperation() {
   const product = document.getElementById('productInput').value;
   const detail = document.getElementById('detailInput').value;
+  const marketMaterial = marketMaterialInput?.value || '';
   const cost = document.getElementById('costInput').value;
   const price = document.getElementById('priceInput').value;
   const stock = document.getElementById('stockInput').value;
@@ -407,7 +409,7 @@ async function generateOperation() {
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: clientId, mode: currentMode, product, detail, cost, price, stock, ...generationConfig })
+      body: JSON.stringify({ client_id: clientId, mode: currentMode, product, detail, market_material: marketMaterial, cost, price, stock, ...generationConfig })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
