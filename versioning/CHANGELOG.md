@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.8.8 - 2026-06-11
+
+### Added
+- Added current time and season context to web generation.
+- Added optional market material input so users can paste current competitor titles, image selling points, or platform phrases.
+- Added lightweight material-pack extraction that keeps recent samples and candidate terms without requiring a full manual RAG build.
+- Added stale-year filtering so generated product results should not contain outdated year terms such as 2024 when the current year has moved on.
+- Added smoke-test coverage for stale-year filtering and market context output.
+
+### Product Experience Rule
+- Titles should not be generated only from static templates.
+- Current time, season, and user-provided material references should calibrate title wording before output.
+- Reference materials are used to extract current wording structure, not to copy competitor titles directly.
+
+### Preserved
+- Existing anonymous page memory from v0.8.7 remains active.
+- Existing navigation reduction from v0.8.6 remains active.
+- Existing generation configuration controls remain active.
+
+### Risk
+- This is still a lightweight material layer, not a full autonomous market-observation Agent.
+- If users do not provide material references and no external data source is connected, the system still relies on its built-in rules plus current time context.
+
 ## v0.8.7 - 2026-06-11
 
 ### Added
@@ -61,44 +84,3 @@
 - Buttons carry the action.
 - Cards carry the choice.
 - Small text appears only when it prevents confusion or confirms status.
-
-### Preserved
-- Existing generation configuration controls remain active.
-- Existing backend API paths remain unchanged.
-- Existing responsive layout from v0.8.3 remains unchanged.
-- Existing workflow breakpoint fixes from v0.8.4 remain unchanged.
-
-### Risk
-- The page is now cleaner, but some first-time users may need clearer onboarding later if they do not understand the generation options.
-
-## v0.8.4 - 2026-06-08
-
-### Fixed
-- Fixed the DeepSeek provider default configuration by using an OpenAI-compatible `/v1` base URL and a stable `deepseek-chat` default model.
-- Added `scripts/smoke_test_runtime.py` to validate that backend generation still returns the expected product result schema.
-- Added `.github/workflows/runtime-smoke-test.yml` as an independent CI guard that does not touch model secrets.
-- Updated the GitHub Issue analyzer so Issue body or comments can specify generation configuration such as title count, image plan count, image generation count, and VIP/free mode.
-- Updated operation-mode output templates so they follow generation configuration instead of hard-coded output quantities.
-
-### Workflow Alignment
-- Web frontend generation and GitHub Issue generation now share the same product rule: output quantity should follow selected or parsed generation configuration.
-- If an Issue does not specify configuration, the Issue workflow defaults to free-mode output: 3 titles, 1 image plan, and 0 image generation.
-- If an Issue requests values above free limits without VIP wording, the script safely clamps the result to free limits.
-
-### Preserved
-- Existing `pdd-operation-analysis.yml` remains active for Issue comments and still uses the configured model environment.
-- Existing backend API paths remain unchanged: `POST /api/generate`, `POST /api/feedback`, `GET /api/health`.
-- Existing v0.8.3 responsive frontend layout remains unchanged.
-
-### Risk
-- The independent smoke test validates local deterministic generation only. It does not call external model APIs.
-- The original Issue workflow was not rewritten directly because it references model secret variables; the safer fix was to add a separate non-secret CI smoke workflow.
-
-## v0.8.3 - 2026-06-08
-
-### Changed
-- Updated `frontend/styles.css` to improve desktop, tablet, and mobile page experience.
-- Desktop now keeps the left navigation and input panel sticky for long result pages.
-- Tablet layout now compresses the sidebar and keeps an efficient two-column workspace.
-- Mobile layout now uses a single-column flow, horizontal navigation, swipeable mode cards, and a bottom-sticky generate button.
-- Form controls now include `select` styling and 16px mobile input text to avoid mobile browser zoom-in.
