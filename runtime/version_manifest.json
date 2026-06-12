@@ -1,5 +1,5 @@
 {
-  "runtime_version": "0.8.9",
+  "runtime_version": "0.9.0",
   "active_chain": "runtime/module_chain.json",
   "active_feedback_chain": "runtime/feedback_chain.json",
   "active_knowledge_retrieval_chain": "runtime/knowledge_retrieval_chain.json",
@@ -13,6 +13,8 @@
   "active_frontend_runtime_renderer": "frontend/app.js",
   "active_frontend_material_observation_styles": "frontend/material-observation.css",
   "active_frontend_material_observation_behavior": "frontend/material-observation.js",
+  "active_frontend_material_sampler_styles": "frontend/material-sampler.css",
+  "active_frontend_material_sampler_behavior": "frontend/material-sampler.js",
   "active_result_backflow_dir": "data/runtime_results/",
   "active_feedback_backflow_dir": "data/runtime_feedback/",
   "active_product_result_schema": "backend/server.py::build_product_result",
@@ -27,6 +29,7 @@
   "active_material_observation_agent": "scripts/material_observer.py::build_material_observation",
   "active_stale_year_filter": "backend/server.py::remove_stale_years",
   "active_material_input": "frontend/index.html::marketMaterialInput",
+  "active_material_sampler_ui": "frontend/material-sampler.js::mountSampler",
   "active_issue_generation_config_parser": "scripts/pdd_operation_analyzer.py::parse_generation_config",
   "active_runtime_smoke_test": "scripts/smoke_test_runtime.py",
   "active_runtime_smoke_workflow": ".github/workflows/runtime-smoke-test.yml",
@@ -39,5 +42,5 @@
   "active_llm_interface": "openai-compatible",
   "active_workflow": ".github/workflows/pdd-operation-analysis.yml",
   "last_verified": "2026-06-11",
-  "notes": "Material observation Agent light version added in v0.8.9. The system now builds a lightweight material pack from user-provided current competitor titles, selling points, and platform phrases, passes it into scripts/material_observer.py, renders the observation on the frontend, and constrains generation to extract wording structure rather than copy titles. This is the bridge toward a future autonomous market-observation Agent without scraping platforms directly yet."
+  "notes": "v0.9.0 adds a pre-generation material sampling UI. Users can click 观察素材 before generation to preview wording signals, title structures, and sampling suggestions from the current product, mode, and material reference input. This remains compliant frontend-side sampling and prepares the interface for a future backend material-observe API or legal search/data connectors."
 }
