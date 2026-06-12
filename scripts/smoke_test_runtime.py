@@ -25,8 +25,9 @@ def main() -> None:
     payload = {
         "client_id": client_id,
         "mode": "自然流",
-        "product": "防晒衣",
-        "detail": "成本19，卖39，库存200，卖点轻薄透气。",
+        "product": "2024防晒衣",
+        "detail": "成本19，卖39，库存200，卖点轻薄透气。参考词：2024新款，夏季骑行，冰丝透气。",
+        "market_material": "2024新款防晒衣女夏季冰丝透气\n2024爆款户外骑行防晒服",
         "cost": 19,
         "price": 39,
         "stock": 200,
@@ -43,6 +44,9 @@ def main() -> None:
     assert_true(len(product_result.get("image_directions", [])) == 1, "free image_plan_count=1 should return 1 image direction")
     assert_true("generation_config" in product_result, "product_result should include generation_config")
     assert_true("image_generation_plan" in product_result, "product_result should include image_generation_plan")
+    serialized = json.dumps(product_result, ensure_ascii=False)
+    assert_true("2024" not in serialized, "stale year 2024 should be removed from product result")
+    assert_true("market_context" in product_result, "product_result should include market_context")
     recent = list_recent_results(client_id)
     assert_true(any(item.get("result_id") == result.get("result_id") for item in recent), "recent results should include the generated result for the same client")
     assert_true(not list_recent_results("another_client_should_not_see_this"), "another client should not see this smoke result")
