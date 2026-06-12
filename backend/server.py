@@ -17,6 +17,7 @@ FEEDBACK_DIR = ROOT / "data" / "runtime_feedback"
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from llm_client import chat, llm_enabled, load_provider  # noqa: E402
+from material_observer import build_material_observation  # noqa: E402
 
 MODE_MAP = {
     "自然流": ("natural-flow", "自然流"),
@@ -181,14 +182,32 @@ def nearest_allowed(value: int, allowed: set[int]) -> int:
 def generation_config_from_payload(payload: dict) -> dict:
     membership = "vip" if str(payload.get("membership") or "free").lower() == "vip" else "free"
     limits = VIP_LIMITS if membership == "vip" else FREE_LIMITS
-    requested = {"title_count": int_from_payload(payload, "title_count", 3), "image_plan_count": int_from_payload(payload, "image_plan_count", 1), "image_generate_count": int_from_payload(payload, "image_generate_count", 0)}
-    applied = {"title_count": nearest_allowed(requested["title_count"], limits["title_counts"]), "image_plan_count": nearest_allowed(requested["image_plan_count"], limits["image_plan_counts"]), "image_generate_count": nearest_allowed(requested["image_generate_count"], limits["image_generate_counts"])}
+    requested = {
+        "title_count": int_from_payload(payload, "title_count", 3),
+        "image_plan_count": int_from_payload(payload, "image_plan_count", 1),
+        "image_generate_count": int_from_payload(payload, "image_generate_count", 0),
+    }
+    applied = {
+        "title_count": nearest_allowed(requested["title_count"], limits["title_counts"]),
+        "image_plan_count": nearest_allowed(requested["image_plan_count"], limits["image_plan_counts"]),
+        "image_generate_count": nearest_allowed(requested["image_generate_count"], limits["image_generate_counts"]),
+    }
     adjustments = []
     for key, value in requested.items():
         if value != applied[key]:
             adjustments.append({"field": key, "requested": value, "applied": applied[key], "reason": "vip_required_or_invalid_count"})
     credits = IMAGE_CREDIT_COST.get(applied["image_generate_count"], 0)
-    return {"membership": membership, "requested": requested, "applied": applied, "adjustments": adjustments, "credit_estimate": {"image_generate_count": applied["image_generate_count"], "credits": credits, "note": "当前版本仅估算图片生成积分；未接入真实图片生成模型。" if applied["image_generate_count"] else "未选择图片生成。"}}
+    return {
+        "membership": membership,
+        "requested": requested,
+        "applied": applied,
+        "adjustments": adjustments,
+        "credit_estimate": {
+            "image_generate_count": applied["image_generate_count"],
+            "credits": credits,
+            "note": "当前版本仅估算图片生成积分；未接入真实图片生成模型。" if applied["image_generate_count"] else "未选择图片生成。",
+        },
+    }
 
 
 def extract_numbers(text: str) -> tuple[float | None, float | None, float | None]:
@@ -198,18 +217,22 @@ def extract_numbers(text: str) -> tuple[float | None, float | None, float | None
             if m:
                 return float(m.group(1))
         return None
+
     return pick(["成本", "进价"]), pick(["售价", "卖", "价格"]), pick(["库存"])
 
 
-def build_product_result(mode_name: str, product: str, detail: str, cost: float | None, price: float | None, stock: float | None, config: dict, market_context: dict) -> dict:
+def build_product_result(mode_name: str, product: str, detail: str, cost: float | None, price: float | None, stock: float | None, config: dict, market_context: dict, material_observation: dict) -> dict:
     current_year = market_context["current_year"]
     safe_product = clean_text_value(product, current_year) or "未填写商品"
     season = market_context["season"]
     applied = config["applied"]
+    usable_terms = material_observation.get("usable_terms") or []
+    term_hint = usable_terms[0] if usable_terms else "透气"
+    scene_hint = next((term for term in usable_terms if term in ["通勤", "骑行", "户外", "旅游", "露营"]), "通勤")
     title_pool = [
-        {"text": f"{safe_product}{season}轻薄透气防晒外套", "tag": "搜索词覆盖", "use_case": "自然搜索曝光测试"},
-        {"text": f"{safe_product}户外骑行防晒服男女同款", "tag": "场景词", "use_case": "场景词点击测试"},
-        {"text": f"{safe_product}冰丝透气轻薄防晒衣", "tag": "轻薄卖点", "use_case": "卖点词测试"},
+        {"text": f"{safe_product}{season}轻薄{term_hint}防晒外套", "tag": "当季词", "use_case": "自然搜索曝光测试"},
+        {"text": f"{safe_product}{scene_hint}防晒服男女同款", "tag": "场景词", "use_case": "场景词点击测试"},
+        {"text": f"{safe_product}冰丝透气轻薄防晒衣", "tag": "体验词", "use_case": "卖点词测试"},
         {"text": f"{safe_product}{season}高性价比外套", "tag": "价格感", "use_case": "价格感点击测试"},
         {"text": f"{safe_product}清仓特价轻薄防晒服", "tag": "清库存", "use_case": "库存消化测试"},
         {"text": f"{safe_product}户外防晒透气速干外套", "tag": "户外人群", "use_case": "户外人群测试"},
@@ -224,18 +247,27 @@ def build_product_result(mode_name: str, product: str, detail: str, cost: float 
         {"text": f"{safe_product}多色可选轻薄防晒衣", "tag": "SKU 承接", "use_case": "颜色 SKU 测试"},
     ]
     image_pool = [
-        {"name": "价格利益型", "main_text": "券后到手价突出", "sub_text": "轻薄透气｜防晒｜多场景可穿", "structure": "左侧放商品主体，右侧放大价格利益点，下方用 3 个卖点标签承接点击。", "use_case": "低价点击测试 / 自然流测款"},
-        {"name": "功能卖点型", "main_text": "轻薄透气不闷热", "sub_text": "户外通勤都能穿", "structure": "上方用场景图，下方列防晒、透气、轻薄三项核心卖点。", "use_case": "提升主图点击率"},
-        {"name": "场景使用型", "main_text": "通勤骑行都适合", "sub_text": "出门随手穿", "structure": "用真实出行场景做背景，商品主体居中，卖点标签放在底部。", "use_case": "VIP 场景图测试"},
+        {"name": "价格利益型", "main_text": "券后到手价突出", "sub_text": f"轻薄{term_hint}｜防晒｜多场景可穿", "structure": "左侧放商品主体，右侧放大价格利益点，下方用 3 个卖点标签承接点击。", "use_case": "低价点击测试 / 自然流测款"},
+        {"name": "功能卖点型", "main_text": f"轻薄{term_hint}不闷热", "sub_text": f"{scene_hint}户外都能穿", "structure": "上方用场景图，下方列防晒、透气、轻薄三项核心卖点。", "use_case": "提升主图点击率"},
+        {"name": "场景使用型", "main_text": f"{scene_hint}骑行都适合", "sub_text": "出门随手穿", "structure": "用真实出行场景做背景，商品主体居中，卖点标签放在底部。", "use_case": "VIP 场景图测试"},
         {"name": "对比痛点型", "main_text": "比普通外套更适合热天", "sub_text": "薄、透气、防晒、好收纳", "structure": "左侧痛点对比，右侧展示商品卖点，底部放适用场景。", "use_case": "VIP 痛点承接测试"},
         {"name": "活动承接型", "main_text": "活动价限时测试", "sub_text": "轻薄防晒｜多色可选｜库存有限", "structure": "顶部活动利益点，中间商品主体，下方放颜色/SKU 和库存提示。", "use_case": "VIP 活动报名承接"},
     ]
-    sku_plans = [{"type": "引流 SKU", "example": "单件基础款 / 基础颜色", "purpose": "拉点击、测价格感、承接自然流"}, {"type": "利润 SKU", "example": "升级面料款 / 热卖颜色", "purpose": "提高单件毛利，承接高意向用户"}, {"type": "组合 SKU", "example": "两件装 / 多色组合", "purpose": "提高客单价，适合活动或清库存"}]
+    sku_plans = [
+        {"type": "引流 SKU", "example": "单件基础款 / 基础颜色", "purpose": "拉点击、测价格感、承接自然流"},
+        {"type": "利润 SKU", "example": "升级面料款 / 热卖颜色", "purpose": "提高单件毛利，承接高意向用户"},
+        {"type": "组合 SKU", "example": "两件装 / 多色组合", "purpose": "提高客单价，适合活动或清库存"},
+    ]
     price_advice = []
     if cost is not None and price is not None:
         profit = price - cost
         margin = profit / price * 100 if price else 0
-        price_advice.extend([{"label": "当前价格", "value": f"售价 {price:.2f}，成本 {cost:.2f}，毛利 {profit:.2f}，毛利率 {margin:.1f}%"}, {"label": "A 档测试", "value": f"{price:.2f} 元，先观察自然流曝光和点击"}, {"label": "B 档测试", "value": f"{max(price - 2, cost):.2f} 元，用于测试转化提升"}, {"label": "止损提醒", "value": "如果点击低，先改标题和主图；不要直接连续降价。"}])
+        price_advice.extend([
+            {"label": "当前价格", "value": f"售价 {price:.2f}，成本 {cost:.2f}，毛利 {profit:.2f}，毛利率 {margin:.1f}%"},
+            {"label": "A 档测试", "value": f"{price:.2f} 元，先观察自然流曝光和点击"},
+            {"label": "B 档测试", "value": f"{max(price - 2, cost):.2f} 元，用于测试转化提升"},
+            {"label": "止损提醒", "value": "如果点击低，先改标题和主图；不要直接连续降价。"},
+        ])
     else:
         price_advice.append({"label": "价格建议", "value": "先补成本和售价，再计算毛利、活动价和止损线。"})
     if mode_name == "强付费":
@@ -251,9 +283,10 @@ def build_product_result(mode_name: str, product: str, detail: str, cost: float 
         next_actions.append(f"当前库存约 {stock:.0f}，建议按库存压力决定是否加入清仓词")
     product_result = {
         "title": f"{mode_name}执行包｜{safe_product}",
-        "summary": f"已按当前{season}语境生成：标题 {applied['title_count']} 条、主图方案 {applied['image_plan_count']} 个。",
+        "summary": f"已先完成素材观察，并按当前{season}语境生成：标题 {applied['title_count']} 条、主图方案 {applied['image_plan_count']} 个。",
         "generation_config": config,
         "market_context": {"current_year": current_year, "season": season},
+        "material_observation": material_observation,
         "titles": title_pool[:applied["title_count"]],
         "image_directions": image_pool[:applied["image_plan_count"]],
         "image_generation_plan": {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]},
@@ -267,7 +300,15 @@ def build_product_result(mode_name: str, product: str, detail: str, cost: float 
 
 
 def product_result_to_markdown(product_result: dict) -> str:
-    lines = [f"## {product_result['title']}", "", "### 标题测试包"]
+    lines = [f"## {product_result['title']}"]
+    observation = product_result.get("material_observation") or {}
+    if observation:
+        lines.extend(["", "### 素材观察"])
+        if observation.get("usable_terms"):
+            lines.append("- 可用词：" + "、".join(observation.get("usable_terms", [])[:12]))
+        if observation.get("title_structures"):
+            lines.append("- 标题结构：" + "；".join(observation.get("title_structures", [])[:3]))
+    lines.extend(["", "### 标题测试包"])
     for idx, item in enumerate(product_result.get("titles", []), 1):
         lines.append(f"{idx}. {item.get('text')}（{item.get('tag')}）")
     lines.extend(["", "### 主图结构方向"])
@@ -306,7 +347,7 @@ def parse_product_result_json(text: str) -> dict | None:
     return product_result if isinstance(product_result, dict) else None
 
 
-def sanitize_product_result(product_result: dict, fallback: dict, config: dict, market_context: dict) -> dict:
+def sanitize_product_result(product_result: dict, fallback: dict, config: dict, market_context: dict, material_observation: dict) -> dict:
     current_year = market_context["current_year"]
     result = fallback.copy()
     for key in ["title", "summary"]:
@@ -321,6 +362,7 @@ def sanitize_product_result(product_result: dict, fallback: dict, config: dict, 
     result["image_directions"] = result.get("image_directions", [])[:applied["image_plan_count"]]
     result["generation_config"] = config
     result["market_context"] = {"current_year": current_year, "season": market_context["season"]}
+    result["material_observation"] = material_observation
     result["image_generation_plan"] = {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]}
     return cleanse_value(result, current_year)
 
@@ -334,6 +376,7 @@ def generate_operation(payload: dict) -> dict:
     detail = clean_text_value(payload.get("detail") or "", current_year)
     market_material = str(payload.get("market_material") or payload.get("source_materials") or "")
     material_pack = build_material_pack(market_material, current_year)
+    material_observation = build_material_observation(product, mode_name, market_context, material_pack)
     cost = number_or_none(payload.get("cost"))
     price = number_or_none(payload.get("price"))
     stock = number_or_none(payload.get("stock"))
@@ -345,14 +388,14 @@ def generate_operation(payload: dict) -> dict:
         price = price if price is not None else parsed_price
         stock = stock if stock is not None else parsed_stock
     module_context = load_module_context(mode_key)
-    fallback_product_result = build_product_result(mode_name, product, detail, cost, price, stock, config, market_context)
+    fallback_product_result = build_product_result(mode_name, product, detail, cost, price, stock, config, market_context, material_observation)
     product_result = fallback_product_result
     raw_markdown = product_result_to_markdown(product_result)
     llm_status = {"enabled": llm_enabled(), "provider": None, "model": None, "used_fallback": True}
     if llm_enabled():
         provider, _, _, model = load_provider()
         llm_status.update({"provider": provider, "model": model})
-        system = f"你是拼多多电商运营产品助手。当前年份是{current_year}，当前季节是{market_context['season']}。只返回 JSON，不要输出 Markdown。标题严禁出现早于{current_year}年的年份词，例如 2024、2025。内容必须产品化，不能出现工程语言、API、debug、result_id、fallback、backflow、llm_status。参考素材只能提取词感和结构，不能直接抄袭。严格按用户选择的数量输出。"
+        system = f"你是拼多多电商运营产品助手。当前年份是{current_year}，当前季节是{market_context['season']}。生成前必须参考素材观察 Agent 的观察包，但不能直接复制竞品标题。只返回 JSON，不要输出 Markdown。标题严禁出现早于{current_year}年的年份词。内容必须产品化，不能出现工程语言、API、debug、result_id、fallback、backflow、llm_status。严格按用户选择的数量输出。"
         applied = config["applied"]
         user = f"""
 请根据输入生成 product_result。只返回如下 JSON：
@@ -371,7 +414,8 @@ def generate_operation(payload: dict) -> dict:
 }}
 
 当前时间语境：{json.dumps(market_context, ensure_ascii=False)}
-素材参考包：{json.dumps(material_pack, ensure_ascii=False)}
+素材观察 Agent 输出：{json.dumps(material_observation, ensure_ascii=False)}
+素材参考样本：{json.dumps(material_pack, ensure_ascii=False)}
 标题禁用规则：不要出现早于 {current_year} 年的年份词，不要为了显得新而硬写过去年份。
 数量要求：标题 {applied['title_count']} 条，主图方案 {applied['image_plan_count']} 个。图片生成选择 {applied['image_generate_count']} 张，预计积分 {config['credit_estimate']['credits']}。
 模式:{mode_name}
@@ -386,7 +430,7 @@ def generate_operation(payload: dict) -> dict:
             llm_text = chat(system, user)
             parsed = parse_product_result_json(llm_text or "")
             if parsed:
-                product_result = sanitize_product_result(parsed, fallback_product_result, config, market_context)
+                product_result = sanitize_product_result(parsed, fallback_product_result, config, market_context, material_observation)
                 raw_markdown = product_result_to_markdown(product_result)
                 llm_status["used_fallback"] = False
             elif llm_text:
@@ -398,7 +442,7 @@ def generate_operation(payload: dict) -> dict:
     result_id = "res_" + uuid.uuid4().hex[:12]
     client_id = client_id or f"single_{result_id}"
     debug = {"result_id": result_id, "llm_status": llm_status, "backflow_status": "stored_local_runtime_result", "generation_config": config, "market_context": market_context}
-    record = {"result_id": result_id, "client_id": client_id, "created_at": now_iso(), "mode": mode_name, "mode_key": mode_key, "product": product, "input": {"detail": detail, "cost": cost, "price": price, "stock": stock, "market_material": market_material}, "material_pack": material_pack, "product_result": product_result, "raw_markdown": raw_markdown, "debug": debug}
+    record = {"result_id": result_id, "client_id": client_id, "created_at": now_iso(), "mode": mode_name, "mode_key": mode_key, "product": product, "input": {"detail": detail, "cost": cost, "price": price, "stock": stock, "market_material": market_material}, "material_pack": material_pack, "material_observation": material_observation, "product_result": product_result, "raw_markdown": raw_markdown, "debug": debug}
     (RESULT_DIR / f"{result_id}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "result_id": result_id, "client_id": client_id, "mode": mode_name, "product": product, "product_result": product_result, "debug": debug, "markdown": raw_markdown}
 
