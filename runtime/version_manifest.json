@@ -1,5 +1,5 @@
 {
-  "runtime_version": "0.8.6",
+  "runtime_version": "0.8.7",
   "active_chain": "runtime/module_chain.json",
   "active_feedback_chain": "runtime/feedback_chain.json",
   "active_knowledge_retrieval_chain": "runtime/knowledge_retrieval_chain.json",
@@ -17,6 +17,9 @@
   "active_product_renderer": "frontend/app.js::renderResult",
   "active_generation_config_schema": "frontend/index.html::generation configuration controls",
   "active_backend_generation_limits": "backend/server.py::generation_config_from_payload",
+  "active_page_memory_client": "frontend/app.js::clientId",
+  "active_page_memory_last_result": "frontend/app.js::restoreLastResult",
+  "active_page_memory_backend_list": "backend/server.py::list_recent_results",
   "active_issue_generation_config_parser": "scripts/pdd_operation_analyzer.py::parse_generation_config",
   "active_runtime_smoke_test": "scripts/smoke_test_runtime.py",
   "active_runtime_smoke_workflow": ".github/workflows/runtime-smoke-test.yml",
@@ -29,5 +32,5 @@
   "active_llm_interface": "openai-compatible",
   "active_workflow": ".github/workflows/pdd-operation-analysis.yml",
   "last_verified": "2026-06-11",
-  "notes": "Navigation reduction added in v0.8.6. The top bar is no longer a duplicated fixed module nav. Sidebar carries unified product module names and can collapse on desktop or open as a drawer on tablet/mobile through nav.css and nav.js."
+  "notes": "Anonymous page memory added in v0.8.7. Each browser gets a local client_id. Generation requests store client_id with result records. The frontend restores the last result after refresh and shows recent plans for the same client_id. This avoids one shared global screen for multiple visitors without requiring a login system yet."
 }
