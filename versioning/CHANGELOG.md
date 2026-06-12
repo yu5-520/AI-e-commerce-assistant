@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.8.7 - 2026-06-11
+
+### Added
+- Added anonymous browser memory through `client_id` so one browser can restore its own recent product plans after refresh.
+- Added backend result listing through `GET /api/results?client_id=...`.
+- Added client-aware result loading through `GET /api/results/<result_id>?client_id=...`.
+- Added frontend automatic restoration of the last generated result through `localStorage`.
+- Added a lightweight “最近方案” panel so users can reopen recent generated plans.
+
+### Product Experience Rule
+- Refreshing the page should not erase the last generated product plan.
+- Multiple people using the same website should not share one global result screen.
+- MVP memory is anonymous and browser-based; it is not yet a full account or shop login system.
+
+### Preserved
+- Existing generation configuration controls remain active.
+- Existing AI generation and fallback behavior remain active.
+- Existing navigation reduction from v0.8.6 remains active.
+
+### Risk
+- Memory is isolated by browser `localStorage` client ID, not by formal user login.
+- Clearing browser data or changing devices will create a new anonymous history.
+
 ## v0.8.6 - 2026-06-11
 
 ### Changed
@@ -79,30 +102,3 @@
 - Tablet layout now compresses the sidebar and keeps an efficient two-column workspace.
 - Mobile layout now uses a single-column flow, horizontal navigation, swipeable mode cards, and a bottom-sticky generate button.
 - Form controls now include `select` styling and 16px mobile input text to avoid mobile browser zoom-in.
-
-### Desktop Experience
-- Wider control-console workspace.
-- Sticky sidebar.
-- Sticky input panel.
-- Larger output area for productized cards.
-
-### Tablet Experience
-- Narrower sidebar.
-- Two-column input/output layout retained.
-- Hero decoration reduced to preserve working space.
-- Tracking cards collapse to two columns.
-
-### Mobile Experience
-- Single-column flow.
-- Sidebar becomes horizontal scroll navigation.
-- Mode cards become horizontal swipe cards.
-- Generate button stays near the bottom for thumb operation.
-- Smaller spacing and card radius to reduce visual pressure.
-
-### Preserved
-- Existing productized rendering from v0.8.1 remains active.
-- Existing generation configuration from v0.8.2 remains active.
-- Existing backend API paths and local backflow folders remain unchanged.
-
-### Risk
-- Responsive layout has not yet been validated against real device screenshots from production browsers.
