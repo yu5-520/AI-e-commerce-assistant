@@ -3,15 +3,18 @@
 ## v0.8.9 - 2026-06-11
 
 ### Added
-- Added the light version of a material observation Agent layer.
+- Added the light version of a material observation Agent layer in `scripts/material_observer.py`.
 - The backend now builds a material pack from user-provided competitor titles, main-image selling points, or platform phrases.
-- The generation prompt now receives the material pack together with the current time and season context.
+- The material observation Agent outputs search tasks, usable terms, title structures, banned terms, and next sampling suggestions.
+- The generation prompt now receives the material observation pack together with the current time and season context.
 - The model is instructed to extract wording structure and current phrase feel, not to copy competitor titles directly.
-- Runtime manifest now tracks the material observation layer as a bridge toward future autonomous market observation.
+- Added frontend material observation rendering through `frontend/material-observation.js` and `frontend/material-observation.css`.
+- Runtime smoke test now checks that generated results include material observation output.
 
 ### Product Experience Rule
 - The product should move from static template generation toward current-market wording calibration.
 - User-provided material is treated as market signal, not as copy text.
+- Material observation is shown to users so they can see why the generated titles are not just template output.
 - This version prepares the architecture for future search/API-based observation without scraping platforms directly.
 
 ### Preserved
@@ -21,7 +24,7 @@
 
 ### Risk
 - This is still a light Agent layer. It does not yet autonomously search the web or platform pages.
-- If no material reference is provided, the system uses time context and built-in title structures only.
+- If no material reference is provided, the system uses time context, generated observation tasks, and built-in title structures.
 
 ## v0.8.8 - 2026-06-11
 
