@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.8.7
+Current Version: v0.8.8
 
 ## Version History
 
@@ -20,6 +20,7 @@ Current Version: v0.8.7
 - v0.8.5: UI microcopy was reduced so the page behaves more like a product tool and less like an engineering explanation page.
 - v0.8.6: Navigation was simplified with a non-fixed top bar, unified product naming, and collapsible/sidebar-drawer behavior.
 - v0.8.7: Anonymous page memory was added so each browser can restore its own recent product plans after refresh without sharing one global screen.
+- v0.8.8: Title timeliness calibration was added with current time context, optional material references, and stale-year filtering.
 
 ## Version Rules
 
