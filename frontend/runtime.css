@@ -305,6 +305,60 @@
   font-size: 13px;
 }
 
+.recent-card {
+  display: grid;
+  gap: 12px;
+}
+
+.recent-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.recent-head h3 {
+  margin: 0;
+}
+
+.recent-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recent-list {
+  display: grid;
+  gap: 8px;
+}
+
+.recent-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.recent-item:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  background: color-mix(in srgb, var(--brand) 7%, var(--surface));
+}
+
+.recent-item strong {
+  font-size: 14px;
+}
+
+.recent-item span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (max-width: 1180px) and (min-width: 761px) {
   .config-grid {
     grid-template-columns: repeat(2, 1fr);
