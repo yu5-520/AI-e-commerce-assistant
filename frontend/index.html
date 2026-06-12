@@ -7,8 +7,6 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./nav.css" />
   <link rel="stylesheet" href="./runtime.css" />
-  <link rel="stylesheet" href="./material-observation.css" />
-  <link rel="stylesheet" href="./material-sampler.css" />
 </head>
 <body>
   <header class="topbar">
@@ -78,8 +76,8 @@
           </label>
 
           <label>
-            素材参考
-            <textarea id="marketMaterialInput" rows="5" placeholder="可粘贴几条当前竞品标题、主图卖点或平台热词；没有素材也可以留空。"></textarea>
+            补充参考素材（可选）
+            <textarea id="marketMaterialInput" rows="5" placeholder="可粘贴竞品标题、主图卖点或平台热词；不填也可以生成。"></textarea>
           </label>
 
           <div class="form-row">
@@ -171,8 +169,7 @@
   </div>
 
   <script src="./nav.js"></script>
-  <script src="./material-sampler.js"></script>
-  <script src="./material-observation.js"></script>
   <script src="./app.js"></script>
+  <script src="./implicit-material-pipeline.js"></script>
 </body>
 </html>
