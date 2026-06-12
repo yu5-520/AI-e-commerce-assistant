@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.9.1 - 2026-06-11
+
+### Changed
+- Moved material observation back into an implicit backend/product-engineering pipeline.
+- Removed user-facing material sampler and material observation cards from the normal page flow.
+- Kept the optional material reference input, renamed it to “补充参考素材（可选）”.
+- Added `frontend/implicit-material-pipeline.js` to show user-facing progress: 正在整理商品素材 → 正在生成可测试方案.
+- Final output remains focused on copyable titles, image directions, SKU plans, price advice, and next actions.
+
+### Product Experience Rule
+- Users should click once and receive final usable outputs.
+- Material observation is a product-engineering capability, not a user confirmation step.
+- The page should not expose internal material packs, search tasks, or Agent observation details to normal users.
+
+### Preserved
+- Backend material observation Agent from v0.8.9 remains active.
+- Title stale-year filtering from v0.8.8 remains active.
+- Anonymous page memory from v0.8.7 remains active.
+
+### Risk
+- Material observation is still saved in backend result records for engineering review, but it is no longer visible in the normal user interface.
+
 ## v0.9.0 - 2026-06-11
 
 ### Added
