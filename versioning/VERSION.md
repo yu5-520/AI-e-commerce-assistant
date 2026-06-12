@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.8.9
+Current Version: v0.9.0
 
 ## Version History
 
@@ -22,6 +22,7 @@ Current Version: v0.8.9
 - v0.8.7: Anonymous page memory was added so each browser can restore its own recent product plans after refresh without sharing one global screen.
 - v0.8.8: Title timeliness calibration was added with current time context, optional material references, and stale-year filtering.
 - v0.8.9: Material observation Agent light version was added to extract current wording structure from user-provided market materials before generation.
+- v0.9.0: Pre-generation material sampling UI was added so users can observe wording signals before generating a product plan.
 
 ## Version Rules
 
