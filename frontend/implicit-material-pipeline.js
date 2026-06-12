@@ -10,7 +10,20 @@
     `;
   }
 
+  function patchGenerationCopy() {
+    if (typeof window.renderSystemMessage !== 'function' || window.__implicitPipelineCopyPatched) return;
+    const originalRenderSystemMessage = window.renderSystemMessage;
+    window.renderSystemMessage = (title, message = '') => {
+      if (title === '正在生成方案') {
+        return originalRenderSystemMessage('正在生成可测试方案', message || '正在生成可复制的标题、主图方向、SKU 和价格建议。');
+      }
+      return originalRenderSystemMessage(title, message);
+    };
+    window.__implicitPipelineCopyPatched = true;
+  }
+
   function mountImplicitPipeline() {
+    patchGenerationCopy();
     const form = document.getElementById('operationForm');
     if (!form || form.dataset.implicitPipelineMounted === 'true') return;
     form.dataset.implicitPipelineMounted = 'true';
@@ -18,6 +31,7 @@
     form.addEventListener('submit', event => {
       event.preventDefault();
       event.stopImmediatePropagation();
+      patchGenerationCopy();
       renderStatus('正在整理商品素材', '正在校准当前时间、商品信息和参考素材。');
       window.setTimeout(() => {
         renderStatus('正在生成可测试方案', '正在生成可复制的标题、主图方向、SKU 和价格建议。');
