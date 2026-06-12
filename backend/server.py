@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = ROOT / "frontend"
@@ -48,6 +48,12 @@ def now_iso() -> str:
 def ensure_dirs() -> None:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def clean_client_id(value) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"[^a-zA-Z0-9_\-]", "", text)
+    return text[:80]
 
 
 def read_json_body(handler: SimpleHTTPRequestHandler) -> dict:
@@ -188,41 +194,11 @@ def build_product_result(mode_name: str, product: str, detail: str, cost: float 
     ]
 
     image_pool = [
-        {
-            "name": "价格利益型",
-            "main_text": "券后到手价突出",
-            "sub_text": "轻薄透气｜夏季防晒｜多场景可穿",
-            "structure": "左侧放商品主体，右侧放大价格利益点，下方用 3 个卖点标签承接点击。",
-            "use_case": "低价点击测试 / 自然流测款",
-        },
-        {
-            "name": "功能卖点型",
-            "main_text": "轻薄透气不闷热",
-            "sub_text": "户外通勤都能穿",
-            "structure": "上方用场景图，下方列防晒、透气、轻薄三项核心卖点。",
-            "use_case": "提升主图点击率",
-        },
-        {
-            "name": "场景使用型",
-            "main_text": "通勤骑行都适合",
-            "sub_text": "夏季出门随手穿",
-            "structure": "用真实出行场景做背景，商品主体居中，卖点标签放在底部。",
-            "use_case": "VIP 场景图测试",
-        },
-        {
-            "name": "对比痛点型",
-            "main_text": "比普通外套更适合夏天",
-            "sub_text": "薄、透气、防晒、好收纳",
-            "structure": "左侧痛点对比，右侧展示商品卖点，底部放适用场景。",
-            "use_case": "VIP 痛点承接测试",
-        },
-        {
-            "name": "活动承接型",
-            "main_text": "活动价限时测试",
-            "sub_text": "轻薄防晒｜多色可选｜库存有限",
-            "structure": "顶部活动利益点，中间商品主体，下方放颜色/SKU 和库存提示。",
-            "use_case": "VIP 活动报名承接",
-        },
+        {"name": "价格利益型", "main_text": "券后到手价突出", "sub_text": "轻薄透气｜夏季防晒｜多场景可穿", "structure": "左侧放商品主体，右侧放大价格利益点，下方用 3 个卖点标签承接点击。", "use_case": "低价点击测试 / 自然流测款"},
+        {"name": "功能卖点型", "main_text": "轻薄透气不闷热", "sub_text": "户外通勤都能穿", "structure": "上方用场景图，下方列防晒、透气、轻薄三项核心卖点。", "use_case": "提升主图点击率"},
+        {"name": "场景使用型", "main_text": "通勤骑行都适合", "sub_text": "夏季出门随手穿", "structure": "用真实出行场景做背景，商品主体居中，卖点标签放在底部。", "use_case": "VIP 场景图测试"},
+        {"name": "对比痛点型", "main_text": "比普通外套更适合夏天", "sub_text": "薄、透气、防晒、好收纳", "structure": "左侧痛点对比，右侧展示商品卖点，底部放适用场景。", "use_case": "VIP 痛点承接测试"},
+        {"name": "活动承接型", "main_text": "活动价限时测试", "sub_text": "轻薄防晒｜多色可选｜库存有限", "structure": "顶部活动利益点，中间商品主体，下方放颜色/SKU 和库存提示。", "use_case": "VIP 活动报名承接"},
     ]
 
     titles = title_pool[:applied["title_count"]]
@@ -259,11 +235,7 @@ def build_product_result(mode_name: str, product: str, detail: str, cost: float 
     if stock is not None:
         next_actions.append(f"当前库存约 {stock:.0f}，建议按库存压力决定是否加入清仓词")
 
-    image_generation_plan = {
-        "count": applied["image_generate_count"],
-        "credits": config["credit_estimate"]["credits"],
-        "note": config["credit_estimate"]["note"],
-    }
+    image_generation_plan = {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]}
 
     return {
         "title": f"{mode_name}执行包｜{safe_product}",
@@ -333,11 +305,7 @@ def sanitize_product_result(product_result: dict, fallback: dict, config: dict) 
     result["titles"] = result.get("titles", [])[:applied["title_count"]]
     result["image_directions"] = result.get("image_directions", [])[:applied["image_plan_count"]]
     result["generation_config"] = config
-    result["image_generation_plan"] = {
-        "count": applied["image_generate_count"],
-        "credits": config["credit_estimate"]["credits"],
-        "note": config["credit_estimate"]["note"],
-    }
+    result["image_generation_plan"] = {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]}
     return result
 
 
@@ -350,6 +318,7 @@ def generate_operation(payload: dict) -> dict:
     price = number_or_none(payload.get("price"))
     stock = number_or_none(payload.get("stock"))
     config = generation_config_from_payload(payload)
+    client_id = clean_client_id(payload.get("client_id"))
     if cost is None or price is None or stock is None:
         parsed_cost, parsed_price, parsed_stock = extract_numbers(detail)
         cost = cost if cost is not None else parsed_cost
@@ -405,14 +374,11 @@ def generate_operation(payload: dict) -> dict:
             llm_status["error"] = type(exc).__name__
 
     result_id = "res_" + uuid.uuid4().hex[:12]
-    debug = {
-        "result_id": result_id,
-        "llm_status": llm_status,
-        "backflow_status": "stored_local_runtime_result",
-        "generation_config": config,
-    }
+    client_id = client_id or f"single_{result_id}"
+    debug = {"result_id": result_id, "llm_status": llm_status, "backflow_status": "stored_local_runtime_result", "generation_config": config}
     record = {
         "result_id": result_id,
+        "client_id": client_id,
         "created_at": now_iso(),
         "mode": mode_name,
         "mode_key": mode_key,
@@ -424,30 +390,40 @@ def generate_operation(payload: dict) -> dict:
     }
     (RESULT_DIR / f"{result_id}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    return {
-        "ok": True,
-        "result_id": result_id,
-        "mode": mode_name,
-        "product": product,
-        "product_result": product_result,
-        "debug": debug,
-        "markdown": raw_markdown,
-    }
+    return {"ok": True, "result_id": result_id, "client_id": client_id, "mode": mode_name, "product": product, "product_result": product_result, "debug": debug, "markdown": raw_markdown}
+
+
+def list_recent_results(client_id: str, limit: int = 20) -> list[dict]:
+    ensure_dirs()
+    client_id = clean_client_id(client_id)
+    if not client_id:
+        return []
+    items = []
+    for path in RESULT_DIR.glob("res_*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if record.get("client_id") != client_id:
+            continue
+        product_result = record.get("product_result") or {}
+        config = product_result.get("generation_config") or {}
+        items.append({
+            "result_id": record.get("result_id"),
+            "created_at": record.get("created_at"),
+            "mode": record.get("mode"),
+            "product": record.get("product"),
+            "title": product_result.get("title"),
+            "generation_config": config.get("applied") or {},
+        })
+    items.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    return items[:limit]
 
 
 def store_feedback(payload: dict) -> dict:
     ensure_dirs()
     feedback_id = "fb_" + uuid.uuid4().hex[:12]
-    record = {
-        "feedback_id": feedback_id,
-        "created_at": now_iso(),
-        "result_id": payload.get("result_id"),
-        "action": payload.get("action"),
-        "section": payload.get("section"),
-        "item_text": payload.get("item_text"),
-        "note": payload.get("note"),
-        "raw": payload,
-    }
+    record = {"feedback_id": feedback_id, "client_id": clean_client_id(payload.get("client_id")), "created_at": now_iso(), "result_id": payload.get("result_id"), "action": payload.get("action"), "section": payload.get("section"), "item_text": payload.get("item_text"), "note": payload.get("note"), "raw": payload}
     (FEEDBACK_DIR / f"{feedback_id}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "feedback_id": feedback_id, "stored": True}
 
@@ -465,17 +441,28 @@ class Handler(SimpleHTTPRequestHandler):
         send_json(self, 200, {"ok": True})
 
     def do_GET(self) -> None:
-        parsed = urlparse(self.path).path
+        parsed_url = urlparse(self.path)
+        parsed = parsed_url.path
+        query = parse_qs(parsed_url.query)
         if parsed == "/api/health":
             send_json(self, 200, {"ok": True, "service": "ai-ecommerce-backend", "time": now_iso()})
             return
+        if parsed == "/api/results":
+            client_id = clean_client_id((query.get("client_id") or [""])[0])
+            send_json(self, 200, {"ok": True, "results": list_recent_results(client_id)})
+            return
         if parsed.startswith("/api/results/"):
             result_id = parsed.rsplit("/", 1)[-1]
+            client_id = clean_client_id((query.get("client_id") or [""])[0])
             p = RESULT_DIR / f"{result_id}.json"
             if not p.exists():
                 send_json(self, 404, {"ok": False, "error": "result_not_found"})
                 return
-            send_json(self, 200, json.loads(p.read_text(encoding="utf-8")))
+            record = json.loads(p.read_text(encoding="utf-8"))
+            if client_id and record.get("client_id") != client_id:
+                send_json(self, 404, {"ok": False, "error": "result_not_found"})
+                return
+            send_json(self, 200, {"ok": True, **record})
             return
         return super().do_GET()
 
