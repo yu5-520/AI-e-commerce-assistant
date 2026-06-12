@@ -33,7 +33,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       patchGenerationCopy();
-      renderStatus('正在整理商品素材', '正在校准当前时间、商品信息和参考素材。');
+      renderStatus('正在整理商品信息', '正在结合商品信息和参考素材，准备生成可测试方案。');
       window.setTimeout(() => {
         window.generateOperation();
       }, 650);
