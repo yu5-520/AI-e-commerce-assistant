@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.8.8
+Current Version: v0.8.9
 
 ## Version History
 
@@ -21,6 +21,7 @@ Current Version: v0.8.8
 - v0.8.6: Navigation was simplified with a non-fixed top bar, unified product naming, and collapsible/sidebar-drawer behavior.
 - v0.8.7: Anonymous page memory was added so each browser can restore its own recent product plans after refresh without sharing one global screen.
 - v0.8.8: Title timeliness calibration was added with current time context, optional material references, and stale-year filtering.
+- v0.8.9: Material observation Agent light version was added to extract current wording structure from user-provided market materials before generation.
 
 ## Version Rules
 
