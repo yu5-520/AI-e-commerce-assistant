@@ -29,16 +29,8 @@ MODE_MAP = {
 }
 
 IMAGE_CREDIT_COST = {0: 0, 1: 10, 2: 18, 3: 25, 5: 40}
-FREE_LIMITS = {
-    "title_counts": {3, 5},
-    "image_plan_counts": {1, 2},
-    "image_generate_counts": {0, 1, 2},
-}
-VIP_LIMITS = {
-    "title_counts": {3, 5, 10, 15},
-    "image_plan_counts": {1, 2, 3, 5},
-    "image_generate_counts": {0, 1, 2, 3, 5},
-}
+FREE_LIMITS = {"title_counts": {3, 5}, "image_plan_counts": {1, 2}, "image_generate_counts": {0, 1, 2}}
+VIP_LIMITS = {"title_counts": {3, 5, 10, 15}, "image_plan_counts": {1, 2, 3, 5}, "image_generate_counts": {0, 1, 2, 3, 5}}
 
 
 def now_iso() -> str:
@@ -50,10 +42,74 @@ def ensure_dirs() -> None:
     FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def market_time_context() -> dict:
+    now = datetime.now(timezone.utc)
+    month = now.month
+    if month in (3, 4, 5):
+        season = "春季"
+    elif month in (6, 7, 8):
+        season = "夏季"
+    elif month in (9, 10, 11):
+        season = "秋季"
+    else:
+        season = "冬季"
+    return {"current_year": now.year, "current_month": month, "current_date": now.date().isoformat(), "season": season}
+
+
+def remove_stale_years(value: str, current_year: int | None = None) -> str:
+    current_year = current_year or market_time_context()["current_year"]
+
+    def replace_year(match: re.Match) -> str:
+        year = int(match.group(1))
+        return match.group(0) if year >= current_year else ""
+
+    text = re.sub(r"\b(20\d{2})\b年?", replace_year, str(value or ""))
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def clean_client_id(value) -> str:
     text = str(value or "").strip()
     text = re.sub(r"[^a-zA-Z0-9_\-]", "", text)
     return text[:80]
+
+
+def clean_text_value(value, current_year: int | None = None) -> str:
+    text = remove_stale_years(str(value or ""), current_year)
+    blocked = ["result_id", "backflow", "llm_status", "deterministic", "fallback", "api", "POST", "debug"]
+    for word in blocked:
+        text = text.replace(word, "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def cleanse_value(value, current_year: int | None = None):
+    if isinstance(value, dict):
+        return {key: cleanse_value(item, current_year) for key, item in value.items()}
+    if isinstance(value, list):
+        return [cleanse_value(item, current_year) for item in value]
+    if isinstance(value, str):
+        return clean_text_value(value, current_year)
+    return value
+
+
+def build_material_pack(raw_material: str, current_year: int) -> dict:
+    lines = []
+    for line in str(raw_material or "").splitlines():
+        cleaned = clean_text_value(line, current_year)
+        if cleaned:
+            lines.append(cleaned)
+        if len(lines) >= 16:
+            break
+    joined = " ".join(lines)
+    terms = []
+    banned = {"拼多多", "商品", "标题", "新款", "爆款", "旗舰", "官方", "正品", "包邮", "现货", "2024", "2025"}
+    for token in re.findall(r"[\u4e00-\u9fffA-Za-z0-9]{2,}", joined):
+        if token in banned or re.fullmatch(r"20\d{2}", token):
+            continue
+        if token not in terms:
+            terms.append(token)
+        if len(terms) >= 30:
+            break
+    return {"samples": lines, "terms": terms}
 
 
 def read_json_body(handler: SimpleHTTPRequestHandler) -> dict:
@@ -125,32 +181,14 @@ def nearest_allowed(value: int, allowed: set[int]) -> int:
 def generation_config_from_payload(payload: dict) -> dict:
     membership = "vip" if str(payload.get("membership") or "free").lower() == "vip" else "free"
     limits = VIP_LIMITS if membership == "vip" else FREE_LIMITS
-    requested = {
-        "title_count": int_from_payload(payload, "title_count", 3),
-        "image_plan_count": int_from_payload(payload, "image_plan_count", 1),
-        "image_generate_count": int_from_payload(payload, "image_generate_count", 0),
-    }
-    applied = {
-        "title_count": nearest_allowed(requested["title_count"], limits["title_counts"]),
-        "image_plan_count": nearest_allowed(requested["image_plan_count"], limits["image_plan_counts"]),
-        "image_generate_count": nearest_allowed(requested["image_generate_count"], limits["image_generate_counts"]),
-    }
+    requested = {"title_count": int_from_payload(payload, "title_count", 3), "image_plan_count": int_from_payload(payload, "image_plan_count", 1), "image_generate_count": int_from_payload(payload, "image_generate_count", 0)}
+    applied = {"title_count": nearest_allowed(requested["title_count"], limits["title_counts"]), "image_plan_count": nearest_allowed(requested["image_plan_count"], limits["image_plan_counts"]), "image_generate_count": nearest_allowed(requested["image_generate_count"], limits["image_generate_counts"])}
     adjustments = []
     for key, value in requested.items():
         if value != applied[key]:
             adjustments.append({"field": key, "requested": value, "applied": applied[key], "reason": "vip_required_or_invalid_count"})
     credits = IMAGE_CREDIT_COST.get(applied["image_generate_count"], 0)
-    return {
-        "membership": membership,
-        "requested": requested,
-        "applied": applied,
-        "adjustments": adjustments,
-        "credit_estimate": {
-            "image_generate_count": applied["image_generate_count"],
-            "credits": credits,
-            "note": "当前版本仅估算图片生成积分；未接入真实图片生成模型。" if applied["image_generate_count"] else "未选择图片生成。",
-        },
-    }
+    return {"membership": membership, "requested": requested, "applied": applied, "adjustments": adjustments, "credit_estimate": {"image_generate_count": applied["image_generate_count"], "credits": credits, "note": "当前版本仅估算图片生成积分；未接入真实图片生成模型。" if applied["image_generate_count"] else "未选择图片生成。"}}
 
 
 def extract_numbers(text: str) -> tuple[float | None, float | None, float | None]:
@@ -160,67 +198,46 @@ def extract_numbers(text: str) -> tuple[float | None, float | None, float | None
             if m:
                 return float(m.group(1))
         return None
-
     return pick(["成本", "进价"]), pick(["售价", "卖", "价格"]), pick(["库存"])
 
 
-def clean_string(value, fallback: str = "") -> str:
-    text = str(value or fallback).strip()
-    blocked = ["result_id", "backflow", "llm_status", "deterministic", "fallback", "api", "POST", "debug"]
-    for word in blocked:
-        text = text.replace(word, "")
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def build_product_result(mode_name: str, product: str, detail: str, cost: float | None, price: float | None, stock: float | None, config: dict) -> dict:
-    safe_product = product.strip() or "未填写商品"
+def build_product_result(mode_name: str, product: str, detail: str, cost: float | None, price: float | None, stock: float | None, config: dict, market_context: dict) -> dict:
+    current_year = market_context["current_year"]
+    safe_product = clean_text_value(product, current_year) or "未填写商品"
+    season = market_context["season"]
     applied = config["applied"]
     title_pool = [
-        {"text": f"{safe_product}夏季轻薄透气防晒外套", "tag": "搜索词覆盖", "use_case": "自然搜索曝光测试"},
+        {"text": f"{safe_product}{season}轻薄透气防晒外套", "tag": "搜索词覆盖", "use_case": "自然搜索曝光测试"},
         {"text": f"{safe_product}户外骑行防晒服男女同款", "tag": "场景词", "use_case": "场景词点击测试"},
         {"text": f"{safe_product}冰丝透气轻薄防晒衣", "tag": "轻薄卖点", "use_case": "卖点词测试"},
-        {"text": f"{safe_product}夏季新款高性价比外套", "tag": "价格感", "use_case": "价格感点击测试"},
+        {"text": f"{safe_product}{season}高性价比外套", "tag": "价格感", "use_case": "价格感点击测试"},
         {"text": f"{safe_product}清仓特价轻薄防晒服", "tag": "清库存", "use_case": "库存消化测试"},
         {"text": f"{safe_product}户外防晒透气速干外套", "tag": "户外人群", "use_case": "户外人群测试"},
-        {"text": f"{safe_product}学生党夏季防晒外套", "tag": "学生人群", "use_case": "低价人群测试"},
+        {"text": f"{safe_product}学生党{season}防晒外套", "tag": "学生人群", "use_case": "低价人群测试"},
         {"text": f"{safe_product}低价好穿透气防晒衣", "tag": "低价点击", "use_case": "低价承接测试"},
-        {"text": f"{safe_product}女夏季薄款防晒服外套", "tag": "长尾词", "use_case": "长尾搜索测试"},
-        {"text": f"{safe_product}活动价夏季防晒外套", "tag": "活动承接", "use_case": "活动报名承接"},
+        {"text": f"{safe_product}女{season}薄款防晒服外套", "tag": "长尾词", "use_case": "长尾搜索测试"},
+        {"text": f"{safe_product}活动价防晒外套", "tag": "活动承接", "use_case": "活动报名承接"},
         {"text": f"{safe_product}通勤户外两用轻薄外套", "tag": "通勤场景", "use_case": "多场景测试"},
-        {"text": f"{safe_product}防晒透气不闷热夏季外套", "tag": "痛点词", "use_case": "痛点承接测试"},
+        {"text": f"{safe_product}防晒透气不闷热外套", "tag": "痛点词", "use_case": "痛点承接测试"},
         {"text": f"{safe_product}骑车旅游防晒薄款外套", "tag": "场景细分", "use_case": "细分人群测试"},
-        {"text": f"{safe_product}防晒服女夏季宽松显瘦", "tag": "人群词", "use_case": "女性人群测试"},
+        {"text": f"{safe_product}防晒服女宽松显瘦", "tag": "人群词", "use_case": "女性人群测试"},
         {"text": f"{safe_product}多色可选轻薄防晒衣", "tag": "SKU 承接", "use_case": "颜色 SKU 测试"},
     ]
-
     image_pool = [
-        {"name": "价格利益型", "main_text": "券后到手价突出", "sub_text": "轻薄透气｜夏季防晒｜多场景可穿", "structure": "左侧放商品主体，右侧放大价格利益点，下方用 3 个卖点标签承接点击。", "use_case": "低价点击测试 / 自然流测款"},
+        {"name": "价格利益型", "main_text": "券后到手价突出", "sub_text": "轻薄透气｜防晒｜多场景可穿", "structure": "左侧放商品主体，右侧放大价格利益点，下方用 3 个卖点标签承接点击。", "use_case": "低价点击测试 / 自然流测款"},
         {"name": "功能卖点型", "main_text": "轻薄透气不闷热", "sub_text": "户外通勤都能穿", "structure": "上方用场景图，下方列防晒、透气、轻薄三项核心卖点。", "use_case": "提升主图点击率"},
-        {"name": "场景使用型", "main_text": "通勤骑行都适合", "sub_text": "夏季出门随手穿", "structure": "用真实出行场景做背景，商品主体居中，卖点标签放在底部。", "use_case": "VIP 场景图测试"},
-        {"name": "对比痛点型", "main_text": "比普通外套更适合夏天", "sub_text": "薄、透气、防晒、好收纳", "structure": "左侧痛点对比，右侧展示商品卖点，底部放适用场景。", "use_case": "VIP 痛点承接测试"},
+        {"name": "场景使用型", "main_text": "通勤骑行都适合", "sub_text": "出门随手穿", "structure": "用真实出行场景做背景，商品主体居中，卖点标签放在底部。", "use_case": "VIP 场景图测试"},
+        {"name": "对比痛点型", "main_text": "比普通外套更适合热天", "sub_text": "薄、透气、防晒、好收纳", "structure": "左侧痛点对比，右侧展示商品卖点，底部放适用场景。", "use_case": "VIP 痛点承接测试"},
         {"name": "活动承接型", "main_text": "活动价限时测试", "sub_text": "轻薄防晒｜多色可选｜库存有限", "structure": "顶部活动利益点，中间商品主体，下方放颜色/SKU 和库存提示。", "use_case": "VIP 活动报名承接"},
     ]
-
-    titles = title_pool[:applied["title_count"]]
-    image_directions = image_pool[:applied["image_plan_count"]]
-
-    sku_plans = [
-        {"type": "引流 SKU", "example": "单件基础款 / 基础颜色", "purpose": "拉点击、测价格感、承接自然流"},
-        {"type": "利润 SKU", "example": "升级面料款 / 热卖颜色", "purpose": "提高单件毛利，承接高意向用户"},
-        {"type": "组合 SKU", "example": "两件装 / 多色组合", "purpose": "提高客单价，适合活动或清库存"},
-    ]
-
+    sku_plans = [{"type": "引流 SKU", "example": "单件基础款 / 基础颜色", "purpose": "拉点击、测价格感、承接自然流"}, {"type": "利润 SKU", "example": "升级面料款 / 热卖颜色", "purpose": "提高单件毛利，承接高意向用户"}, {"type": "组合 SKU", "example": "两件装 / 多色组合", "purpose": "提高客单价，适合活动或清库存"}]
     price_advice = []
     if cost is not None and price is not None:
         profit = price - cost
         margin = profit / price * 100 if price else 0
-        price_advice.append({"label": "当前价格", "value": f"售价 {price:.2f}，成本 {cost:.2f}，毛利 {profit:.2f}，毛利率 {margin:.1f}%"})
-        price_advice.append({"label": "A 档测试", "value": f"{price:.2f} 元，先观察自然流曝光和点击"})
-        price_advice.append({"label": "B 档测试", "value": f"{max(price - 2, cost):.2f} 元，用于测试转化提升"})
-        price_advice.append({"label": "止损提醒", "value": "如果点击低，先改标题和主图；不要直接连续降价。"})
+        price_advice.extend([{"label": "当前价格", "value": f"售价 {price:.2f}，成本 {cost:.2f}，毛利 {profit:.2f}，毛利率 {margin:.1f}%"}, {"label": "A 档测试", "value": f"{price:.2f} 元，先观察自然流曝光和点击"}, {"label": "B 档测试", "value": f"{max(price - 2, cost):.2f} 元，用于测试转化提升"}, {"label": "止损提醒", "value": "如果点击低，先改标题和主图；不要直接连续降价。"}])
     else:
         price_advice.append({"label": "价格建议", "value": "先补成本和售价，再计算毛利、活动价和止损线。"})
-
     if mode_name == "强付费":
         activity = ["先小预算测素材点击率", "ROI 连续低于预期时先停素材，不直接放大预算", "退款率异常时暂停放量"]
         next_actions = ["选择标题做曝光测试", "用价格利益型主图测点击", "用小预算验证转化与 ROI", "第二天回填点击率、转化率、ROI"]
@@ -230,26 +247,23 @@ def build_product_result(mode_name: str, product: str, detail: str, cost: float 
     else:
         activity = ["先测标题和主图，不急着放大预算", "曝光低先换标题词", "点击低先换主图结构", "有点击无成交再看价格和 SKU"]
         next_actions = [f"复制 {min(applied['title_count'], 3)} 条标题上架测试", "优先做价格利益型主图", "保留一个引流 SKU 和一个利润 SKU", "3 天后回填曝光、点击、成交数据"]
-
-    precision_tips = ["竞品价格与销量", "当前曝光 / 点击 / 成交 / 退款", "主图素材和商品核心卖点"]
     if stock is not None:
         next_actions.append(f"当前库存约 {stock:.0f}，建议按库存压力决定是否加入清仓词")
-
-    image_generation_plan = {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]}
-
-    return {
+    product_result = {
         "title": f"{mode_name}执行包｜{safe_product}",
-        "summary": f"已按配置生成：标题 {applied['title_count']} 条、主图方案 {applied['image_plan_count']} 个。",
+        "summary": f"已按当前{season}语境生成：标题 {applied['title_count']} 条、主图方案 {applied['image_plan_count']} 个。",
         "generation_config": config,
-        "titles": titles,
-        "image_directions": image_directions,
-        "image_generation_plan": image_generation_plan,
+        "market_context": {"current_year": current_year, "season": season},
+        "titles": title_pool[:applied["title_count"]],
+        "image_directions": image_pool[:applied["image_plan_count"]],
+        "image_generation_plan": {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]},
         "sku_plans": sku_plans,
         "price_advice": price_advice,
         "activity_suggestions": activity,
         "next_actions": next_actions,
-        "precision_tips": precision_tips,
+        "precision_tips": ["竞品价格与销量", "当前曝光 / 点击 / 成交 / 退款", "主图素材和商品核心卖点"],
     }
+    return cleanse_value(product_result, current_year)
 
 
 def product_result_to_markdown(product_result: dict) -> str:
@@ -292,11 +306,12 @@ def parse_product_result_json(text: str) -> dict | None:
     return product_result if isinstance(product_result, dict) else None
 
 
-def sanitize_product_result(product_result: dict, fallback: dict, config: dict) -> dict:
+def sanitize_product_result(product_result: dict, fallback: dict, config: dict, market_context: dict) -> dict:
+    current_year = market_context["current_year"]
     result = fallback.copy()
     for key in ["title", "summary"]:
         if isinstance(product_result.get(key), str):
-            result[key] = clean_string(product_result[key], result.get(key, ""))
+            result[key] = clean_text_value(product_result[key], current_year) or result.get(key, "")
     for key in ["titles", "image_directions", "sku_plans", "price_advice", "activity_suggestions", "next_actions", "precision_tips"]:
         value = product_result.get(key)
         if isinstance(value, list) and value:
@@ -305,15 +320,20 @@ def sanitize_product_result(product_result: dict, fallback: dict, config: dict) 
     result["titles"] = result.get("titles", [])[:applied["title_count"]]
     result["image_directions"] = result.get("image_directions", [])[:applied["image_plan_count"]]
     result["generation_config"] = config
+    result["market_context"] = {"current_year": current_year, "season": market_context["season"]}
     result["image_generation_plan"] = {"count": applied["image_generate_count"], "credits": config["credit_estimate"]["credits"], "note": config["credit_estimate"]["note"]}
-    return result
+    return cleanse_value(result, current_year)
 
 
 def generate_operation(payload: dict) -> dict:
     ensure_dirs()
+    market_context = market_time_context()
+    current_year = market_context["current_year"]
     mode_key, mode_name = mode_from_payload(payload)
-    product = str(payload.get("product") or "").strip() or "未填写商品"
-    detail = str(payload.get("detail") or "")
+    product = clean_text_value(payload.get("product") or "", current_year) or "未填写商品"
+    detail = clean_text_value(payload.get("detail") or "", current_year)
+    market_material = str(payload.get("market_material") or payload.get("source_materials") or "")
+    material_pack = build_material_pack(market_material, current_year)
     cost = number_or_none(payload.get("cost"))
     price = number_or_none(payload.get("price"))
     stock = number_or_none(payload.get("stock"))
@@ -324,17 +344,15 @@ def generate_operation(payload: dict) -> dict:
         cost = cost if cost is not None else parsed_cost
         price = price if price is not None else parsed_price
         stock = stock if stock is not None else parsed_stock
-
     module_context = load_module_context(mode_key)
-    fallback_product_result = build_product_result(mode_name, product, detail, cost, price, stock, config)
+    fallback_product_result = build_product_result(mode_name, product, detail, cost, price, stock, config, market_context)
     product_result = fallback_product_result
     raw_markdown = product_result_to_markdown(product_result)
     llm_status = {"enabled": llm_enabled(), "provider": None, "model": None, "used_fallback": True}
-
     if llm_enabled():
         provider, _, _, model = load_provider()
         llm_status.update({"provider": provider, "model": model})
-        system = "你是拼多多电商运营产品助手。只返回 JSON，不要输出 Markdown。内容必须产品化，不能出现工程语言、API、debug、result_id、fallback、backflow、llm_status。严格按用户选择的数量输出。"
+        system = f"你是拼多多电商运营产品助手。当前年份是{current_year}，当前季节是{market_context['season']}。只返回 JSON，不要输出 Markdown。标题严禁出现早于{current_year}年的年份词，例如 2024、2025。内容必须产品化，不能出现工程语言、API、debug、result_id、fallback、backflow、llm_status。参考素材只能提取词感和结构，不能直接抄袭。严格按用户选择的数量输出。"
         applied = config["applied"]
         user = f"""
 请根据输入生成 product_result。只返回如下 JSON：
@@ -352,6 +370,9 @@ def generate_operation(payload: dict) -> dict:
   }}
 }}
 
+当前时间语境：{json.dumps(market_context, ensure_ascii=False)}
+素材参考包：{json.dumps(material_pack, ensure_ascii=False)}
+标题禁用规则：不要出现早于 {current_year} 年的年份词，不要为了显得新而硬写过去年份。
 数量要求：标题 {applied['title_count']} 条，主图方案 {applied['image_plan_count']} 个。图片生成选择 {applied['image_generate_count']} 张，预计积分 {config['credit_estimate']['credits']}。
 模式:{mode_name}
 商品:{product}
@@ -365,31 +386,20 @@ def generate_operation(payload: dict) -> dict:
             llm_text = chat(system, user)
             parsed = parse_product_result_json(llm_text or "")
             if parsed:
-                product_result = sanitize_product_result(parsed, fallback_product_result, config)
+                product_result = sanitize_product_result(parsed, fallback_product_result, config, market_context)
                 raw_markdown = product_result_to_markdown(product_result)
                 llm_status["used_fallback"] = False
             elif llm_text:
                 llm_status["parse_warning"] = "llm_text_not_product_json"
         except Exception as exc:
             llm_status["error"] = type(exc).__name__
-
+    product_result = cleanse_value(product_result, current_year)
+    raw_markdown = product_result_to_markdown(product_result)
     result_id = "res_" + uuid.uuid4().hex[:12]
     client_id = client_id or f"single_{result_id}"
-    debug = {"result_id": result_id, "llm_status": llm_status, "backflow_status": "stored_local_runtime_result", "generation_config": config}
-    record = {
-        "result_id": result_id,
-        "client_id": client_id,
-        "created_at": now_iso(),
-        "mode": mode_name,
-        "mode_key": mode_key,
-        "product": product,
-        "input": {"detail": detail, "cost": cost, "price": price, "stock": stock},
-        "product_result": product_result,
-        "raw_markdown": raw_markdown,
-        "debug": debug,
-    }
+    debug = {"result_id": result_id, "llm_status": llm_status, "backflow_status": "stored_local_runtime_result", "generation_config": config, "market_context": market_context}
+    record = {"result_id": result_id, "client_id": client_id, "created_at": now_iso(), "mode": mode_name, "mode_key": mode_key, "product": product, "input": {"detail": detail, "cost": cost, "price": price, "stock": stock, "market_material": market_material}, "material_pack": material_pack, "product_result": product_result, "raw_markdown": raw_markdown, "debug": debug}
     (RESULT_DIR / f"{result_id}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-
     return {"ok": True, "result_id": result_id, "client_id": client_id, "mode": mode_name, "product": product, "product_result": product_result, "debug": debug, "markdown": raw_markdown}
 
 
@@ -408,14 +418,7 @@ def list_recent_results(client_id: str, limit: int = 20) -> list[dict]:
             continue
         product_result = record.get("product_result") or {}
         config = product_result.get("generation_config") or {}
-        items.append({
-            "result_id": record.get("result_id"),
-            "created_at": record.get("created_at"),
-            "mode": record.get("mode"),
-            "product": record.get("product"),
-            "title": product_result.get("title"),
-            "generation_config": config.get("applied") or {},
-        })
+        items.append({"result_id": record.get("result_id"), "created_at": record.get("created_at"), "mode": record.get("mode"), "product": record.get("product"), "title": product_result.get("title"), "generation_config": config.get("applied") or {}})
     items.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return items[:limit]
 
