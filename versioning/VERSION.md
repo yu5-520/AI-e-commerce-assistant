@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.9.0
+Current Version: v0.9.1
 
 ## Version History
 
@@ -23,6 +23,7 @@ Current Version: v0.9.0
 - v0.8.8: Title timeliness calibration was added with current time context, optional material references, and stale-year filtering.
 - v0.8.9: Material observation Agent light version was added to extract current wording structure from user-provided market materials before generation.
 - v0.9.0: Pre-generation material sampling UI was added so users can observe wording signals before generating a product plan.
+- v0.9.1: Material observation was moved back into an implicit backend pipeline so users only see generation progress and final copyable outputs.
 
 ## Version Rules
 
