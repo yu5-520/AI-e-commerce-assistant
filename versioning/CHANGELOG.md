@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.9.2 - 2026-06-11
+
+### Added
+- Added Agent module governance for the material observation layer.
+- `scripts/material_observer.py` now exposes a stable Agent contract through `agent_contract()`.
+- Material observation output now includes `agent_id`, `agent_version`, `stage`, `source_policy`, `risk_flags`, `confidence`, and `agent_trace`.
+- Added `runtime/agent_registry.json` so current and future Agents can be registered and governed in one place.
+- Runtime smoke test now validates the Agent contract, source policy, risk flags, confidence output, and stale-year filtering.
+
+### Product Engineering Rule
+- Agent outputs are product-engineering records, not normal user-facing UI.
+- Agents must expose a stable contract before being used by generation flows.
+- Agents must declare allowed and disallowed data sources.
+- Material observation can use user-provided text, merchant-owned data, uploaded screenshot text, and legal search APIs.
+- Material observation must not use unauthorized platform scraping or copy competitor titles verbatim.
+
+### Preserved
+- v0.9.1 implicit user flow remains active.
+- v0.8.8 title stale-year filtering remains active.
+- v0.8.7 anonymous page memory remains active.
+
 ## v0.9.1 - 2026-06-11
 
 ### Changed
@@ -52,5 +73,3 @@
 - The material observation Agent outputs search tasks, usable terms, title structures, banned terms, and next sampling suggestions.
 - The generation prompt now receives the material observation pack together with the current time and season context.
 - The model is instructed to extract wording structure and current phrase feel, not to copy competitor titles directly.
-- Added frontend material observation rendering through `frontend/material-observation.js` and `frontend/material-observation.css`.
-- Runtime smoke test now checks that generated results include material observation output.
