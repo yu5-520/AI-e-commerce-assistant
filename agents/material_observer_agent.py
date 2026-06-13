@@ -6,10 +6,20 @@ from typing import Any
 
 from .base import AgentContext, AgentResult
 
+AGENT_ID = "material-observer"
+AGENT_NAME = "素材观察 Agent"
+AGENT_VERSION = "0.9.2"
+AGENT_STAGE = "pre_generation"
+
 SCENE_WORDS = ["通勤", "骑行", "户外", "旅游", "防晒", "出游", "上班", "学生", "宝妈", "露营", "跑步"]
 FUNCTION_WORDS = ["轻薄", "透气", "冰丝", "凉感", "速干", "防晒", "显瘦", "宽松", "不闷", "防紫外线", "收纳"]
 PRICE_WORDS = ["低价", "券后", "活动价", "清仓", "高性价比", "限时", "多件装"]
 GENERIC_BANNED_WORDS = ["2024", "2025", "过季", "去年", "全网爆款", "全网热卖", "官方正品", "永久", "第一", "最强"]
+SOURCE_POLICY = {
+    "allowed_sources": ["user_provided_text", "merchant_owned_data", "uploaded_screenshot_text", "legal_search_api"],
+    "disallowed_sources": ["unauthorized_platform_scraping", "copying_competitor_titles_verbatim"],
+    "copy_rule": "只提取词感、词频、结构和风险，不直接复制竞品标题。",
+}
 
 
 def _unique(items: list[str], limit: int = 12) -> list[str]:
@@ -40,9 +50,45 @@ def _pick_terms(samples: list[str], product: str) -> dict[str, list[str]]:
     }
 
 
+def _risk_flags(samples: list[str]) -> list[str]:
+    joined = " ".join(samples)
+    flags = []
+    if re.search(r"\b202[0-5]\b", joined):
+        flags.append("stale_year_detected")
+    if any(word in joined for word in ["全网爆款", "全网热卖", "最强", "永久", "第一"]):
+        flags.append("overclaim_word_detected")
+    if not samples:
+        flags.append("no_market_material")
+    if len(samples) < 3:
+        flags.append("low_sample_count")
+    return flags
+
+
+def _confidence(samples: list[str], usable_terms: list[str]) -> dict[str, Any]:
+    score = 0.35
+    if len(samples) >= 3:
+        score += 0.25
+    elif len(samples) >= 1:
+        score += 0.12
+    if len(usable_terms) >= 6:
+        score += 0.25
+    elif len(usable_terms) >= 3:
+        score += 0.14
+    score = min(round(score, 2), 0.9)
+    if score >= 0.75:
+        label = "high"
+    elif score >= 0.5:
+        label = "medium"
+    else:
+        label = "low"
+    return {"score": score, "label": label}
+
+
 class MaterialObserverAgent:
-    agent_id = "material_observer"
-    agent_name = "素材观察 Agent"
+    agent_id = AGENT_ID
+    agent_name = AGENT_NAME
+    agent_version = AGENT_VERSION
+    stage = AGENT_STAGE
 
     def run(self, context: AgentContext) -> AgentResult:
         product = (context.product or "商品").strip() or "商品"
@@ -78,21 +124,31 @@ class MaterialObserverAgent:
             extracted["dynamic_terms"] + extracted["scene_terms"] + extracted["function_terms"] + extracted["price_terms"],
             18,
         )
-
         output = {
+            "agent_id": self.agent_id,
             "agent_name": self.agent_name,
+            "agent_version": self.agent_version,
+            "stage": self.stage,
             "status": "素材已提取" if has_material else "等待素材补充",
-            "market_time": {
-                "current_year": current_year,
-                "season": season,
-            },
+            "market_time": {"current_year": current_year, "season": season},
             "search_tasks": _unique(search_tasks, 8),
             "usable_terms": usable_terms,
             "title_structures": title_structures,
             "banned_terms": GENERIC_BANNED_WORDS,
+            "risk_flags": _risk_flags(samples),
+            "confidence": _confidence(samples, usable_terms),
             "sample_count": len(samples),
             "next_sampling": next_sampling,
-            "rule": "只提取词感和结构，不直接复制竞品标题。",
+            "source_policy": SOURCE_POLICY,
+            "agent_trace": [
+                "read_market_context",
+                "clean_user_material",
+                "extract_terms",
+                "build_title_structures",
+                "mark_risks",
+                "return_observation_pack",
+            ],
+            "rule": SOURCE_POLICY["copy_rule"],
         }
         return AgentResult(
             agent_id=self.agent_id,
@@ -109,17 +165,8 @@ class MaterialObserverAgent:
 
 
 def build_material_observation(product: str, mode_name: str, market_context: dict[str, Any], material_pack: dict[str, Any], client_id: str | None = None) -> dict[str, Any]:
-    """Backward-compatible helper used by the current backend runtime."""
-    context = AgentContext(
-        product=product,
-        mode_name=mode_name,
-        market_context=market_context,
-        material_pack=material_pack,
-        client_id=client_id,
-        source="backend.generate_operation",
-    )
+    context = AgentContext(product=product, mode_name=mode_name, market_context=market_context, material_pack=material_pack, client_id=client_id, source="backend.generate_operation")
     result = MaterialObserverAgent().run(context).to_dict()
     output = result["output"]
-    output["agent_id"] = result["agent_id"]
     output["trace"] = result["trace"]
     return output
