@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.9.1
+Current Version: v0.9.2
 
 ## Version History
 
@@ -24,6 +24,7 @@ Current Version: v0.9.1
 - v0.8.9: Material observation Agent light version was added to extract current wording structure from user-provided market materials before generation.
 - v0.9.0: Pre-generation material sampling UI was added so users can observe wording signals before generating a product plan.
 - v0.9.1: Material observation was moved back into an implicit backend pipeline so users only see generation progress and final copyable outputs.
+- v0.9.2: Agent module governance was added with a stable material observer contract, source policy, confidence, risk flags, and runtime registry.
 
 ## Version Rules
 
