@@ -1,0 +1,48 @@
+{
+  "agent_id": "material-observer",
+  "name": "素材观察 Agent",
+  "version": "0.9.2",
+  "stage": "pre_generation",
+  "visible_to_user": false,
+  "entrypoint": "scripts/material_observer.py::build_material_observation",
+  "inputs": {
+    "product": "string",
+    "mode_name": "string",
+    "market_context": {
+      "current_year": "int",
+      "season": "string"
+    },
+    "material_pack": {
+      "samples": "list[string]",
+      "terms": "list[string]"
+    }
+  },
+  "outputs": {
+    "search_tasks": "list[string]",
+    "usable_terms": "list[string]",
+    "title_structures": "list[string]",
+    "banned_terms": "list[string]",
+    "risk_flags": "list[string]",
+    "confidence": {
+      "score": "float",
+      "label": "low|medium|high"
+    },
+    "next_sampling": "list[string]",
+    "agent_trace": "list[string]"
+  },
+  "source_policy": {
+    "allowed_sources": [
+      "user_provided_text",
+      "merchant_owned_data",
+      "uploaded_screenshot_text",
+      "legal_search_api"
+    ],
+    "disallowed_sources": [
+      "unauthorized_platform_scraping",
+      "copying_competitor_titles_verbatim"
+    ],
+    "copy_rule": "Only extract wording feel, term frequency, structure, and risk. Do not copy competitor titles directly."
+  },
+  "user_experience_rule": "Hide this agent from normal users. Show only product-friendly progress and final copyable outputs.",
+  "engineering_rule": "Persist agent output in result records for product engineering review."
+}
