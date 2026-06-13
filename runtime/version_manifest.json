@@ -1,10 +1,11 @@
 {
-  "runtime_version": "0.9.1",
+  "runtime_version": "0.9.2",
   "active_chain": "runtime/module_chain.json",
   "active_feedback_chain": "runtime/feedback_chain.json",
   "active_knowledge_retrieval_chain": "runtime/knowledge_retrieval_chain.json",
   "active_vector_retrieval_chain": "runtime/vector_retrieval_chain.json",
   "active_rag_chain": "runtime/rag_chain.json",
+  "active_agent_registry": "runtime/agent_registry.json",
   "active_frontend_entry": "frontend/index.html",
   "active_backend_entry": "backend/server.py",
   "active_frontend_responsive_styles": "frontend/styles.css",
@@ -24,6 +25,7 @@
   "active_market_time_context": "backend/server.py::market_time_context",
   "active_material_pack_builder": "backend/server.py::build_material_pack",
   "active_material_observation_agent": "scripts/material_observer.py::build_material_observation",
+  "active_material_observation_contract": "scripts/material_observer.py::agent_contract",
   "active_stale_year_filter": "backend/server.py::remove_stale_years",
   "active_material_input": "frontend/index.html::marketMaterialInput",
   "active_issue_generation_config_parser": "scripts/pdd_operation_analyzer.py::parse_generation_config",
@@ -38,5 +40,5 @@
   "active_llm_interface": "openai-compatible",
   "active_workflow": ".github/workflows/pdd-operation-analysis.yml",
   "last_verified": "2026-06-11",
-  "notes": "v0.9.1 makes material observation implicit. The backend material observation Agent remains active for title timeliness and wording calibration, but normal users no longer see material sampler buttons or observation cards. The main frontend generation flow shows only product-friendly progress states: 正在整理商品素材, then 正在生成可测试方案, then final copyable output."
+  "notes": "v0.9.2 adds Agent module governance. The material observation Agent now exposes a stable contract, source policy, risk flags, confidence metadata, and trace steps. runtime/agent_registry.json records current and future Agent modules. Normal users still see only generation progress and final copyable output."
 }
