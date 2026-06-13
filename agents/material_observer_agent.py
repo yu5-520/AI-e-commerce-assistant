@@ -84,6 +84,31 @@ def _confidence(samples: list[str], usable_terms: list[str]) -> dict[str, Any]:
     return {"score": score, "label": label}
 
 
+def agent_contract() -> dict[str, Any]:
+    return {
+        "agent_id": AGENT_ID,
+        "agent_name": AGENT_NAME,
+        "agent_version": AGENT_VERSION,
+        "stage": AGENT_STAGE,
+        "input_schema": {
+            "product": "string",
+            "mode_name": "string",
+            "market_context": {"current_year": "int", "season": "string"},
+            "material_pack": {"samples": "list[string]", "terms": "list[string]"},
+        },
+        "output_schema": {
+            "search_tasks": "list[string]",
+            "usable_terms": "list[string]",
+            "title_structures": "list[string]",
+            "banned_terms": "list[string]",
+            "risk_flags": "list[string]",
+            "confidence": {"score": "float", "label": "low|medium|high"},
+            "next_sampling": "list[string]",
+        },
+        "source_policy": SOURCE_POLICY,
+    }
+
+
 class MaterialObserverAgent:
     agent_id = AGENT_ID
     agent_name = AGENT_NAME
