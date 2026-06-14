@@ -22,6 +22,7 @@ from src.reports.generate_demo_report import write_json, write_markdown_report
 from src.repositories.sqlite_repository import insert_report_record
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks, generate_product_tasks
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
+from src.traffic_test import build_traffic_feedback_report
 
 
 def now_iso() -> str:
@@ -127,11 +128,25 @@ def build_mock_workflow_result(
                 },
             )
 
+        traffic_feedback_report = build_traffic_feedback_report(category_context, listing_growth_plan)
+        if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="traffic_feedback_report",
+                status="success",
+                output_snapshot={
+                    "report_id": traffic_feedback_report.get("report_id"),
+                    "experiment_count": traffic_feedback_report.get("experiment_count"),
+                    "next_action": traffic_feedback_report.get("next_action"),
+                },
+            )
+
         category_name = category_context["category_profile"].get("category_name", "垂直类目")
         rag_context = {
             "category_profile": retrieve(f"{category_name} 价格带 季节性 尺码 退换 主图 SKU", top_k=3),
             "competitor_analysis": retrieve(f"{category_name} 竞品 价格带 差评 SKU 主图", top_k=3),
             "listing_growth": retrieve(f"{category_name} 上新 货盘 标题 主图 SKU 定价", top_k=3),
+            "traffic_feedback": retrieve(f"{category_name} 流量 测试 点击 转化 退款 ROI 回流", top_k=3),
             "activity_price": retrieve("活动价 保本线 利润 风险", top_k=3),
             "after_sales": retrieve("退款 售后 客服 SOP 敏感客户", top_k=3),
             "customer_touch": retrieve("客户触达 隐私 自动群发 合规", top_k=3),
@@ -168,6 +183,7 @@ def build_mock_workflow_result(
             "customer_segmentation": customer_segmentation,
             "competitor_analysis": competitor_analysis,
             "listing_growth_plan": listing_growth_plan,
+            "traffic_feedback_report": traffic_feedback_report,
             "rpa_tasks": rpa_tasks,
             "approval_required_tasks": approval_required_tasks,
             "rag_context": rag_context,
@@ -179,6 +195,8 @@ def build_mock_workflow_result(
                 "competitor_count": competitor_analysis.get("competitor_count", 0),
                 "listing_candidate_count": listing_growth_plan.get("candidate_count", 0),
                 "top_listing_candidate": listing_growth_plan.get("top_candidate", {}).get("supplier_product_id"),
+                "traffic_experiment_count": traffic_feedback_report.get("experiment_count", 0),
+                "traffic_next_action": traffic_feedback_report.get("next_action"),
                 "rpa_task_count": len(rpa_tasks),
                 "approval_required_count": len(approval_required_tasks),
                 "auto_execution_allowed_count": sum(
@@ -186,6 +204,7 @@ def build_mock_workflow_result(
                 ),
             },
             "safety_boundary": {
+                "auto_ad_account_operation": False,
                 "auto_supplier_api": False,
                 "auto_competitor_crawling": False,
                 "auto_product_publish": False,
@@ -203,6 +222,7 @@ def build_mock_workflow_result(
             write_json("customer_segmentation.json", customer_segmentation)
             write_json("competitor_analysis.json", competitor_analysis)
             write_json("listing_growth_plan.json", listing_growth_plan)
+            write_json("traffic_feedback_report.json", traffic_feedback_report)
             write_json("rpa_task_draft.json", rpa_tasks)
             write_json("approval_required_tasks.json", approval_required_tasks)
             write_json("rag_retrieval_context.json", rag_context)
@@ -214,6 +234,7 @@ def build_mock_workflow_result(
                 category_context,
                 competitor_analysis,
                 listing_growth_plan,
+                traffic_feedback_report,
             )
             result["report_path"] = str(report_path)
             report_record = {
