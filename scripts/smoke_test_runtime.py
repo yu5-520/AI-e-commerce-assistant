@@ -24,9 +24,9 @@ def main() -> None:
     """Smoke-test the current main product workflow.
 
     The product entrypoint is `src.workflow.mock_workflow` and `src.api.main`.
-    This test validates the V0.8 ERP / CRM workflow, the V0.9 vertical category
-    profile hook, the V1.0 same-category competitor analysis skeleton, the V1.1
-    listing growth plan skeleton, and the V1.2 traffic feedback loop skeleton.
+    This test validates the V0.8-V1.3 vertical shelf ecommerce operating loop
+    skeleton: category, diagnosis, competitor, listing, traffic feedback, loop
+    summary, RPA drafts, and human approval boundaries.
     """
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
@@ -51,6 +51,7 @@ def main() -> None:
     listing_growth_plan = result.get("listing_growth_plan") or {}
     listing_draft = listing_growth_plan.get("listing_draft") or {}
     traffic_feedback_report = result.get("traffic_feedback_report") or {}
+    operating_loop_summary = result.get("operating_loop_summary") or {}
 
     assert_true(result.get("workflow_mode") == "Workflow-first", "workflow should stay Workflow-first")
     assert_true(category_profile.get("category_id") == "sun_protection_clothing", "workflow should inject category context")
@@ -91,6 +92,12 @@ def main() -> None:
     assert_true(traffic_feedback_report.get("decision_summary"), "traffic feedback should summarize next-action decisions")
     assert_true(traffic_feedback_report.get("loopback_actions"), "traffic feedback should produce loopback actions")
     assert_true(traffic_feedback_report.get("safe_use_policy"), "traffic feedback should include safe-use policy")
+    assert_true(operating_loop_summary.get("loop_status") == "closed_loop_mock_ready", "operating loop should be closed-loop mock ready")
+    assert_true(operating_loop_summary.get("next_module"), "operating loop should choose next module")
+    assert_true(operating_loop_summary.get("next_iteration_plan"), "operating loop should produce next iteration plan")
+    assert_true(operating_loop_summary.get("manual_review_required") is True, "operating loop should require human review")
+    assert_true(operating_loop_summary.get("auto_execution_allowed") is False, "operating loop must not auto-execute")
+    assert_true(summary.get("loop_next_module") == operating_loop_summary.get("next_module"), "summary should expose loop next module")
     assert_true(summary.get("rpa_task_count", 0) > 0, "workflow should generate RPA task drafts")
     assert_true(summary.get("auto_execution_allowed_count") == 0, "MVP must not allow automatic execution")
 
