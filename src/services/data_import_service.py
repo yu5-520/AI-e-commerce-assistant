@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set
 from uuid import uuid4
 
+from src.repositories.sqlite_repository import insert_import_record, list_import_records as list_sqlite_import_records
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -273,6 +274,7 @@ def import_mock_data() -> Dict[str, Any]:
             "validation": validation,
         }
         append_import_record(record)
+        insert_import_record(record)
         create_execution_log(
             workflow_run_id=workflow_run_id,
             node_name="data_import_record",
@@ -310,6 +312,9 @@ def import_mock_data() -> Dict[str, Any]:
 
 
 def list_import_records(limit: int = 20) -> List[Dict[str, Any]]:
+    sqlite_records = list_sqlite_import_records(limit=limit)
+    if sqlite_records:
+        return sqlite_records
     if not IMPORT_LOG_PATH.exists():
         return []
     lines = IMPORT_LOG_PATH.read_text(encoding="utf-8").splitlines()
