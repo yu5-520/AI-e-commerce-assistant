@@ -114,17 +114,17 @@ const routes = {
   },
   tasks: {
     title: "任务中心",
-    subtitle: "将 AI 建议转成可确认、可追溯的 RPA 任务草案。",
+    subtitle: "从 SQLite task_status 读取任务审批状态，并合并当前任务草案。",
     render: renderTasks,
   },
   approvals: {
     title: "审批中心",
-    subtitle: "确认或拒绝中高风险任务，避免 AI / RPA 越权执行。",
+    subtitle: "确认 / 拒绝中高风险任务，并查看 ApprovalRecord 历史。",
     render: renderApprovals,
   },
   reports: {
     title: "报告中心",
-    subtitle: "输出商品诊断、客户分层、售后归因和复盘报告。",
+    subtitle: "展示 ReportRecord 列表和 Markdown 报告内容。",
     render: renderReports,
   },
   knowledge: {
@@ -134,7 +134,7 @@ const routes = {
   },
   logs: {
     title: "运行日志",
-    subtitle: "查看 WorkflowRun 与 ExecutionLog，追踪每次导入、诊断和审批动作。",
+    subtitle: "查看 WorkflowRun 与 ExecutionLog，支持按 workflow_run_id 查看节点详情。",
     render: renderLogs,
   },
 };
@@ -142,11 +142,16 @@ const routes = {
 const state = {
   apiData: null,
   apiMode: false,
+  tasks: [],
+  approvalRecords: [],
   reportText: "",
+  reportRecords: [],
   importValidation: null,
   importRecords: [],
   workflowRuns: [],
   executionLogs: [],
+  selectedWorkflowRunId: null,
+  selectedRunLogs: [],
 };
 
 function view() {
@@ -167,7 +172,18 @@ function statusBadge(status) {
 }
 
 function importStatusBadge(status) {
-  const labelMap = { passed: "通过", failed: "失败", warning: "警告", preview: "预览", local_preview: "本地预览", success: "成功", running: "运行中" };
+  const labelMap = {
+    passed: "通过",
+    failed: "失败",
+    warning: "警告",
+    preview: "预览",
+    local_preview: "本地预览",
+    success: "成功",
+    running: "运行中",
+    approved: "已确认",
+    rejected: "已拒绝",
+    pending: "待确认",
+  };
   return `<span class="status-badge ${status || "preview"}">${labelMap[status] || status || "预览"}</span>`;
 }
 
@@ -221,6 +237,43 @@ async function refreshImportStatus(createRecord = false) {
   }
 }
 
+async function refreshTasks() {
+  if (!state.apiMode) {
+    state.tasks = getData().rpa_tasks;
+    return;
+  }
+  try {
+    state.tasks = await fetchJson("/api/tasks");
+  } catch (error) {
+    state.tasks = getData().rpa_tasks;
+  }
+}
+
+async function refreshApprovals() {
+  if (!state.apiMode) {
+    state.approvalRecords = [];
+    return;
+  }
+  try {
+    state.approvalRecords = await fetchJson("/api/approvals/records");
+  } catch (error) {
+    state.approvalRecords = [];
+  }
+}
+
+async function refreshReports() {
+  if (!state.apiMode) {
+    state.reportRecords = [];
+    return;
+  }
+  try {
+    const payload = await fetchJson("/api/reports");
+    state.reportRecords = payload.reports || [];
+  } catch (error) {
+    state.reportRecords = [];
+  }
+}
+
 async function refreshLogs() {
   if (!state.apiMode) {
     state.workflowRuns = [];
@@ -233,6 +286,20 @@ async function refreshLogs() {
   } catch (error) {
     state.workflowRuns = [];
     state.executionLogs = [];
+  }
+}
+
+async function refreshSelectedRunLogs(workflowRunId) {
+  if (!state.apiMode || !workflowRunId) {
+    state.selectedWorkflowRunId = null;
+    state.selectedRunLogs = [];
+    return;
+  }
+  state.selectedWorkflowRunId = workflowRunId;
+  try {
+    state.selectedRunLogs = await fetchJson(`/api/logs/workflow-runs/${workflowRunId}/execution-logs`);
+  } catch (error) {
+    state.selectedRunLogs = [];
   }
 }
 
@@ -310,7 +377,7 @@ async function renderDataImport() {
         ${importStatusBadge(item.status)}
       </div>
     `).join("")
-    : `<div><strong>暂无导入记录</strong><span>点击“确认导入 Mock 数据”后生成记录。</span>${importStatusBadge("preview")}</div>`;
+    : `<div><strong>暂无导入记录</strong><span>点击“确认导入 Mock 数据”后生成记录。</span><span>-</span>${importStatusBadge("preview")}</div>`;
 
   view().innerHTML = `
     <section class="page-section">
@@ -365,29 +432,38 @@ function renderDiagnosis(data) {
   `;
 }
 
-function renderTasks(data) {
-  const overrides = data.task_status_overrides || {};
-  const rows = data.rpa_tasks.map((task) => {
-    const override = overrides[task.task_id] || {};
-    const approvalStatus = override.approval_status || task.approval_status || "pending";
-    return `
-      <div class="task-row">
-        <div>
-          <strong>${task.task_id}</strong>
-          <p>${task.ai_suggestion}</p>
-        </div>
-        <span>${task.task_type}</span>
-        ${badge(task.risk_level)}
-        ${statusBadge(approvalStatus)}
-        <small>自动执行：${task.auto_execution_allowed}</small>
+async function renderTasks() {
+  await refreshTasks();
+  const tasks = state.tasks.length ? state.tasks : getData().rpa_tasks;
+  const rows = tasks.map((task) => `
+    <div class="task-row">
+      <div>
+        <strong>${task.task_id}</strong>
+        <p>${task.ai_suggestion || task.task_type}</p>
       </div>
-    `;
-  }).join("");
+      <span>${task.task_type}</span>
+      ${badge(task.risk_level)}
+      ${statusBadge(task.approval_status || task.status || "pending")}
+      <small>自动执行：${task.auto_execution_allowed}</small>
+    </div>
+  `).join("");
 
-  view().innerHTML = `<section class="page-section"><h2>任务草案</h2><div class="task-table">${rows}</div></section>`;
+  view().innerHTML = `
+    <section class="page-section">
+      <div class="section-header">
+        <div>
+          <h2>任务状态</h2>
+          <p class="muted">API 模式下会读取 SQLite task_status，并合并当前工作流任务草案。</p>
+        </div>
+        <button onclick="refreshTaskView()">刷新任务状态</button>
+      </div>
+      <div class="task-table">${rows}</div>
+    </section>
+  `;
 }
 
-function renderApprovals(data) {
+async function renderApprovals(data) {
+  await refreshApprovals();
   const overrides = data.task_status_overrides || {};
   const tasks = (data.approval_required_tasks || data.rpa_tasks).filter((task) => task.requires_approval !== false);
   const cards = tasks.map((task) => {
@@ -406,10 +482,25 @@ function renderApprovals(data) {
     `;
   }).join("");
 
-  view().innerHTML = `<section class="page-section"><h2>待人工确认</h2><div class="result-list">${cards}</div></section>`;
+  const recordRows = state.approvalRecords.length
+    ? state.approvalRecords.map((record) => `
+      <div>
+        <strong>${record.task_id}</strong>
+        <span>${record.operator || "demo_user"}</span>
+        <span>${record.created_at || record.updated_at || "-"}</span>
+        ${importStatusBadge(record.approval_status)}
+      </div>
+    `).join("")
+    : `<div><strong>暂无审批历史</strong><span>确认或拒绝任务后生成 ApprovalRecord。</span><span>-</span>${importStatusBadge("preview")}</div>`;
+
+  view().innerHTML = `
+    <section class="page-section"><h2>待人工确认</h2><div class="result-list">${cards}</div></section>
+    <section class="page-section"><h2>审批历史</h2><div class="table-like import-table records-table">${recordRows}</div></section>
+  `;
 }
 
 async function renderReports() {
+  await refreshReports();
   if (state.apiMode && !state.reportText) {
     try {
       const response = await fetch("/api/reports/demo");
@@ -418,9 +509,31 @@ async function renderReports() {
       state.reportText = "API 报告读取失败，当前展示本地报告占位。";
     }
   }
+
+  const reportRows = state.reportRecords.length
+    ? state.reportRecords.map((record) => `
+      <div>
+        <strong>${record.report_id || "demo_report"}</strong>
+        <span>${record.report_type || "mock_workflow_report"}</span>
+        <span>${record.path || "-"}</span>
+        ${importStatusBadge(record.format || "markdown")}
+      </div>
+    `).join("")
+    : `<div><strong>暂无报告记录</strong><span>运行完整工作流后生成 ReportRecord。</span><span>-</span>${importStatusBadge("preview")}</div>`;
+
   view().innerHTML = `
     <section class="page-section">
-      <h2>报告输出</h2>
+      <div class="section-header">
+        <div>
+          <h2>ReportRecord</h2>
+          <p class="muted">API 模式下优先读取 SQLite report_records。</p>
+        </div>
+        <button onclick="refreshReportView()">刷新报告记录</button>
+      </div>
+      <div class="table-like import-table records-table">${reportRows}</div>
+    </section>
+    <section class="page-section">
+      <h2>报告内容预览</h2>
       <div class="report-preview"><pre>${state.reportText || "运行 API 后可查看 Markdown 报告。当前可导出商品诊断、客户分层、售后归因和任务草案。"}</pre></div>
     </section>
   `;
@@ -449,11 +562,12 @@ async function renderLogs() {
         <span>${run.workflow_type}</span>
         <span>${run.finished_at || run.started_at || "-"}</span>
         ${importStatusBadge(run.status)}
+        <button class="secondary" onclick="selectWorkflowRun('${run.workflow_run_id}')">查看节点</button>
       </div>
     `).join("")
     : `<div><strong>暂无 WorkflowRun</strong><span>运行数据导入、诊断或审批后生成。</span><span>-</span>${importStatusBadge("preview")}</div>`;
 
-  const logRows = state.executionLogs.length
+  const allLogRows = state.executionLogs.length
     ? state.executionLogs.map((log) => `
       <div>
         <strong>${log.node_name}</strong>
@@ -464,6 +578,17 @@ async function renderLogs() {
     `).join("")
     : `<div><strong>暂无 ExecutionLog</strong><span>运行工作流节点后生成。</span><span>-</span>${importStatusBadge("preview")}</div>`;
 
+  const selectedRows = state.selectedRunLogs.length
+    ? state.selectedRunLogs.map((log) => `
+      <div>
+        <strong>${log.node_name}</strong>
+        <span>${log.log_id}</span>
+        <span>${log.created_at}</span>
+        ${importStatusBadge(log.status)}
+      </div>
+    `).join("")
+    : `<div><strong>未选择 WorkflowRun</strong><span>点击“查看节点”后展示该运行的节点日志。</span><span>-</span>${importStatusBadge("preview")}</div>`;
+
   view().innerHTML = `
     <section class="page-section">
       <div class="section-header">
@@ -473,11 +598,15 @@ async function renderLogs() {
         </div>
         <button onclick="refreshLogsAndRender()">刷新日志</button>
       </div>
-      <div class="table-like import-table records-table">${runRows}</div>
+      <div class="table-like import-table log-table">${runRows}</div>
     </section>
     <section class="page-section">
-      <h2>ExecutionLog</h2>
-      <div class="table-like import-table records-table">${logRows}</div>
+      <h2>当前选中运行的节点日志 ${state.selectedWorkflowRunId ? `：${state.selectedWorkflowRunId}` : ""}</h2>
+      <div class="table-like import-table records-table">${selectedRows}</div>
+    </section>
+    <section class="page-section">
+      <h2>最新 ExecutionLog</h2>
+      <div class="table-like import-table records-table">${allLogRows}</div>
     </section>
   `;
 }
@@ -505,8 +634,24 @@ async function importMockAndRender() {
   await renderRoute();
 }
 
+async function refreshTaskView() {
+  await refreshTasks();
+  await renderRoute();
+}
+
+async function refreshReportView() {
+  await refreshReports();
+  state.reportText = "";
+  await renderRoute();
+}
+
 async function refreshLogsAndRender() {
   await refreshLogs();
+  await renderRoute();
+}
+
+async function selectWorkflowRun(workflowRunId) {
+  await refreshSelectedRunLogs(workflowRunId);
   await renderRoute();
 }
 
@@ -520,7 +665,10 @@ window.rejectTask = (taskId) => updateTask(taskId, "reject");
 window.refreshAndRender = refreshAndRender;
 window.validateImportAndRender = validateImportAndRender;
 window.importMockAndRender = importMockAndRender;
+window.refreshTaskView = refreshTaskView;
+window.refreshReportView = refreshReportView;
 window.refreshLogsAndRender = refreshLogsAndRender;
+window.selectWorkflowRun = selectWorkflowRun;
 
 document.getElementById("refreshBtn").addEventListener("click", refreshAndRender);
 window.addEventListener("hashchange", renderRoute);
