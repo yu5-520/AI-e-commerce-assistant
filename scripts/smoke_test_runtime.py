@@ -25,7 +25,8 @@ def main() -> None:
 
     The product entrypoint is `src.workflow.mock_workflow` and `src.api.main`.
     This test validates the V0.8 ERP / CRM workflow, the V0.9 vertical category
-    profile hook, and the V1.0 same-category competitor analysis skeleton.
+    profile hook, the V1.0 same-category competitor analysis skeleton, and the
+    V1.1 listing growth plan skeleton.
     """
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
@@ -47,6 +48,8 @@ def main() -> None:
     category_context = result.get("category_context") or {}
     category_profile = category_context.get("category_profile") or {}
     competitor_analysis = result.get("competitor_analysis") or {}
+    listing_growth_plan = result.get("listing_growth_plan") or {}
+    listing_draft = listing_growth_plan.get("listing_draft") or {}
 
     assert_true(result.get("workflow_mode") == "Workflow-first", "workflow should stay Workflow-first")
     assert_true(category_profile.get("category_id") == "sun_protection_clothing", "workflow should inject category context")
@@ -67,6 +70,18 @@ def main() -> None:
         competitor_analysis.get("safe_use_policy"),
         "competitor analysis should include safe-use policy",
     )
+    assert_true(summary.get("listing_candidate_count", 0) > 0, "workflow should score listing candidates")
+    assert_true(
+        listing_growth_plan.get("data_source") == "examples/category_sun_protection/mock_supplier_products.csv",
+        "listing growth should use the mock supplier product dataset",
+    )
+    assert_true(
+        listing_growth_plan.get("top_candidate", {}).get("score", 0) > 0,
+        "listing growth should choose a scored top candidate",
+    )
+    assert_true(listing_draft.get("requires_human_approval") is True, "listing draft should require human approval")
+    assert_true(listing_draft.get("auto_publish_allowed") is False, "listing draft must not auto-publish")
+    assert_true(listing_growth_plan.get("safe_use_policy"), "listing growth should include safe-use policy")
     assert_true(summary.get("rpa_task_count", 0) > 0, "workflow should generate RPA task drafts")
     assert_true(summary.get("auto_execution_allowed_count") == 0, "MVP must not allow automatic execution")
 
