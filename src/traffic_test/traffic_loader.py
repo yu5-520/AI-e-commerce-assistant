@@ -5,18 +5,27 @@ from pathlib import Path
 from typing import Dict, List
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-CATEGORY_EXAMPLES_DIR = ROOT_DIR / "examples" / "category_sun_protection"
+CATEGORY_DATA_DIRS = {
+    "home_living_goods": ROOT_DIR / "examples" / "category_home_living",
+    "sun_protection_clothing": ROOT_DIR / "examples" / "category_sun_protection",
+}
 
 
-def load_mock_traffic_tests() -> List[Dict[str, str]]:
-    """Load same-category traffic test mock data.
+def load_mock_traffic_tests(category_id: str = "home_living_goods") -> List[Dict[str, str]]:
+    """Load same-operating-unit traffic test mock data.
 
     MVP boundary: this reads manually prepared / mock traffic experiment rows. It
     does not connect to real ad accounts, platform APIs, or modify campaigns.
     """
-    path = CATEGORY_EXAMPLES_DIR / "mock_traffic_tests.csv"
+    data_dir = CATEGORY_DATA_DIRS.get(category_id, CATEGORY_DATA_DIRS["home_living_goods"])
+    path = data_dir / "mock_traffic_tests.csv"
     if not path.exists():
         raise FileNotFoundError(f"Missing mock traffic test dataset: {path}")
 
     with path.open("r", encoding="utf-8-sig", newline="") as file:
         return list(csv.DictReader(file))
+
+
+def traffic_data_source(category_id: str = "home_living_goods") -> str:
+    data_dir = CATEGORY_DATA_DIRS.get(category_id, CATEGORY_DATA_DIRS["home_living_goods"])
+    return str((data_dir / "mock_traffic_tests.csv").relative_to(ROOT_DIR))
