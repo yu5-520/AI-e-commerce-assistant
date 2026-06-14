@@ -28,11 +28,11 @@
 
 一句话：
 
-> **垂直类目定规则，ERP 管货，CRM 管人，竞品找差距，上新补增长，RPA 做文档任务，日志做复盘。**
+> **垂直类目定规则，ERP 管货，CRM 管人，竞品找差距，上新补增长，流量测结果，RPA 做文档任务，日志做复盘。**
 
 ## 2. 当前版本边界
 
-当前仓库已经完成的是 **V0.8：ERP + CRM 经营判断底座**，已接入 **V0.9：垂直类目配置层**、**V1.0：同类目竞品比对系统** 和 **V1.1：同类目上新增长系统** 的 Mock 骨架。
+当前仓库已经完成的是 **V0.8：ERP + CRM 经营判断底座**，并已接入 **V0.9：垂直类目配置层**、**V1.0：同类目竞品比对系统**、**V1.1：同类目上新增长系统** 和 **V1.2：流量测试与数据回流系统** 的 Mock 骨架。
 
 当前可运行能力：
 
@@ -49,6 +49,8 @@ Mock ERP / CRM 数据
 ↓
 同类目上新增长草案
 ↓
+流量测试与数据回流
+↓
 CRM 客户分层
 ↓
 轻量 RAG 知识召回
@@ -63,8 +65,11 @@ RPA 任务草案
 当前尚未实现，但已经纳入架构升级路线的能力：
 
 ```text
-流量测试与数据回流系统
 业务档案长期落库
+第二个垂直类目复制
+更完整 API / 前端页面
+Embedding + 向量库 RAG
+真实低风险 RPA Adapter
 ```
 
 ## 3. 核心架构
@@ -104,6 +109,7 @@ outputs/product_diagnosis.json
 outputs/customer_segmentation.json
 outputs/competitor_analysis.json
 outputs/listing_growth_plan.json
+outputs/traffic_feedback_report.json
 outputs/rpa_task_draft.json
 outputs/approval_required_tasks.json
 outputs/rag_retrieval_context.json
@@ -174,6 +180,8 @@ http://127.0.0.1:8000/web_demo/index.html
 + 同类目竞品比对模块
 + 供应链货盘 Mock 数据
 + 同类目上新增长模块
++ 流量测试 Mock 数据
++ 流量测试与回流模块
 + Mock ERP / CRM 数据
 + Python Mock Workflow
 + 简单 RAG 检索
@@ -255,13 +263,50 @@ SKU 建议
 
 注意：当前只生成上新资料草案，不自动上架、不自动改价、不自动投放。
 
-### 6.4 ERP / 表格数据接入
+### 6.4 流量测试与数据回流
+
+当前已加入防晒服流量测试 Mock 数据和回流诊断模块。
+
+位置：
+
+```text
+examples/category_sun_protection/mock_traffic_tests.csv
+src/traffic_test/
+```
+
+当前能力：
+
+```text
+流量测试数据读取
+点击率诊断
+转化率诊断
+退款率诊断
+ROI 诊断
+下一步动作判断
+回流动作生成
+测试复盘报告
+安全使用边界
+```
+
+回流方向：
+
+```text
+点击低 → 回流标题 / 主图复查
+转化低 → 回流 SKU / 价格 / 详情页承接
+退款高 → 回流售后归因
+ROI 低 → 回流预算止损
+指标健康 → 小幅放量但继续人工确认
+```
+
+注意：当前只生成复盘和下一步动作建议，不操作真实广告账户、不自动加预算、不自动改价。
+
+### 6.5 ERP / 表格数据接入
 
 MVP 阶段优先支持 Mock CSV / Excel 数据，不直接接入真实商家后台。
 
 数据类型：商品、订单、库存、退款、SKU、成本、售价、活动价、投放摘要。
 
-### 6.5 CRM 客户数据接入
+### 6.6 CRM 客户数据接入
 
 MVP 阶段只使用脱敏 Mock 数据。
 
@@ -269,15 +314,15 @@ MVP 阶段只使用脱敏 Mock 数据。
 
 不保存真实姓名、手机号、微信号、地址等隐私信息。
 
-### 6.6 AI / RAG 决策层
+### 6.7 AI / RAG 决策层
 
 当前版本使用规则引擎模拟 AI 诊断，用关键词检索模拟 RAG。RAG 已支持读取 `knowledge_base/category_profiles/` 下的垂直类目知识。
 
-### 6.7 Human-in-the-loop 人工确认
+### 6.8 Human-in-the-loop 人工确认
 
 关键动作必须由用户确认：改标题、改主图、改价、报名活动、增加投放预算、下架 / 清货、批量回写 ERP / CRM、客户触达、优惠券策略执行和售后处理动作。
 
-### 6.8 RPA 任务草案层
+### 6.9 RPA 任务草案层
 
 MVP 阶段生成低风险任务草案，不执行真实自动化。
 
@@ -292,7 +337,7 @@ V0.8：ERP + CRM 经营判断系统（当前已跑通）
 V0.9：垂直类目配置层（当前已接入最小骨架）
 V1.0：同类目竞品比对系统（当前已接入 Mock 骨架）
 V1.1：同类目上新增长系统（当前已接入 Mock 骨架）
-V1.2：流量测试与数据回流系统
+V1.2：流量测试与数据回流系统（当前已接入 Mock 骨架）
 V1.3：完整货架电商经营循环系统
 ```
 
