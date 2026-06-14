@@ -3,11 +3,11 @@
 Usage:
     python -m src.run_demo
 
-V1.2 note:
+V1.3 note:
     The CLI and FastAPI API share the same workflow service in
     src.workflow.mock_workflow. The workflow now loads vertical category,
-    same-category competitor analysis, listing growth plan, and traffic feedback
-    loop nodes before RPA task drafting.
+    same-category competitor analysis, listing growth plan, traffic feedback,
+    and operating loop summary nodes before RPA task drafting.
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ def main() -> None:
     print(f"Top listing candidate: {top_candidate.get('supplier_product_id')} - {top_candidate.get('product_name')}")
     print(f"Traffic experiment count: {summary.get('traffic_experiment_count')}")
     print(f"Traffic next action: {summary.get('traffic_next_action')}")
+    print(f"Loop status: {summary.get('loop_status')}")
+    print(f"Loop next module: {summary.get('loop_next_module')}")
     print(f"RPA task draft count: {summary['rpa_task_count']}")
     print(f"Approval required count: {summary['approval_required_count']}")
     print(f"Report generated: {result.get('report_path')}")
