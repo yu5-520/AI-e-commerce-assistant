@@ -24,8 +24,8 @@ def main() -> None:
     """Smoke-test the current main product workflow.
 
     The product entrypoint is `src.workflow.mock_workflow` and `src.api.main`.
-    This test validates the V0.8 ERP / CRM workflow plus the V0.9 vertical
-    category profile hook.
+    This test validates the V0.8 ERP / CRM workflow, the V0.9 vertical category
+    profile hook, and the V1.0 same-category competitor analysis skeleton.
     """
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
@@ -46,12 +46,27 @@ def main() -> None:
     summary = result.get("summary") or {}
     category_context = result.get("category_context") or {}
     category_profile = category_context.get("category_profile") or {}
+    competitor_analysis = result.get("competitor_analysis") or {}
 
     assert_true(result.get("workflow_mode") == "Workflow-first", "workflow should stay Workflow-first")
     assert_true(category_profile.get("category_id") == "sun_protection_clothing", "workflow should inject category context")
     assert_true(summary.get("category_name") == "防晒服", "workflow summary should expose category name")
     assert_true(summary.get("product_count", 0) > 0, "workflow should diagnose products")
     assert_true(summary.get("customer_count", 0) > 0, "workflow should segment customers")
+    assert_true(summary.get("competitor_count", 0) > 0, "workflow should compare same-category competitors")
+    assert_true(competitor_analysis.get("analysis_id"), "workflow should return competitor analysis")
+    assert_true(
+        competitor_analysis.get("data_source") == "examples/category_sun_protection/mock_competitors.csv",
+        "competitor analysis should use the mock competitor dataset",
+    )
+    assert_true(
+        competitor_analysis.get("reference_product", {}).get("trigger_reason"),
+        "competitor analysis should explain why it was triggered",
+    )
+    assert_true(
+        competitor_analysis.get("safe_use_policy"),
+        "competitor analysis should include safe-use policy",
+    )
     assert_true(summary.get("rpa_task_count", 0) > 0, "workflow should generate RPA task drafts")
     assert_true(summary.get("auto_execution_allowed_count") == 0, "MVP must not allow automatic execution")
 
