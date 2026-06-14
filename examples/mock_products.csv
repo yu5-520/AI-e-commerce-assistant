@@ -1,0 +1,4 @@
+product_id,product_name,category,shop_type,cost_price,sale_price,activity_price,shipping_cost,stock,supply_status,is_sensitive_category,main_selling_points
+P001,遮阳伞,家居日用,白牌,10,29,19.9,3,200,稳定,false,"晴雨两用;骨架大;耐用;黑胶防晒"
+P002,厨房置物架,家居收纳,白牌,8.5,24.9,18.9,4,120,可补货,false,"免打孔;承重;节省空间;多场景"
+P003,护腰坐垫,健康家居,白牌,18,49,39,6,80,稳定,true,"支撑腰部;久坐舒适;办公室场景"
