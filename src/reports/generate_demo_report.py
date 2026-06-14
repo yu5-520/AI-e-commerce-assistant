@@ -22,12 +22,23 @@ def write_markdown_report(
     customer_segments: List[Dict[str, object]],
     rpa_tasks: List[Dict[str, object]],
     rag_context: Dict[str, object],
+    category_context: Dict[str, object] | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / "demo_report.md"
+    category_context = category_context or {}
+    category_profile = category_context.get("category_profile") or {}
+    category_rules = category_context.get("category_rules") or {}
 
     lines: List[str] = [
-        "# AI + RPA + ERP + CRM Mock Workflow Demo Report",
+        "# AI 垂直货架电商经营循环 Demo Report",
+        "",
+        "## 0. 垂直类目上下文",
+        f"- 类目：{category_profile.get('category_name', '未加载')}",
+        f"- 来源：{category_profile.get('source', '未加载')}",
+        f"- 类目摘要：{category_profile.get('summary', '未加载')}",
+        f"- 安全策略：{category_rules.get('safe_output_policy', '未加载')}",
+        f"- 集成状态：{category_context.get('integration_status', '未加载')}",
         "",
         "## 1. 商品经营诊断",
     ]
@@ -82,9 +93,18 @@ def write_markdown_report(
             json.dumps(rag_context, ensure_ascii=False, indent=2),
             "```",
             "",
-            "## 5. 复盘结论",
+            "## 5. 类目下一步",
+        ]
+    )
+    for step in category_context.get("next_steps", []):
+        lines.append(f"- {step}")
+
+    lines.extend(
+        [
             "",
-            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 规则诊断 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
+            "## 6. 复盘结论",
+            "",
+            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 规则诊断 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
         ]
     )
 
