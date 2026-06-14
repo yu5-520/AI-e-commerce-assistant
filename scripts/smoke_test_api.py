@@ -36,7 +36,8 @@ def assert_keys(payload: Dict[str, Any], keys: list[str], name: str) -> None:
 
 def run_smoke_test() -> None:
     health = assert_status("GET", "/api/health")
-    assert_keys(health, ["status"], "health")
+    assert_keys(health, ["ok", "version", "mode", "safety"], "health")
+    assert health["ok"] is True, "health.ok should be true"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
