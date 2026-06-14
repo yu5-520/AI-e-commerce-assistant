@@ -12,6 +12,7 @@ from typing import Any, Dict
 from uuid import uuid4
 
 from src.category import build_category_context
+from src.competitor import build_competitor_analysis
 from src.data_loader.load_mock_data import load_all
 from src.diagnosis.customer_segmentation import segment_customers
 from src.diagnosis.product_diagnosis import diagnose_products
@@ -99,9 +100,23 @@ def build_mock_workflow_result(
                 output_snapshot={"customer_count": len(customer_segmentation)},
             )
 
+        competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
+        if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="competitor_analysis",
+                status="success",
+                output_snapshot={
+                    "analysis_id": competitor_analysis.get("analysis_id"),
+                    "competitor_count": competitor_analysis.get("competitor_count"),
+                    "reference_product": competitor_analysis.get("reference_product", {}).get("product_id"),
+                },
+            )
+
         category_name = category_context["category_profile"].get("category_name", "垂直类目")
         rag_context = {
             "category_profile": retrieve(f"{category_name} 价格带 季节性 尺码 退换 主图 SKU", top_k=3),
+            "competitor_analysis": retrieve(f"{category_name} 竞品 价格带 差评 SKU 主图", top_k=3),
             "activity_price": retrieve("活动价 保本线 利润 风险", top_k=3),
             "after_sales": retrieve("退款 售后 客服 SOP 敏感客户", top_k=3),
             "customer_touch": retrieve("客户触达 隐私 自动群发 合规", top_k=3),
@@ -136,6 +151,7 @@ def build_mock_workflow_result(
             "category_context": category_context,
             "product_diagnosis": product_diagnosis,
             "customer_segmentation": customer_segmentation,
+            "competitor_analysis": competitor_analysis,
             "rpa_tasks": rpa_tasks,
             "approval_required_tasks": approval_required_tasks,
             "rag_context": rag_context,
@@ -144,6 +160,7 @@ def build_mock_workflow_result(
                 "category_name": category_context["category_profile"].get("category_name"),
                 "product_count": len(product_diagnosis),
                 "customer_count": len(customer_segmentation),
+                "competitor_count": competitor_analysis.get("competitor_count", 0),
                 "rpa_task_count": len(rpa_tasks),
                 "approval_required_count": len(approval_required_tasks),
                 "auto_execution_allowed_count": sum(
@@ -151,6 +168,7 @@ def build_mock_workflow_result(
                 ),
             },
             "safety_boundary": {
+                "auto_competitor_crawling": False,
                 "auto_product_publish": False,
                 "auto_price_change": False,
                 "auto_campaign_registration": False,
@@ -164,11 +182,17 @@ def build_mock_workflow_result(
             write_json("category_context.json", category_context)
             write_json("product_diagnosis.json", product_diagnosis)
             write_json("customer_segmentation.json", customer_segmentation)
+            write_json("competitor_analysis.json", competitor_analysis)
             write_json("rpa_task_draft.json", rpa_tasks)
             write_json("approval_required_tasks.json", approval_required_tasks)
             write_json("rag_retrieval_context.json", rag_context)
             report_path = write_markdown_report(
-                product_diagnosis, customer_segmentation, rpa_tasks, rag_context, category_context
+                product_diagnosis,
+                customer_segmentation,
+                rpa_tasks,
+                rag_context,
+                category_context,
+                competitor_analysis,
             )
             result["report_path"] = str(report_path)
             report_record = {
