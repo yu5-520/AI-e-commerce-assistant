@@ -60,7 +60,16 @@ web_demo/index.html
 
 ### 数据导入
 
-展示当前 Mock ERP / CRM 数据源，后续扩展为 CSV / Excel 上传和字段映射。
+展示当前 Mock ERP / CRM 数据源、字段校验结果、数据关系校验结果和导入记录。
+
+API 模式下调用：
+
+```text
+GET  /api/data/sources
+POST /api/data/validate
+POST /api/data/import/mock
+GET  /api/data/imports
+```
 
 ### AI 诊断
 
