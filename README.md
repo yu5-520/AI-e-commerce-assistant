@@ -32,7 +32,7 @@
 
 ## 2. 当前版本边界
 
-当前仓库已经完成的是 **V0.8：ERP + CRM 经营判断底座**，并已开始接入 **V0.9：垂直类目配置层** 的最小骨架。
+当前仓库已经完成的是 **V0.8：ERP + CRM 经营判断底座**，已接入 **V0.9：垂直类目配置层** 的最小骨架，并开始实现 **V1.0：同类目竞品比对系统** 的 Mock 骨架。
 
 当前可运行能力：
 
@@ -44,6 +44,8 @@ Mock ERP / CRM 数据
 数据导入与校验
 ↓
 商品经营诊断
+↓
+同类目竞品比对
 ↓
 CRM 客户分层
 ↓
@@ -59,7 +61,6 @@ RPA 任务草案
 当前尚未实现，但已经纳入架构升级路线的能力：
 
 ```text
-同类目竞品比对系统
 同类目上新增长系统
 流量测试与数据回流系统
 业务档案长期落库
@@ -100,6 +101,7 @@ python -m src.run_demo
 outputs/category_context.json
 outputs/product_diagnosis.json
 outputs/customer_segmentation.json
+outputs/competitor_analysis.json
 outputs/rpa_task_draft.json
 outputs/approval_required_tasks.json
 outputs/rag_retrieval_context.json
@@ -166,6 +168,8 @@ http://127.0.0.1:8000/web_demo/index.html
 统一产品文档
 + 防晒服垂直类目档案
 + 类目上下文加载模块
++ 同类目竞品 Mock 数据
++ 同类目竞品比对模块
 + Mock ERP / CRM 数据
 + Python Mock Workflow
 + 简单 RAG 检索
@@ -192,13 +196,38 @@ src/category/
 
 类目上下文会进入 Mock Workflow，并输出到 `outputs/category_context.json`。
 
-### 6.2 ERP / 表格数据接入
+### 6.2 同类目竞品比对
+
+当前已加入防晒服竞品 Mock 数据和比对模块。
+
+位置：
+
+```text
+examples/category_sun_protection/mock_competitors.csv
+src/competitor/
+```
+
+当前能力：
+
+```text
+竞品数据读取
+价格带比对
+SKU 结构摘要
+差评机会分析
+触发商品选择
+下一步动作建议
+安全使用边界
+```
+
+注意：当前不做真实平台爬虫，只使用 Mock / 手动准备的竞品数据。
+
+### 6.3 ERP / 表格数据接入
 
 MVP 阶段优先支持 Mock CSV / Excel 数据，不直接接入真实商家后台。
 
 数据类型：商品、订单、库存、退款、SKU、成本、售价、活动价、投放摘要。
 
-### 6.3 CRM 客户数据接入
+### 6.4 CRM 客户数据接入
 
 MVP 阶段只使用脱敏 Mock 数据。
 
@@ -206,15 +235,15 @@ MVP 阶段只使用脱敏 Mock 数据。
 
 不保存真实姓名、手机号、微信号、地址等隐私信息。
 
-### 6.4 AI / RAG 决策层
+### 6.5 AI / RAG 决策层
 
 当前版本使用规则引擎模拟 AI 诊断，用关键词检索模拟 RAG。RAG 已支持读取 `knowledge_base/category_profiles/` 下的垂直类目知识。
 
-### 6.5 Human-in-the-loop 人工确认
+### 6.6 Human-in-the-loop 人工确认
 
 关键动作必须由用户确认：改标题、改主图、改价、报名活动、增加投放预算、下架 / 清货、批量回写 ERP / CRM、客户触达、优惠券策略执行和售后处理动作。
 
-### 6.6 RPA 任务草案层
+### 6.7 RPA 任务草案层
 
 MVP 阶段生成低风险任务草案，不执行真实自动化。
 
@@ -227,7 +256,7 @@ MVP 阶段生成低风险任务草案，不执行真实自动化。
 ```text
 V0.8：ERP + CRM 经营判断系统（当前已跑通）
 V0.9：垂直类目配置层（当前已接入最小骨架）
-V1.0：同类目竞品比对系统
+V1.0：同类目竞品比对系统（当前已接入 Mock 骨架）
 V1.1：同类目上新增长系统
 V1.2：流量测试与数据回流系统
 V1.3：完整货架电商经营循环系统
@@ -242,7 +271,7 @@ docs/system-upgrade-roadmap.md
 ## 8. 重点目录
 
 ```text
-examples/        Mock ERP / CRM 数据
+examples/        Mock ERP / CRM 数据 + 垂直类目样例数据
 knowledge_base/  简单 RAG 知识片段，含垂直类目知识
 src/             Python Mock Workflow 与 API
 evals/           最小评测
