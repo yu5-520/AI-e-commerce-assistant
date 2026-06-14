@@ -94,6 +94,25 @@ const fallbackImportStatus = {
   relationship_checks: [],
 };
 
+const fallbackDbStatus = {
+  ok: false,
+  database: {
+    type: "sqlite",
+    path: "logs/product_workbench.sqlite3",
+    exists: false,
+    size_bytes: 0,
+  },
+  tables: [
+    { table_name: "workflow_runs", record_count: 0, latest_at: null },
+    { table_name: "execution_logs", record_count: 0, latest_at: null },
+    { table_name: "import_records", record_count: 0, latest_at: null },
+    { table_name: "approval_records", record_count: 0, latest_at: null },
+    { table_name: "task_status", record_count: 0, latest_at: null },
+    { table_name: "report_records", record_count: 0, latest_at: null },
+  ],
+  summary: { table_count: 6, total_records: 0, latest_at: null },
+};
+
 fallbackData.approval_required_tasks = fallbackData.rpa_tasks.filter((task) => task.requires_approval !== false);
 
 const routes = {
@@ -137,6 +156,11 @@ const routes = {
     subtitle: "查看 WorkflowRun 与 ExecutionLog，支持按 workflow_run_id 查看节点详情。",
     render: renderLogs,
   },
+  system: {
+    title: "系统状态",
+    subtitle: "检查 SQLite 文件、数据表、记录数和最近更新时间。",
+    render: renderSystem,
+  },
 };
 
 const state = {
@@ -152,6 +176,7 @@ const state = {
   executionLogs: [],
   selectedWorkflowRunId: null,
   selectedRunLogs: [],
+  dbStatus: null,
 };
 
 function view() {
@@ -183,6 +208,10 @@ function importStatusBadge(status) {
     approved: "已确认",
     rejected: "已拒绝",
     pending: "待确认",
+    true: "正常",
+    false: "未就绪",
+    sqlite: "SQLite",
+    markdown: "Markdown",
   };
   return `<span class="status-badge ${status || "preview"}">${labelMap[status] || status || "预览"}</span>`;
 }
@@ -300,6 +329,18 @@ async function refreshSelectedRunLogs(workflowRunId) {
     state.selectedRunLogs = await fetchJson(`/api/logs/workflow-runs/${workflowRunId}/execution-logs`);
   } catch (error) {
     state.selectedRunLogs = [];
+  }
+}
+
+async function refreshSystemStatus() {
+  if (!state.apiMode) {
+    state.dbStatus = fallbackDbStatus;
+    return;
+  }
+  try {
+    state.dbStatus = await fetchJson("/api/system/db-status");
+  } catch (error) {
+    state.dbStatus = fallbackDbStatus;
   }
 }
 
@@ -611,6 +652,44 @@ async function renderLogs() {
   `;
 }
 
+async function renderSystem() {
+  await refreshSystemStatus();
+  const status = state.dbStatus || fallbackDbStatus;
+  const database = status.database || fallbackDbStatus.database;
+  const summary = status.summary || fallbackDbStatus.summary;
+  const tableRows = (status.tables || []).map((item) => `
+    <div>
+      <strong>${item.table_name}</strong>
+      <span>${item.record_count || 0} 条</span>
+      <span>${item.latest_at || "暂无"}</span>
+      ${importStatusBadge((item.record_count || 0) > 0 ? "success" : "preview")}
+    </div>
+  `).join("");
+
+  view().innerHTML = `
+    <section class="kpi-grid">
+      ${card("数据库", `<strong>${database.exists ? "已生成" : "未生成"}</strong><p>${database.path}</p>`)}
+      ${card("表数量", `<strong>${summary.table_count || 0}</strong><p>当前 SQLite 表</p>`)}
+      ${card("总记录数", `<strong>${summary.total_records || 0}</strong><p>所有持久化记录</p>`)}
+      ${card("文件大小", `<strong>${database.size_bytes || 0}</strong><p>bytes</p>`)}
+    </section>
+    <section class="page-section">
+      <div class="section-header">
+        <div>
+          <h2>SQLite 表状态</h2>
+          <p class="muted">最近更新时间：${summary.latest_at || "暂无"}</p>
+        </div>
+        <button onclick="refreshSystemView()">刷新系统状态</button>
+      </div>
+      <div class="table-like import-table records-table">${tableRows}</div>
+    </section>
+    <section class="two-column">
+      ${card("当前存储对象", list(["WorkflowRun", "ExecutionLog", "ImportRecord", "ApprovalRecord", "TaskStatus", "ReportRecord"]))}
+      ${card("运行边界", list(["不接真实 ERP", "不接真实 CRM", "不接真实店铺后台", "不自动执行高风险动作"]))}
+    </section>
+  `;
+}
+
 async function updateTask(taskId, action) {
   if (!state.apiMode) {
     alert("当前为本地样例模式。启动 FastAPI 后可记录确认 / 拒绝状态。");
@@ -655,6 +734,11 @@ async function selectWorkflowRun(workflowRunId) {
   await renderRoute();
 }
 
+async function refreshSystemView() {
+  await refreshSystemStatus();
+  await renderRoute();
+}
+
 async function refreshAndRender() {
   await refreshWorkflow();
   await renderRoute();
@@ -669,6 +753,7 @@ window.refreshTaskView = refreshTaskView;
 window.refreshReportView = refreshReportView;
 window.refreshLogsAndRender = refreshLogsAndRender;
 window.selectWorkflowRun = selectWorkflowRun;
+window.refreshSystemView = refreshSystemView;
 
 document.getElementById("refreshBtn").addEventListener("click", refreshAndRender);
 window.addEventListener("hashchange", renderRoute);
