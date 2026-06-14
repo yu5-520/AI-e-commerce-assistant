@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 from uuid import uuid4
 
+from src.category import build_category_context
 from src.data_loader.load_mock_data import load_all
 from src.diagnosis.customer_segmentation import segment_customers
 from src.diagnosis.product_diagnosis import diagnose_products
@@ -25,12 +26,17 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = False) -> Dict[str, Any]:
+def build_mock_workflow_result(
+    write_outputs: bool = False,
+    record_logs: bool = False,
+    category_id: str = "sun_protection_clothing",
+) -> Dict[str, Any]:
     """Run the full mock workflow and return structured outputs.
 
     Args:
         write_outputs: When true, also write outputs/*.json and demo_report.md.
         record_logs: When true, write WorkflowRun and ExecutionLog records.
+        category_id: Vertical category profile id injected into the workflow.
 
     Returns:
         A dictionary suitable for API responses and CLI report generation.
@@ -39,11 +45,24 @@ def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = 
     if record_logs:
         run = create_workflow_run(
             workflow_type="full_mock_workflow",
-            input_snapshot={"write_outputs": write_outputs},
+            input_snapshot={"write_outputs": write_outputs, "category_id": category_id},
         )
         workflow_run_id = run["workflow_run_id"]
 
     try:
+        category_context = build_category_context(category_id)
+        if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="category_context",
+                status="success",
+                output_snapshot={
+                    "category_id": category_context["category_profile"].get("category_id"),
+                    "category_name": category_context["category_profile"].get("category_name"),
+                    "source": category_context["category_profile"].get("source"),
+                },
+            )
+
         datasets = load_all()
         if record_logs and workflow_run_id:
             create_execution_log(
@@ -80,7 +99,9 @@ def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = 
                 output_snapshot={"customer_count": len(customer_segmentation)},
             )
 
+        category_name = category_context["category_profile"].get("category_name", "垂直类目")
         rag_context = {
+            "category_profile": retrieve(f"{category_name} 价格带 季节性 尺码 退换 主图 SKU", top_k=3),
             "activity_price": retrieve("活动价 保本线 利润 风险", top_k=3),
             "after_sales": retrieve("退款 售后 客服 SOP 敏感客户", top_k=3),
             "customer_touch": retrieve("客户触达 隐私 自动群发 合规", top_k=3),
@@ -109,15 +130,18 @@ def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = 
             )
 
         result: Dict[str, Any] = {
-            "workflow_name": "AI + RPA + ERP + CRM Mock Workflow",
+            "workflow_name": "AI Vertical Shelf E-commerce Operating Loop Mock Workflow",
             "workflow_mode": "Workflow-first",
             "workflow_run_id": workflow_run_id,
+            "category_context": category_context,
             "product_diagnosis": product_diagnosis,
             "customer_segmentation": customer_segmentation,
             "rpa_tasks": rpa_tasks,
             "approval_required_tasks": approval_required_tasks,
             "rag_context": rag_context,
             "summary": {
+                "category_id": category_context["category_profile"].get("category_id"),
+                "category_name": category_context["category_profile"].get("category_name"),
                 "product_count": len(product_diagnosis),
                 "customer_count": len(customer_segmentation),
                 "rpa_task_count": len(rpa_tasks),
@@ -127,6 +151,7 @@ def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = 
                 ),
             },
             "safety_boundary": {
+                "auto_product_publish": False,
                 "auto_price_change": False,
                 "auto_campaign_registration": False,
                 "auto_ad_spend_change": False,
@@ -136,13 +161,14 @@ def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = 
         }
 
         if write_outputs:
+            write_json("category_context.json", category_context)
             write_json("product_diagnosis.json", product_diagnosis)
             write_json("customer_segmentation.json", customer_segmentation)
             write_json("rpa_task_draft.json", rpa_tasks)
             write_json("approval_required_tasks.json", approval_required_tasks)
             write_json("rag_retrieval_context.json", rag_context)
             report_path = write_markdown_report(
-                product_diagnosis, customer_segmentation, rpa_tasks, rag_context
+                product_diagnosis, customer_segmentation, rpa_tasks, rag_context, category_context
             )
             result["report_path"] = str(report_path)
             report_record = {
