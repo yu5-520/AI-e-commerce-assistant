@@ -1,11 +1,12 @@
-"""Run the mock ERP + CRM + RAG + RPA workflow demo.
+"""Run the mock vertical shelf ecommerce workflow demo.
 
 Usage:
     python -m src.run_demo
 
-V7 note:
-    The CLI and FastAPI API now share the same workflow service in
-    src.workflow.mock_workflow. This avoids two divergent demo chains.
+V0.9 note:
+    The CLI and FastAPI API share the same workflow service in
+    src.workflow.mock_workflow. The workflow now loads a vertical category
+    profile before running ERP / CRM diagnosis.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ def main() -> None:
     summary = result["summary"]
 
     print("Mock workflow completed.")
+    print(f"Category: {summary.get('category_name')} ({summary.get('category_id')})")
     print(f"Product diagnosis count: {summary['product_count']}")
     print(f"Customer segmentation count: {summary['customer_count']}")
     print(f"RPA task draft count: {summary['rpa_task_count']}")
