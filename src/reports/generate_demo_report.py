@@ -26,6 +26,7 @@ def write_markdown_report(
     competitor_analysis: Dict[str, object] | None = None,
     listing_growth_plan: Dict[str, object] | None = None,
     traffic_feedback_report: Dict[str, object] | None = None,
+    operating_loop_summary: Dict[str, object] | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / "demo_report.md"
@@ -33,6 +34,7 @@ def write_markdown_report(
     competitor_analysis = competitor_analysis or {}
     listing_growth_plan = listing_growth_plan or {}
     traffic_feedback_report = traffic_feedback_report or {}
+    operating_loop_summary = operating_loop_summary or {}
     category_profile = category_context.get("category_profile") or {}
     category_rules = category_context.get("category_rules") or {}
     reference_product = competitor_analysis.get("reference_product") or {}
@@ -120,7 +122,24 @@ def write_markdown_report(
         lines.append(f"- {action}")
     lines.append("")
 
-    lines.append("## 5. CRM 客户分层")
+    lines.append("## 5. 经营循环总控")
+    lines.extend(
+        [
+            f"- 循环 ID：{operating_loop_summary.get('loop_id', '未生成')}",
+            f"- 循环状态：{operating_loop_summary.get('loop_status', '未生成')}",
+            f"- 下一轮进入模块：{operating_loop_summary.get('next_module', '未生成')}",
+            f"- 是否需要人工确认：{operating_loop_summary.get('manual_review_required', True)}",
+            f"- 是否允许自动执行：{operating_loop_summary.get('auto_execution_allowed', False)}",
+            f"- 安全边界：{operating_loop_summary.get('safe_use_policy', '未生成')}",
+            "",
+            "### 下一轮计划",
+        ]
+    )
+    for action in operating_loop_summary.get("next_iteration_plan", []):
+        lines.append(f"- {action}")
+    lines.append("")
+
+    lines.append("## 6. CRM 客户分层")
     for item in customer_segments:
         lines.extend(
             [
@@ -135,7 +154,7 @@ def write_markdown_report(
             ]
         )
 
-    lines.append("## 6. RPA 任务草案")
+    lines.append("## 7. RPA 任务草案")
     for task in rpa_tasks:
         lines.extend(
             [
@@ -151,13 +170,13 @@ def write_markdown_report(
 
     lines.extend(
         [
-            "## 7. RAG 召回摘要",
+            "## 8. RAG 召回摘要",
             "",
             "```json",
             json.dumps(rag_context, ensure_ascii=False, indent=2),
             "```",
             "",
-            "## 8. 类目下一步",
+            "## 9. 类目下一步",
         ]
     )
     for step in category_context.get("next_steps", []):
@@ -166,9 +185,9 @@ def write_markdown_report(
     lines.extend(
         [
             "",
-            "## 9. 复盘结论",
+            "## 10. 复盘结论",
             "",
-            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 商品经营判断 → 同类目竞品比对 → 同类目上新增长草案 → 流量测试回流 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
+            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 商品经营判断 → 同类目竞品比对 → 同类目上新增长草案 → 流量测试回流 → 经营循环总控 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
         ]
     )
 
