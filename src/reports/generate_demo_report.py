@@ -27,6 +27,8 @@ def write_markdown_report(
     listing_growth_plan: Dict[str, object] | None = None,
     traffic_feedback_report: Dict[str, object] | None = None,
     operating_loop_summary: Dict[str, object] | None = None,
+    operating_unit: Dict[str, object] | None = None,
+    cycle_policy: Dict[str, object] | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / "demo_report.md"
@@ -35,6 +37,8 @@ def write_markdown_report(
     listing_growth_plan = listing_growth_plan or {}
     traffic_feedback_report = traffic_feedback_report or {}
     operating_loop_summary = operating_loop_summary or {}
+    operating_unit = operating_unit or category_context.get("operating_unit") or {}
+    cycle_policy = cycle_policy or {}
     category_profile = category_context.get("category_profile") or {}
     category_rules = category_context.get("category_rules") or {}
     reference_product = competitor_analysis.get("reference_product") or {}
@@ -46,9 +50,23 @@ def write_markdown_report(
     risk_summary = traffic_feedback_report.get("risk_summary") or {}
 
     lines: List[str] = [
-        "# AI 垂直货架电商经营循环 Demo Report",
+        "# AI ERP经营单元电商循环 Demo Report",
         "",
-        "## 0. 垂直类目上下文",
+        "## 0. ERP 经营单元识别",
+        f"- 经营单元：{operating_unit.get('unit_name', '未推断')}",
+        f"- 推断来源：{operating_unit.get('base_source', '未加载')}",
+        f"- 商品群：{operating_unit.get('dominant_product_group', '未推断')}",
+        f"- 经营单元 ID：{operating_unit.get('operating_unit_id', '未推断')}",
+        f"- 推断理由：{operating_unit.get('reason', '未生成')}",
+        "",
+        "## 0.1 循环频率策略",
+        f"- 频率：{cycle_policy.get('cycle_frequency', '未生成')}",
+        f"- 循环类型：{cycle_policy.get('cycle_type', '未生成')}",
+        f"- 运行时间：{cycle_policy.get('run_time', '未生成')}",
+        f"- 报告类型：{cycle_policy.get('report_type', '未生成')}",
+        f"- 说明：{cycle_policy.get('description', '未生成')}",
+        "",
+        "## 0.2 类目 / 经营单元上下文",
         f"- 类目：{category_profile.get('category_name', '未加载')}",
         f"- 来源：{category_profile.get('source', '未加载')}",
         f"- 类目摘要：{category_profile.get('summary', '未加载')}",
@@ -71,7 +89,7 @@ def write_markdown_report(
             ]
         )
 
-    lines.append("## 2. 同类目竞品比对")
+    lines.append("## 2. 同经营单元竞品比对")
     lines.extend(
         [
             f"- 分析 ID：{competitor_analysis.get('analysis_id', '未生成')}",
@@ -87,7 +105,7 @@ def write_markdown_report(
         ]
     )
 
-    lines.append("## 3. 同类目上新增长")
+    lines.append("## 3. 同经营单元上新增长")
     lines.extend(
         [
             f"- 计划 ID：{listing_growth_plan.get('plan_id', '未生成')}",
@@ -187,7 +205,7 @@ def write_markdown_report(
             "",
             "## 10. 复盘结论",
             "",
-            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 商品经营判断 → 同类目竞品比对 → 同类目上新增长草案 → 流量测试回流 → 经营循环总控 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
+            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → ERP 经营单元识别 → 循环频率策略 → 类目上下文加载 → 商品经营判断 → 同经营单元竞品比对 → 同经营单元上新增长草案 → 流量测试回流 → 经营循环总控 → RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
         ]
     )
 
