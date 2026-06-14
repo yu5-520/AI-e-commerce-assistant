@@ -23,20 +23,18 @@ def assert_true(condition: bool, message: str) -> None:
 def main() -> None:
     """Smoke-test the current main product workflow.
 
-    The product entrypoint is `src.workflow.mock_workflow` and `src.api.main`.
-    This test validates the V0.8-V1.3 vertical shelf ecommerce operating loop
-    skeleton: category, diagnosis, competitor, listing, traffic feedback, loop
-    summary, RPA drafts, and human approval boundaries.
+    The workflow now starts from ERP product data, infers the operating unit,
+    chooses a cycle policy, and then runs the closed operating loop skeleton.
     """
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
     assert_true(validation["failed_count"] == 0, "mock import validation should have no failed checks")
     assert_true(len(validation["datasets"]) >= 7, "validation should cover ERP and CRM mock datasets")
 
-    standalone_category_context = build_category_context("sun_protection_clothing")
+    standalone_category_context = build_category_context("home_living_goods")
     assert_true(
-        standalone_category_context["category_profile"]["category_name"] == "防晒服",
-        "category context should load the sun protection clothing profile",
+        standalone_category_context["category_profile"]["category_name"] == "家居生活商品",
+        "category context should load the ERP-inferred home living profile",
     )
     assert_true(
         "价格带" in " ".join(standalone_category_context["category_rules"]["risk_focus"]),
@@ -45,6 +43,8 @@ def main() -> None:
 
     result = build_mock_workflow_result(write_outputs=False, record_logs=False)
     summary = result.get("summary") or {}
+    operating_unit = result.get("operating_unit") or {}
+    cycle_policy = result.get("cycle_policy") or {}
     category_context = result.get("category_context") or {}
     category_profile = category_context.get("category_profile") or {}
     competitor_analysis = result.get("competitor_analysis") or {}
@@ -54,15 +54,20 @@ def main() -> None:
     operating_loop_summary = result.get("operating_loop_summary") or {}
 
     assert_true(result.get("workflow_mode") == "Workflow-first", "workflow should stay Workflow-first")
-    assert_true(category_profile.get("category_id") == "sun_protection_clothing", "workflow should inject category context")
-    assert_true(summary.get("category_name") == "防晒服", "workflow summary should expose category name")
+    assert_true(operating_unit.get("base_source") == "ERP product data", "operating unit should be inferred from ERP data")
+    assert_true(operating_unit.get("category_profile_id") == "home_living_goods", "mock ERP should infer home living operating unit")
+    assert_true(cycle_policy.get("cycle_frequency") == "daily", "home living low-price stock should use daily loop policy")
+    assert_true(category_profile.get("category_id") == "home_living_goods", "workflow should inject ERP-inferred category context")
+    assert_true(summary.get("category_name") == "家居生活商品", "workflow summary should expose ERP-inferred category name")
+    assert_true(summary.get("operating_unit_id") == "home_living_goods", "summary should expose operating unit id")
+    assert_true(summary.get("cycle_frequency") == "daily", "summary should expose cycle frequency")
     assert_true(summary.get("product_count", 0) > 0, "workflow should diagnose products")
     assert_true(summary.get("customer_count", 0) > 0, "workflow should segment customers")
-    assert_true(summary.get("competitor_count", 0) > 0, "workflow should compare same-category competitors")
+    assert_true(summary.get("competitor_count", 0) > 0, "workflow should compare same-operating-unit competitors")
     assert_true(competitor_analysis.get("analysis_id"), "workflow should return competitor analysis")
     assert_true(
-        competitor_analysis.get("data_source") == "examples/category_sun_protection/mock_competitors.csv",
-        "competitor analysis should use the mock competitor dataset",
+        competitor_analysis.get("data_source") == "examples/category_home_living/mock_competitors.csv",
+        "competitor analysis should use the ERP-inferred home living competitor dataset",
     )
     assert_true(
         competitor_analysis.get("reference_product", {}).get("trigger_reason"),
@@ -74,8 +79,8 @@ def main() -> None:
     )
     assert_true(summary.get("listing_candidate_count", 0) > 0, "workflow should score listing candidates")
     assert_true(
-        listing_growth_plan.get("data_source") == "examples/category_sun_protection/mock_supplier_products.csv",
-        "listing growth should use the mock supplier product dataset",
+        listing_growth_plan.get("data_source") == "examples/category_home_living/mock_supplier_products.csv",
+        "listing growth should use the ERP-inferred home living supplier dataset",
     )
     assert_true(
         listing_growth_plan.get("top_candidate", {}).get("score", 0) > 0,
@@ -86,8 +91,8 @@ def main() -> None:
     assert_true(listing_growth_plan.get("safe_use_policy"), "listing growth should include safe-use policy")
     assert_true(summary.get("traffic_experiment_count", 0) > 0, "workflow should diagnose traffic experiments")
     assert_true(
-        traffic_feedback_report.get("data_source") == "examples/category_sun_protection/mock_traffic_tests.csv",
-        "traffic feedback should use the mock traffic test dataset",
+        traffic_feedback_report.get("data_source") == "examples/category_home_living/mock_traffic_tests.csv",
+        "traffic feedback should use the ERP-inferred home living traffic dataset",
     )
     assert_true(traffic_feedback_report.get("decision_summary"), "traffic feedback should summarize next-action decisions")
     assert_true(traffic_feedback_report.get("loopback_actions"), "traffic feedback should produce loopback actions")
@@ -112,11 +117,11 @@ def main() -> None:
     assert_true(high_risk_policy["risk_level"] == "high", "auto price change should be high risk")
     assert_true(high_risk_policy["auto_execution_allowed"] is False, "high risk tasks should not auto-execute")
 
-    rag_hits = retrieve("防晒服 价格带 季节性 尺码 退换", top_k=3)
+    rag_hits = retrieve("家居生活商品 价格带 尺寸 收纳 流量 回流", top_k=3)
     assert_true(isinstance(rag_hits, list), "RAG retriever should return a list")
     assert_true(
-        any("category_profiles/sun_protection_clothing.md" == hit.get("source") for hit in rag_hits),
-        "RAG retriever should include category profile documents",
+        any("category_profiles/home_living_goods.md" == hit.get("source") for hit in rag_hits),
+        "RAG retriever should include ERP-inferred operating unit profile documents",
     )
 
     print(
