@@ -1,0 +1,4 @@
+snapshot_id,product_id,sku_id,current_stock,available_stock,safety_stock,supply_status,updated_at
+INV001,P001,SKU001,200,180,50,稳定,2026-06-14 12:00
+INV002,P002,SKU001,120,95,40,可补货,2026-06-14 12:00
+INV003,P003,SKU001,80,70,30,稳定,2026-06-14 12:00
