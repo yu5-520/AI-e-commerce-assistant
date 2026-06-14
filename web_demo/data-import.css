@@ -1,7 +1,34 @@
-.button-group {
+.button-group,
+.filter-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.filter-bar {
+  align-items: center;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.filter-bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.filter-bar select {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: white;
+  color: var(--text);
+  font-weight: 700;
 }
 
 .import-table > div {
