@@ -132,6 +132,11 @@ const routes = {
     subtitle: "平台规则、合规风控、运营方法和客服 SOP 的 RAG 依据。",
     render: renderKnowledge,
   },
+  logs: {
+    title: "运行日志",
+    subtitle: "查看 WorkflowRun 与 ExecutionLog，追踪每次导入、诊断和审批动作。",
+    render: renderLogs,
+  },
 };
 
 const state = {
@@ -140,6 +145,8 @@ const state = {
   reportText: "",
   importValidation: null,
   importRecords: [],
+  workflowRuns: [],
+  executionLogs: [],
 };
 
 function view() {
@@ -160,7 +167,7 @@ function statusBadge(status) {
 }
 
 function importStatusBadge(status) {
-  const labelMap = { passed: "通过", failed: "失败", warning: "警告", preview: "预览", local_preview: "本地预览" };
+  const labelMap = { passed: "通过", failed: "失败", warning: "警告", preview: "预览", local_preview: "本地预览", success: "成功", running: "运行中" };
   return `<span class="status-badge ${status || "preview"}">${labelMap[status] || status || "预览"}</span>`;
 }
 
@@ -211,6 +218,21 @@ async function refreshImportStatus(createRecord = false) {
   } catch (error) {
     state.importValidation = fallbackImportStatus;
     state.importRecords = [];
+  }
+}
+
+async function refreshLogs() {
+  if (!state.apiMode) {
+    state.workflowRuns = [];
+    state.executionLogs = [];
+    return;
+  }
+  try {
+    state.workflowRuns = await fetchJson("/api/logs/workflow-runs");
+    state.executionLogs = await fetchJson("/api/logs/execution-logs");
+  } catch (error) {
+    state.workflowRuns = [];
+    state.executionLogs = [];
   }
 }
 
@@ -418,6 +440,48 @@ function renderKnowledge(data) {
   view().innerHTML = `<section class="page-section"><h2>RAG 依据</h2><div class="result-list">${items}</div></section>`;
 }
 
+async function renderLogs() {
+  await refreshLogs();
+  const runRows = state.workflowRuns.length
+    ? state.workflowRuns.map((run) => `
+      <div>
+        <strong>${run.workflow_run_id}</strong>
+        <span>${run.workflow_type}</span>
+        <span>${run.finished_at || run.started_at || "-"}</span>
+        ${importStatusBadge(run.status)}
+      </div>
+    `).join("")
+    : `<div><strong>暂无 WorkflowRun</strong><span>运行数据导入、诊断或审批后生成。</span><span>-</span>${importStatusBadge("preview")}</div>`;
+
+  const logRows = state.executionLogs.length
+    ? state.executionLogs.map((log) => `
+      <div>
+        <strong>${log.node_name}</strong>
+        <span>${log.workflow_run_id}</span>
+        <span>${log.created_at}</span>
+        ${importStatusBadge(log.status)}
+      </div>
+    `).join("")
+    : `<div><strong>暂无 ExecutionLog</strong><span>运行工作流节点后生成。</span><span>-</span>${importStatusBadge("preview")}</div>`;
+
+  view().innerHTML = `
+    <section class="page-section">
+      <div class="section-header">
+        <div>
+          <h2>WorkflowRun</h2>
+          <p class="muted">记录一次完整运行，例如数据导入、诊断或任务审批。</p>
+        </div>
+        <button onclick="refreshLogsAndRender()">刷新日志</button>
+      </div>
+      <div class="table-like import-table records-table">${runRows}</div>
+    </section>
+    <section class="page-section">
+      <h2>ExecutionLog</h2>
+      <div class="table-like import-table records-table">${logRows}</div>
+    </section>
+  `;
+}
+
 async function updateTask(taskId, action) {
   if (!state.apiMode) {
     alert("当前为本地样例模式。启动 FastAPI 后可记录确认 / 拒绝状态。");
@@ -441,6 +505,11 @@ async function importMockAndRender() {
   await renderRoute();
 }
 
+async function refreshLogsAndRender() {
+  await refreshLogs();
+  await renderRoute();
+}
+
 async function refreshAndRender() {
   await refreshWorkflow();
   await renderRoute();
@@ -451,6 +520,7 @@ window.rejectTask = (taskId) => updateTask(taskId, "reject");
 window.refreshAndRender = refreshAndRender;
 window.validateImportAndRender = validateImportAndRender;
 window.importMockAndRender = importMockAndRender;
+window.refreshLogsAndRender = refreshLogsAndRender;
 
 document.getElementById("refreshBtn").addEventListener("click", refreshAndRender);
 window.addEventListener("hashchange", renderRoute);
