@@ -8,18 +8,26 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 CATEGORY_PROFILE_DIR = ROOT_DIR / "knowledge_base" / "category_profiles"
 
 CATEGORY_PROFILE_FILES = {
+    "home_living_goods": "home_living_goods.md",
+    "家居生活商品": "home_living_goods.md",
     "sun_protection_clothing": "sun_protection_clothing.md",
     "防晒服": "sun_protection_clothing.md",
 }
 
+CATEGORY_PROFILE_META = {
+    "home_living_goods": {
+        "category_name": "家居生活商品",
+        "summary": "由 ERP 商品结构推断出的家居日用、收纳、健康家居和生活场景商品经营单元。",
+    },
+    "sun_protection_clothing": {
+        "category_name": "防晒服 / 防晒商品样板",
+        "summary": "季节性强、价格带明显、退换货和尺码问题较高的防晒商品样板。",
+    },
+}
+
 
 def _extract_heading_section(content: str, heading: str) -> str:
-    """Extract a markdown section by heading text.
-
-    This deliberately stays lightweight. The category profile is still a human
-    readable markdown file; this helper only extracts enough structure for MVP
-    workflow context and smoke tests.
-    """
+    """Extract a markdown section by heading text."""
     pattern = rf"^##\s+\d+\.\s+{re.escape(heading)}\s*$"
     match = re.search(pattern, content, flags=re.MULTILINE)
     if not match:
@@ -51,15 +59,24 @@ def _extract_text_block(section: str) -> List[str]:
     return values
 
 
-def load_category_profile(category_id: str = "sun_protection_clothing") -> Dict[str, Any]:
-    """Load one vertical category profile from knowledge_base/category_profiles."""
-    filename = CATEGORY_PROFILE_FILES.get(category_id, CATEGORY_PROFILE_FILES["sun_protection_clothing"])
+def _resolve_profile_id(category_id: str) -> str:
+    if category_id in {"家居生活商品", "home_living_goods"}:
+        return "home_living_goods"
+    if category_id in {"防晒服", "sun_protection_clothing"}:
+        return "sun_protection_clothing"
+    return "home_living_goods"
+
+
+def load_category_profile(category_id: str = "home_living_goods") -> Dict[str, Any]:
+    """Load one operating-unit profile from knowledge_base/category_profiles."""
+    profile_id = _resolve_profile_id(category_id)
+    filename = CATEGORY_PROFILE_FILES.get(profile_id, CATEGORY_PROFILE_FILES["home_living_goods"])
     path = CATEGORY_PROFILE_DIR / filename
     if not path.exists():
         raise FileNotFoundError(f"Category profile not found: {path}")
 
     content = path.read_text(encoding="utf-8")
-    category_name = "防晒服" if "防晒服" in content[:120] else category_id
+    meta = CATEGORY_PROFILE_META.get(profile_id, CATEGORY_PROFILE_META["home_living_goods"])
 
     seasonality_section = _extract_heading_section(content, "核心经营周期")
     price_section = _extract_heading_section(content, "常见价格带")
@@ -71,10 +88,10 @@ def load_category_profile(category_id: str = "sun_protection_clothing") -> Dict[
     traffic_section = _extract_heading_section(content, "流量测试指标")
 
     return {
-        "category_id": "sun_protection_clothing",
-        "category_name": category_name,
+        "category_id": profile_id,
+        "category_name": meta["category_name"],
         "source": str(path.relative_to(ROOT_DIR)),
-        "summary": "季节性强、价格带明显、退换货和尺码问题较高的服饰类目。",
+        "summary": meta["summary"],
         "seasonality": _extract_text_block(seasonality_section),
         "price_bands": _extract_text_block(price_section),
         "selling_points": _extract_bullets(selling_points_section),
