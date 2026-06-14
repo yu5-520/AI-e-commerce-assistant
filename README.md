@@ -32,11 +32,13 @@
 
 ## 2. 当前版本边界
 
-当前仓库已经完成的是 **V0.8：ERP + CRM 经营判断底座**。
+当前仓库已经完成的是 **V0.8：ERP + CRM 经营判断底座**，并已开始接入 **V0.9：垂直类目配置层** 的最小骨架。
 
 当前可运行能力：
 
 ```text
+防晒服垂直类目档案
+↓
 Mock ERP / CRM 数据
 ↓
 数据导入与校验
@@ -57,7 +59,6 @@ RPA 任务草案
 当前尚未实现，但已经纳入架构升级路线的能力：
 
 ```text
-垂直类目配置层
 同类目竞品比对系统
 同类目上新增长系统
 流量测试与数据回流系统
@@ -96,6 +97,7 @@ python -m src.run_demo
 运行后生成：
 
 ```text
+outputs/category_context.json
 outputs/product_diagnosis.json
 outputs/customer_segmentation.json
 outputs/rpa_task_draft.json
@@ -162,6 +164,8 @@ http://127.0.0.1:8000/web_demo/index.html
 
 ```text
 统一产品文档
++ 防晒服垂直类目档案
++ 类目上下文加载模块
 + Mock ERP / CRM 数据
 + Python Mock Workflow
 + 简单 RAG 检索
@@ -175,13 +179,26 @@ http://127.0.0.1:8000/web_demo/index.html
 
 ## 6. 当前核心模块
 
-### 6.1 ERP / 表格数据接入
+### 6.1 垂直类目配置
+
+当前已加入防晒服类目样板。
+
+位置：
+
+```text
+knowledge_base/category_profiles/sun_protection_clothing.md
+src/category/
+```
+
+类目上下文会进入 Mock Workflow，并输出到 `outputs/category_context.json`。
+
+### 6.2 ERP / 表格数据接入
 
 MVP 阶段优先支持 Mock CSV / Excel 数据，不直接接入真实商家后台。
 
 数据类型：商品、订单、库存、退款、SKU、成本、售价、活动价、投放摘要。
 
-### 6.2 CRM 客户数据接入
+### 6.3 CRM 客户数据接入
 
 MVP 阶段只使用脱敏 Mock 数据。
 
@@ -189,15 +206,15 @@ MVP 阶段只使用脱敏 Mock 数据。
 
 不保存真实姓名、手机号、微信号、地址等隐私信息。
 
-### 6.3 AI / RAG 决策层
+### 6.4 AI / RAG 决策层
 
-当前版本使用规则引擎模拟 AI 诊断，用关键词检索模拟 RAG。后续可替换为 LLM + Embedding + 向量库。
+当前版本使用规则引擎模拟 AI 诊断，用关键词检索模拟 RAG。RAG 已支持读取 `knowledge_base/category_profiles/` 下的垂直类目知识。
 
-### 6.4 Human-in-the-loop 人工确认
+### 6.5 Human-in-the-loop 人工确认
 
 关键动作必须由用户确认：改标题、改主图、改价、报名活动、增加投放预算、下架 / 清货、批量回写 ERP / CRM、客户触达、优惠券策略执行和售后处理动作。
 
-### 6.5 RPA 任务草案层
+### 6.6 RPA 任务草案层
 
 MVP 阶段生成低风险任务草案，不执行真实自动化。
 
@@ -208,8 +225,8 @@ MVP 阶段生成低风险任务草案，不执行真实自动化。
 ## 7. 下一阶段升级路线
 
 ```text
-V0.8：ERP + CRM 经营判断系统（当前）
-V0.9：垂直类目配置层
+V0.8：ERP + CRM 经营判断系统（当前已跑通）
+V0.9：垂直类目配置层（当前已接入最小骨架）
 V1.0：同类目竞品比对系统
 V1.1：同类目上新增长系统
 V1.2：流量测试与数据回流系统
@@ -226,7 +243,7 @@ docs/system-upgrade-roadmap.md
 
 ```text
 examples/        Mock ERP / CRM 数据
-knowledge_base/  简单 RAG 知识片段，后续加入垂直类目知识
+knowledge_base/  简单 RAG 知识片段，含垂直类目知识
 src/             Python Mock Workflow 与 API
 evals/           最小评测
 web_demo/        前端 Demo
