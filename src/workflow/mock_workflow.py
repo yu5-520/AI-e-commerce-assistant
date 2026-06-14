@@ -18,10 +18,12 @@ from src.diagnosis.customer_segmentation import segment_customers
 from src.diagnosis.product_diagnosis import diagnose_products
 from src.listing import build_listing_growth_plan
 from src.operating_loop import build_operating_loop_summary
+from src.operating_unit import infer_operating_unit
 from src.rag.simple_retriever import retrieve
 from src.reports.generate_demo_report import write_json, write_markdown_report
 from src.repositories.sqlite_repository import insert_report_record
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks, generate_product_tasks
+from src.scheduler import build_cycle_policy
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
 from src.traffic_test import build_traffic_feedback_report
 
@@ -33,14 +35,15 @@ def now_iso() -> str:
 def build_mock_workflow_result(
     write_outputs: bool = False,
     record_logs: bool = False,
-    category_id: str = "sun_protection_clothing",
+    category_id: str | None = None,
 ) -> Dict[str, Any]:
     """Run the full mock workflow and return structured outputs.
 
     Args:
         write_outputs: When true, also write outputs/*.json and demo_report.md.
         record_logs: When true, write WorkflowRun and ExecutionLog records.
-        category_id: Vertical category profile id injected into the workflow.
+        category_id: Optional manual override for demo/testing. Product logic
+            should normally infer the operating unit from ERP data first.
 
     Returns:
         A dictionary suitable for API responses and CLI report generation.
@@ -49,13 +52,55 @@ def build_mock_workflow_result(
     if record_logs:
         run = create_workflow_run(
             workflow_type="full_mock_workflow",
-            input_snapshot={"write_outputs": write_outputs, "category_id": category_id},
+            input_snapshot={"write_outputs": write_outputs, "category_override": category_id},
         )
         workflow_run_id = run["workflow_run_id"]
 
     try:
-        category_context = build_category_context(category_id)
+        datasets = load_all()
         if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="load_mock_data",
+                status="success",
+                output_snapshot={key: len(value) for key, value in datasets.items()},
+            )
+
+        operating_unit = infer_operating_unit(
+            products=datasets["products"],
+            orders=datasets["orders"],
+            inventory=datasets["inventory"],
+        )
+        if category_id:
+            operating_unit["category_profile_id"] = category_id
+            operating_unit["manual_category_override"] = True
+        cycle_policy = build_cycle_policy(operating_unit)
+        category_context = build_category_context(
+            str(operating_unit.get("category_profile_id", "home_living_goods")),
+            operating_unit=operating_unit,
+        )
+        if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="operating_unit_inference",
+                status="success",
+                output_snapshot={
+                    "operating_unit_id": operating_unit.get("operating_unit_id"),
+                    "unit_name": operating_unit.get("unit_name"),
+                    "category_profile_id": operating_unit.get("category_profile_id"),
+                    "cycle_suggestion": operating_unit.get("cycle_suggestion"),
+                },
+            )
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="cycle_policy",
+                status="success",
+                output_snapshot={
+                    "cycle_policy_id": cycle_policy.get("cycle_policy_id"),
+                    "cycle_frequency": cycle_policy.get("cycle_frequency"),
+                    "report_type": cycle_policy.get("report_type"),
+                },
+            )
             create_execution_log(
                 workflow_run_id=workflow_run_id,
                 node_name="category_context",
@@ -65,15 +110,6 @@ def build_mock_workflow_result(
                     "category_name": category_context["category_profile"].get("category_name"),
                     "source": category_context["category_profile"].get("source"),
                 },
-            )
-
-        datasets = load_all()
-        if record_logs and workflow_run_id:
-            create_execution_log(
-                workflow_run_id=workflow_run_id,
-                node_name="load_mock_data",
-                status="success",
-                output_snapshot={key: len(value) for key, value in datasets.items()},
             )
 
         product_diagnosis = diagnose_products(
@@ -162,9 +198,10 @@ def build_mock_workflow_result(
                 },
             )
 
-        category_name = category_context["category_profile"].get("category_name", "垂直类目")
+        category_name = category_context["category_profile"].get("category_name", "经营单元")
         rag_context = {
-            "category_profile": retrieve(f"{category_name} 价格带 季节性 尺码 退换 主图 SKU", top_k=3),
+            "operating_unit": retrieve(f"{category_name} ERP 商品结构 经营单元 循环频率", top_k=3),
+            "category_profile": retrieve(f"{category_name} 价格带 季节性 尺寸 退换 主图 SKU", top_k=3),
             "competitor_analysis": retrieve(f"{category_name} 竞品 价格带 差评 SKU 主图", top_k=3),
             "listing_growth": retrieve(f"{category_name} 上新 货盘 标题 主图 SKU 定价", top_k=3),
             "traffic_feedback": retrieve(f"{category_name} 流量 测试 点击 转化 退款 ROI 回流", top_k=3),
@@ -196,9 +233,11 @@ def build_mock_workflow_result(
             )
 
         result: Dict[str, Any] = {
-            "workflow_name": "AI Vertical Shelf E-commerce Operating Loop Mock Workflow",
+            "workflow_name": "AI ERP-based Operating Unit E-commerce Loop Mock Workflow",
             "workflow_mode": "Workflow-first",
             "workflow_run_id": workflow_run_id,
+            "operating_unit": operating_unit,
+            "cycle_policy": cycle_policy,
             "category_context": category_context,
             "product_diagnosis": product_diagnosis,
             "customer_segmentation": customer_segmentation,
@@ -210,6 +249,10 @@ def build_mock_workflow_result(
             "approval_required_tasks": approval_required_tasks,
             "rag_context": rag_context,
             "summary": {
+                "operating_unit_id": operating_unit.get("operating_unit_id"),
+                "unit_name": operating_unit.get("unit_name"),
+                "cycle_frequency": cycle_policy.get("cycle_frequency"),
+                "cycle_type": cycle_policy.get("cycle_type"),
                 "category_id": category_context["category_profile"].get("category_id"),
                 "category_name": category_context["category_profile"].get("category_name"),
                 "product_count": len(product_diagnosis),
@@ -228,6 +271,7 @@ def build_mock_workflow_result(
                 ),
             },
             "safety_boundary": {
+                "auto_scheduled_platform_action": False,
                 "auto_loop_execution": False,
                 "auto_ad_account_operation": False,
                 "auto_supplier_api": False,
@@ -242,6 +286,8 @@ def build_mock_workflow_result(
         }
 
         if write_outputs:
+            write_json("operating_unit.json", operating_unit)
+            write_json("cycle_policy.json", cycle_policy)
             write_json("category_context.json", category_context)
             write_json("product_diagnosis.json", product_diagnosis)
             write_json("customer_segmentation.json", customer_segmentation)
@@ -262,6 +308,8 @@ def build_mock_workflow_result(
                 listing_growth_plan,
                 traffic_feedback_report,
                 operating_loop_summary,
+                operating_unit,
+                cycle_policy,
             )
             result["report_path"] = str(report_path)
             report_record = {
