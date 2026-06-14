@@ -1,8 +1,7 @@
 """Approval service for task approval state in MVP.
 
 Current storage is in-memory plus JSONL append log. This keeps the API simple
-while preserving a traceable approval record. Later it can be replaced by
-SQLite or PostgreSQL.
+while preserving traceability. Later it can be replaced by SQLite or PostgreSQL.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ from typing import Any, Dict
 
 from fastapi import HTTPException
 
+from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
 from src.services.workflow_service import get_task
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -34,24 +34,59 @@ def append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
 
 
 def update_task_status(task_id: str, status: str, operator: str = "demo_user") -> Dict[str, Any]:
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+    workflow_run = create_workflow_run(
+        workflow_type="task_approval",
+        input_snapshot={"task_id": task_id, "target_status": status, "operator": operator},
+    )
+    workflow_run_id = workflow_run["workflow_run_id"]
 
-    if status not in {"approved", "rejected"}:
-        raise HTTPException(status_code=400, detail="Invalid task status")
+    try:
+        task = get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
-    updated = {
-        **task,
-        "approval_status": status,
-        "status": status,
-        "operator": operator,
-        "updated_at": now_iso(),
-        "execution_note": "MVP only records approval state; it does not execute real RPA actions.",
-    }
-    TASK_STATUS[task_id] = updated
-    append_jsonl(APPROVAL_LOG_PATH, updated)
-    return updated
+        if status not in {"approved", "rejected"}:
+            raise HTTPException(status_code=400, detail="Invalid task status")
+
+        updated = {
+            **task,
+            "workflow_run_id": workflow_run_id,
+            "approval_status": status,
+            "status": status,
+            "operator": operator,
+            "updated_at": now_iso(),
+            "execution_note": "MVP only records approval state; it does not execute real RPA actions.",
+        }
+        TASK_STATUS[task_id] = updated
+        append_jsonl(APPROVAL_LOG_PATH, updated)
+        create_execution_log(
+            workflow_run_id=workflow_run_id,
+            node_name="task_approval_record",
+            status="success",
+            input_snapshot={"task_id": task_id, "approval_status": status},
+            output_snapshot={"task_id": task_id, "approval_status": status},
+        )
+        finish_workflow_run(
+            workflow_run_id=workflow_run_id,
+            workflow_type="task_approval",
+            status="success",
+            output_snapshot={"task_id": task_id, "approval_status": status},
+        )
+        return updated
+    except Exception as exc:
+        create_execution_log(
+            workflow_run_id=workflow_run_id,
+            node_name="task_approval_error",
+            status="failed",
+            error_message=str(exc),
+        )
+        finish_workflow_run(
+            workflow_run_id=workflow_run_id,
+            workflow_type="task_approval",
+            status="failed",
+            error_message=str(exc),
+        )
+        raise
 
 
 def get_task_status_overrides() -> Dict[str, Dict[str, Any]]:
