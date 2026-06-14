@@ -14,7 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
       - name: Python syntax check
-        run: python -m py_compile scripts/pdd_operation_analyzer.py scripts/llm_client.py backend/server.py scripts/smoke_test_runtime.py
-      - name: Runtime API smoke test
+        run: python -m py_compile src/run_demo.py src/api/main.py evals/run_evals.py scripts/smoke_test_runtime.py
+      - name: Unified workflow smoke test
         run: python scripts/smoke_test_runtime.py
+      - name: Minimal evals
+        run: python evals/run_evals.py
