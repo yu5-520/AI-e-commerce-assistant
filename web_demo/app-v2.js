@@ -90,18 +90,16 @@ fallbackData.approval_required_tasks = fallbackData.rpa_tasks;
 
 const fallbackImportStatus = {
   status: "preview",
-  datasets: ["商品表", "订单表", "库存表", "退款表", "客户表", "客户标签", "互动记录"].map((label) => ({ label, filename: "演示数据", row_count: 0, status: "preview" })),
+  datasets: ["商品表", "订单表", "库存表", "退款表", "客户表", "客户标签", "互动记录"].map((label) => ({ name: label, row_count: 0, status: "preview" })),
   relationship_checks: [],
 };
 
 const state = {
   apiData: null,
+  businessToday: null,
   apiMode: false,
   importValidation: null,
-  importRecords: [],
-  tasks: [],
-  approvalRecords: [],
-  reportRecords: [],
+  actions: [],
   reportText: "",
 };
 
@@ -121,7 +119,6 @@ const $ = (id) => document.getElementById(id);
 const view = () => $("appView");
 const data = () => state.apiData || fallbackData;
 const safeArray = (value) => Array.isArray(value) ? value : [];
-const first = (value, fallback = {}) => Array.isArray(value) && value.length ? value[0] : fallback;
 const cnFrequency = (frequency) => ({ daily: "每天", weekly: "每周", monthly: "每月" }[frequency] || frequency || "未设置");
 const cnDecision = (decision) => ({
   enter_after_sales_diagnosis: "先查售后",
@@ -155,11 +152,14 @@ async function fetchJson(url, options = {}) {
 
 async function refreshWorkflow() {
   try {
-    state.apiData = await fetchJson("/api/demo/run");
+    const payload = await fetchJson("/api/business/today");
+    state.businessToday = payload;
+    state.apiData = payload.raw || fallbackData;
     state.apiMode = true;
     $("apiModeBadge").textContent = "已连接经营数据";
     $("apiModeBadge").className = "mode-badge api";
   } catch (error) {
+    state.businessToday = null;
     state.apiData = fallbackData;
     state.apiMode = false;
     $("apiModeBadge").textContent = "本地演示数据";
@@ -178,39 +178,47 @@ async function renderRoute() {
 
 function renderDashboard() {
   const d = data();
+  const today = state.businessToday;
   const s = d.summary || {};
   const loop = d.operating_loop_summary || {};
   const traffic = d.traffic_feedback_report || {};
+  const priority = today?.priority;
   view().innerHTML = `<section class="hero-card">
     <div>
       <p class="eyebrow">今天优先看</p>
-      <h2>${cnModule(s.loop_next_module || loop.next_module)}</h2>
-      <p>${traffic.next_action || "先完成商品、竞品、上新和流量复盘，再生成下一轮动作。"}</p>
+      <h2>${priority?.title || cnModule(s.loop_next_module || loop.next_module)}</h2>
+      <p>${priority?.reason || traffic.next_action || "先完成商品、竞品、上新和流量复盘，再生成下一轮动作。"}</p>
     </div>
     <div class="hero-actions">
-      <span>${s.unit_name || d.operating_unit?.unit_name || "经营单元待识别"}</span>
-      <strong>${cnFrequency(s.cycle_frequency || d.cycle_policy?.cycle_frequency)}循环</strong>
+      <span>${today?.operating_unit?.name || s.unit_name || d.operating_unit?.unit_name || "经营单元待识别"}</span>
+      <strong>${today?.cycle?.frequency_label || cnFrequency(s.cycle_frequency || d.cycle_policy?.cycle_frequency)}循环</strong>
     </div>
   </section>
   <section class="kpi-grid">
-    ${card("经营单元", `<strong>${s.unit_name || "-"}</strong><p>由商品结构自动识别</p>`)}
-    ${card("商品体检", `<strong>${s.product_count || safeArray(d.product_diagnosis).length}</strong><p>已检查商品</p>`)}
-    ${card("流量测试", `<strong>${s.traffic_experiment_count || traffic.experiment_count || 0}</strong><p>已复盘测试</p>`)}
-    ${card("待确认", `<strong>${s.approval_required_count || safeArray(d.approval_required_tasks).length}</strong><p>高风险动作不自动执行</p>`)}
+    ${(today?.cards || [
+      { title: "经营单元", value: s.unit_name || "-", desc: "由商品结构自动识别" },
+      { title: "商品体检", value: s.product_count || safeArray(d.product_diagnosis).length, desc: "已检查商品" },
+      { title: "流量测试", value: s.traffic_experiment_count || traffic.experiment_count || 0, desc: "已复盘测试" },
+      { title: "待确认", value: s.approval_required_count || safeArray(d.approval_required_tasks).length, desc: "高风险动作不自动执行" },
+    ]).map((item) => card(item.title, `<strong>${item.value}</strong><p>${item.desc}</p>`)).join("")}
   </section>
   <section class="two-column">
-    ${card("下一轮计划", list(loop.next_iteration_plan || ["复查售后归因", "再决定是否继续投流", "所有关键动作人工确认"]))}
-    ${card("使用边界", list(["只生成判断、草案和报告", "不自动上架、改价、投放", "不自动触达客户或退款", "确认后再进入下一步"]))}
+    ${card("下一轮计划", list(priority?.next_steps || loop.next_iteration_plan || ["复查售后归因", "再决定是否继续投流", "所有关键动作人工确认"]))}
+    ${card("使用边界", list(today?.boundaries || ["只生成判断、草案和报告", "不自动上架、改价、投放", "不自动触达客户或退款", "确认后再进入下一步"]))}
   </section>`;
 }
 
-function renderOperatingUnit() {
+async function renderOperatingUnit() {
+  let payload = null;
+  if (state.apiMode) {
+    try { payload = await fetchJson("/api/business/operating-unit"); } catch { payload = null; }
+  }
   const d = data();
-  const unit = d.operating_unit || {};
-  const policy = d.cycle_policy || {};
+  const unit = payload || d.operating_unit || {};
+  const policy = payload?.cycle_policy || d.cycle_policy || {};
   view().innerHTML = `<section class="page-section">
     <div class="section-header"><div><h2>系统识别出的生意类型</h2><p class="muted">不是预设防晒服，而是先看你的商品结构。</p></div>${statusBadge("success")}</div>
-    ${kv([["经营单元", unit.unit_name || "-"], ["主要商品群", unit.dominant_product_group || "-"], ["运行频率", cnFrequency(policy.cycle_frequency)], ["报告类型", policy.report_type || "-"]])}
+    ${kv([["经营单元", unit.unit_name || "-"], ["主要商品群", unit.dominant_product_group || "-"], ["运行频率", policy.frequency_label || cnFrequency(policy.cycle_frequency || policy.frequency)], ["报告类型", policy.report_type || "-"]])}
     <p class="callout">${unit.reason || "系统会根据商品名称、类目、库存和订单判断当前经营单元。"}</p>
   </section>
   <section class="two-column">
@@ -222,19 +230,16 @@ function renderOperatingUnit() {
 async function renderDataCheck() {
   if (state.apiMode) {
     try {
-      state.importValidation = await fetchJson("/api/data/validate", { method: "POST" });
-      state.importRecords = await fetchJson("/api/data/imports");
+      state.importValidation = await fetchJson("/api/business/data-health");
     } catch {
       state.importValidation = fallbackImportStatus;
-      state.importRecords = [];
     }
   } else {
     state.importValidation = fallbackImportStatus;
-    state.importRecords = [];
   }
   const validation = state.importValidation || fallbackImportStatus;
-  const datasetRows = safeArray(validation.datasets).map((item) => `<div><strong>${item.label || item.dataset_name}</strong><span>${item.row_count ?? 0} 行数据</span>${statusBadge(item.status)}</div>`).join("");
-  view().innerHTML = `<section class="page-section"><div class="section-header"><div><h2>数据是否够用</h2><p class="muted">先确认商品、订单、库存、退款和客户数据能不能支撑经营判断。</p></div><div class="button-group"><button onclick="refreshCurrentView()">重新检查</button><button class="secondary" onclick="importMockData()">保存本轮演示数据</button></div></div><div class="table-like compact-table">${datasetRows}</div></section>`;
+  const datasetRows = safeArray(validation.datasets).map((item) => `<div><strong>${item.name || item.label || item.dataset_name}</strong><span>${item.row_count ?? 0} 行数据</span>${statusBadge(item.status)}</div>`).join("");
+  view().innerHTML = `<section class="page-section"><div class="section-header"><div><h2>数据是否够用</h2><p class="muted">${validation.message || "先确认商品、订单、库存、退款和客户数据能不能支撑经营判断。"}</p></div><div class="button-group"><button onclick="refreshCurrentView()">重新检查</button><button class="secondary" onclick="importMockData()">保存本轮演示数据</button></div></div><div class="table-like compact-table">${datasetRows}</div></section>`;
 }
 
 function renderProducts() {
@@ -277,20 +282,19 @@ function renderTraffic() {
 }
 
 async function renderApprovals() {
+  let actions = [];
+  if (state.apiMode) {
+    try { actions = (await fetchJson("/api/business/actions")).items || []; } catch { actions = []; }
+  }
   const d = data();
-  try { state.approvalRecords = state.apiMode ? await fetchJson("/api/approvals/records") : []; } catch { state.approvalRecords = []; }
-  const tasks = safeArray(d.approval_required_tasks?.length ? d.approval_required_tasks : d.rpa_tasks);
-  const cards = tasks.map((task) => `<div class="result-card"><h3>${task.task_type || "待确认动作"} ${badge(task.risk_level)}</h3><p>${task.ai_suggestion || "请人工确认后再执行。"}</p><div class="task-actions"><button onclick="updateTask('${task.task_id}', 'approve')">确认执行</button><button class="secondary" onclick="updateTask('${task.task_id}', 'reject')">暂不执行</button></div></div>`).join("");
+  const tasks = actions.length ? actions : safeArray(d.approval_required_tasks?.length ? d.approval_required_tasks : d.rpa_tasks).map((task) => ({ action_id: task.task_id, action_name: task.task_type, risk_level: task.risk_level, suggestion: task.ai_suggestion }));
+  const cards = tasks.map((task) => `<div class="result-card"><h3>${task.action_name || "待确认动作"} ${badge(task.risk_level)}</h3><p>${task.suggestion || "请人工确认后再执行。"}</p><div class="task-actions"><button onclick="updateTask('${task.action_id}', 'approve')">确认执行</button><button class="secondary" onclick="updateTask('${task.action_id}', 'reject')">暂不执行</button></div></div>`).join("");
   view().innerHTML = `<section class="page-section"><h2>待确认动作</h2><p class="muted">系统只把建议放到这里，你确认后才进入下一步。</p><div class="result-list">${cards}</div></section>`;
 }
 
 async function renderReports() {
-  try {
-    const payload = state.apiMode ? await fetchJson("/api/reports") : { reports: [] };
-    state.reportRecords = payload.reports || [];
-  } catch { state.reportRecords = []; }
   if (state.apiMode && !state.reportText) {
-    try { state.reportText = await (await fetch("/api/reports/demo")).text(); } catch { state.reportText = "经营报告暂时读取失败。"; }
+    try { state.reportText = await (await fetch("/api/business/report")).text(); } catch { state.reportText = "经营报告暂时读取失败。"; }
   }
   const summary = data().summary || {};
   view().innerHTML = `<section class="page-section"><div class="section-header"><div><h2>本轮经营报告</h2><p class="muted">适合发给老板或运营自己复盘。</p></div><button onclick="refreshAndRender()">重新生成</button></div>${kv([["经营单元", summary.unit_name || "-"], ["循环频率", cnFrequency(summary.cycle_frequency)], ["下一步重点", cnModule(summary.loop_next_module)], ["待确认动作", summary.approval_required_count || 0]])}</section><section class="page-section"><h2>报告预览</h2><div class="report-preview"><pre>${state.reportText || "运行后会生成本轮经营报告。"}</pre></div></section>`;
@@ -309,7 +313,7 @@ async function updateTask(taskId, action) {
   await renderApprovals();
 }
 async function refreshCurrentView() { await renderRoute(); }
-async function refreshAndRender() { await refreshWorkflow(); await renderRoute(); }
+async function refreshAndRender() { state.reportText = ""; await refreshWorkflow(); await renderRoute(); }
 
 window.importMockData = importMockData;
 window.updateTask = updateTask;
