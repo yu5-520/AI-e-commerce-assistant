@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ERPProduct",
+  "type": "object",
+  "required": ["product_id", "product_name", "category", "cost_price", "sale_price", "stock"],
+  "properties": {
+    "product_id": { "type": "string", "description": "商品 ID" },
+    "product_name": { "type": "string", "description": "商品名称" },
+    "category": { "type": "string", "description": "商品类目" },
+    "shop_type": { "type": "string", "description": "店铺类型：白牌、品牌、黑标等" },
+    "cost_price": { "type": "number", "minimum": 0 },
+    "sale_price": { "type": "number", "minimum": 0 },
+    "activity_price": { "type": "number", "minimum": 0 },
+    "shipping_cost": { "type": "number", "minimum": 0 },
+    "stock": { "type": "integer", "minimum": 0 },
+    "supply_status": { "type": "string", "description": "货源状态" },
+    "is_sensitive_category": { "type": "boolean" },
+    "main_selling_points": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}
