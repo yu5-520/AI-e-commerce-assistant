@@ -17,14 +17,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import approvals, customers, data_import, demo, diagnosis, evals, health, logs, products, reports, tasks
+from src.api.routes import approvals, customers, data_import, demo, diagnosis, evals, health, logs, products, reports, system, tasks
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI + RPA + ERP + CRM E-commerce Workflow API",
-    version="0.8.2",
+    version="0.8.3",
     description="Product-oriented API MVP for the AI ecommerce workflow workbench.",
 )
 
@@ -50,6 +50,7 @@ def index() -> FileResponse | Dict[str, str]:
 
 
 app.include_router(health.router)
+app.include_router(system.router)
 app.include_router(data_import.router)
 app.include_router(demo.router)
 app.include_router(products.router)
