@@ -1,0 +1,5 @@
+customer_id,nickname_hash,first_order_time,last_order_time,total_orders,total_amount,refund_count,last_interaction_time,customer_level,rfm_score
+C001,hash_a71c,2026-01-10,2026-06-10,8,680,0,2026-06-12,高价值客户,R5F5M5
+C002,hash_b82d,2026-05-20,2026-05-20,1,29,0,2026-05-21,新客,R4F1M1
+C003,hash_c93e,2025-11-02,2026-02-01,5,320,1,2026-02-05,沉睡客户,R1F4M3
+C004,hash_d04f,2026-03-15,2026-06-01,3,146,2,2026-06-03,售后敏感客户,R4F3M2
