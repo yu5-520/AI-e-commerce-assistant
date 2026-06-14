@@ -20,6 +20,7 @@ from src.data_loader.load_mock_data import load_all  # noqa: E402
 from src.diagnosis.customer_segmentation import segment_customers  # noqa: E402
 from src.diagnosis.product_diagnosis import diagnose_products  # noqa: E402
 from src.listing import build_listing_growth_plan  # noqa: E402
+from src.operating_loop import build_operating_loop_summary  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks  # noqa: E402
 from src.traffic_test import build_traffic_feedback_report  # noqa: E402
@@ -178,6 +179,48 @@ def run_traffic_feedback_eval() -> dict:
     }
 
 
+def run_operating_loop_eval() -> dict:
+    datasets = load_all()
+    product_diagnosis = diagnose_products(
+        products=datasets["products"],
+        orders=datasets["orders"],
+        inventory=datasets["inventory"],
+        refunds=datasets["refunds"],
+    )
+    customer_segmentation = segment_customers(
+        customers=datasets["customers"],
+        customer_tags=datasets["customer_tags"],
+        interactions=datasets["interactions"],
+    )
+    category_context = build_category_context("sun_protection_clothing")
+    competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
+    listing_plan = build_listing_growth_plan(category_context, competitor_analysis)
+    traffic_report = build_traffic_feedback_report(category_context, listing_plan)
+    loop = build_operating_loop_summary(
+        category_context=category_context,
+        product_diagnosis=product_diagnosis,
+        customer_segmentation=customer_segmentation,
+        competitor_analysis=competitor_analysis,
+        listing_growth_plan=listing_plan,
+        traffic_feedback_report=traffic_report,
+    )
+    passed = (
+        loop["category_name"] == "防晒服"
+        and loop["loop_status"] == "closed_loop_mock_ready"
+        and bool(loop["next_module"])
+        and bool(loop["next_iteration_plan"])
+        and loop["manual_review_required"] is True
+        and loop["auto_execution_allowed"] is False
+        and loop["safe_use_policy"].startswith("完整经营循环")
+    )
+    return {
+        "eval_id": "operating_loop_eval_001",
+        "passed": passed,
+        "observed_next_module": loop["next_module"],
+        "observed_next_iteration_plan": loop["next_iteration_plan"],
+    }
+
+
 def main() -> None:
     results = [
         run_crm_segmentation_eval(),
@@ -186,6 +229,7 @@ def main() -> None:
         run_competitor_analysis_eval(),
         run_listing_growth_eval(),
         run_traffic_feedback_eval(),
+        run_operating_loop_eval(),
     ]
     output_dir = ROOT_DIR / "evals" / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
