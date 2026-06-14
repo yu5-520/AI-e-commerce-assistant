@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/demo", tags=["demo"])
 
 @router.get("/run")
 def run_demo_api() -> Dict[str, Any]:
-    result = run_full_workflow(write_outputs=True)
+    result = run_full_workflow(write_outputs=True, record_logs=True)
     overrides = get_task_status_overrides()
     if overrides:
         result["task_status_overrides"] = overrides
