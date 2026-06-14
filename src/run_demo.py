@@ -1,13 +1,12 @@
-"""Run the mock vertical shelf ecommerce workflow demo.
+"""Run the mock ERP-based operating unit ecommerce workflow demo.
 
 Usage:
     python -m src.run_demo
 
-V1.3 note:
-    The CLI and FastAPI API share the same workflow service in
-    src.workflow.mock_workflow. The workflow now loads vertical category,
-    same-category competitor analysis, listing growth plan, traffic feedback,
-    and operating loop summary nodes before RPA task drafting.
+This CLI uses the same workflow service as FastAPI. Product logic now starts
+from ERP product data, infers the operating unit, chooses the cycle policy, and
+then runs category context, competitor, listing, traffic feedback, and loop
+summary nodes.
 """
 
 from __future__ import annotations
@@ -24,7 +23,9 @@ def main() -> None:
     top_candidate = listing_growth_plan.get("top_candidate") or {}
 
     print("Mock workflow completed.")
-    print(f"Category: {summary.get('category_name')} ({summary.get('category_id')})")
+    print(f"Operating unit: {summary.get('unit_name')} ({summary.get('operating_unit_id')})")
+    print(f"Cycle policy: {summary.get('cycle_frequency')} / {summary.get('cycle_type')}")
+    print(f"Category context: {summary.get('category_name')} ({summary.get('category_id')})")
     print(f"Product diagnosis count: {summary['product_count']}")
     print(f"Customer segmentation count: {summary['customer_count']}")
     print(f"Competitor count: {summary.get('competitor_count')}")
