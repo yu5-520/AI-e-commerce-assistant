@@ -14,8 +14,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from src.category import build_category_context  # noqa: E402
 from src.data_loader.load_mock_data import load_all  # noqa: E402
 from src.diagnosis.customer_segmentation import segment_customers  # noqa: E402
+from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks  # noqa: E402
 
 
@@ -67,8 +69,27 @@ def run_rpa_task_eval() -> dict:
     }
 
 
+def run_category_profile_eval() -> dict:
+    context = build_category_context("sun_protection_clothing")
+    profile = context["category_profile"]
+    hits = retrieve("防晒服 价格带 季节性 尺码 退换", top_k=3)
+    passed = (
+        profile["category_name"] == "防晒服"
+        and bool(profile["price_bands"])
+        and bool(profile["common_return_reasons"])
+        and any(hit.get("source") == "category_profiles/sun_protection_clothing.md" for hit in hits)
+    )
+    return {
+        "eval_id": "category_profile_eval_001",
+        "passed": passed,
+        "observed_category": profile["category_name"],
+        "observed_source": profile["source"],
+        "rag_sources": [hit.get("source") for hit in hits],
+    }
+
+
 def main() -> None:
-    results = [run_crm_segmentation_eval(), run_rpa_task_eval()]
+    results = [run_crm_segmentation_eval(), run_rpa_task_eval(), run_category_profile_eval()]
     output_dir = ROOT_DIR / "evals" / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "latest_results.json"
