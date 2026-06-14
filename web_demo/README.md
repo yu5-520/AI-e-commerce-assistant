@@ -13,6 +13,7 @@ AI 诊断
 报告中心
 知识库
 运行日志
+系统状态
 ```
 
 ## 运行方式一：API 模式
@@ -123,6 +124,16 @@ API 模式下调用：
 GET /api/logs/workflow-runs
 GET /api/logs/execution-logs
 GET /api/logs/workflow-runs/{workflow_run_id}/execution-logs
+```
+
+### 系统状态
+
+展示 SQLite 文件、表数量、记录数、文件大小和每张表的最近更新时间。
+
+API 模式下调用：
+
+```text
+GET /api/system/db-status
 ```
 
 ## 当前边界
