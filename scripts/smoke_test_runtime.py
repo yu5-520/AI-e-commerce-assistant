@@ -11,6 +11,17 @@ if str(ROOT) not in sys.path:
 from src.approval.risk_rules import classify_task  # noqa: E402
 from src.category import build_category_context  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
+from src.services.business_view_service import (  # noqa: E402
+    get_action_confirmations,
+    get_business_report_text,
+    get_competitor_opportunities,
+    get_data_health,
+    get_listing_suggestions,
+    get_operating_unit_view,
+    get_product_health,
+    get_today_advice,
+    get_traffic_review,
+)
 from src.services.data_import_service import validate_all_imports  # noqa: E402
 from src.workflow.mock_workflow import build_mock_workflow_result  # noqa: E402
 
@@ -21,11 +32,7 @@ def assert_true(condition: bool, message: str) -> None:
 
 
 def main() -> None:
-    """Smoke-test the current main product workflow.
-
-    The workflow now starts from ERP product data, infers the operating unit,
-    chooses a cycle policy, and then runs the closed operating loop skeleton.
-    """
+    """Smoke-test the current main product workflow and business API views."""
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
     assert_true(validation["failed_count"] == 0, "mock import validation should have no failed checks")
@@ -41,7 +48,7 @@ def main() -> None:
         "category risk rules should include category-specific risk focus",
     )
 
-    result = build_mock_workflow_result(write_outputs=False, record_logs=False)
+    result = build_mock_workflow_result(write_outputs=True, record_logs=False)
     summary = result.get("summary") or {}
     operating_unit = result.get("operating_unit") or {}
     cycle_policy = result.get("cycle_policy") or {}
@@ -69,23 +76,14 @@ def main() -> None:
         competitor_analysis.get("data_source") == "examples/category_home_living/mock_competitors.csv",
         "competitor analysis should use the ERP-inferred home living competitor dataset",
     )
-    assert_true(
-        competitor_analysis.get("reference_product", {}).get("trigger_reason"),
-        "competitor analysis should explain why it was triggered",
-    )
-    assert_true(
-        competitor_analysis.get("safe_use_policy"),
-        "competitor analysis should include safe-use policy",
-    )
+    assert_true(competitor_analysis.get("reference_product", {}).get("trigger_reason"), "competitor analysis should explain why it was triggered")
+    assert_true(competitor_analysis.get("safe_use_policy"), "competitor analysis should include safe-use policy")
     assert_true(summary.get("listing_candidate_count", 0) > 0, "workflow should score listing candidates")
     assert_true(
         listing_growth_plan.get("data_source") == "examples/category_home_living/mock_supplier_products.csv",
         "listing growth should use the ERP-inferred home living supplier dataset",
     )
-    assert_true(
-        listing_growth_plan.get("top_candidate", {}).get("score", 0) > 0,
-        "listing growth should choose a scored top candidate",
-    )
+    assert_true(listing_growth_plan.get("top_candidate", {}).get("score", 0) > 0, "listing growth should choose a scored top candidate")
     assert_true(listing_draft.get("requires_human_approval") is True, "listing draft should require human approval")
     assert_true(listing_draft.get("auto_publish_allowed") is False, "listing draft must not auto-publish")
     assert_true(listing_growth_plan.get("safe_use_policy"), "listing growth should include safe-use policy")
@@ -124,12 +122,43 @@ def main() -> None:
         "RAG retriever should include ERP-inferred operating unit profile documents",
     )
 
+    today = get_today_advice(write_outputs=False, record_logs=False)
+    assert_true(today["page_title"] == "今日经营建议", "business today endpoint should expose productized title")
+    assert_true(today["priority"]["title"], "business today endpoint should expose next priority")
+    assert_true(today["operating_unit"]["name"] == "家居生活商品", "business today endpoint should expose operating unit name")
+    assert_true(today["cycle"]["frequency_label"] == "每天", "business today endpoint should expose human-readable cycle frequency")
+    assert_true(today["raw"]["summary"]["operating_unit_id"] == "home_living_goods", "business today endpoint should keep raw compatibility payload")
+
+    unit_view = get_operating_unit_view()
+    data_health = get_data_health()
+    product_health = get_product_health()
+    competitor_view = get_competitor_opportunities()
+    listing_view = get_listing_suggestions()
+    traffic_view = get_traffic_review()
+    action_view = get_action_confirmations()
+    report_text = get_business_report_text()
+
+    assert_true(unit_view["unit_name"] == "家居生活商品", "operating-unit business view should be productized")
+    assert_true(data_health["message"], "data-health business view should include merchant-facing message")
+    assert_true(product_health["items"], "product-health business view should include product cards")
+    assert_true(competitor_view["opportunity_actions"], "competitor business view should include opportunity actions")
+    assert_true(listing_view["title_draft"], "listing business view should include title draft")
+    assert_true(traffic_view["items"], "traffic business view should include review items")
+    assert_true(action_view["items"], "actions business view should include confirmation items")
+    assert_true("经营单元" in report_text or "经营报告" in report_text, "business report text should be generated")
+
     print(
         json.dumps(
             {
                 "ok": True,
                 "workflow": result.get("workflow_name"),
                 "summary": summary,
+                "business_api": {
+                    "today": today["priority"]["title"],
+                    "unit": unit_view["unit_name"],
+                    "cycle": today["cycle"]["frequency_label"],
+                    "actions": len(action_view["items"]),
+                },
                 "validation_status": validation["status"],
                 "task_count": len(tasks),
                 "rag_hit_count": len(rag_hits),
