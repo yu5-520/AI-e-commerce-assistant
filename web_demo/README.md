@@ -78,24 +78,34 @@ GET  /api/data/imports
 
 ### 任务中心
 
-展示由 AI 诊断生成的 RPA 任务草案。
-
-### 审批中心
-
-支持任务确认 / 拒绝。
+展示由 AI 诊断生成的 RPA 任务草案，并读取 SQLite 中的 `task_status` 持久化状态。
 
 API 模式下调用：
 
 ```text
+GET /api/tasks
+```
+
+### 审批中心
+
+支持任务确认 / 拒绝，并展示 SQLite 中的 `approval_records` 审批历史。
+
+API 模式下调用：
+
+```text
+GET  /api/approvals/records
 POST /api/approvals/{task_id}/approve
 POST /api/approvals/{task_id}/reject
 ```
 
 ### 报告中心
 
+展示 SQLite 中的 `report_records` 报告记录，并读取 Markdown 报告内容。
+
 API 模式下读取：
 
 ```text
+GET /api/reports
 GET /api/reports/demo
 ```
 
@@ -105,7 +115,7 @@ GET /api/reports/demo
 
 ### 运行日志
 
-展示 WorkflowRun 和 ExecutionLog。
+展示 WorkflowRun 和 ExecutionLog，并支持按 workflow_run_id 查看节点详情。
 
 API 模式下调用：
 
