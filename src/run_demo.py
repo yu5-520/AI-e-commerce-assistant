@@ -3,10 +3,11 @@
 Usage:
     python -m src.run_demo
 
-V1.0 note:
+V1.1 note:
     The CLI and FastAPI API share the same workflow service in
-    src.workflow.mock_workflow. The workflow now loads a vertical category
-    profile and same-category competitor analysis before RPA task drafting.
+    src.workflow.mock_workflow. The workflow now loads vertical category,
+    same-category competitor analysis, and listing growth plan nodes before RPA
+    task drafting.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ def main() -> None:
     summary = result["summary"]
     competitor_analysis = result.get("competitor_analysis") or {}
     reference_product = competitor_analysis.get("reference_product") or {}
+    listing_growth_plan = result.get("listing_growth_plan") or {}
+    top_candidate = listing_growth_plan.get("top_candidate") or {}
 
     print("Mock workflow completed.")
     print(f"Category: {summary.get('category_name')} ({summary.get('category_id')})")
@@ -26,6 +29,8 @@ def main() -> None:
     print(f"Customer segmentation count: {summary['customer_count']}")
     print(f"Competitor count: {summary.get('competitor_count')}")
     print(f"Competitor trigger product: {reference_product.get('product_id')} - {reference_product.get('product_name')}")
+    print(f"Listing candidate count: {summary.get('listing_candidate_count')}")
+    print(f"Top listing candidate: {top_candidate.get('supplier_product_id')} - {top_candidate.get('product_name')}")
     print(f"RPA task draft count: {summary['rpa_task_count']}")
     print(f"Approval required count: {summary['approval_required_count']}")
     print(f"Report generated: {result.get('report_path')}")
