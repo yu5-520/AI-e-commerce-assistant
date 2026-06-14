@@ -23,12 +23,17 @@ def write_markdown_report(
     rpa_tasks: List[Dict[str, object]],
     rag_context: Dict[str, object],
     category_context: Dict[str, object] | None = None,
+    competitor_analysis: Dict[str, object] | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / "demo_report.md"
     category_context = category_context or {}
+    competitor_analysis = competitor_analysis or {}
     category_profile = category_context.get("category_profile") or {}
     category_rules = category_context.get("category_rules") or {}
+    reference_product = competitor_analysis.get("reference_product") or {}
+    price_gap = competitor_analysis.get("price_gap") or {}
+    review_gap = competitor_analysis.get("review_gap") or {}
 
     lines: List[str] = [
         "# AI 垂直货架电商经营循环 Demo Report",
@@ -56,7 +61,23 @@ def write_markdown_report(
             ]
         )
 
-    lines.append("## 2. CRM 客户分层")
+    lines.append("## 2. 同类目竞品比对")
+    lines.extend(
+        [
+            f"- 分析 ID：{competitor_analysis.get('analysis_id', '未生成')}",
+            f"- 数据来源：{competitor_analysis.get('data_source', '未加载')}",
+            f"- 竞品数量：{competitor_analysis.get('competitor_count', 0)}",
+            f"- 触发商品：{reference_product.get('product_id', '未选择')}｜{reference_product.get('product_name', '未选择')}",
+            f"- 触发原因：{reference_product.get('trigger_reason', '未生成')}",
+            f"- 价格带位置：{price_gap.get('position', 'unknown')}｜{price_gap.get('insight', '未生成')}",
+            f"- 差评机会：{'、'.join(review_gap.get('top_bad_review_keywords', [])) or '暂无'}",
+            f"- 下一步动作：{competitor_analysis.get('next_action', '未生成')}",
+            f"- 安全边界：{competitor_analysis.get('safe_use_policy', '未生成')}",
+            "",
+        ]
+    )
+
+    lines.append("## 3. CRM 客户分层")
     for item in customer_segments:
         lines.extend(
             [
@@ -71,7 +92,7 @@ def write_markdown_report(
             ]
         )
 
-    lines.append("## 3. RPA 任务草案")
+    lines.append("## 4. RPA 任务草案")
     for task in rpa_tasks:
         lines.extend(
             [
@@ -87,13 +108,13 @@ def write_markdown_report(
 
     lines.extend(
         [
-            "## 4. RAG 召回摘要",
+            "## 5. RAG 召回摘要",
             "",
             "```json",
             json.dumps(rag_context, ensure_ascii=False, indent=2),
             "```",
             "",
-            "## 5. 类目下一步",
+            "## 6. 类目下一步",
         ]
     )
     for step in category_context.get("next_steps", []):
@@ -102,9 +123,9 @@ def write_markdown_report(
     lines.extend(
         [
             "",
-            "## 6. 复盘结论",
+            "## 7. 复盘结论",
             "",
-            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 规则诊断 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
+            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 商品经营判断 → 同类目竞品比对 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
         ]
     )
 
