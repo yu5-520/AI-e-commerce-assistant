@@ -21,6 +21,14 @@ def clean_text(value: str) -> str:
 
 def detect_focus(title: str, body: str, comment: str) -> str:
     text = f"{title}\n{body}\n{comment}"
+    if any(keyword in text for keyword in ["类目", "垂直", "价格带", "季节", "防晒服"]):
+        return "category_profile"
+    if any(keyword in text for keyword in ["竞品", "同行", "差评", "价格比对", "卖点比对"]):
+        return "competitor_analysis"
+    if any(keyword in text for keyword in ["上新", "铺货", "货盘", "新品", "扩品"]):
+        return "listing_growth"
+    if any(keyword in text for keyword in ["流量", "测试", "曝光", "点击", "转化", "ROI"]):
+        return "traffic_test"
     if any(keyword in text for keyword in ["数据", "导入", "ERP", "CRM", "字段", "表格"]):
         return "data_import"
     if any(keyword in text for keyword in ["客户", "复购", "召回", "售后敏感", "分层"]):
@@ -47,14 +55,38 @@ def build_report(title: str, body: str, comment: str) -> str:
     approval_required = result.get("approval_required_tasks") or []
 
     focus_titles = {
+        "category_profile": "垂直类目配置",
+        "competitor_analysis": "同类目竞品比对",
+        "listing_growth": "同类目上新增长",
+        "traffic_test": "流量测试与数据回流",
         "data_import": "数据导入与校验",
         "product_diagnosis": "商品经营诊断",
         "customer_segmentation": "CRM 客户分层",
         "task_approval": "RPA 任务草案与人工审批",
-        "full_workflow": "完整经营工作流",
+        "full_workflow": "完整经营循环",
     }
 
     next_actions = {
+        "category_profile": [
+            "先确定垂直类目的价格带、季节性、主图表达、SKU 结构和高频售后风险。",
+            "把类目知识写入 knowledge_base/category_profiles/，再进入经营判断。",
+            "当前建议先以防晒服样板验证类目配置机制。",
+        ],
+        "competitor_analysis": [
+            "竞品比对应由经营问题触发，不是凭空分析竞品。",
+            "优先比对价格带、标题关键词、主图卖点、SKU 结构和差评机会。",
+            "输出应判断优化老品、扩相似品，还是暂停投入。",
+        ],
+        "listing_growth": [
+            "上新增长应基于已有经营数据、竞品差距和供应链货盘。",
+            "先生成新品候选评分、标题 / 主图 / SKU / 定价草案和上新检查表。",
+            "真实上架动作必须人工确认，MVP 不自动上架。",
+        ],
+        "traffic_test": [
+            "上新或优化后必须进入小流量测试，否则只是一次性生成。",
+            "重点观察曝光、点击、转化、退款、ROI 和库存消耗速度。",
+            "测试结果要回写经营判断系统，形成循环。",
+        ],
         "data_import": [
             "先检查字段完整性、必填项和数值格式。",
             "再检查商品、订单、库存、退款、客户标签之间的关系。",
@@ -63,7 +95,7 @@ def build_report(title: str, body: str, comment: str) -> str:
         "product_diagnosis": [
             "优先看活动价毛利、库存压力和退款率。",
             "高库存低订单商品先做测试或清货测算，不直接加预算。",
-            "退款异常商品先进入售后归因，不直接放量。",
+            "低点击、低转化、高退款、高库存问题后续可触发同类目竞品比对。",
         ],
         "customer_segmentation": [
             "高价值客户生成复购任务草案。",
@@ -76,9 +108,9 @@ def build_report(title: str, body: str, comment: str) -> str:
             "审批动作只记录状态，不触发真实 RPA。",
         ],
         "full_workflow": [
-            "按 数据导入 → AI 诊断 → RPA 草案 → 人工确认 → 报告日志 的顺序演示。",
-            "当前版本用 Mock 数据验证链路，不宣称已接真实店铺后台。",
-            "下一步优先补 Excel 上传、字段映射和业务档案落库。",
+            "按 垂直类目 → 经营判断 → 竞品比对 → 上新增长 → 流量回流 的顺序演示。",
+            "当前版本用 Mock ERP / CRM 数据验证 V0.8，不宣称已接真实店铺后台。",
+            "下一步优先补垂直类目配置层，再做同类目竞品比对。",
         ],
     }
 
@@ -89,7 +121,7 @@ def build_report(title: str, body: str, comment: str) -> str:
         f"# {focus_titles[focus]}结果卡",
         "",
         "## 结论",
-        f"当前 Issue 被归入 **{focus_titles[focus]}** 场景。主产品叙事统一为 AI + RPA + ERP + CRM 电商经营自动化工作台，而不是单一平台标题 / 主图生成器。",
+        f"当前 Issue 被归入 **{focus_titles[focus]}** 场景。主产品叙事统一为 AI 垂直货架电商经营循环系统：先基于 ERP / CRM 做已有经营判断，再触发同类目竞品比对、上新增长和流量测试回流。",
         "",
         "## 当前 Mock Workflow 摘要",
         f"- 商品诊断数：{summary.get('product_count', 0)}",
