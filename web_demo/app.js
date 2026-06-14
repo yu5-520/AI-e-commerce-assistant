@@ -80,6 +80,20 @@ const fallbackData = {
   },
 };
 
+const fallbackImportStatus = {
+  status: "local_preview",
+  datasets: [
+    { dataset_name: "products", label: "商品表", filename: "mock_products.csv", row_count: 3, status: "preview" },
+    { dataset_name: "orders", label: "订单表", filename: "mock_orders.csv", row_count: 4, status: "preview" },
+    { dataset_name: "inventory", label: "库存表", filename: "mock_inventory.csv", row_count: 3, status: "preview" },
+    { dataset_name: "refunds", label: "退款表", filename: "mock_refunds.csv", row_count: 2, status: "preview" },
+    { dataset_name: "customers", label: "客户表", filename: "mock_customers.csv", row_count: 4, status: "preview" },
+    { dataset_name: "customer_tags", label: "客户标签表", filename: "mock_customer_tags.csv", row_count: 6, status: "preview" },
+    { dataset_name: "interactions", label: "客户互动表", filename: "mock_interactions.csv", row_count: 4, status: "preview" },
+  ],
+  relationship_checks: [],
+};
+
 fallbackData.approval_required_tasks = fallbackData.rpa_tasks.filter((task) => task.requires_approval !== false);
 
 const routes = {
@@ -90,7 +104,7 @@ const routes = {
   },
   "data-import": {
     title: "数据导入",
-    subtitle: "MVP 阶段使用 Mock ERP / CRM 数据，后续扩展为 CSV / Excel 上传与字段映射。",
+    subtitle: "MVP 阶段先跑通 Mock CSV 校验、导入记录和字段关系检查。",
     render: renderDataImport,
   },
   diagnosis: {
@@ -124,6 +138,8 @@ const state = {
   apiData: null,
   apiMode: false,
   reportText: "",
+  importValidation: null,
+  importRecords: [],
 };
 
 function view() {
@@ -140,7 +156,12 @@ function badge(level) {
 }
 
 function statusBadge(status) {
-  return `<span class="status-badge">${status || "pending"}</span>`;
+  return `<span class="status-badge ${status || "pending"}">${status || "pending"}</span>`;
+}
+
+function importStatusBadge(status) {
+  const labelMap = { passed: "通过", failed: "失败", warning: "警告", preview: "预览", local_preview: "本地预览" };
+  return `<span class="status-badge ${status || "preview"}">${labelMap[status] || status || "预览"}</span>`;
 }
 
 function card(title, body, extraClass = "") {
@@ -169,6 +190,27 @@ async function refreshWorkflow() {
     state.apiMode = false;
     document.getElementById("apiModeBadge").textContent = "本地样例模式";
     document.getElementById("apiModeBadge").className = "mode-badge local";
+  }
+}
+
+async function refreshImportStatus(createRecord = false) {
+  if (!state.apiMode) {
+    state.importValidation = fallbackImportStatus;
+    state.importRecords = [];
+    return;
+  }
+
+  try {
+    if (createRecord) {
+      const importRecord = await fetchJson("/api/data/import/mock", { method: "POST" });
+      state.importValidation = importRecord.validation;
+    } else {
+      state.importValidation = await fetchJson("/api/data/validate", { method: "POST" });
+    }
+    state.importRecords = await fetchJson("/api/data/imports");
+  } catch (error) {
+    state.importValidation = fallbackImportStatus;
+    state.importRecords = [];
   }
 }
 
@@ -211,25 +253,68 @@ function renderDashboard(data) {
   `;
 }
 
-function renderDataImport(data) {
+async function renderDataImport() {
+  await refreshImportStatus(false);
+  const validation = state.importValidation || fallbackImportStatus;
+  const datasets = validation.datasets || [];
+  const relationshipChecks = validation.relationship_checks || [];
+  const records = state.importRecords || [];
+
+  const datasetRows = datasets.map((item) => `
+    <div>
+      <strong>${item.label || item.dataset_name}</strong>
+      <span>${item.filename || "-"}</span>
+      <span>${item.row_count ?? 0} 行</span>
+      ${importStatusBadge(item.status)}
+    </div>
+  `).join("");
+
+  const relationRows = relationshipChecks.length
+    ? relationshipChecks.map((item) => `
+      <div>
+        <strong>${item.check_name}</strong>
+        <span>缺失 ID：${(item.missing_ids || []).join("，") || "无"}</span>
+        ${importStatusBadge(item.status)}
+      </div>
+    `).join("")
+    : `<div><strong>关系校验</strong><span>本地样例模式下仅展示预览；启动 API 后执行真实校验。</span>${importStatusBadge("preview")}</div>`;
+
+  const recordRows = records.length
+    ? records.map((item) => `
+      <div>
+        <strong>${item.import_id}</strong>
+        <span>${item.created_at}</span>
+        <span>${item.total_rows} 行</span>
+        ${importStatusBadge(item.status)}
+      </div>
+    `).join("")
+    : `<div><strong>暂无导入记录</strong><span>点击“确认导入 Mock 数据”后生成记录。</span>${importStatusBadge("preview")}</div>`;
+
   view().innerHTML = `
     <section class="page-section">
       <div class="section-header">
-        <h2>Mock 数据源</h2>
-        <button onclick="refreshAndRender()">重新导入 Mock 数据</button>
+        <div>
+          <h2>数据导入校验</h2>
+          <p class="muted">状态：${validation.status || "local_preview"}｜失败：${validation.failed_count || 0}｜警告：${validation.warning_count || 0}</p>
+        </div>
+        <div class="button-group">
+          <button onclick="validateImportAndRender()">重新校验</button>
+          <button onclick="importMockAndRender()">确认导入 Mock 数据</button>
+        </div>
       </div>
-      <div class="table-like">
-        <div><strong>商品表</strong><span>examples/mock_products.csv</span><em>已接入</em></div>
-        <div><strong>订单表</strong><span>examples/mock_orders.csv</span><em>已接入</em></div>
-        <div><strong>库存表</strong><span>examples/mock_inventory.csv</span><em>已接入</em></div>
-        <div><strong>退款表</strong><span>examples/mock_refunds.csv</span><em>已接入</em></div>
-        <div><strong>客户表</strong><span>examples/mock_customers.csv</span><em>已接入</em></div>
-        <div><strong>互动表</strong><span>examples/mock_interactions.csv</span><em>已接入</em></div>
-      </div>
+      <div class="table-like import-table">${datasetRows}</div>
+    </section>
+    <section class="page-section">
+      <h2>关系校验</h2>
+      <div class="table-like import-table relation-table">${relationRows}</div>
+    </section>
+    <section class="page-section">
+      <h2>导入记录</h2>
+      <div class="table-like import-table records-table">${recordRows}</div>
     </section>
     <section class="two-column">
-      ${card("数据校验目标", list(["必填字段", "数字字段", "product_id 关联", "customer_id 关联", "退款与订单关联", "客户互动与客户关联"]))}
-      ${card("后续产品化", list(["CSV / Excel 上传", "字段映射确认", "错误行报告", "导入记录", "数据快照保存"]))}
+      ${card("当前已校验", list(["必填字段", "数字字段", "product_id 关联", "order_id 关联", "customer_id 关联"]))}
+      ${card("后续产品化", list(["CSV / Excel 上传", "字段映射确认", "错误行报告", "数据快照保存", "WorkflowRun 日志"] ))}
     </section>
   `;
 }
@@ -302,7 +387,7 @@ function renderApprovals(data) {
   view().innerHTML = `<section class="page-section"><h2>待人工确认</h2><div class="result-list">${cards}</div></section>`;
 }
 
-async function renderReports(data) {
+async function renderReports() {
   if (state.apiMode && !state.reportText) {
     try {
       const response = await fetch("/api/reports/demo");
@@ -346,6 +431,16 @@ async function updateTask(taskId, action) {
   await refreshAndRender();
 }
 
+async function validateImportAndRender() {
+  await refreshImportStatus(false);
+  await renderRoute();
+}
+
+async function importMockAndRender() {
+  await refreshImportStatus(true);
+  await renderRoute();
+}
+
 async function refreshAndRender() {
   await refreshWorkflow();
   await renderRoute();
@@ -354,6 +449,8 @@ async function refreshAndRender() {
 window.approveTask = (taskId) => updateTask(taskId, "approve");
 window.rejectTask = (taskId) => updateTask(taskId, "reject");
 window.refreshAndRender = refreshAndRender;
+window.validateImportAndRender = validateImportAndRender;
+window.importMockAndRender = importMockAndRender;
 
 document.getElementById("refreshBtn").addEventListener("click", refreshAndRender);
 window.addEventListener("hashchange", renderRoute);
