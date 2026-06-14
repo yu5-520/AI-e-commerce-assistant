@@ -19,6 +19,7 @@ from src.competitor import build_competitor_analysis  # noqa: E402
 from src.data_loader.load_mock_data import load_all  # noqa: E402
 from src.diagnosis.customer_segmentation import segment_customers  # noqa: E402
 from src.diagnosis.product_diagnosis import diagnose_products  # noqa: E402
+from src.listing import build_listing_growth_plan  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks  # noqa: E402
 
@@ -117,12 +118,43 @@ def run_competitor_analysis_eval() -> dict:
     }
 
 
+def run_listing_growth_eval() -> dict:
+    datasets = load_all()
+    product_diagnosis = diagnose_products(
+        products=datasets["products"],
+        orders=datasets["orders"],
+        inventory=datasets["inventory"],
+        refunds=datasets["refunds"],
+    )
+    category_context = build_category_context("sun_protection_clothing")
+    competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
+    plan = build_listing_growth_plan(category_context, competitor_analysis)
+    draft = plan["listing_draft"]
+    passed = (
+        plan["category_name"] == "防晒服"
+        and plan["candidate_count"] > 0
+        and plan["top_candidate"]["score"] > 0
+        and bool(draft["title_draft"])
+        and draft["requires_human_approval"] is True
+        and draft["auto_publish_allowed"] is False
+        and plan["safe_use_policy"].startswith("只生成")
+    )
+    return {
+        "eval_id": "listing_growth_eval_001",
+        "passed": passed,
+        "observed_top_candidate": plan["top_candidate"],
+        "observed_title_draft": draft["title_draft"],
+        "observed_next_action": plan["next_action"],
+    }
+
+
 def main() -> None:
     results = [
         run_crm_segmentation_eval(),
         run_rpa_task_eval(),
         run_category_profile_eval(),
         run_competitor_analysis_eval(),
+        run_listing_growth_eval(),
     ]
     output_dir = ROOT_DIR / "evals" / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
