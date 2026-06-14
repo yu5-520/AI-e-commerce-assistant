@@ -15,8 +15,10 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.category import build_category_context  # noqa: E402
+from src.competitor import build_competitor_analysis  # noqa: E402
 from src.data_loader.load_mock_data import load_all  # noqa: E402
 from src.diagnosis.customer_segmentation import segment_customers  # noqa: E402
+from src.diagnosis.product_diagnosis import diagnose_products  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks  # noqa: E402
 
@@ -88,8 +90,40 @@ def run_category_profile_eval() -> dict:
     }
 
 
+def run_competitor_analysis_eval() -> dict:
+    datasets = load_all()
+    product_diagnosis = diagnose_products(
+        products=datasets["products"],
+        orders=datasets["orders"],
+        inventory=datasets["inventory"],
+        refunds=datasets["refunds"],
+    )
+    category_context = build_category_context("sun_protection_clothing")
+    analysis = build_competitor_analysis(product_diagnosis, category_context)
+    passed = (
+        analysis["category_name"] == "防晒服"
+        and analysis["competitor_count"] > 0
+        and bool(analysis["reference_product"]["trigger_reason"])
+        and bool(analysis["price_gap"]["insight"])
+        and bool(analysis["review_gap"]["opportunity_actions"])
+        and analysis["safe_use_policy"].startswith("只拆解")
+    )
+    return {
+        "eval_id": "competitor_analysis_eval_001",
+        "passed": passed,
+        "observed_reference_product": analysis["reference_product"],
+        "observed_competitor_count": analysis["competitor_count"],
+        "observed_next_action": analysis["next_action"],
+    }
+
+
 def main() -> None:
-    results = [run_crm_segmentation_eval(), run_rpa_task_eval(), run_category_profile_eval()]
+    results = [
+        run_crm_segmentation_eval(),
+        run_rpa_task_eval(),
+        run_category_profile_eval(),
+        run_competitor_analysis_eval(),
+    ]
     output_dir = ROOT_DIR / "evals" / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "latest_results.json"
