@@ -11,9 +11,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = ROOT_DIR / "outputs"
 
 
-def run_full_workflow(write_outputs: bool = True) -> Dict[str, Any]:
+def run_full_workflow(write_outputs: bool = True, record_logs: bool = False) -> Dict[str, Any]:
     """Run full mock workflow and return structured result."""
-    return build_mock_workflow_result(write_outputs=write_outputs)
+    return build_mock_workflow_result(write_outputs=write_outputs, record_logs=record_logs)
 
 
 def get_products() -> List[Dict[str, Any]]:
@@ -55,5 +55,5 @@ def get_demo_report_text() -> str:
     """Return latest Markdown report, generating it if necessary."""
     report_path = OUTPUT_DIR / "demo_report.md"
     if not report_path.exists():
-        run_full_workflow(write_outputs=True)
+        run_full_workflow(write_outputs=True, record_logs=True)
     return report_path.read_text(encoding="utf-8")
