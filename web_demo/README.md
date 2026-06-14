@@ -16,6 +16,14 @@ AI 诊断
 系统状态
 ```
 
+页面入口加载：
+
+```text
+web_demo/app-v2.js
+```
+
+`app-v2.js` 是当前稳定入口，用于承接日志筛选、系统状态和清空 Demo 数据等产品操作。
+
 ## 运行方式一：API 模式
 
 在仓库根目录安装依赖：
@@ -116,14 +124,14 @@ GET /api/reports/demo
 
 ### 运行日志
 
-展示 WorkflowRun 和 ExecutionLog，并支持按 workflow_run_id 查看节点详情。
+展示 WorkflowRun 和 ExecutionLog，并支持筛选、分页、按 workflow_run_id 查看节点详情。
 
 API 模式下调用：
 
 ```text
-GET /api/logs/workflow-runs
-GET /api/logs/execution-logs
-GET /api/logs/workflow-runs/{workflow_run_id}/execution-logs
+GET /api/logs/workflow-runs?limit=20&offset=0&workflow_type=full_mock_workflow&status=success
+GET /api/logs/execution-logs?limit=20&offset=0&status=success
+GET /api/logs/workflow-runs/{workflow_run_id}/execution-logs?limit=100&status=success
 ```
 
 ### 系统状态
@@ -133,8 +141,11 @@ GET /api/logs/workflow-runs/{workflow_run_id}/execution-logs
 API 模式下调用：
 
 ```text
-GET /api/system/db-status
+GET  /api/system/db-status
+POST /api/system/clear-demo-data?confirm=true&include_audit_logs=true
 ```
+
+清空 Demo 数据只删除运行生成的 SQLite 和 JSONL 日志，不删除源码、Mock 数据和产品文档。
 
 ## 当前边界
 
