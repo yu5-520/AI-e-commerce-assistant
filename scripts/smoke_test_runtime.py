@@ -25,8 +25,8 @@ def main() -> None:
 
     The product entrypoint is `src.workflow.mock_workflow` and `src.api.main`.
     This test validates the V0.8 ERP / CRM workflow, the V0.9 vertical category
-    profile hook, the V1.0 same-category competitor analysis skeleton, and the
-    V1.1 listing growth plan skeleton.
+    profile hook, the V1.0 same-category competitor analysis skeleton, the V1.1
+    listing growth plan skeleton, and the V1.2 traffic feedback loop skeleton.
     """
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
@@ -50,6 +50,7 @@ def main() -> None:
     competitor_analysis = result.get("competitor_analysis") or {}
     listing_growth_plan = result.get("listing_growth_plan") or {}
     listing_draft = listing_growth_plan.get("listing_draft") or {}
+    traffic_feedback_report = result.get("traffic_feedback_report") or {}
 
     assert_true(result.get("workflow_mode") == "Workflow-first", "workflow should stay Workflow-first")
     assert_true(category_profile.get("category_id") == "sun_protection_clothing", "workflow should inject category context")
@@ -82,6 +83,14 @@ def main() -> None:
     assert_true(listing_draft.get("requires_human_approval") is True, "listing draft should require human approval")
     assert_true(listing_draft.get("auto_publish_allowed") is False, "listing draft must not auto-publish")
     assert_true(listing_growth_plan.get("safe_use_policy"), "listing growth should include safe-use policy")
+    assert_true(summary.get("traffic_experiment_count", 0) > 0, "workflow should diagnose traffic experiments")
+    assert_true(
+        traffic_feedback_report.get("data_source") == "examples/category_sun_protection/mock_traffic_tests.csv",
+        "traffic feedback should use the mock traffic test dataset",
+    )
+    assert_true(traffic_feedback_report.get("decision_summary"), "traffic feedback should summarize next-action decisions")
+    assert_true(traffic_feedback_report.get("loopback_actions"), "traffic feedback should produce loopback actions")
+    assert_true(traffic_feedback_report.get("safe_use_policy"), "traffic feedback should include safe-use policy")
     assert_true(summary.get("rpa_task_count", 0) > 0, "workflow should generate RPA task drafts")
     assert_true(summary.get("auto_execution_allowed_count") == 0, "MVP must not allow automatic execution")
 
