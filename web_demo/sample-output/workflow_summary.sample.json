@@ -1,0 +1,22 @@
+{
+  "workflow_name": "AI + RPA + ERP + CRM Mock Workflow",
+  "mode": "Workflow-first",
+  "agent_boundary": "Agent-ready only for low-risk nodes",
+  "input_layers": ["ERP mock data", "CRM mock data", "knowledge_base"],
+  "decision_layers": ["product diagnosis", "customer segmentation", "simple RAG retrieval"],
+  "execution_layers": ["RPA task draft", "human approval gate", "report output"],
+  "forbidden_actions": [
+    "auto price change",
+    "auto ad spend",
+    "auto campaign registration",
+    "auto customer message blast",
+    "auto refund"
+  ],
+  "outputs": [
+    "product_diagnosis.json",
+    "customer_segmentation.json",
+    "rpa_task_draft.json",
+    "rag_retrieval_context.json",
+    "demo_report.md"
+  ]
+}
