@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RAGChunk",
+  "type": "object",
+  "required": ["chunk_id", "source_type", "title", "content", "tags"],
+  "properties": {
+    "chunk_id": { "type": "string" },
+    "source_type": {
+      "type": "string",
+      "enum": ["product_memory", "customer_memory", "platform_rule", "compliance_rule", "operation_method", "customer_service_sop"]
+    },
+    "title": { "type": "string" },
+    "content": { "type": "string" },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+    "source_uri": { "type": "string" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}
