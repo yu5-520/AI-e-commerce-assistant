@@ -7,6 +7,15 @@ from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import DB_PATH, connect, init_db
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+LOG_DIR = ROOT_DIR / "logs"
+JSONL_LOG_FILES = [
+    LOG_DIR / "workflow_runs.jsonl",
+    LOG_DIR / "execution_logs.jsonl",
+    LOG_DIR / "data_import_records.jsonl",
+    LOG_DIR / "approval_records.jsonl",
+]
+
 TABLES = [
     {
         "table_name": "workflow_runs",
@@ -75,4 +84,33 @@ def get_db_status() -> Dict[str, Any]:
             "real_shop_backend_connected": False,
             "auto_high_risk_execution": False,
         },
+    }
+
+
+def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
+    """Clear runtime demo persistence files.
+
+    This only removes generated runtime data under logs/. It does not delete
+    source code, examples, docs, or product architecture files.
+    """
+    removed_files: List[str] = []
+    db_path = Path(DB_PATH)
+    if db_path.exists():
+        db_path.unlink()
+        removed_files.append(str(db_path))
+
+    if include_audit_logs:
+        for path in JSONL_LOG_FILES:
+            if path.exists():
+                path.unlink()
+                removed_files.append(str(path))
+
+    # Recreate an empty SQLite schema so the system status page remains usable.
+    init_db()
+    return {
+        "ok": True,
+        "message": "Demo runtime data cleared and empty SQLite schema recreated.",
+        "removed_files": removed_files,
+        "include_audit_logs": include_audit_logs,
+        "db_status": get_db_status(),
     }
