@@ -1,14 +1,47 @@
 # Web Demo
 
-这是一个静态前端原型，用于演示 AI + RPA + ERP + CRM 电商经营自动化工作台的三段式流程。
+这是 AI + RPA + ERP + CRM 电商经营自动化工作台的前端 Demo。
 
-## 运行方式
+V7 起，页面支持两种模式：
+
+1. **API 模式**：启动 FastAPI 后，页面调用 `/api/demo/run` 获取真实 Python Mock Workflow 输出。
+2. **本地样例模式**：未启动 API 时，页面自动回退到内置样例数据，方便直接打开展示。
+
+## 运行方式一：API 模式
+
+在仓库根目录安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+启动服务：
+
+```bash
+uvicorn src.api.main:app --reload
+```
+
+然后打开：
+
+```text
+http://127.0.0.1:8000/
+```
+
+或：
+
+```text
+http://127.0.0.1:8000/web_demo/index.html
+```
+
+## 运行方式二：本地样例模式
 
 直接用浏览器打开：
 
 ```text
 web_demo/index.html
 ```
+
+这种方式不会调用 API，只展示内置样例数据。
 
 ## 页面流程
 
@@ -22,25 +55,18 @@ web_demo/index.html
 查看人工确认项
 ```
 
-## 当前定位
+## API 能力
 
-当前页面不连接真实后端，也不执行真实 ERP / CRM / 店铺后台操作。
+当前前端会优先调用：
 
-它用于展示：
-
-- ERP 数据摘要
-- CRM 数据摘要
-- 商品风险诊断
-- 客户分层与售后敏感识别
-- RPA 低风险任务草案
-- Human-in-the-loop 人工确认边界
-
-## 后续升级
-
-后续可以将页面按钮连接到：
-
-```bash
-python -m src.run_demo
+```text
+GET /api/demo/run
+POST /api/tasks/{task_id}/approve
+POST /api/tasks/{task_id}/reject
 ```
 
-或者通过 API 调用后端工作流，返回真实 JSON 输出并渲染到页面。
+如果 API 不可用，自动回退到本地样例模式。
+
+## 当前边界
+
+当前页面和 API 都不连接真实 ERP / CRM，不执行真实店铺后台操作，不自动改价、不自动投放、不自动群发、不自动退款。
