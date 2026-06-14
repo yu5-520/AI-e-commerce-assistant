@@ -4,7 +4,7 @@ from collections import Counter
 from typing import Dict, List
 
 from src.traffic_test.metrics_diagnosis import diagnose_traffic_tests
-from src.traffic_test.traffic_loader import load_mock_traffic_tests
+from src.traffic_test.traffic_loader import load_mock_traffic_tests, traffic_data_source
 
 
 def build_traffic_feedback_report(
@@ -12,11 +12,12 @@ def build_traffic_feedback_report(
     listing_growth_plan: Dict[str, object],
 ) -> Dict[str, object]:
     """Build traffic test feedback report from mock experiments."""
-    rows = load_mock_traffic_tests()
+    category_profile = category_context.get("category_profile") or {}
+    category_id = str(category_profile.get("category_id", "home_living_goods"))
+    rows = load_mock_traffic_tests(category_id)
     diagnoses = diagnose_traffic_tests(rows)
     decision_counter = Counter(item["decision"] for item in diagnoses)
     risk_counter = Counter(item["risk_level"] for item in diagnoses)
-    category_profile = category_context.get("category_profile") or {}
     top_candidate = listing_growth_plan.get("top_candidate") or {}
 
     high_priority_items = [
@@ -26,10 +27,10 @@ def build_traffic_feedback_report(
     loopback_actions = _build_loopback_actions(diagnoses)
 
     return {
-        "report_id": "TRAFFIC_FEEDBACK_SUN_PROTECTION_001",
-        "category_id": category_profile.get("category_id", "sun_protection_clothing"),
-        "category_name": category_profile.get("category_name", "防晒服"),
-        "data_source": "examples/category_sun_protection/mock_traffic_tests.csv",
+        "report_id": f"TRAFFIC_FEEDBACK_{category_id.upper()}_001",
+        "category_id": category_id,
+        "category_name": category_profile.get("category_name", "家居生活商品"),
+        "data_source": traffic_data_source(category_id),
         "mvp_boundary": "Mock / manually prepared traffic rows only; no real ad account or platform campaign operation.",
         "related_listing_candidate": top_candidate.get("supplier_product_id"),
         "experiment_count": len(diagnoses),
@@ -47,15 +48,15 @@ def _build_loopback_actions(diagnoses: List[Dict[str, object]]) -> List[str]:
     actions: List[str] = []
     decisions = {item["decision"] for item in diagnoses}
     if "change_title_or_main_image" in decisions:
-        actions.append("回流到商品经营判断：标记主图 / 标题点击问题，触发同类目竞品主图与标题复查。")
+        actions.append("回流到商品经营判断：标记主图 / 标题点击问题，触发同经营单元竞品主图与标题复查。")
     if "adjust_sku_price_or_detail_page" in decisions:
         actions.append("回流到商品经营判断：标记 SKU / 价格 / 详情页承接问题，进入 SKU 和定价复盘。")
     if "enter_after_sales_diagnosis" in decisions:
-        actions.append("回流到 CRM / 售后判断：标记高退款实验，进入尺码、面料、物流和客服 SOP 归因。")
+        actions.append("回流到 CRM / 售后判断：标记高退款实验，进入尺寸、材质、物流和客服 SOP 归因。")
     if "stop_or_reduce_budget" in decisions:
         actions.append("回流到经营判断：标记 ROI 低，暂停放量并要求人工复核预算策略。")
     if "scale_carefully" in decisions:
-        actions.append("回流到经营判断：标记可小幅放量，但必须继续观察退款率和库存承接。")
+        actions.append("回流到经营判断：标记可小幅放量，但必须继续观察退款率、ROI 和库存承接。")
     if not actions:
         actions.append("回流到经营判断：继续收集曝光、点击、转化、退款和 ROI 数据。")
     return actions
