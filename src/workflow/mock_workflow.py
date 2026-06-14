@@ -7,15 +7,22 @@ workflow that `python -m src.run_demo` uses.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict
+from uuid import uuid4
 
 from src.data_loader.load_mock_data import load_all
 from src.diagnosis.customer_segmentation import segment_customers
 from src.diagnosis.product_diagnosis import diagnose_products
 from src.rag.simple_retriever import retrieve
 from src.reports.generate_demo_report import write_json, write_markdown_report
+from src.repositories.sqlite_repository import insert_report_record
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks, generate_product_tasks
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = False) -> Dict[str, Any]:
@@ -138,12 +145,22 @@ def build_mock_workflow_result(write_outputs: bool = False, record_logs: bool = 
                 product_diagnosis, customer_segmentation, rpa_tasks, rag_context
             )
             result["report_path"] = str(report_path)
+            report_record = {
+                "report_id": f"REPORT_{uuid4().hex[:10]}",
+                "workflow_run_id": workflow_run_id,
+                "report_type": "mock_workflow_report",
+                "path": str(report_path),
+                "format": "markdown",
+                "created_at": now_iso(),
+            }
+            insert_report_record(report_record)
+            result["report_record"] = report_record
             if record_logs and workflow_run_id:
                 create_execution_log(
                     workflow_run_id=workflow_run_id,
                     node_name="report_output",
                     status="success",
-                    output_snapshot={"report_path": str(report_path)},
+                    output_snapshot={"report_path": str(report_path), "report_id": report_record["report_id"]},
                 )
 
         if record_logs and workflow_run_id:
