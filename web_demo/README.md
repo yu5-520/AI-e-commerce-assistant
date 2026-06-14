@@ -12,6 +12,7 @@ AI 诊断
 审批中心
 报告中心
 知识库
+运行日志
 ```
 
 ## 运行方式一：API 模式
@@ -101,6 +102,18 @@ GET /api/reports/demo
 ### 知识库
 
 展示当前 RAG 召回依据。
+
+### 运行日志
+
+展示 WorkflowRun 和 ExecutionLog。
+
+API 模式下调用：
+
+```text
+GET /api/logs/workflow-runs
+GET /api/logs/execution-logs
+GET /api/logs/workflow-runs/{workflow_run_id}/execution-logs
+```
 
 ## 当前边界
 
