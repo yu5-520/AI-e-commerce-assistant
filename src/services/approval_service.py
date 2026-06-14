@@ -1,7 +1,7 @@
 """Approval service for task approval state in MVP.
 
-Current storage is in-memory plus JSONL append log. This keeps the API simple
-while preserving traceability. Later it can be replaced by SQLite or PostgreSQL.
+Current storage uses JSONL for audit and SQLite for queryable task status.
+The service never executes real RPA actions; it only records approval state.
 """
 
 from __future__ import annotations
@@ -10,9 +10,16 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
+from uuid import uuid4
 
 from fastapi import HTTPException
 
+from src.repositories.sqlite_repository import (
+    get_task_status_map,
+    insert_approval_record,
+    list_approval_records as list_sqlite_approval_records,
+    upsert_task_status,
+)
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
 from src.services.workflow_service import get_task
 
@@ -50,6 +57,7 @@ def update_task_status(task_id: str, status: str, operator: str = "demo_user") -
 
         updated = {
             **task,
+            "approval_id": f"APPROVAL_{uuid4().hex[:10]}",
             "workflow_run_id": workflow_run_id,
             "approval_status": status,
             "status": status,
@@ -59,6 +67,8 @@ def update_task_status(task_id: str, status: str, operator: str = "demo_user") -
         }
         TASK_STATUS[task_id] = updated
         append_jsonl(APPROVAL_LOG_PATH, updated)
+        insert_approval_record(updated)
+        upsert_task_status(updated)
         create_execution_log(
             workflow_run_id=workflow_run_id,
             node_name="task_approval_record",
@@ -90,4 +100,15 @@ def update_task_status(task_id: str, status: str, operator: str = "demo_user") -
 
 
 def get_task_status_overrides() -> Dict[str, Dict[str, Any]]:
-    return TASK_STATUS
+    persisted = get_task_status_map()
+    return {**persisted, **TASK_STATUS}
+
+
+def list_approval_records(limit: int = 50) -> list[Dict[str, Any]]:
+    records = list_sqlite_approval_records(limit=limit)
+    if records:
+        return records
+    if not APPROVAL_LOG_PATH.exists():
+        return []
+    lines = APPROVAL_LOG_PATH.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()][-limit:][::-1]
