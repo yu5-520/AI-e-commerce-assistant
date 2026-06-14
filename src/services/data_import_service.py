@@ -1,7 +1,8 @@
 """Data Import service for Mock ERP / CRM datasets.
 
 This service turns examples/*.csv from passive demo files into product-level
-import sources with validation results and import records.
+import sources with validation results, import records, WorkflowRun records,
+and node-level ExecutionLog records.
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 from uuid import uuid4
+
+from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 EXAMPLES_DIR = ROOT_DIR / "examples"
@@ -215,14 +218,14 @@ def validate_relationships() -> List[Dict[str, Any]]:
     return checks
 
 
-def validate_all_imports() -> Dict[str, Any]:
+def validate_all_imports(workflow_run_id: str | None = None) -> Dict[str, Any]:
     datasets = [validate_dataset(dataset_name) for dataset_name in DATASET_CONFIGS]
     relationship_checks = validate_relationships()
     failed_count = sum(1 for item in datasets if item["status"] == "failed") + sum(
         1 for item in relationship_checks if item["status"] == "failed"
     )
     warning_count = sum(1 for item in datasets if item["status"] == "warning")
-    return {
+    result = {
         "validation_run_id": f"VALIDATION_{uuid4().hex[:10]}",
         "validated_at": now_iso(),
         "status": "passed" if failed_count == 0 else "failed",
@@ -231,6 +234,18 @@ def validate_all_imports() -> Dict[str, Any]:
         "datasets": datasets,
         "relationship_checks": relationship_checks,
     }
+    if workflow_run_id:
+        create_execution_log(
+            workflow_run_id=workflow_run_id,
+            node_name="data_import_validation",
+            status=result["status"],
+            output_snapshot={
+                "dataset_count": len(datasets),
+                "failed_count": failed_count,
+                "warning_count": warning_count,
+            },
+        )
+    return result
 
 
 def append_import_record(payload: Dict[str, Any]) -> None:
@@ -240,18 +255,58 @@ def append_import_record(payload: Dict[str, Any]) -> None:
 
 
 def import_mock_data() -> Dict[str, Any]:
-    validation = validate_all_imports()
-    record = {
-        "import_id": f"IMPORT_{uuid4().hex[:10]}",
-        "created_at": now_iso(),
-        "mode": "mock_csv",
-        "status": validation["status"],
-        "dataset_count": len(DATASET_CONFIGS),
-        "total_rows": sum(item["row_count"] for item in validation["datasets"]),
-        "validation": validation,
-    }
-    append_import_record(record)
-    return record
+    workflow_run = create_workflow_run(
+        workflow_type="data_import_mock_csv",
+        input_snapshot={"source": "examples/*.csv", "dataset_count": len(DATASET_CONFIGS)},
+    )
+    workflow_run_id = workflow_run["workflow_run_id"]
+    try:
+        validation = validate_all_imports(workflow_run_id=workflow_run_id)
+        record = {
+            "import_id": f"IMPORT_{uuid4().hex[:10]}",
+            "workflow_run_id": workflow_run_id,
+            "created_at": now_iso(),
+            "mode": "mock_csv",
+            "status": validation["status"],
+            "dataset_count": len(DATASET_CONFIGS),
+            "total_rows": sum(item["row_count"] for item in validation["datasets"]),
+            "validation": validation,
+        }
+        append_import_record(record)
+        create_execution_log(
+            workflow_run_id=workflow_run_id,
+            node_name="data_import_record",
+            status=record["status"],
+            output_snapshot={
+                "import_id": record["import_id"],
+                "total_rows": record["total_rows"],
+            },
+        )
+        finish_workflow_run(
+            workflow_run_id=workflow_run_id,
+            workflow_type="data_import_mock_csv",
+            status=record["status"],
+            output_snapshot={
+                "import_id": record["import_id"],
+                "total_rows": record["total_rows"],
+                "failed_count": validation["failed_count"],
+            },
+        )
+        return record
+    except Exception as exc:
+        create_execution_log(
+            workflow_run_id=workflow_run_id,
+            node_name="data_import_error",
+            status="failed",
+            error_message=str(exc),
+        )
+        finish_workflow_run(
+            workflow_run_id=workflow_run_id,
+            workflow_type="data_import_mock_csv",
+            status="failed",
+            error_message=str(exc),
+        )
+        raise
 
 
 def list_import_records(limit: int = 20) -> List[Dict[str, Any]]:
