@@ -118,18 +118,35 @@ def _suggest_cycle_type(
     return "weekly_operation_review_loop"
 
 
+def _first_number(item: Dict[str, object], keys: List[str]) -> float:
+    for key in keys:
+        value = to_number(item.get(key))
+        if value:
+            return value
+    return 0
+
+
+def _first_int(item: Dict[str, object], keys: List[str]) -> int:
+    for key in keys:
+        value = to_int(item.get(key))
+        if value:
+            return value
+    return 0
+
+
 def _sum_order_amount_by_product(orders: List[Dict[str, object]]) -> Dict[str, float]:
     result: Dict[str, float] = defaultdict(float)
     for order in orders:
-        result[str(order.get("product_id"))] += to_number(order.get("pay_amount"))
+        result[str(order.get("product_id"))] += _first_number(order, ["actual_paid", "order_amount", "pay_amount"])
     return {key: round(value, 2) for key, value in result.items()}
 
 
 def _sum_stock_by_product(inventory: List[Dict[str, object]], products: List[Dict[str, object]]) -> Dict[str, int]:
     result: Dict[str, int] = defaultdict(int)
     for item in inventory:
-        result[str(item.get("product_id"))] += to_int(item.get("stock"))
-    if not result:
+        result[str(item.get("product_id"))] += _first_int(item, ["available_stock", "current_stock", "stock"])
+    if not any(result.values()):
+        result.clear()
         for product in products:
             result[str(product.get("product_id"))] += to_int(product.get("stock"))
     return dict(result)
