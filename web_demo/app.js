@@ -1,17 +1,10 @@
-const state = {
-  apiData: null,
-  apiMode: false,
-  erpLoaded: false,
-  diagnosisReady: false,
-  taskReady: false,
-};
-
 const fallbackData = {
   summary: {
     product_count: 3,
     customer_count: 4,
     rpa_task_count: 7,
     approval_required_count: 7,
+    auto_execution_allowed_count: 0,
   },
   product_diagnosis: [
     {
@@ -20,6 +13,10 @@ const fallbackData = {
       risk_level: "medium",
       risks: ["high_inventory_low_order_risk", "activity_price_margin_risk"],
       suggested_actions: ["生成 SKU 价格建议表", "活动报名前人工确认"],
+      gross_margin: 8.2,
+      activity_margin: 1.2,
+      stock: 200,
+      refund_count: 0,
     },
     {
       product_id: "P003",
@@ -27,6 +24,10 @@ const fallbackData = {
       risk_level: "high",
       risks: ["sensitive_category_compliance_risk", "refund_abnormal_risk"],
       suggested_actions: ["进入售后归因工作流", "先做合规检查"],
+      gross_margin: 11.5,
+      activity_margin: 5.5,
+      stock: 80,
+      refund_count: 2,
     },
   ],
   customer_segmentation: [
@@ -81,163 +82,255 @@ const fallbackData = {
 
 fallbackData.approval_required_tasks = fallbackData.rpa_tasks.filter((task) => task.requires_approval !== false);
 
-function setStatus(id, text) {
-  document.getElementById(id).textContent = text;
-}
+const routes = {
+  dashboard: {
+    title: "经营总览",
+    subtitle: "查看商品、客户、任务、审批和安全边界的整体状态。",
+    render: renderDashboard,
+  },
+  "data-import": {
+    title: "数据导入",
+    subtitle: "MVP 阶段使用 Mock ERP / CRM 数据，后续扩展为 CSV / Excel 上传与字段映射。",
+    render: renderDataImport,
+  },
+  diagnosis: {
+    title: "AI 诊断",
+    subtitle: "商品诊断、客户分层、售后归因与 RAG 依据。",
+    render: renderDiagnosis,
+  },
+  tasks: {
+    title: "任务中心",
+    subtitle: "将 AI 建议转成可确认、可追溯的 RPA 任务草案。",
+    render: renderTasks,
+  },
+  approvals: {
+    title: "审批中心",
+    subtitle: "确认或拒绝中高风险任务，避免 AI / RPA 越权执行。",
+    render: renderApprovals,
+  },
+  reports: {
+    title: "报告中心",
+    subtitle: "输出商品诊断、客户分层、售后归因和复盘报告。",
+    render: renderReports,
+  },
+  knowledge: {
+    title: "知识库",
+    subtitle: "平台规则、合规风控、运营方法和客服 SOP 的 RAG 依据。",
+    render: renderKnowledge,
+  },
+};
 
-function badge(level) {
-  const label = level === "high" ? "高风险" : level === "medium" ? "中风险" : "低风险";
-  return `<span class="badge ${level}">${label}</span>`;
-}
+const state = {
+  apiData: null,
+  apiMode: false,
+  reportText: "",
+};
 
-function renderList(items) {
-  if (!items.length) return "<p>暂无。</p>";
-  return `<ul class="metric-list">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
-}
-
-function markStep(stepIndex) {
-  document.querySelectorAll(".flow-step").forEach((node, index) => {
-    node.classList.toggle("active", index === stepIndex);
-  });
+function view() {
+  return document.getElementById("appView");
 }
 
 function getData() {
   return state.apiData || fallbackData;
 }
 
-async function fetchApiData() {
+function badge(level) {
+  const label = level === "high" ? "高风险" : level === "medium" ? "中风险" : "低风险";
+  return `<span class="badge ${level || "low"}">${label}</span>`;
+}
+
+function statusBadge(status) {
+  return `<span class="status-badge">${status || "pending"}</span>`;
+}
+
+function card(title, body, extraClass = "") {
+  return `<article class="card ${extraClass}"><h3>${title}</h3>${body}</article>`;
+}
+
+function list(items) {
+  if (!items || !items.length) return "<p class='muted'>暂无数据。</p>";
+  return `<ul class="clean-list">${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`${url} ${response.status}`);
+  return response.json();
+}
+
+async function refreshWorkflow() {
   try {
-    const response = await fetch("/api/demo/run");
-    if (!response.ok) throw new Error(`API ${response.status}`);
-    state.apiData = await response.json();
+    state.apiData = await fetchJson("/api/demo/run");
     state.apiMode = true;
-    return state.apiData;
+    document.getElementById("apiModeBadge").textContent = "API 模式";
+    document.getElementById("apiModeBadge").className = "mode-badge api";
   } catch (error) {
     state.apiData = fallbackData;
     state.apiMode = false;
-    return fallbackData;
+    document.getElementById("apiModeBadge").textContent = "本地样例模式";
+    document.getElementById("apiModeBadge").className = "mode-badge local";
   }
 }
 
-function renderDataSummary(data) {
+function currentRoute() {
+  const route = window.location.hash.replace("#", "") || "dashboard";
+  return routes[route] ? route : "dashboard";
+}
+
+function setActiveNav(route) {
+  document.querySelectorAll(".nav a").forEach((link) => {
+    link.classList.toggle("active", link.dataset.route === route);
+  });
+}
+
+async function renderRoute() {
+  const route = currentRoute();
+  const config = routes[route];
+  setActiveNav(route);
+  document.getElementById("pageTitle").textContent = config.title;
+  document.getElementById("pageSubtitle").textContent = config.subtitle;
+  await config.render(getData());
+}
+
+function renderDashboard(data) {
   const summary = data.summary || {};
-  setStatus("erpStatus", state.apiMode ? "API 已导入" : "本地样例");
-  setStatus("crmStatus", state.apiMode ? "API 已导入" : "本地样例");
+  const highRiskProducts = data.product_diagnosis.filter((item) => item.risk_level === "high").length;
+  const highRiskCustomers = data.customer_segmentation.filter((item) => item.risk_level === "high").length;
 
-  document.getElementById("erpSummary").innerHTML = `
-    <ul class="metric-list">
-      <li>商品诊断对象：${summary.product_count || data.product_diagnosis.length} 个</li>
-      <li>RPA 任务草案：${summary.rpa_task_count || data.rpa_tasks.length} 个</li>
-      <li>需人工确认任务：${summary.approval_required_count || data.approval_required_tasks.length} 个</li>
-    </ul>
-    <p>${state.apiMode ? "已连接 FastAPI，当前展示真实 Python Mock Workflow 输出。" : "当前使用前端内置样例数据；启动 FastAPI 后会自动切换到 API 输出。"}</p>
-  `;
-
-  document.getElementById("crmSummary").innerHTML = `
-    <ul class="metric-list">
-      <li>客户分层对象：${summary.customer_count || data.customer_segmentation.length} 个</li>
-      <li>高风险客户：${data.customer_segmentation.filter((item) => item.risk_level === "high").length} 个</li>
-      <li>禁止自动触达：true</li>
-    </ul>
-    <p>CRM 数据使用脱敏 Mock 数据，不保存真实姓名、手机号、微信号或地址。</p>
+  view().innerHTML = `
+    <section class="kpi-grid">
+      ${card("商品诊断", `<strong>${summary.product_count || data.product_diagnosis.length}</strong><p>高风险商品：${highRiskProducts}</p>`)}
+      ${card("客户分层", `<strong>${summary.customer_count || data.customer_segmentation.length}</strong><p>高风险客户：${highRiskCustomers}</p>`)}
+      ${card("任务草案", `<strong>${summary.rpa_task_count || data.rpa_tasks.length}</strong><p>自动执行：${summary.auto_execution_allowed_count || 0}</p>`)}
+      ${card("待人工确认", `<strong>${summary.approval_required_count || data.approval_required_tasks.length}</strong><p>默认不执行高风险动作</p>`)}
+    </section>
+    <section class="two-column">
+      ${card("产品主线", list(["导入经营数据", "AI / RAG 经营诊断", "生成任务草案", "人工确认", "报告输出与日志回写"]))}
+      ${card("当前边界", list(["不接真实店铺后台", "不自动改价 / 投放 / 报名活动", "不自动群发客户", "不自动处理退款", "CRM 只使用脱敏 Mock 数据"]))}
+    </section>
   `;
 }
 
-async function loadData() {
-  setStatus("erpStatus", "导入中...");
-  setStatus("crmStatus", "导入中...");
-  const data = await fetchApiData();
-  state.erpLoaded = true;
-  markStep(0);
-  renderDataSummary(data);
+function renderDataImport(data) {
+  view().innerHTML = `
+    <section class="page-section">
+      <div class="section-header">
+        <h2>Mock 数据源</h2>
+        <button onclick="refreshAndRender()">重新导入 Mock 数据</button>
+      </div>
+      <div class="table-like">
+        <div><strong>商品表</strong><span>examples/mock_products.csv</span><em>已接入</em></div>
+        <div><strong>订单表</strong><span>examples/mock_orders.csv</span><em>已接入</em></div>
+        <div><strong>库存表</strong><span>examples/mock_inventory.csv</span><em>已接入</em></div>
+        <div><strong>退款表</strong><span>examples/mock_refunds.csv</span><em>已接入</em></div>
+        <div><strong>客户表</strong><span>examples/mock_customers.csv</span><em>已接入</em></div>
+        <div><strong>互动表</strong><span>examples/mock_interactions.csv</span><em>已接入</em></div>
+      </div>
+    </section>
+    <section class="two-column">
+      ${card("数据校验目标", list(["必填字段", "数字字段", "product_id 关联", "customer_id 关联", "退款与订单关联", "客户互动与客户关联"]))}
+      ${card("后续产品化", list(["CSV / Excel 上传", "字段映射确认", "错误行报告", "导入记录", "数据快照保存"]))}
+    </section>
+  `;
 }
 
 function renderDiagnosis(data) {
-  const productItems = data.product_diagnosis.map((item) => `
-    <div class="result-item">
+  const productCards = data.product_diagnosis.map((item) => `
+    <div class="result-card">
       <h3>${item.product_id} - ${item.product_name} ${badge(item.risk_level)}</h3>
       <p>风险标签：${(item.risks || []).join("，") || "暂无"}</p>
       <p>建议动作：${(item.suggested_actions || []).join("；")}</p>
+      <small>毛利：${item.gross_margin ?? "-"}｜活动毛利：${item.activity_margin ?? "-"}｜库存：${item.stock ?? "-"}</small>
     </div>
-  `);
+  `).join("");
 
-  const customerItems = data.customer_segmentation.map((item) => `
-    <div class="result-item">
+  const customerCards = data.customer_segmentation.map((item) => `
+    <div class="result-card">
       <h3>${item.customer_id} - ${item.segment} ${badge(item.risk_level)}</h3>
       <p>标签：${(item.tags || []).join("，") || "暂无"}</p>
       <p>建议动作：${(item.recommended_actions || []).join("；")}</p>
     </div>
-  `);
+  `).join("");
 
-  const ragItems = Object.entries(data.rag_context || {}).map(([key, values]) => {
-    const first = values && values[0] ? values[0] : {};
-    return `<li>${key}：${first.source || "knowledge_base"}｜${first.snippet || "已召回相关依据"}</li>`;
-  });
-
-  document.getElementById("diagnosisResult").innerHTML = `
-    <div class="result-list">
-      ${productItems.join("")}
-      ${customerItems.join("")}
-      <div class="result-item">
-        <h3>RAG 召回依据</h3>
-        ${renderList(ragItems)}
-      </div>
-    </div>
+  view().innerHTML = `
+    <section class="page-section"><h2>商品诊断</h2><div class="result-list">${productCards}</div></section>
+    <section class="page-section"><h2>客户分层</h2><div class="result-list">${customerCards}</div></section>
   `;
-}
-
-async function runDiagnosis() {
-  if (!state.erpLoaded) await loadData();
-  state.diagnosisReady = true;
-  markStep(1);
-  setStatus("diagnosisStatus", state.apiMode ? "API 已生成" : "本地样例");
-  renderDiagnosis(getData());
 }
 
 function renderTasks(data) {
   const overrides = data.task_status_overrides || {};
-  const taskCards = data.rpa_tasks.map((task) => {
+  const rows = data.rpa_tasks.map((task) => {
     const override = overrides[task.task_id] || {};
     const approvalStatus = override.approval_status || task.approval_status || "pending";
     return `
-      <div class="result-item">
+      <div class="task-row">
+        <div>
+          <strong>${task.task_id}</strong>
+          <p>${task.ai_suggestion}</p>
+        </div>
+        <span>${task.task_type}</span>
+        ${badge(task.risk_level)}
+        ${statusBadge(approvalStatus)}
+        <small>自动执行：${task.auto_execution_allowed}</small>
+      </div>
+    `;
+  }).join("");
+
+  view().innerHTML = `<section class="page-section"><h2>任务草案</h2><div class="task-table">${rows}</div></section>`;
+}
+
+function renderApprovals(data) {
+  const overrides = data.task_status_overrides || {};
+  const tasks = (data.approval_required_tasks || data.rpa_tasks).filter((task) => task.requires_approval !== false);
+  const cards = tasks.map((task) => {
+    const override = overrides[task.task_id] || {};
+    const approvalStatus = override.approval_status || task.approval_status || "pending";
+    return `
+      <div class="result-card">
         <h3>${task.task_id} ${badge(task.risk_level)}</h3>
-        <p>类型：${task.task_type}</p>
-        <p>动作：${task.ai_suggestion}</p>
-        <small>审批状态：${approvalStatus}；自动执行：${task.auto_execution_allowed}</small>
+        <p>${task.ai_suggestion || task.task_type}</p>
+        <p>审批状态：${approvalStatus}｜自动执行：${task.auto_execution_allowed}</p>
         <div class="task-actions">
           <button onclick="approveTask('${task.task_id}')">确认</button>
-          <button onclick="rejectTask('${task.task_id}')">拒绝</button>
+          <button class="secondary" onclick="rejectTask('${task.task_id}')">拒绝</button>
         </div>
       </div>
     `;
-  });
+  }).join("");
 
-  document.getElementById("taskResult").innerHTML = `<div class="result-list">${taskCards.join("")}</div>`;
+  view().innerHTML = `<section class="page-section"><h2>待人工确认</h2><div class="result-list">${cards}</div></section>`;
 }
 
-async function generateTasks() {
-  if (!state.diagnosisReady) await runDiagnosis();
-  state.taskReady = true;
-  markStep(2);
-  setStatus("taskStatus", state.apiMode ? "API 待人工确认" : "本地样例");
-  renderTasks(getData());
-}
-
-function showApproval() {
-  if (!state.taskReady) return generateTasks().then(showApproval);
-  const data = getData();
-  const approvalItems = (data.approval_required_tasks || data.rpa_tasks)
-    .filter((task) => task.risk_level !== "low" || task.requires_approval !== false)
-    .map((task) => `${task.task_id}：${task.ai_suggestion || task.task_type}`);
-
-  document.getElementById("taskResult").innerHTML += `
-    <div class="result-item">
-      <h3>必须人工确认的任务</h3>
-      ${renderList(approvalItems)}
-      <p>当前 Demo 不会自动执行改价、活动报名、客户触达、退款处理等高风险动作。</p>
-    </div>
+async function renderReports(data) {
+  if (state.apiMode && !state.reportText) {
+    try {
+      const response = await fetch("/api/reports/demo");
+      state.reportText = await response.text();
+    } catch (error) {
+      state.reportText = "API 报告读取失败，当前展示本地报告占位。";
+    }
+  }
+  view().innerHTML = `
+    <section class="page-section">
+      <h2>报告输出</h2>
+      <div class="report-preview"><pre>${state.reportText || "运行 API 后可查看 Markdown 报告。当前可导出商品诊断、客户分层、售后归因和任务草案。"}</pre></div>
+    </section>
   `;
+}
+
+function renderKnowledge(data) {
+  const items = Object.entries(data.rag_context || {}).map(([key, values]) => {
+    const first = values && values[0] ? values[0] : {};
+    return `
+      <div class="result-card">
+        <h3>${key}</h3>
+        <p>${first.snippet || "已召回相关知识片段"}</p>
+        <small>来源：${first.source || "knowledge_base"}</small>
+      </div>
+    `;
+  }).join("");
+  view().innerHTML = `<section class="page-section"><h2>RAG 依据</h2><div class="result-list">${items}</div></section>`;
 }
 
 async function updateTask(taskId, action) {
@@ -245,20 +338,24 @@ async function updateTask(taskId, action) {
     alert("当前为本地样例模式。启动 FastAPI 后可记录确认 / 拒绝状态。");
     return;
   }
-  const response = await fetch(`/api/tasks/${taskId}/${action}`, { method: "POST" });
+  const response = await fetch(`/api/approvals/${taskId}/${action}`, { method: "POST" });
   if (!response.ok) {
     alert("任务状态更新失败");
     return;
   }
-  await loadData();
-  await runDiagnosis();
-  await generateTasks();
+  await refreshAndRender();
+}
+
+async function refreshAndRender() {
+  await refreshWorkflow();
+  await renderRoute();
 }
 
 window.approveTask = (taskId) => updateTask(taskId, "approve");
 window.rejectTask = (taskId) => updateTask(taskId, "reject");
+window.refreshAndRender = refreshAndRender;
 
-document.getElementById("loadDataBtn").addEventListener("click", loadData);
-document.getElementById("diagnosisBtn").addEventListener("click", runDiagnosis);
-document.getElementById("taskBtn").addEventListener("click", generateTasks);
-document.getElementById("approvalBtn").addEventListener("click", showApproval);
+document.getElementById("refreshBtn").addEventListener("click", refreshAndRender);
+window.addEventListener("hashchange", renderRoute);
+
+refreshAndRender();
