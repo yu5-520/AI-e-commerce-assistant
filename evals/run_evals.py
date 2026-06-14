@@ -22,6 +22,7 @@ from src.diagnosis.product_diagnosis import diagnose_products  # noqa: E402
 from src.listing import build_listing_growth_plan  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks  # noqa: E402
+from src.traffic_test import build_traffic_feedback_report  # noqa: E402
 
 
 def run_crm_segmentation_eval() -> dict:
@@ -148,6 +149,35 @@ def run_listing_growth_eval() -> dict:
     }
 
 
+def run_traffic_feedback_eval() -> dict:
+    datasets = load_all()
+    product_diagnosis = diagnose_products(
+        products=datasets["products"],
+        orders=datasets["orders"],
+        inventory=datasets["inventory"],
+        refunds=datasets["refunds"],
+    )
+    category_context = build_category_context("sun_protection_clothing")
+    competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
+    listing_plan = build_listing_growth_plan(category_context, competitor_analysis)
+    report = build_traffic_feedback_report(category_context, listing_plan)
+    passed = (
+        report["category_name"] == "防晒服"
+        and report["experiment_count"] > 0
+        and bool(report["decision_summary"])
+        and bool(report["loopback_actions"])
+        and bool(report["next_action"])
+        and report["safe_use_policy"].startswith("只生成")
+    )
+    return {
+        "eval_id": "traffic_feedback_eval_001",
+        "passed": passed,
+        "observed_decision_summary": report["decision_summary"],
+        "observed_next_action": report["next_action"],
+        "observed_loopback_actions": report["loopback_actions"],
+    }
+
+
 def main() -> None:
     results = [
         run_crm_segmentation_eval(),
@@ -155,6 +185,7 @@ def main() -> None:
         run_category_profile_eval(),
         run_competitor_analysis_eval(),
         run_listing_growth_eval(),
+        run_traffic_feedback_eval(),
     ]
     output_dir = ROOT_DIR / "evals" / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
