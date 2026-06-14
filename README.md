@@ -40,7 +40,7 @@
 
 ## 2. 当前版本边界
 
-当前仓库已经完成的是 **V0.8 - V1.3 的 Mock 闭环骨架**，并新增了 ERP 经营单元识别和循环频率策略。
+当前仓库已经完成的是 **V0.8 - V1.4 的 Mock 闭环骨架**，并新增了 ERP 经营单元识别、循环频率策略和产品化后端接口。
 
 当前可运行能力：
 
@@ -113,6 +113,9 @@ RPA 任务草案
 ↓
 7. 经营循环总控
 决定下一轮回到 ERP、CRM、竞品、上新、流量测试或继续循环
+↓
+8. 产品化 API 层
+把内部工作流结果包装成今日建议、经营单元、商品体检、竞品机会、上新建议、流量复盘、待确认动作和经营报告
 ```
 
 ## 4. 当前可运行内容
@@ -160,7 +163,21 @@ pip install -r requirements.txt
 uvicorn src.api.main:app --reload
 ```
 
-常用接口：
+前端优先使用产品化接口：
+
+```text
+GET  /api/business/today             今日经营建议
+GET  /api/business/operating-unit    经营单元与循环频率
+GET  /api/business/data-health       数据体检
+GET  /api/business/products          商品体检
+GET  /api/business/competitors       竞品机会
+GET  /api/business/listing           上新建议
+GET  /api/business/traffic           流量复盘
+GET  /api/business/actions           待确认动作
+GET  /api/business/report            经营报告
+```
+
+兼容旧版和内部调试接口：
 
 ```text
 GET  /api/health
@@ -186,7 +203,7 @@ http://127.0.0.1:8000/
 http://127.0.0.1:8000/web_demo/index.html
 ```
 
-页面会优先调用 `/api/demo/run`。如果没有启动 API，直接打开 `web_demo/index.html` 时会自动回退到本地样例数据。
+页面会优先调用 `/api/business/today` 和其他 `/api/business/*` 产品接口。如果没有启动 API，直接打开 `web_demo/index.html` 时会自动回退到本地样例数据。
 
 ## 5. 当前已经完成
 
@@ -194,6 +211,7 @@ http://127.0.0.1:8000/web_demo/index.html
 统一产品文档
 + ERP 经营单元推断模块
 + 循环频率策略模块
++ 产品化 Business API
 + 家居生活经营单元档案
 + 家居生活竞品 / 货盘 / 流量测试 Mock 数据
 + 防晒服 demo 样板保留
@@ -209,7 +227,7 @@ http://127.0.0.1:8000/web_demo/index.html
 + Human-in-the-loop 风控
 + Evals
 + FastAPI API
-+ 前端 fetch API / 本地 fallback
++ 产品化前端 UI
 + SQLite / JSONL 日志记录
 ```
 
@@ -257,7 +275,22 @@ src/scheduler/
 daily_fast_moving_goods_loop
 ```
 
-### 6.3 经营单元知识档案
+### 6.3 产品化 Business API
+
+```text
+src/api/routes/business.py
+src/services/business_view_service.py
+```
+
+当前能力：
+
+```text
+把内部 workflow 结果包装成前端可直接消费的产品视图
+隐藏 workflow、RAG、SQLite、ExecutionLog 等工程表达
+保留 raw 字段用于兼容旧前端数据结构
+```
+
+### 6.4 经营单元知识档案
 
 ```text
 knowledge_base/category_profiles/home_living_goods.md
@@ -267,7 +300,7 @@ src/category/
 
 家居生活商品是当前 ERP 推断出的主经营单元。防晒服保留为可复制的第二样板，但不再作为默认值。
 
-### 6.4 同经营单元竞品比对
+### 6.5 同经营单元竞品比对
 
 ```text
 examples/category_home_living/mock_competitors.csv
@@ -278,7 +311,7 @@ src/competitor/
 
 当前不做真实平台数据抓取，只使用 Mock / 手动准备的数据。
 
-### 6.5 同经营单元上新增长
+### 6.6 同经营单元上新增长
 
 ```text
 examples/category_home_living/mock_supplier_products.csv
@@ -289,7 +322,7 @@ src/listing/
 
 当前只生成上新资料草案，不自动上架、不自动改价、不自动投放。
 
-### 6.6 流量测试与数据回流
+### 6.7 流量测试与数据回流
 
 ```text
 examples/category_home_living/mock_traffic_tests.csv
@@ -308,7 +341,7 @@ ROI 低 → 回流预算止损
 指标健康 → 小幅放量但继续人工确认
 ```
 
-### 6.7 经营循环总控
+### 6.8 经营循环总控
 
 ```text
 src/operating_loop/
@@ -316,30 +349,30 @@ src/operating_loop/
 
 当前能力：汇总商品风险、客户风险、竞品比对、上新增长、流量测试回流，判断下一轮进入哪个模块，并生成下一轮动作计划。
 
-### 6.8 ERP / CRM 数据接入
+### 6.9 ERP / CRM 数据接入
 
 MVP 阶段优先支持 Mock CSV / Excel 数据，不直接接入真实商家后台。
 
-### 6.9 AI / RAG 决策层
+### 6.10 AI / RAG 决策层
 
 当前版本使用规则引擎模拟 AI 诊断，用关键词检索模拟 RAG。RAG 已支持读取 `knowledge_base/category_profiles/` 下的经营单元知识。
 
-### 6.10 Human-in-the-loop 人工确认
+### 6.11 Human-in-the-loop 人工确认
 
 关键动作必须由用户确认：改标题、改主图、改价、活动、投放预算、下架 / 清货、批量回写 ERP / CRM、客户触达、优惠券策略执行和售后处理动作。
 
-### 6.11 RPA 任务草案层
+### 6.12 RPA 任务草案层
 
 MVP 阶段生成低风险任务草案，不执行真实自动化。
 
 ## 7. 下一阶段升级路线
 
 ```text
-V1.4：业务档案长期落库
-V1.5：第二个经营单元复制验证
-V1.6：前端新增经营单元 / 循环策略页面
-V1.7：Embedding + 向量库 RAG
-V1.8：真实低风险 RPA Adapter
+V1.5：业务档案长期落库
+V1.6：第二个经营单元复制验证
+V1.7：前端新增经营单元 / 循环策略页面增强
+V1.8：Embedding + 向量库 RAG
+V1.9：真实低风险 RPA Adapter
 ```
 
 详细升级清单见：
