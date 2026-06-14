@@ -1,10 +1,8 @@
 """Lightweight product log service.
 
-The MVP uses JSONL files for traceability before introducing SQLite.
-It records two product-level objects:
-
-- WorkflowRun: one high-level run, such as data import or full diagnosis.
-- ExecutionLog: one node-level event inside a run.
+The MVP uses JSONL files for readable audit trail and SQLite for queryable
+product state. This is a transitional persistence layer before a full database
+schema is introduced.
 """
 
 from __future__ import annotations
@@ -14,6 +12,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+
+from src.repositories.sqlite_repository import (
+    insert_execution_log,
+    list_execution_logs as list_sqlite_execution_logs,
+    list_execution_logs_by_run as list_sqlite_execution_logs_by_run,
+    list_workflow_runs as list_sqlite_workflow_runs,
+    upsert_workflow_run,
+)
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 LOG_DIR = ROOT_DIR / "logs"
@@ -54,6 +60,7 @@ def create_workflow_run(
         "error_message": None,
     }
     append_jsonl(WORKFLOW_RUN_LOG_PATH, run)
+    upsert_workflow_run(run)
     return run
 
 
@@ -74,6 +81,7 @@ def finish_workflow_run(
         "error_message": error_message,
     }
     append_jsonl(WORKFLOW_RUN_LOG_PATH, run)
+    upsert_workflow_run(run)
     return run
 
 
@@ -96,17 +104,27 @@ def create_execution_log(
         "created_at": now_iso(),
     }
     append_jsonl(EXECUTION_LOG_PATH, log)
+    insert_execution_log(log)
     return log
 
 
 def list_workflow_runs(limit: int = 50) -> List[Dict[str, Any]]:
+    sqlite_rows = list_sqlite_workflow_runs(limit=limit)
+    if sqlite_rows:
+        return sqlite_rows
     return read_jsonl(WORKFLOW_RUN_LOG_PATH, limit=limit)
 
 
 def list_execution_logs(limit: int = 100) -> List[Dict[str, Any]]:
+    sqlite_rows = list_sqlite_execution_logs(limit=limit)
+    if sqlite_rows:
+        return sqlite_rows
     return read_jsonl(EXECUTION_LOG_PATH, limit=limit)
 
 
 def list_execution_logs_by_run(workflow_run_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    sqlite_rows = list_sqlite_execution_logs_by_run(workflow_run_id=workflow_run_id, limit=limit)
+    if sqlite_rows:
+        return sqlite_rows
     logs = read_jsonl(EXECUTION_LOG_PATH, limit=limit * 5)
     return [item for item in logs if item.get("workflow_run_id") == workflow_run_id][:limit]
