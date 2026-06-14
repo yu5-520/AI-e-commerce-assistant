@@ -19,10 +19,15 @@ def _load_documents() -> List[Dict[str, str]]:
     if not KNOWLEDGE_DIR.exists():
         return docs
 
-    for path in KNOWLEDGE_DIR.glob("*.md"):
+    paths = list(KNOWLEDGE_DIR.glob("*.md"))
+    category_dir = KNOWLEDGE_DIR / "category_profiles"
+    if category_dir.exists():
+        paths.extend(category_dir.glob("*.md"))
+
+    for path in paths:
         docs.append(
             {
-                "source": path.name,
+                "source": str(path.relative_to(KNOWLEDGE_DIR)),
                 "content": path.read_text(encoding="utf-8"),
             }
         )
