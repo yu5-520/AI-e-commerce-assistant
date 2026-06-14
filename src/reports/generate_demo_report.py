@@ -25,12 +25,14 @@ def write_markdown_report(
     category_context: Dict[str, object] | None = None,
     competitor_analysis: Dict[str, object] | None = None,
     listing_growth_plan: Dict[str, object] | None = None,
+    traffic_feedback_report: Dict[str, object] | None = None,
 ) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / "demo_report.md"
     category_context = category_context or {}
     competitor_analysis = competitor_analysis or {}
     listing_growth_plan = listing_growth_plan or {}
+    traffic_feedback_report = traffic_feedback_report or {}
     category_profile = category_context.get("category_profile") or {}
     category_rules = category_context.get("category_rules") or {}
     reference_product = competitor_analysis.get("reference_product") or {}
@@ -38,6 +40,8 @@ def write_markdown_report(
     review_gap = competitor_analysis.get("review_gap") or {}
     top_candidate = listing_growth_plan.get("top_candidate") or {}
     listing_draft = listing_growth_plan.get("listing_draft") or {}
+    decision_summary = traffic_feedback_report.get("decision_summary") or {}
+    risk_summary = traffic_feedback_report.get("risk_summary") or {}
 
     lines: List[str] = [
         "# AI 垂直货架电商经营循环 Demo Report",
@@ -98,7 +102,25 @@ def write_markdown_report(
         ]
     )
 
-    lines.append("## 4. CRM 客户分层")
+    lines.append("## 4. 流量测试与数据回流")
+    lines.extend(
+        [
+            f"- 报告 ID：{traffic_feedback_report.get('report_id', '未生成')}",
+            f"- 数据来源：{traffic_feedback_report.get('data_source', '未加载')}",
+            f"- 测试实验数：{traffic_feedback_report.get('experiment_count', 0)}",
+            f"- 决策分布：{json.dumps(decision_summary, ensure_ascii=False)}",
+            f"- 风险分布：{json.dumps(risk_summary, ensure_ascii=False)}",
+            f"- 下一步动作：{traffic_feedback_report.get('next_action', '未生成')}",
+            f"- 安全边界：{traffic_feedback_report.get('safe_use_policy', '未生成')}",
+            "",
+            "### 回流动作",
+        ]
+    )
+    for action in traffic_feedback_report.get("loopback_actions", []):
+        lines.append(f"- {action}")
+    lines.append("")
+
+    lines.append("## 5. CRM 客户分层")
     for item in customer_segments:
         lines.extend(
             [
@@ -113,7 +135,7 @@ def write_markdown_report(
             ]
         )
 
-    lines.append("## 5. RPA 任务草案")
+    lines.append("## 6. RPA 任务草案")
     for task in rpa_tasks:
         lines.extend(
             [
@@ -129,13 +151,13 @@ def write_markdown_report(
 
     lines.extend(
         [
-            "## 6. RAG 召回摘要",
+            "## 7. RAG 召回摘要",
             "",
             "```json",
             json.dumps(rag_context, ensure_ascii=False, indent=2),
             "```",
             "",
-            "## 7. 类目下一步",
+            "## 8. 类目下一步",
         ]
     )
     for step in category_context.get("next_steps", []):
@@ -144,9 +166,9 @@ def write_markdown_report(
     lines.extend(
         [
             "",
-            "## 8. 复盘结论",
+            "## 9. 复盘结论",
             "",
-            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 商品经营判断 → 同类目竞品比对 → 同类目上新增长草案 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
+            "当前 Demo 已跑通：Mock ERP / CRM 数据导入 → 垂直类目上下文加载 → 商品经营判断 → 同类目竞品比对 → 同类目上新增长草案 → 流量测试回流 → 简单 RAG 召回 → RPA 任务草案 → 人工确认边界 → 报告输出。",
         ]
     )
 
