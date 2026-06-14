@@ -21,9 +21,32 @@ from src.diagnosis.customer_segmentation import segment_customers  # noqa: E402
 from src.diagnosis.product_diagnosis import diagnose_products  # noqa: E402
 from src.listing import build_listing_growth_plan  # noqa: E402
 from src.operating_loop import build_operating_loop_summary  # noqa: E402
+from src.operating_unit import infer_operating_unit  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks  # noqa: E402
+from src.scheduler import build_cycle_policy  # noqa: E402
 from src.traffic_test import build_traffic_feedback_report  # noqa: E402
+
+
+def _build_erp_inferred_context() -> tuple[dict, dict, dict, list[dict]]:
+    datasets = load_all()
+    operating_unit = infer_operating_unit(
+        products=datasets["products"],
+        orders=datasets["orders"],
+        inventory=datasets["inventory"],
+    )
+    cycle_policy = build_cycle_policy(operating_unit)
+    category_context = build_category_context(
+        str(operating_unit["category_profile_id"]),
+        operating_unit=operating_unit,
+    )
+    product_diagnosis = diagnose_products(
+        products=datasets["products"],
+        orders=datasets["orders"],
+        inventory=datasets["inventory"],
+        refunds=datasets["refunds"],
+    )
+    return operating_unit, cycle_policy, category_context, product_diagnosis
 
 
 def run_crm_segmentation_eval() -> dict:
@@ -74,15 +97,31 @@ def run_rpa_task_eval() -> dict:
     }
 
 
-def run_category_profile_eval() -> dict:
-    context = build_category_context("sun_protection_clothing")
-    profile = context["category_profile"]
-    hits = retrieve("防晒服 价格带 季节性 尺码 退换", top_k=3)
+def run_operating_unit_eval() -> dict:
+    operating_unit, cycle_policy, category_context, _product_diagnosis = _build_erp_inferred_context()
     passed = (
-        profile["category_name"] == "防晒服"
+        operating_unit["base_source"] == "ERP product data"
+        and operating_unit["category_profile_id"] == "home_living_goods"
+        and category_context["category_profile"]["category_name"] == "家居生活商品"
+        and cycle_policy["cycle_frequency"] == "daily"
+    )
+    return {
+        "eval_id": "operating_unit_eval_001",
+        "passed": passed,
+        "observed_operating_unit": operating_unit,
+        "observed_cycle_policy": cycle_policy,
+    }
+
+
+def run_category_profile_eval() -> dict:
+    _operating_unit, _cycle_policy, context, _product_diagnosis = _build_erp_inferred_context()
+    profile = context["category_profile"]
+    hits = retrieve("家居生活商品 价格带 尺寸 收纳 流量 回流", top_k=3)
+    passed = (
+        profile["category_name"] == "家居生活商品"
         and bool(profile["price_bands"])
         and bool(profile["common_return_reasons"])
-        and any(hit.get("source") == "category_profiles/sun_protection_clothing.md" for hit in hits)
+        and any(hit.get("source") == "category_profiles/home_living_goods.md" for hit in hits)
     )
     return {
         "eval_id": "category_profile_eval_001",
@@ -94,17 +133,11 @@ def run_category_profile_eval() -> dict:
 
 
 def run_competitor_analysis_eval() -> dict:
-    datasets = load_all()
-    product_diagnosis = diagnose_products(
-        products=datasets["products"],
-        orders=datasets["orders"],
-        inventory=datasets["inventory"],
-        refunds=datasets["refunds"],
-    )
-    category_context = build_category_context("sun_protection_clothing")
+    _operating_unit, _cycle_policy, category_context, product_diagnosis = _build_erp_inferred_context()
     analysis = build_competitor_analysis(product_diagnosis, category_context)
     passed = (
-        analysis["category_name"] == "防晒服"
+        analysis["category_name"] == "家居生活商品"
+        and analysis["data_source"] == "examples/category_home_living/mock_competitors.csv"
         and analysis["competitor_count"] > 0
         and bool(analysis["reference_product"]["trigger_reason"])
         and bool(analysis["price_gap"]["insight"])
@@ -121,19 +154,13 @@ def run_competitor_analysis_eval() -> dict:
 
 
 def run_listing_growth_eval() -> dict:
-    datasets = load_all()
-    product_diagnosis = diagnose_products(
-        products=datasets["products"],
-        orders=datasets["orders"],
-        inventory=datasets["inventory"],
-        refunds=datasets["refunds"],
-    )
-    category_context = build_category_context("sun_protection_clothing")
+    _operating_unit, _cycle_policy, category_context, product_diagnosis = _build_erp_inferred_context()
     competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
     plan = build_listing_growth_plan(category_context, competitor_analysis)
     draft = plan["listing_draft"]
     passed = (
-        plan["category_name"] == "防晒服"
+        plan["category_name"] == "家居生活商品"
+        and plan["data_source"] == "examples/category_home_living/mock_supplier_products.csv"
         and plan["candidate_count"] > 0
         and plan["top_candidate"]["score"] > 0
         and bool(draft["title_draft"])
@@ -151,19 +178,13 @@ def run_listing_growth_eval() -> dict:
 
 
 def run_traffic_feedback_eval() -> dict:
-    datasets = load_all()
-    product_diagnosis = diagnose_products(
-        products=datasets["products"],
-        orders=datasets["orders"],
-        inventory=datasets["inventory"],
-        refunds=datasets["refunds"],
-    )
-    category_context = build_category_context("sun_protection_clothing")
+    _operating_unit, _cycle_policy, category_context, product_diagnosis = _build_erp_inferred_context()
     competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
     listing_plan = build_listing_growth_plan(category_context, competitor_analysis)
     report = build_traffic_feedback_report(category_context, listing_plan)
     passed = (
-        report["category_name"] == "防晒服"
+        report["category_name"] == "家居生活商品"
+        and report["data_source"] == "examples/category_home_living/mock_traffic_tests.csv"
         and report["experiment_count"] > 0
         and bool(report["decision_summary"])
         and bool(report["loopback_actions"])
@@ -181,18 +202,12 @@ def run_traffic_feedback_eval() -> dict:
 
 def run_operating_loop_eval() -> dict:
     datasets = load_all()
-    product_diagnosis = diagnose_products(
-        products=datasets["products"],
-        orders=datasets["orders"],
-        inventory=datasets["inventory"],
-        refunds=datasets["refunds"],
-    )
+    operating_unit, _cycle_policy, category_context, product_diagnosis = _build_erp_inferred_context()
     customer_segmentation = segment_customers(
         customers=datasets["customers"],
         customer_tags=datasets["customer_tags"],
         interactions=datasets["interactions"],
     )
-    category_context = build_category_context("sun_protection_clothing")
     competitor_analysis = build_competitor_analysis(product_diagnosis, category_context)
     listing_plan = build_listing_growth_plan(category_context, competitor_analysis)
     traffic_report = build_traffic_feedback_report(category_context, listing_plan)
@@ -205,7 +220,8 @@ def run_operating_loop_eval() -> dict:
         traffic_feedback_report=traffic_report,
     )
     passed = (
-        loop["category_name"] == "防晒服"
+        loop["category_name"] == "家居生活商品"
+        and loop["category_id"] == operating_unit["category_profile_id"]
         and loop["loop_status"] == "closed_loop_mock_ready"
         and bool(loop["next_module"])
         and bool(loop["next_iteration_plan"])
@@ -225,6 +241,7 @@ def main() -> None:
     results = [
         run_crm_segmentation_eval(),
         run_rpa_task_eval(),
+        run_operating_unit_eval(),
         run_category_profile_eval(),
         run_competitor_analysis_eval(),
         run_listing_growth_eval(),
