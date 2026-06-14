@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.approval.risk_rules import classify_task  # noqa: E402
+from src.category import build_category_context  # noqa: E402
 from src.rag.simple_retriever import retrieve  # noqa: E402
 from src.services.data_import_service import validate_all_imports  # noqa: E402
 from src.workflow.mock_workflow import build_mock_workflow_result  # noqa: E402
@@ -22,19 +23,33 @@ def assert_true(condition: bool, message: str) -> None:
 def main() -> None:
     """Smoke-test the current main product workflow.
 
-    The repository used to contain a legacy `backend.server` runtime for a
-    PDD-only demo. The product entrypoint is now `src.workflow.mock_workflow`
-    and `src.api.main`, so this test intentionally validates the unified
-    AI + RPA + ERP + CRM workflow instead of the archived legacy backend.
+    The product entrypoint is `src.workflow.mock_workflow` and `src.api.main`.
+    This test validates the V0.8 ERP / CRM workflow plus the V0.9 vertical
+    category profile hook.
     """
     validation = validate_all_imports()
     assert_true(validation["status"] == "passed", "mock ERP / CRM datasets should pass validation")
     assert_true(validation["failed_count"] == 0, "mock import validation should have no failed checks")
     assert_true(len(validation["datasets"]) >= 7, "validation should cover ERP and CRM mock datasets")
 
+    standalone_category_context = build_category_context("sun_protection_clothing")
+    assert_true(
+        standalone_category_context["category_profile"]["category_name"] == "防晒服",
+        "category context should load the sun protection clothing profile",
+    )
+    assert_true(
+        "价格带" in " ".join(standalone_category_context["category_rules"]["risk_focus"]),
+        "category risk rules should include category-specific risk focus",
+    )
+
     result = build_mock_workflow_result(write_outputs=False, record_logs=False)
     summary = result.get("summary") or {}
+    category_context = result.get("category_context") or {}
+    category_profile = category_context.get("category_profile") or {}
+
     assert_true(result.get("workflow_mode") == "Workflow-first", "workflow should stay Workflow-first")
+    assert_true(category_profile.get("category_id") == "sun_protection_clothing", "workflow should inject category context")
+    assert_true(summary.get("category_name") == "防晒服", "workflow summary should expose category name")
     assert_true(summary.get("product_count", 0) > 0, "workflow should diagnose products")
     assert_true(summary.get("customer_count", 0) > 0, "workflow should segment customers")
     assert_true(summary.get("rpa_task_count", 0) > 0, "workflow should generate RPA task drafts")
@@ -51,8 +66,12 @@ def main() -> None:
     assert_true(high_risk_policy["risk_level"] == "high", "auto price change should be high risk")
     assert_true(high_risk_policy["auto_execution_allowed"] is False, "high risk tasks should not auto-execute")
 
-    rag_hits = retrieve("活动价 保本线 利润 风险", top_k=3)
+    rag_hits = retrieve("防晒服 价格带 季节性 尺码 退换", top_k=3)
     assert_true(isinstance(rag_hits, list), "RAG retriever should return a list")
+    assert_true(
+        any("category_profiles/sun_protection_clothing.md" == hit.get("source") for hit in rag_hits),
+        "RAG retriever should include category profile documents",
+    )
 
     print(
         json.dumps(
