@@ -17,6 +17,7 @@ from src.data_loader.load_mock_data import load_all
 from src.diagnosis.customer_segmentation import segment_customers
 from src.diagnosis.product_diagnosis import diagnose_products
 from src.listing import build_listing_growth_plan
+from src.operating_loop import build_operating_loop_summary
 from src.rag.simple_retriever import retrieve
 from src.reports.generate_demo_report import write_json, write_markdown_report
 from src.repositories.sqlite_repository import insert_report_record
@@ -141,6 +142,26 @@ def build_mock_workflow_result(
                 },
             )
 
+        operating_loop_summary = build_operating_loop_summary(
+            category_context=category_context,
+            product_diagnosis=product_diagnosis,
+            customer_segmentation=customer_segmentation,
+            competitor_analysis=competitor_analysis,
+            listing_growth_plan=listing_growth_plan,
+            traffic_feedback_report=traffic_feedback_report,
+        )
+        if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="operating_loop_summary",
+                status="success",
+                output_snapshot={
+                    "loop_id": operating_loop_summary.get("loop_id"),
+                    "loop_status": operating_loop_summary.get("loop_status"),
+                    "next_module": operating_loop_summary.get("next_module"),
+                },
+            )
+
         category_name = category_context["category_profile"].get("category_name", "垂直类目")
         rag_context = {
             "category_profile": retrieve(f"{category_name} 价格带 季节性 尺码 退换 主图 SKU", top_k=3),
@@ -184,6 +205,7 @@ def build_mock_workflow_result(
             "competitor_analysis": competitor_analysis,
             "listing_growth_plan": listing_growth_plan,
             "traffic_feedback_report": traffic_feedback_report,
+            "operating_loop_summary": operating_loop_summary,
             "rpa_tasks": rpa_tasks,
             "approval_required_tasks": approval_required_tasks,
             "rag_context": rag_context,
@@ -197,6 +219,8 @@ def build_mock_workflow_result(
                 "top_listing_candidate": listing_growth_plan.get("top_candidate", {}).get("supplier_product_id"),
                 "traffic_experiment_count": traffic_feedback_report.get("experiment_count", 0),
                 "traffic_next_action": traffic_feedback_report.get("next_action"),
+                "loop_status": operating_loop_summary.get("loop_status"),
+                "loop_next_module": operating_loop_summary.get("next_module"),
                 "rpa_task_count": len(rpa_tasks),
                 "approval_required_count": len(approval_required_tasks),
                 "auto_execution_allowed_count": sum(
@@ -204,6 +228,7 @@ def build_mock_workflow_result(
                 ),
             },
             "safety_boundary": {
+                "auto_loop_execution": False,
                 "auto_ad_account_operation": False,
                 "auto_supplier_api": False,
                 "auto_competitor_crawling": False,
@@ -223,6 +248,7 @@ def build_mock_workflow_result(
             write_json("competitor_analysis.json", competitor_analysis)
             write_json("listing_growth_plan.json", listing_growth_plan)
             write_json("traffic_feedback_report.json", traffic_feedback_report)
+            write_json("operating_loop_summary.json", operating_loop_summary)
             write_json("rpa_task_draft.json", rpa_tasks)
             write_json("approval_required_tasks.json", approval_required_tasks)
             write_json("rag_retrieval_context.json", rag_context)
@@ -235,6 +261,7 @@ def build_mock_workflow_result(
                 competitor_analysis,
                 listing_growth_plan,
                 traffic_feedback_report,
+                operating_loop_summary,
             )
             result["report_path"] = str(report_path)
             report_record = {
