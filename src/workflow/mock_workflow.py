@@ -16,6 +16,7 @@ from src.competitor import build_competitor_analysis
 from src.data_loader.load_mock_data import load_all
 from src.diagnosis.customer_segmentation import segment_customers
 from src.diagnosis.product_diagnosis import diagnose_products
+from src.listing import build_listing_growth_plan
 from src.rag.simple_retriever import retrieve
 from src.reports.generate_demo_report import write_json, write_markdown_report
 from src.repositories.sqlite_repository import insert_report_record
@@ -113,10 +114,24 @@ def build_mock_workflow_result(
                 },
             )
 
+        listing_growth_plan = build_listing_growth_plan(category_context, competitor_analysis)
+        if record_logs and workflow_run_id:
+            create_execution_log(
+                workflow_run_id=workflow_run_id,
+                node_name="listing_growth_plan",
+                status="success",
+                output_snapshot={
+                    "plan_id": listing_growth_plan.get("plan_id"),
+                    "candidate_count": listing_growth_plan.get("candidate_count"),
+                    "top_candidate": listing_growth_plan.get("top_candidate", {}).get("supplier_product_id"),
+                },
+            )
+
         category_name = category_context["category_profile"].get("category_name", "垂直类目")
         rag_context = {
             "category_profile": retrieve(f"{category_name} 价格带 季节性 尺码 退换 主图 SKU", top_k=3),
             "competitor_analysis": retrieve(f"{category_name} 竞品 价格带 差评 SKU 主图", top_k=3),
+            "listing_growth": retrieve(f"{category_name} 上新 货盘 标题 主图 SKU 定价", top_k=3),
             "activity_price": retrieve("活动价 保本线 利润 风险", top_k=3),
             "after_sales": retrieve("退款 售后 客服 SOP 敏感客户", top_k=3),
             "customer_touch": retrieve("客户触达 隐私 自动群发 合规", top_k=3),
@@ -152,6 +167,7 @@ def build_mock_workflow_result(
             "product_diagnosis": product_diagnosis,
             "customer_segmentation": customer_segmentation,
             "competitor_analysis": competitor_analysis,
+            "listing_growth_plan": listing_growth_plan,
             "rpa_tasks": rpa_tasks,
             "approval_required_tasks": approval_required_tasks,
             "rag_context": rag_context,
@@ -161,6 +177,8 @@ def build_mock_workflow_result(
                 "product_count": len(product_diagnosis),
                 "customer_count": len(customer_segmentation),
                 "competitor_count": competitor_analysis.get("competitor_count", 0),
+                "listing_candidate_count": listing_growth_plan.get("candidate_count", 0),
+                "top_listing_candidate": listing_growth_plan.get("top_candidate", {}).get("supplier_product_id"),
                 "rpa_task_count": len(rpa_tasks),
                 "approval_required_count": len(approval_required_tasks),
                 "auto_execution_allowed_count": sum(
@@ -168,6 +186,7 @@ def build_mock_workflow_result(
                 ),
             },
             "safety_boundary": {
+                "auto_supplier_api": False,
                 "auto_competitor_crawling": False,
                 "auto_product_publish": False,
                 "auto_price_change": False,
@@ -183,6 +202,7 @@ def build_mock_workflow_result(
             write_json("product_diagnosis.json", product_diagnosis)
             write_json("customer_segmentation.json", customer_segmentation)
             write_json("competitor_analysis.json", competitor_analysis)
+            write_json("listing_growth_plan.json", listing_growth_plan)
             write_json("rpa_task_draft.json", rpa_tasks)
             write_json("approval_required_tasks.json", approval_required_tasks)
             write_json("rag_retrieval_context.json", rag_context)
@@ -193,6 +213,7 @@ def build_mock_workflow_result(
                 rag_context,
                 category_context,
                 competitor_analysis,
+                listing_growth_plan,
             )
             result["report_path"] = str(report_path)
             report_record = {
