@@ -1,0 +1,5 @@
+interaction_id,customer_id,interaction_type,channel,content_summary,sentiment,created_at
+INT001,C001,复购提醒,站内信,用户曾多次购买同类商品，可生成复购提醒草案,positive,2026-06-12
+INT002,C002,新客关怀,客服,首次购买后询问使用方法，适合生成新客说明话术,neutral,2026-05-21
+INT003,C003,沉睡召回,站内信,长期未复购，不建议频繁触达，可生成低频召回任务草案,neutral,2026-02-05
+INT004,C004,售后反馈,客服,用户反馈商品效果不符合预期，需要优先做售后归因和详情页检查,negative,2026-06-03
