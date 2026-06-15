@@ -1,8 +1,8 @@
-"""Reusable Mock Workflow service.
+"""Reusable operating-unit workflow service.
 
-This module is the single orchestration layer for both CLI and FastAPI.
-It keeps the current implementation honest: API endpoints call the same
-workflow that `python -m src.run_demo` uses.
+This module is the single orchestration layer for FastAPI business APIs and
+smoke tests. It keeps the current implementation honest by making every
+product-facing view use the same ERP operating-unit workflow.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from src.listing import build_listing_growth_plan
 from src.operating_loop import build_operating_loop_summary
 from src.operating_unit import infer_operating_unit
 from src.rag.simple_retriever import retrieve
-from src.reports.generate_demo_report import write_json, write_markdown_report
+from src.reports.generate_operating_report import write_json, write_markdown_report
 from src.repositories.sqlite_repository import insert_report_record
 from src.rpa_tasks.generate_task_draft import generate_customer_tasks, generate_product_tasks
 from src.scheduler import build_cycle_policy
@@ -37,16 +37,16 @@ def build_mock_workflow_result(
     record_logs: bool = False,
     category_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Run the full mock workflow and return structured outputs.
+    """Run the full ERP operating-unit workflow and return structured outputs.
 
     Args:
-        write_outputs: When true, also write outputs/*.json and demo_report.md.
+        write_outputs: When true, also write outputs/*.json and operating_report.md.
         record_logs: When true, write WorkflowRun and ExecutionLog records.
         category_id: Optional manual override for demo/testing. Product logic
             should normally infer the operating unit from ERP data first.
 
     Returns:
-        A dictionary suitable for API responses and CLI report generation.
+        A dictionary suitable for API responses and report generation.
     """
     workflow_run_id = None
     if record_logs:
@@ -315,7 +315,7 @@ def build_mock_workflow_result(
             report_record = {
                 "report_id": f"REPORT_{uuid4().hex[:10]}",
                 "workflow_run_id": workflow_run_id,
-                "report_type": "mock_workflow_report",
+                "report_type": "operating_unit_report",
                 "path": str(report_path),
                 "format": "markdown",
                 "created_at": now_iso(),
