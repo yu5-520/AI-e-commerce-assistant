@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v0.9.2
+Current Version: v1.0.0
 
 ## Version History
 
@@ -25,9 +25,15 @@ Current Version: v0.9.2
 - v0.9.0: Pre-generation material sampling UI was added so users can observe wording signals before generating a product plan.
 - v0.9.1: Material observation was moved back into an implicit backend pipeline so users only see generation progress and final copyable outputs.
 - v0.9.2: Agent module governance was added with a stable material observer contract, source policy, confidence, risk flags, and runtime registry.
+- v1.0.0: Main branch was recut into one current product trunk, removing old frontend templates, legacy compatibility APIs, stale demo helpers, and aligning README, smoke tests, and version logs with `/api/business/*`.
 
 ## Version Rules
 
 - Patch: copy, prompt, template, or wording changes.
 - Minor: new module, new mode, new interface, or new runtime config.
 - Major: breaking workflow, API contract, schema, or folder migration changes.
+
+## Logging Rule
+
+- Any architecture-level cleanup, route removal, folder migration, or deployment-entry change must update both `versioning/CHANGELOG.md` and this file.
+- Product-specific decisions should also update the matching log under `docs/product/`.
