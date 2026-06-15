@@ -1,5 +1,4 @@
 const productManagerPayload = {
-  filters: ["全部平台", "全部店铺", "库存异常", "售后敏感", "毛利偏低"],
   products: [
     {
       id: "P001",
@@ -78,6 +77,14 @@ const productManagerPayload = {
 
 let activeProductId = null;
 let productNotice = "";
+let openProductFilter = null;
+let productRenderScheduled = false;
+const productFilters = {
+  platform: "全部平台",
+  store: "全部店铺",
+  status: "全部状态",
+  search: "",
+};
 
 function isProductRoute() {
   return location.hash.replace("#", "") === "business-products" || document.querySelector('.nav a[data-route="business-products"]')?.classList.contains("active");
@@ -92,51 +99,103 @@ function productNoticeMarkup() {
   return `<section class="product-notice"><strong>操作结果</strong><span>${productNotice}</span></section>`;
 }
 
+function productFilterOptions(type) {
+  if (type === "platform") return ["全部平台", ...new Set(productManagerPayload.products.map((item) => item.platform))];
+  if (type === "store") return ["全部店铺", ...new Set(productManagerPayload.products.map((item) => item.store))];
+  return ["全部状态", "库存异常", "售后敏感", "毛利偏低"];
+}
+
+function renderProductFilter(type, label) {
+  const value = productFilters[type];
+  const isOpen = openProductFilter === type;
+  return `<div class="product-filter-menu ${isOpen ? "open" : ""}">
+    <button type="button" data-product-filter-toggle="${type}">${label}：${value} <span>⌄</span></button>
+    <div class="product-filter-options">
+      ${productFilterOptions(type).map((option) => `<button type="button" class="${option === value ? "selected" : ""}" data-product-filter-value="${type}:${option}">${option}</button>`).join("")}
+    </div>
+  </div>`;
+}
+
+function productMatchesFilters(product) {
+  if (productFilters.platform !== "全部平台" && product.platform !== productFilters.platform) return false;
+  if (productFilters.store !== "全部店铺" && product.store !== productFilters.store) return false;
+  if (productFilters.status === "库存异常" && product.inventoryLevel === "good") return false;
+  if (productFilters.status === "售后敏感" && product.afterSalesLevel === "good") return false;
+  if (productFilters.status === "毛利偏低" && Number.parseFloat(product.grossMargin) >= 50) return false;
+  const keyword = productFilters.search.trim().toLowerCase();
+  if (!keyword) return true;
+  return [product.id, product.shortName, product.title, product.platform, product.store, product.afterSales, product.inventoryStatus]
+    .join(" ")
+    .toLowerCase()
+    .includes(keyword);
+}
+
+function filteredProducts() {
+  return productManagerPayload.products.filter(productMatchesFilters);
+}
+
+function productFilterSummary(count) {
+  const active = [
+    productFilters.platform !== "全部平台" ? productFilters.platform : null,
+    productFilters.store !== "全部店铺" ? productFilters.store : null,
+    productFilters.status !== "全部状态" ? productFilters.status : null,
+    productFilters.search.trim() ? `搜索：${productFilters.search.trim()}` : null,
+  ].filter(Boolean);
+  return active.length ? `${count} 个商品 · ${active.join(" / ")}` : `${count} 个商品`;
+}
+
+function renderProductRow(product) {
+  return `<article class="product-row">
+    <div class="product-title-cell">
+      <div class="product-thumb">${product.imageLabel}</div>
+      <div class="product-title-block">
+        <strong>${product.title}</strong>
+        <small>${product.id} · <a href="${product.link}" target="_blank" rel="noreferrer">查看商品链接</a></small>
+        <span>${product.platform} · ${product.store}</span>
+      </div>
+    </div>
+    <div class="product-metric-strip">
+      <div class="product-number-cell ${productStatusClass(product.inventoryLevel)}"><span>库存</span><strong>${product.inventory}</strong><small>${product.inventoryStatus}</small></div>
+      <div class="product-number-cell"><span>售价</span><strong>¥${product.price}</strong><small>成本 ¥${product.cost}</small></div>
+      <div class="product-number-cell"><span>毛利率</span><strong>${product.grossMargin}</strong><small>活动需复核</small></div>
+      <div class="product-number-cell ${productStatusClass(product.afterSalesLevel)}"><span>售后</span><strong>${product.afterSales}</strong><small>售后状态</small></div>
+    </div>
+    <div class="product-actions">
+      <button type="button" data-product-detail="${product.id}">详情</button>
+      <button type="button" data-product-copy="${product.id}">复制链接</button>
+      <button type="button" data-product-report="${product.id}">商品报表</button>
+    </div>
+  </article>`;
+}
+
 function renderProductManager() {
   const appView = document.getElementById("appView");
   const title = document.getElementById("pageTitle");
   if (!appView || !title || !isProductRoute()) return;
+  const products = filteredProducts();
   activeProductId = null;
   title.textContent = "商品";
   appView.innerHTML = `<section class="product-toolbar">
     <div>
       <p class="eyebrow">PRODUCT LIST</p>
       <h2>商品经营列表</h2>
-      <p>按平台、店铺、标题、主图和链接管理商品，库存和售后状态直接标在对应字段上。</p>
+      <p>按平台、店铺和状态筛选商品；列表只显示摘要，完整标题与判断进入详情查看。</p>
     </div>
     <div class="product-filter-row">
-      ${productManagerPayload.filters.map((filter, index) => `<button type="button" class="${index === 0 ? "active" : ""}">${filter}</button>`).join("")}
+      ${renderProductFilter("platform", "平台")}
+      ${renderProductFilter("store", "店铺")}
+      ${renderProductFilter("status", "状态")}
+      <label class="product-search"><input type="search" value="${productFilters.search}" placeholder="搜索商品 / 店铺" data-product-search /></label>
     </div>
   </section>
   ${productNoticeMarkup()}
   <section class="page-section product-list-section">
     <div class="section-header">
       <h3>商品列表</h3>
-      <span class="status-badge">${productManagerPayload.products.length} 个商品</span>
+      <span class="status-badge">${productFilterSummary(products.length)}</span>
     </div>
-    <div class="product-list-table">
-      <div class="product-list-head">
-        <span>商品</span><span>平台 / 店铺</span><span>库存</span><span>售价</span><span>毛利率</span><span>售后</span><span>操作</span>
-      </div>
-      ${productManagerPayload.products.map((product) => `<article class="product-row">
-        <div class="product-title-cell">
-          <div class="product-thumb">${product.imageLabel}</div>
-          <div>
-            <strong>${product.title}</strong>
-            <small>${product.id} · <a href="${product.link}" target="_blank" rel="noreferrer">查看商品链接</a></small>
-          </div>
-        </div>
-        <div class="product-store-cell"><strong>${product.platform}</strong><small>${product.store}</small></div>
-        <div class="product-number-cell ${productStatusClass(product.inventoryLevel)}"><strong>${product.inventory}</strong><small>${product.inventoryStatus}</small></div>
-        <div class="product-number-cell"><strong>¥${product.price}</strong><small>成本 ¥${product.cost}</small></div>
-        <div class="product-number-cell"><strong>${product.grossMargin}</strong><small>活动需复核</small></div>
-        <div class="product-number-cell ${productStatusClass(product.afterSalesLevel)}"><strong>${product.afterSales}</strong><small>售后状态</small></div>
-        <div class="product-actions">
-          <button type="button" data-product-detail="${product.id}">详情</button>
-          <button type="button" data-product-copy="${product.id}">复制链接</button>
-          <button type="button" data-product-report="${product.id}">商品报表</button>
-        </div>
-      </article>`).join("")}
+    <div class="product-card-list">
+      ${products.length ? products.map(renderProductRow).join("") : `<div class="product-empty">当前筛选条件下没有商品。</div>`}
     </div>
   </section>`;
   bindProductButtons();
@@ -148,6 +207,7 @@ function renderProductDetail(productId) {
   const title = document.getElementById("pageTitle");
   if (!product || !appView || !title) return;
   activeProductId = productId;
+  openProductFilter = null;
   title.textContent = product.shortName;
   appView.innerHTML = `<section class="product-detail-hero">
     <div class="product-detail-main">
@@ -180,6 +240,26 @@ function renderProductDetail(productId) {
 }
 
 function bindProductButtons() {
+  document.querySelectorAll("[data-product-filter-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openProductFilter = openProductFilter === button.dataset.productFilterToggle ? null : button.dataset.productFilterToggle;
+      renderProductManager();
+    });
+  });
+  document.querySelectorAll("[data-product-filter-value]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const [type, value] = button.dataset.productFilterValue.split(":");
+      productFilters[type] = value;
+      openProductFilter = null;
+      productNotice = "";
+      renderProductManager();
+    });
+  });
+  document.querySelector("[data-product-search]")?.addEventListener("input", (event) => {
+    productFilters.search = event.target.value;
+    renderProductManager();
+    document.querySelector("[data-product-search]")?.focus();
+  });
   document.querySelectorAll("[data-product-detail]").forEach((button) => {
     button.addEventListener("click", () => {
       productNotice = "";
@@ -219,25 +299,27 @@ function bindProductButtons() {
 }
 
 function scheduleProductPatch() {
+  if (productRenderScheduled) return;
+  productRenderScheduled = true;
   setTimeout(() => {
+    productRenderScheduled = false;
     if (!isProductRoute()) return;
     if (activeProductId) renderProductDetail(activeProductId);
     else renderProductManager();
   }, 0);
-  setTimeout(() => {
-    if (!isProductRoute()) return;
-    if (!document.querySelector(".product-toolbar") && !document.querySelector(".product-detail-hero")) renderProductManager();
-  }, 160);
 }
 
 const productObserver = new MutationObserver(() => {
-  if (isProductRoute()) scheduleProductPatch();
+  if (!isProductRoute()) return;
+  if (document.querySelector(".product-toolbar") || document.querySelector(".product-detail-hero")) return;
+  scheduleProductPatch();
 });
 
 productObserver.observe(document.body, { childList: true, subtree: true });
 window.addEventListener("hashchange", () => {
   activeProductId = null;
   productNotice = "";
+  openProductFilter = null;
   scheduleProductPatch();
 });
 window.addEventListener("load", scheduleProductPatch);
