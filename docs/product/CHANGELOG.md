@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v1.0.9 - 2026-06-15
+
+### Product Decision
+- The screenshot showed the ECS/browser was still serving the old v1.0.7 dashboard hero, so the fix must cover both current code and cached old markup.
+- The homepage must not show `今日任务清单` or `今日到期` after the compact task-list correction.
+- Current product truth remains: `web_demo/index.html?v=1.0.9` → `web_demo/app-v2.js?v=1.0.9` + `web_demo/dashboard-hotfix.js?v=1.0.9` → `/api/business/today` compact task board payload.
+
+### Fixed
+- Added `web_demo/dashboard-hotfix.js` to patch stale dashboard DOM after render.
+- The hotfix changes cached `今日任务清单` to `任务清单` and cached `今日到期` to `到期任务`.
+- `web_demo/dashboard.css` now includes fallback styling for old `.hero-card.dashboard-hero` markup so the top module shrinks even when cached old JavaScript still renders it.
+- `web_demo/index.html` now bumps all frontend assets to `?v=1.0.9` and loads the hotfix after the main app script.
+- API version is aligned to `v1.0.9` for this cache-compatibility correction.
+
+### Product Boundary
+- This is a frontend cache/deployment hardening patch, not a workflow change.
+- After deployment, the ECS must pull the latest commit; otherwise the browser will still see the old server files.
+
 ## v1.0.8 - 2026-06-15
 
 ### Product Decision
