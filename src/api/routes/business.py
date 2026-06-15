@@ -27,6 +27,32 @@ from src.services.business_view_service import (
 router = APIRouter(prefix="/api/business", tags=["business"])
 
 
+def _apply_action_status_overrides(payload: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Merge persisted approval status back into product-facing action cards."""
+    overrides = get_task_status_overrides()
+    if not overrides:
+        return payload
+
+    merged_items: List[Dict[str, Any]] = []
+    for item in payload.get("items", []):
+        action_id = item.get("action_id")
+        override = overrides.get(action_id) if action_id else None
+        if not override:
+            merged_items.append(item)
+            continue
+        merged_items.append(
+            {
+                **item,
+                "status": override.get("status") or override.get("approval_status") or item.get("status"),
+                "approval_status": override.get("approval_status") or override.get("status") or item.get("status"),
+                "operator": override.get("operator"),
+                "updated_at": override.get("updated_at"),
+                "approval_id": override.get("approval_id"),
+            }
+        )
+    return {**payload, "items": merged_items}
+
+
 @router.get("/today")
 def today_advice() -> Dict[str, Any]:
     """Return the merchant-facing daily overview."""
@@ -75,8 +101,8 @@ def traffic() -> Dict[str, Any]:
 
 @router.get("/actions")
 def actions() -> Dict[str, List[Dict[str, Any]]]:
-    """Return actions that require merchant confirmation."""
-    return get_action_confirmations()
+    """Return actions that require merchant confirmation with latest approval status."""
+    return _apply_action_status_overrides(get_action_confirmations())
 
 
 @router.get("/report", response_class=PlainTextResponse)
