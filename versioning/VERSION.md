@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.22
+Current Version: v1.0.23
 
 ## Version History
 
@@ -48,6 +48,7 @@ Current Version: v1.0.22
 - v1.0.20: Traffic page was repositioned as `流量测试台`. Traffic rows now bind every judgment to precise product information, including image placeholder, title, platform, shop, link, traffic source, exposure, CTR, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
 - v1.0.21: Actions page was repositioned as `待办任务`. The sidebar label changed from `确认` to `待办`, and tasks from 商品、竞品、上新、流量、报表 and AI 自动判定 now appear in a priority-ordered task center with deadlines, source modules, precise product context, reasons, status, and task-specific actions.
 - v1.0.22: Report page was repositioned as `日志`. The sidebar label changed from `报告` to `日志`, the old Markdown report panel was replaced by an operation log center, and logs now record task completion, AI judgment, data import/export, and user actions with source, product context, reason, result, detail, source jump, and export actions.
+- v1.0.23: Dashboard task board now uses a unified cross-module task pool. Homepage metrics are calculated from active tasks, task cards bind to precise product/store context, and each top task links to 待办、来源模块、商品页 while completed items leave the homepage and move to 日志.
 
 ## Version Rules
 
