@@ -129,6 +129,15 @@ const card = (title, body, extra = "") => `<article class="card ${extra}"><h3>${
 const list = (items) => `<ul class="clean-list">${safeArray(items).map((item) => `<li>${item}</li>`).join("")}</ul>`;
 const kv = (items) => `<div class="info-list">${items.map(([key, value]) => `<div><span>${key}</span><strong>${value ?? "-"}</strong></div>`).join("")}</div>`;
 
+function formatDashboardTime(date = new Date()) {
+  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${month}月${day}日 ${weekdays[date.getDay()]} · ${hour}:${minute} 更新`;
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) throw new Error(`${url} ${response.status}`);
@@ -245,32 +254,35 @@ function renderDashboard() {
   const d = raw();
   const today = state.businessToday;
   const s = d.summary || {};
-  const loop = d.operating_loop_summary || {};
   const traffic = d.traffic_feedback_report || {};
   const priority = today?.priority;
   const tasks = today?.task_queue || fallbackTaskQueue(d);
   const cards = today?.task_distribution || today?.cards || [
-    { title: "紧急任务", value: 4, desc: "需要今天先处理" },
-    { title: "今日到期", value: 3, desc: "有明确时间限制" },
+    { title: "紧急任务", value: 4, desc: "需要先处理" },
+    { title: "到期任务", value: 3, desc: "有时间限制" },
     { title: "待确认", value: s.approval_required_count || safeArray(d.approval_required_tasks).length, desc: "确认前不执行" },
     { title: "可测试机会", value: s.traffic_experiment_count || traffic.experiment_count || 0, desc: "小范围观察" },
   ];
   const pendingCount = priority?.pending_count ?? s.approval_required_count ?? safeArray(d.approval_required_tasks).length;
-  view().innerHTML = `<section class="hero-card dashboard-hero">
-    <div>
+  const unitName = today?.operating_unit?.name || s.unit_name || d.operating_unit?.unit_name || "-";
+  const cycleLabel = today?.cycle?.frequency_label || cnFrequency(s.cycle_frequency || d.cycle_policy?.cycle_frequency);
+  view().innerHTML = `<section class="dashboard-status">
+    <div class="dashboard-status-main">
       <p class="eyebrow">TASK BOARD</p>
-      <h2>${priority?.title || "今日任务清单"}</h2>
+      <h2>任务清单</h2>
+      <p class="dashboard-time">${formatDashboardTime()}</p>
     </div>
-    <div class="hero-actions">
-      <span>${today?.operating_unit?.name || s.unit_name || d.operating_unit?.unit_name || "-"}</span>
-      <strong>${pendingCount} 项待确认</strong>
+    <div class="dashboard-status-side">
+      <span>经营单元</span>
+      <strong>${unitName}</strong>
+      <small>${cycleLabel}循环 · ${pendingCount} 项待确认</small>
     </div>
   </section>
-  <section class="kpi-grid">${cards.map((item) => card(item.title, `<strong>${item.value}</strong><span class="card-desc">${item.desc || ""}</span>`)).join("")}</section>
+  <section class="kpi-grid dashboard-metrics">${cards.map((item) => card(item.title, `<strong>${item.value}</strong><span class="card-desc">${item.desc || ""}</span>`, "metric-card")).join("")}</section>
   <section class="page-section dashboard-queue">
     <div class="section-header">
       <h3>处理顺序</h3>
-      <span class="status-badge">${today?.cycle?.frequency_label || cnFrequency(s.cycle_frequency || d.cycle_policy?.cycle_frequency)}</span>
+      <span class="status-badge">实时任务</span>
     </div>
     ${renderTaskQueue(tasks)}
   </section>`;
