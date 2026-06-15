@@ -1,8 +1,7 @@
-"""Productized business routes for the AI operating advisor UI.
+"""Productized business routes for the AI ERP operating advisor UI.
 
 These endpoints wrap the internal workflow result with merchant-facing names.
-They keep the older /api/demo, /api/tasks, /api/logs routes compatible while
-providing a cleaner product API for the frontend.
+They are the only product-facing business API consumed by the current frontend.
 """
 
 from __future__ import annotations
