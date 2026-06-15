@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v1.0.10 - 2026-06-15
+
+### Product Decision
+- The operating unit page is a store-group management page, not an engineering category-recognition page.
+- The page should show which platforms and shops are managed, what data is connected, and which systems can be connected next.
+- Distribution and trigger-rule blocks should be removed from the visible operating-unit page because they do not help merchants manage store groups.
+- Current product truth remains: `web_demo/index.html?v=1.0.10` → `web_demo/app-v2.js?v=1.0.10` + `web_demo/operating-unit-hotfix.js?v=1.0.10` → store-group operating unit UI.
+
+### Changed
+- Added `web_demo/operating-unit-hotfix.js` to replace the old operating-unit page after render.
+- The page now shows `家居生活店铺组`, linked platforms, shop count, connected data, pending integrations, associated shops, and data-source status.
+- `web_demo/dashboard.css` now includes store-group layout styles for hero, metric cards, shop rows, and data-source rows.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.10` and loads the operating-unit hotfix script after existing frontend scripts.
+- API version is aligned to `v1.0.10` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing UI productization patch.
+- Real 聚水潭、千牛、店铺后台、广告后台 connections are still future integrations, not active production connectors.
+- The product still uses Mock ERP / CRM data.
+
 ## v1.0.9 - 2026-06-15
 
 ### Product Decision
@@ -185,7 +205,7 @@
 ### Removed From Active Product Trunk
 - Old frontend template: `web_demo/app.js`.
 - Legacy compatibility route families: `/api/demo`, `/api/products`, `/api/customers`, `/api/diagnosis`, `/api/tasks`, `/api/reports`, `/api/evals`, and `/api/logs`.
-- Old standalone helpers: `src/run_demo.py`, `src/services/workflow_service.py`, `src/services/eval_service.py`, and `evals/run_evals.py`.
+- Old standalone helpers: `src/run_demo.py`, `src/services/workflow_service.py`, and `evals/run_evals.py`.
 
 ### Product Boundary
 - The product still uses Mock ERP / CRM data.
