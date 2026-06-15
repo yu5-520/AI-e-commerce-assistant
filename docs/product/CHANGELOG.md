@@ -1,5 +1,30 @@
 # Product Changelog
 
+## v1.0.22 - 2026-06-15
+
+### Product Decision
+- The old `报告` page is now `日志`, because the page content is a trace record rather than a user-facing operating report.
+- Reports are conclusions for decision-making; logs are records of tasks, system judgments, data actions, and user operations that already happened.
+- Each log must show time, type, source, status, product/store context, action, reason, and result.
+- Current product truth remains: `web_demo/index.html?v=1.0.22` → `web_demo/log-manager-hotfix.js?v=1.0.22` + `web_demo/log-center.css?v=1.0.22` → 操作日志.
+
+### Changed
+- Sidebar label changed from `报告` to `日志`.
+- Added `web_demo/log-manager-hotfix.js` to replace the old Markdown report page after render.
+- Added `web_demo/log-center.css` for log rows, filters, metrics, detail pages, source jumps, export action, and responsive layout.
+- The page now shows metrics for 今日记录、任务完成、AI 判定、数据动作.
+- Logs now include task completion records, AI automatic judgments, report/data actions, and user operations.
+- Added filters for type, source, and status, plus log search.
+- Added log detail page, source jump, related-task jump, and CSV export of the filtered logs.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.22` and loads the operation log center script.
+- API version is aligned to `v1.0.22` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing traceability UI patch.
+- The log page records actions and links back to source modules; it does not make operational decisions itself.
+- Export creates a local CSV from mock log data.
+- Log data remains Mock ERP / CRM / marketplace data until real persistence and platform connectors are attached.
+
 ## v1.0.21 - 2026-06-15
 
 ### Product Decision
@@ -72,31 +97,9 @@
 - `确认测试` records a local confirmation-style state; it does not publish real listings, change prices, join platform campaigns, or launch paid promotions.
 - Test data remains Mock ERP / CRM / marketplace data until real platform connectors are attached.
 
-## v1.0.18 - 2026-06-15
-
-### Product Decision
-- The 竞品 page should use the same scan pattern as the 商品 page: image, title, platform, store, link, core metrics, status, and actions.
-- Competitor analysis should be a list of comparable competitor goods, not a single backend conclusion page.
-- Engineering codes such as `below_market` must be translated into business wording before they reach the merchant-facing UI.
-- Current product truth remains: `web_demo/index.html?v=1.0.18` → `web_demo/competitor-manager-hotfix.js?v=1.0.18` + `web_demo/competitor-center.css?v=1.0.18` → responsive competitor observation list.
-
-### Changed
-- Added `web_demo/competitor-manager-hotfix.js` to replace the old competitor analysis page after render.
-- Added `web_demo/competitor-center.css` for responsive competitor rows, filter menus, metric strips, opportunity blocks, and detail pages.
-- The competitor page now shows 8 comparable competitor items instead of one narrow analysis block.
-- Competitor cards now show title, image placeholder, platform, store, link, price, monthly sales, rating, bad-review keywords, opportunity point, and actions.
-- Added platform, target product, and status filters, plus competitor search.
-- Added `详情`, `复制链接`, and `加入观察` actions.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.18` and loads the competitor manager script.
-- API version is aligned to `v1.0.18` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing UI productization patch.
-- Competitor links, sales, ratings, and review keywords are Mock data until real marketplace or crawler connectors are attached.
-- `加入观察` is a local confirmation-style interaction, not a real external platform subscription.
-
 ## Earlier History
 
+- v1.0.18: 竞品 page became responsive competitor observation list.
 - v1.0.17: 商品 page became responsive product cards with working filters.
 - v1.0.16: Product list layout was hardened for long titles.
 - v1.0.15: Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
