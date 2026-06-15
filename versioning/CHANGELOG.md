@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.0.23 - 2026-06-15
+
+### Changed
+- Upgraded the homepage `任务清单` from a standalone static task board into a cross-module task summary.
+- Replaced the old dashboard hotfix with a linked dashboard task pool covering 商品、竞品、上新、流量、报表、待办 and 日志.
+- Added `web_demo/dashboard-linked.css` for linked dashboard task cards, source buttons, product context, and responsive layout.
+- Homepage metrics are now calculated from active tasks: 紧急任务、到期任务、待确认、可测试机会.
+- Each homepage task now shows precise product/store context, source module, deadline, reason, and impact.
+- Each task exposes `进入待办`, `查看来源`, `查看商品`, and `标记完成` actions.
+- Completed items are removed from the homepage task summary and represented as log-trace behavior.
+- `web_demo/index.html` now appends `?v=1.0.23` to assets and loads the linked dashboard stylesheet.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.23`.
+
+### Product Engineering Rule
+- The homepage is not a second full task center. It should show only the top cross-module tasks that need attention now.
+- The 待办 page remains the full task queue, while the 首页 is the executive summary.
+- Every homepage task must link back to its source module and show the affected product/store or report context.
+- Completed tasks should leave the homepage and be traceable through 日志.
+
 ## v1.0.22 - 2026-06-15
 
 ### Changed
@@ -53,27 +72,9 @@
 - Backflow should be a concise field such as 售后归因、经营判断、库存承接, not a long process paragraph on the list page.
 - Traffic execution remains confirmation-first; the page should not imply automatic ad spend or campaign changes.
 
-## v1.0.19 - 2026-06-15
-
-### Changed
-- Repositioned the 上新 page as `上新测试台` instead of a single candidate-generation report.
-- Added `web_demo/listing-manager-hotfix.js` with two launch-test flows: `已有商品测试` and `竞品机会测试`.
-- Added `web_demo/listing-center.css` for launch test tabs, test cards, metric strips, confirmation actions, and detail pages.
-- Existing-product tests now cover title tests, main-image tests, SKU tests, platform coupon/activity tests, and promotion tests.
-- Competitor-opportunity tests now turn competitor gaps into launch experiments, such as installation images, dimension references, structure stability, material explanation, and support proof.
-- Test cards now include source, platform, store, test type, test plan, cycle, target metric, status, risk, and actions.
-- Added actions for `详情`, `确认测试`, `加入任务清单`, and source jumps to 商品 / 竞品 / 流量 pages.
-- `web_demo/index.html` now appends `?v=1.0.19` to assets and loads the listing test workspace script.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.19`.
-
-### Product Engineering Rule
-- 上新 should mean controlled launch testing, not only new product generation.
-- Existing products can be re-launched for title, main image, SKU, platform campaign, coupon, and promotion tests.
-- Competitor opportunities should flow into launch experiments only after being turned into clear test actions and metrics.
-- Test execution remains confirmation-first; the page should not imply automatic real shop publishing.
-
 ## Earlier History
 
+- v1.0.19: Listing page was repositioned as `上新测试台`.
 - v1.0.18: Productized the 竞品 page from an analysis result panel into a competitor observation list.
 - v1.0.17: Product page was switched from forced table columns to responsive product cards.
 - v1.0.16: Product list layout was hardened for long titles.
