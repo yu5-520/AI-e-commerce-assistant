@@ -1,215 +1,178 @@
 # 模块边界
 
-## 1. 设计目标
+## 1. 当前边界目标
 
-模块边界用于明确每个模块负责什么、不负责什么，避免产品从 AI 工作台变成无边界自动化系统。
+本文件只描述 v1.0.2 当前 active trunk 的模块边界。
 
-## 2. Data Hub 数据中心
+当前产品是：
+
+```text
+AI ERP 经营单元工作台
+```
+
+当前产品不是：
+
+```text
+完整 ERP
+完整 CRM
+多页面后台系统
+自动运营 Agent
+旧标题 / 图片生成 demo
+旧 Material Observer Agent 链路
+```
+
+## 2. API 入口边界
 
 ### 负责
 
 ```text
-上传 CSV / Excel
-字段映射
-数据校验
-导入记录
-数据快照
-错误报告
+src.api.main:app
+挂载 /api/business/* 当前产品接口
+挂载 /api/health 健康检查
+挂载 /api/data/* Mock 数据校验与导入记录
+挂载 /api/approvals/* 待确认动作记录
+挂载 /api/system/* 系统状态与清理接口
+服务 web_demo/index.html 当前单页前端
 ```
 
 ### 不负责
 
 ```text
-不直接登录真实店铺后台
-不抓取未授权数据
+不挂载旧 /api/demo
+不挂载旧 /api/products
+不挂载旧 /api/customers
+不挂载旧 /api/diagnosis
+不挂载旧 /api/tasks
+不挂载旧 /api/reports
+不挂载旧 /api/evals
+不挂载旧 /api/logs
+不暴露旧 evals 结果接口
+不恢复 backend/server.py
+```
+
+## 3. Business API 边界
+
+### 负责
+
+```text
+/api/business/today              今日经营建议
+/api/business/operating-unit     经营单元识别结果
+/api/business/data-health        数据健康状态
+/api/business/products           商品体检卡片
+/api/business/competitors        竞品机会
+/api/business/listing            上新建议
+/api/business/traffic            流量复盘
+/api/business/actions            待确认动作
+/api/business/report             经营报告
+```
+
+### 不负责
+
+```text
+不直接接真实店铺 API
+不直接执行 RPA
+不直接发布商品
+不直接改价
+不直接投放广告
+不直接触达客户
+```
+
+## 4. Workflow 边界
+
+### 负责
+
+```text
+读取 Mock ERP / CRM 数据
+校验数据关系
+识别经营单元
+加载经营单元知识档案
+生成循环频率策略
+生成商品、竞品、上新、流量、动作和报告结果
+输出可供 business_view_service 包装的结构化结果
+```
+
+### 不负责
+
+```text
+不连接真实商家系统
 不绕过平台接口限制
 不保存真实客户隐私
+不产生真实经营动作
 ```
 
-## 3. Product Center 商品经营中心
+## 5. Frontend 边界
 
 ### 负责
 
 ```text
-商品列表
-商品详情
-库存状态
-订单摘要
-退款摘要
-SKU 利润判断
-活动价风险
-商品诊断结果展示
+web_demo/index.html
+web_demo/app-v2.js
+展示当前经营单元工作台
+调用 /api/business/*
+展示 Mock 数据下的经营建议、报告和待确认动作
 ```
 
 ### 不负责
 
 ```text
-不自动上架商品
-不自动下架商品
-不自动修改主图
-不自动改价
-不自动报名活动
+不恢复 web_demo/app.js
+不恢复旧标题生成 UI
+不恢复旧素材观察 UI
+不实现未来多页面后台路由
 ```
 
-## 4. Customer Center 客户经营中心
+## 6. Scripts / CI 边界
 
 ### 负责
 
 ```text
-客户列表
-客户分层
-RFM 分析
-客户标签
-复购建议
-售后敏感识别
-流失风险识别
+scripts/check_version_governance.py   检查版本、日志、旧入口残留
+scripts/smoke_test_runtime.py         检查当前 workflow 主链路
+scripts/smoke_test_api.py             检查当前产品 API
+scripts/start_server.sh               本机启动
+scripts/deploy_server.sh              服务器部署
+.github/workflows/runtime-smoke-test.yml
+                                      CI 执行治理检查和 smoke tests
 ```
 
 ### 不负责
 
 ```text
-不自动群发客户
-不自动外呼
-不诱导好评
-不自动承诺优惠
-不保存真实手机号、微信号、地址
+不运行 src/run_demo.py
+不运行 evals/run_evals.py
+不运行 scripts/material_observer.py
+不检查旧 demo route
 ```
 
-## 5. Diagnosis Center AI 诊断中心
+## 7. Documentation 边界
 
 ### 负责
 
 ```text
-商品诊断
-库存预警
-SKU 利润判断
-客户分层
-售后归因
-活动准备分析
-生成建议动作
-标记风险等级
+README.md                         当前主说明
+docs/server-deploy.md             服务器部署说明
+versioning/VERSION.md             当前版本与版本规则
+versioning/CHANGELOG.md           工程版本日志
+docs/product/CHANGELOG.md         产品主线日志
+docs/product/mvp-scope.md         当前 MVP 范围
+docs/product/module-boundary.md   当前模块边界
 ```
 
 ### 不负责
 
 ```text
-不直接执行高风险动作
-不跳过人工确认
-不输出无依据的强结论
-不在数据不足时假装确定
+不保留旧 demo 文档
+不保留未来多页面蓝图作为当前说明
+不保留已删除接口的验收命令
+不把历史 Agent 设计放在 active trunk 文档中
 ```
 
-## 6. Knowledge Center 知识库中心
-
-### 负责
+## 8. 当前原则
 
 ```text
-平台规则
-合规边界
-运营方法
-客服 SOP
-商品历史
-客户历史
-RAG 召回记录
-```
-
-### 不负责
-
-```text
-不替代平台官方规则
-不保存未授权资料
-不作为法律合规最终判断
-```
-
-## 7. Task Center 任务中心
-
-### 负责
-
-```text
-生成任务草案
-任务状态管理
-任务风险等级
-任务输入输出记录
-任务失败原因记录
-```
-
-### 不负责
-
-```text
-不自动执行高风险任务
-不绕过审批
-不绕过平台风控
-不直接操作真实店铺后台
-```
-
-## 8. Approval Center 审批中心
-
-### 负责
-
-```text
-展示待确认任务
-展示风险等级
-展示 AI 建议依据
-展示 RAG 依据
-确认 / 拒绝 / 修改 / 暂存
-记录审批日志
-```
-
-### 不负责
-
-```text
-不替用户做最终经营决策
-不隐藏风险信息
-不允许高风险动作无确认执行
-```
-
-## 9. Report Center 报告中心
-
-### 负责
-
-```text
-生成商品诊断报告
-生成客户分层报告
-生成售后归因报告
-生成 SKU 价格建议表
-生成经营日报
-生成复盘报告
-导出 Markdown / CSV / JSON
-```
-
-### 不负责
-
-```text
-不保证报告等同经营结果
-不替代人工判断
-不输出未经校验的数据结论
-```
-
-## 10. API 层
-
-### 负责
-
-```text
-封装后端能力
-返回结构化 JSON
-提供前端调用接口
-记录任务审批状态
-暴露 Evals 结果
-```
-
-### 不负责
-
-```text
-不直接接入真实 ERP / CRM
-不直接接入真实店铺后台
-不执行真实 RPA 高风险动作
-```
-
-## 11. 当前 MVP 的模块边界原则
-
-```text
-AI 可以建议，但不能越权执行
-RPA 可以生成任务草案，但不能绕过人工确认
-知识库可以提供依据，但不能替代平台规则
-系统可以导出报告，但不能替用户承担经营责任
+AI 可以建议，但不能越权执行。
+系统可以生成待确认动作，但不能绕过人工确认。
+报告可以辅助经营判断，但不能替用户承担经营责任。
+版本治理必须先于 smoke tests 执行。
+文档必须服务当前可运行主线，而不是召回旧模板。
 ```
