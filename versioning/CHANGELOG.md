@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.0.0 - 2026-06-15
+
+### Changed
+- Recut the repository into a single current product trunk: `src.api.main:app` → `/api/business/*` → `web_demo/app-v2.js`.
+- Updated `src/api/main.py` so it only mounts the current product-facing API surface plus health, data import, approval, and system maintenance routes.
+- Updated `scripts/start_server.sh` to default to `127.0.0.1:3000`, keeping public access behind Nginx.
+- Rewrote `README.md` around the current AI ERP operating-unit product architecture and deployment path.
+- Updated `scripts/smoke_test_api.py` so API smoke tests verify only current product routes.
+
+### Removed
+- Removed the old frontend template `web_demo/app.js`.
+- Removed legacy compatibility routes: `/api/demo`, `/api/products`, `/api/customers`, `/api/diagnosis`, `/api/tasks`, `/api/reports`, `/api/evals`, and `/api/logs`.
+- Removed old helper entrypoints and services that pulled the project back toward the previous demo shape: `src/run_demo.py`, `src/services/workflow_service.py`, `src/services/eval_service.py`, and `evals/run_evals.py`.
+
+### Added
+- Added `.gitignore` rules for runtime outputs, local logs, local databases, virtual environments, and environment files.
+
+### Product Engineering Rule
+- The main branch should contain only the current runnable product path.
+- Old demo templates, legacy compatibility APIs, and deprecated run commands should live in Git history, not in the active product trunk.
+- Every architecture-level cleanup must update this `versioning/` record and the relevant product log under `docs/product/`.
+
+### Risk / Follow-up
+- Server instances must run `git pull origin main` and redeploy before the online page reflects this cleanup.
+- Any docs or tests that still reference removed legacy routes should be treated as stale and updated or deleted.
+
 ## v0.9.2 - 2026-06-11
 
 ### Added
