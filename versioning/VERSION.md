@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.5
+Current Version: v1.0.6
 
 ## Version History
 
@@ -31,6 +31,7 @@ Current Version: v1.0.5
 - v1.0.3: Legacy module-chain memory was removed from active trunk. Old runtime module-chain registry and obsolete modules were deleted, report generation was renamed from demo report to operating report, and governance now blocks removed module-chain roots.
 - v1.0.4: Frontend UI was aligned with productized `/api/business/*` endpoints. Old standalone data-import stylesheet was removed, business hash routes were clarified, and governance now blocks the removed frontend component stylesheet.
 - v1.0.5: Backend API contract was repaired so business actions merge persisted approval status, health returns the current version, system cleanup has a runtime-data alias, and API smoke tests verify approval status roundtrip.
+- v1.0.6: Server runtime import failure was fixed by disabling the homepage response model and removing the invalid `FileResponse | Dict` response annotation.
 
 ## Version Rules
 
