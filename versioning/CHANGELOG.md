@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.0.3 - 2026-06-15
+
+### Changed
+- Removed the old module-chain memory layer from the active product trunk.
+- Added `src/reports/generate_operating_report.py` and updated workflow/service imports to use the current operating report output.
+- `src/workflow/mock_workflow.py` now describes itself as the FastAPI business API and smoke-test orchestration layer, not a removed CLI demo layer.
+- `src/services/business_view_service.py` now reads `outputs/operating_report.md`.
+- Aligned the FastAPI app version with the repository version: `version="1.0.3"`.
+- Extended `scripts/check_version_governance.py` so removed module-chain roots and old report naming cannot return to active trunk.
+
+### Removed
+- Removed `runtime/module_chain.json`.
+- Removed obsolete module files under the old `modules/` tree from active trunk.
+- Removed `src/reports/generate_demo_report.py`.
+
+### Product Engineering Rule
+- Active module memory must come from the real runtime chain: `src.api.main:app` → `/api/business/*` → `business_view_service` → `mock_workflow` → current ERP operating-unit modules.
+- Old module registries should live in Git history, not in active trunk.
+- Report modules must use current product naming, not old demo naming.
+
 ## v1.0.2 - 2026-06-15
 
 ### Changed
@@ -12,7 +32,6 @@
 
 ### Removed
 - Removed outdated planning documents from the active product docs: `docs/product/product-map.md`, `docs/product/user-flow.md`, and `docs/product/domain-model.md`.
-- These documents described future multi-page product structure or broad domain models that could pull the current MVP back toward removed routes and old UI assumptions.
 
 ### Product Engineering Rule
 - Active docs must describe the current runnable trunk, not future blueprints or deleted route families.
@@ -28,12 +47,11 @@
 - Aligned the FastAPI app version with the repository version: `version="1.0.1"`.
 
 ### Removed
-- Removed legacy Material Observer Agent files from the active product trunk.
-- The old v0.9.x material-observation Agent remains recoverable from Git history, but it is no longer part of the current v1.x ERP operating-unit product path.
+- Removed legacy Agent files from the active product trunk.
+- Historical agent work remains recoverable from Git history, but it is no longer part of the current v1.x ERP operating-unit product path.
 
 ### Product Engineering Rule
 - CI must run the version governance check before smoke tests.
-- GitHub Actions must not reference deleted legacy entrypoints such as `src/run_demo.py`, `evals/run_evals.py`, or old local server services.
 - If a future cleanup removes routes, folders, workflows, or product entrypoints, the same change must update `versioning/VERSION.md`, `versioning/CHANGELOG.md`, and `docs/product/CHANGELOG.md`.
 
 ## v1.0.0 - 2026-06-15
@@ -47,8 +65,7 @@
 - Added `docs/product/CHANGELOG.md` as the product-level log for positioning, page/API boundary, and active trunk changes.
 
 ### Removed
-- Removed the old frontend template `web_demo/app.js`.
-- Removed legacy compatibility routes and old helper entrypoints that pulled the project back toward the previous demo shape.
+- Removed the old frontend template, legacy compatibility routes, and old helper entrypoints that pulled the project back toward the previous demo shape.
 
 ### Added
 - Added `.gitignore` rules for runtime outputs, local logs, local databases, virtual environments, and environment files.
@@ -60,7 +77,7 @@
 
 ## Earlier History
 
-- v0.9.2: Agent module governance was added with stable contract, source policy, confidence, risk flags, and runtime registry.
-- v0.9.1: Material observation was moved back into an implicit backend pipeline so users only see generation progress and final outputs.
+- v0.9.2: Agent module governance was added.
+- v0.9.1: Material observation was moved back into an implicit backend pipeline.
 - v0.9.0: Pre-generation material sampling UI was added.
 - v0.8.9: Light material observation Agent layer was added.
