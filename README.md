@@ -205,6 +205,40 @@ http://127.0.0.1:8000/web_demo/index.html
 
 页面会优先调用 `/api/business/today` 和其他 `/api/business/*` 产品接口。如果没有启动 API，直接打开 `web_demo/index.html` 时会自动回退到本地样例数据。
 
+### 4.5 服务器部署
+
+默认服务器端口为 `3000`，FastAPI 会同时服务前端页面和产品接口。
+
+一键部署入口：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git
+
+git clone https://github.com/yu5-520/AI-e-commerce-assistant.git /opt/ai-ecommerce-assistant
+cd /opt/ai-ecommerce-assistant
+sudo bash scripts/deploy_server.sh
+```
+
+部署完成后访问：
+
+```text
+http://47.118.29.46:3000
+```
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3000/api/business/today
+```
+
+详细部署说明见：
+
+```text
+docs/server-deploy.md
+```
+
 ## 5. 当前已经完成
 
 ```text
@@ -212,6 +246,7 @@ http://127.0.0.1:8000/web_demo/index.html
 + ERP 经营单元推断模块
 + 循环频率策略模块
 + 产品化 Business API
++ 服务器启动与部署脚本
 + 家居生活经营单元档案
 + 家居生活竞品 / 货盘 / 流量测试 Mock 数据
 + 防晒服 demo 样板保留
@@ -290,7 +325,25 @@ src/services/business_view_service.py
 保留 raw 字段用于兼容旧前端数据结构
 ```
 
-### 6.4 经营单元知识档案
+### 6.4 服务器部署
+
+```text
+scripts/start_server.sh
+scripts/deploy_server.sh
+deploy/nginx-ai-operating-advisor.conf
+docs/server-deploy.md
+```
+
+当前能力：
+
+```text
+启动 FastAPI + 前端静态页
+绑定 0.0.0.0:3000
+生成 systemd 服务
+支持 Nginx 反向代理配置
+```
+
+### 6.5 经营单元知识档案
 
 ```text
 knowledge_base/category_profiles/home_living_goods.md
@@ -299,117 +352,3 @@ src/category/
 ```
 
 家居生活商品是当前 ERP 推断出的主经营单元。防晒服保留为可复制的第二样板，但不再作为默认值。
-
-### 6.5 同经营单元竞品比对
-
-```text
-examples/category_home_living/mock_competitors.csv
-src/competitor/
-```
-
-当前能力：竞品数据读取、价格带比对、SKU 结构摘要、差评机会分析、触发商品选择、下一步动作建议、安全使用边界。
-
-当前不做真实平台数据抓取，只使用 Mock / 手动准备的数据。
-
-### 6.6 同经营单元上新增长
-
-```text
-examples/category_home_living/mock_supplier_products.csv
-src/listing/
-```
-
-当前能力：货盘数据读取、新品候选评分、利润空间判断、库存承接判断、经营单元卖点匹配、竞品差评机会承接、标题草案、主图方向、SKU 建议、定价建议、合规检查表、安全使用边界。
-
-当前只生成上新资料草案，不自动上架、不自动改价、不自动投放。
-
-### 6.7 流量测试与数据回流
-
-```text
-examples/category_home_living/mock_traffic_tests.csv
-src/traffic_test/
-```
-
-当前能力：流量测试数据读取、点击率诊断、转化率诊断、退款率诊断、ROI 诊断、下一步动作判断、回流动作生成、测试复盘报告、安全使用边界。
-
-回流方向：
-
-```text
-点击低 → 回流标题 / 主图复查
-转化低 → 回流 SKU / 价格 / 详情页承接
-退款高 → 回流售后归因
-ROI 低 → 回流预算止损
-指标健康 → 小幅放量但继续人工确认
-```
-
-### 6.8 经营循环总控
-
-```text
-src/operating_loop/
-```
-
-当前能力：汇总商品风险、客户风险、竞品比对、上新增长、流量测试回流，判断下一轮进入哪个模块，并生成下一轮动作计划。
-
-### 6.9 ERP / CRM 数据接入
-
-MVP 阶段优先支持 Mock CSV / Excel 数据，不直接接入真实商家后台。
-
-### 6.10 AI / RAG 决策层
-
-当前版本使用规则引擎模拟 AI 诊断，用关键词检索模拟 RAG。RAG 已支持读取 `knowledge_base/category_profiles/` 下的经营单元知识。
-
-### 6.11 Human-in-the-loop 人工确认
-
-关键动作必须由用户确认：改标题、改主图、改价、活动、投放预算、下架 / 清货、批量回写 ERP / CRM、客户触达、优惠券策略执行和售后处理动作。
-
-### 6.12 RPA 任务草案层
-
-MVP 阶段生成低风险任务草案，不执行真实自动化。
-
-## 7. 下一阶段升级路线
-
-```text
-V1.5：业务档案长期落库
-V1.6：第二个经营单元复制验证
-V1.7：前端新增经营单元 / 循环策略页面增强
-V1.8：Embedding + 向量库 RAG
-V1.9：真实低风险 RPA Adapter
-```
-
-详细升级清单见：
-
-```text
-docs/system-upgrade-roadmap.md
-```
-
-## 8. 重点目录
-
-```text
-examples/        Mock ERP / CRM 数据 + 经营单元样例数据
-knowledge_base/  简单 RAG 知识片段，含经营单元知识
-src/             Python Mock Workflow 与 API
-evals/           最小评测
-web_demo/        前端 Demo
-docs/            架构、PRD、升级路线与风险边界
-```
-
-核心入口：
-
-```text
-src/run_demo.py        命令行工作流
-src/api/main.py        FastAPI 后端
-web_demo/index.html    前端 Demo
-evals/run_evals.py     Evals 运行器
-```
-
-## 9. 风险边界
-
-本项目定位是：
-
-> **AI 辅助经营决策 + RPA 可控任务草案原型，而不是无约束自动化系统。**
-
-本产品不做：
-
-- 未经确认的真实上架、改价、投放、活动报名。
-- 未经确认的客户触达、批量消息、退款或好评诱导。
-- 侵权素材复制、虚假功效宣传或平台规则不允许的运营方式。
-- 保存真实客户姓名、手机号、微信号、地址等隐私数据。
