@@ -1,18 +1,18 @@
 # 产品化后端接口说明
 
-本项目的前端 UI 已从工程控制台升级为「AI 经营参谋」。对应后端也新增了产品化接口，前端优先使用 `/api/business/*`。
+本项目的前端 UI 已从工程控制台升级为「AI 经营参谋」。对应后端主接口统一为 `/api/business/*`。
 
 ## 1. 接口分层
 
 ```text
-/api/business/*    当前前端推荐使用的产品接口
-/api/operation/*   operation 命名别名，便于后续产品命名实验
+/api/business/*    当前前端使用的唯一产品接口
 /api/demo/*        旧版完整工作流接口，保留兼容
 /api/logs/*        内部运行记录接口，不建议直接暴露给普通商家 UI
 /api/system/*      内部系统状态接口，不建议直接暴露给普通商家 UI
+/api/evals/*       自动验收接口，供测试和检查使用
 ```
 
-产品 UI 应尽量使用 `/api/business/*`，避免直接展示 workflow、logs、sqlite、rag 等工程概念。
+产品 UI 应使用 `/api/business/*`，避免直接展示 workflow、logs、sqlite、rag 等工程概念。
 
 ## 2. 推荐给前端使用的接口
 
@@ -194,13 +194,32 @@ GET /api/business/today
 ```text
 经营单元页：GET /api/business/operating-unit
 数据体检页：GET /api/business/data-health
+商品体检页：GET /api/business/products
+竞品机会页：GET /api/business/competitors
+上新建议页：GET /api/business/listing
+流量复盘页：GET /api/business/traffic
 待确认动作：GET /api/business/actions
 经营报告页：GET /api/business/report
 ```
 
 当前前端已优先调用 `/api/business/today`，并用 `raw` 字段兼容原有渲染结构。
 
-## 4. 安全边界
+## 4. 兼容接口
+
+以下接口仍可保留给开发调试、旧 Demo 和自动验收：
+
+```text
+/api/demo/*
+/api/approvals/*
+/api/reports/*
+/api/evals/*
+/api/logs/*
+/api/system/*
+```
+
+普通产品 UI 不直接展示这些接口。
+
+## 5. 安全边界
 
 产品接口只返回建议、草案、复盘和待确认动作。
 
