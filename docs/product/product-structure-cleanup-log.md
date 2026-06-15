@@ -1,5 +1,59 @@
 # 产品结构清理日志
 
+## 2026-06-15：v1.0.3 模块链记忆清理
+
+### 清理目标
+
+将仓库模块链从旧的独立模块注册表，收敛到当前真实运行主线。
+
+### 当前保留主链路
+
+```text
+src.api.main:app
+↓
+/api/business/*
+↓
+src/services/business_view_service.py
+↓
+src/workflow/mock_workflow.py
+↓
+operating_unit / scheduler / category / competitor / listing / traffic_test / operating_loop
+↓
+src/reports/generate_operating_report.py
+```
+
+### 本轮删除内容
+
+```text
+runtime/module_chain.json
+modules/platforms/
+modules/operation_modes/
+modules/frontend/
+src/reports/generate_demo_report.py
+```
+
+### 本轮同步修正
+
+```text
+src/reports/generate_operating_report.py
+src/workflow/mock_workflow.py
+src/services/business_view_service.py
+src/api/main.py
+scripts/check_version_governance.py
+versioning/VERSION.md
+versioning/CHANGELOG.md
+docs/product/CHANGELOG.md
+```
+
+### 新规则
+
+- active trunk 不保留旧模块注册表。
+- 当前模块链以真实运行入口和 import 链为准。
+- 报告输出使用 `operating_report.md`，不再使用旧 demo 报告命名。
+- 旧模块实验从 Git 历史查，不放在当前 runtime / modules 目录里。
+
+---
+
 ## 2026-06-15：v1.0.2 文档主干清理
 
 ### 清理目标
@@ -29,7 +83,7 @@ docs/product/user-flow.md
 docs/product/domain-model.md
 ```
 
-删除原因：这些文档描述未来多页面产品结构或宽泛领域对象，容易把当前 MVP 拉回 `/products`、`/customers`、`/diagnosis`、`/tasks`、`/reports` 等已从 active trunk 移除的旧页面 / 旧接口假设。
+删除原因：这些文档描述未来多页面产品结构或宽泛领域对象，容易把当前 MVP 拉回已从 active trunk 移除的旧页面 / 旧接口假设。
 
 ### 本轮同步修正
 
