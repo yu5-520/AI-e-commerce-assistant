@@ -1,5 +1,58 @@
 # 产品结构清理日志
 
+## 2026-06-15：v1.0.4 前端 UI 主线清理
+
+### 清理目标
+
+将前端从“raw workflow 渲染器”收敛为“产品 API UI”，让页面结构、API 调用和样式组件都服务当前 `/api/business/*` 主线。
+
+### 当前前端主链路
+
+```text
+web_demo/index.html
+↓
+web_demo/app-v2.js
+↓
+/api/business/today
+/api/business/operating-unit
+/api/business/data-health
+/api/business/products
+/api/business/competitors
+/api/business/listing
+/api/business/traffic
+/api/business/actions
+/api/business/report
+```
+
+### 本轮删除内容
+
+```text
+web_demo/data-import.css
+```
+
+删除原因：该样式文件主要服务旧的数据导入后台表格组件，当前单页经营工作台已经不再使用这些独立组件。
+
+### 本轮同步修正
+
+```text
+web_demo/index.html
+web_demo/app-v2.js
+src/api/main.py
+scripts/check_version_governance.py
+versioning/VERSION.md
+versioning/CHANGELOG.md
+docs/product/CHANGELOG.md
+```
+
+### 新规则
+
+- 前端页面优先使用 productized `/api/business/*` 接口。
+- raw workflow 只作为 fallback 或调试数据来源，不作为 UI 主契约。
+- 未被当前页面使用的独立样式组件应删除。
+- 被删除的前端组件必须加入版本治理检查，避免后续回流。
+
+---
+
 ## 2026-06-15：v1.0.3 模块链记忆清理
 
 ### 清理目标
