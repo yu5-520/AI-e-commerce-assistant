@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.11 - 2026-06-15
+
+### Changed
+- Renamed the visible data navigation concept into a report-management surface: `ERP / CRM 报表管理`.
+- Added `web_demo/data-report-hotfix.js` so the old static data-health page is replaced after render with ERP/CRM report groups and clickable report cards.
+- Added `web_demo/report-center.css` for report hero, report cards, drill-down actions, and table detail layouts.
+- Added report drill-down pages for 商品报表、订单报表、库存报表、退款报表、客户报表、客户标签报表、客户互动报表.
+- `web_demo/index.html` now appends `?v=1.0.11` to assets, renames the sidebar item from 数据 to 报表, and loads the report manager hotfix script.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.11`.
+
+### Product Engineering Rule
+- The report page should answer: where the data comes from, how many records are available, and what report can be opened next.
+- Data-health checks are internal support signals; merchants need report cards and detailed tables, not static pass/fail rows.
+- Report detail pages should use product terms such as 商品报表 and 订单报表 instead of database/table wording.
+
 ## v1.0.10 - 2026-06-15
 
 ### Changed
