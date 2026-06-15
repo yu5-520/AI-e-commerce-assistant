@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.0.4 - 2026-06-15
+
+### Product Decision
+- The frontend UI now uses productized business API sections instead of behaving like a raw workflow viewer.
+- Current product truth remains: `web_demo/index.html` → `web_demo/app-v2.js` → `/api/business/*`.
+
+### Changed
+- `web_demo/index.html` now loads only `styles.css` and `app-v2.js`.
+- Sidebar hash routes now use clearer business section names for product pages.
+- `web_demo/app-v2.js` now prefers dedicated product endpoints for product health, competitor opportunities, listing suggestions, traffic review, action confirmations, and reports.
+- Data health status now renders `passed` as `通过`.
+- API version is aligned to `v1.0.4` for this frontend UI cleanup.
+- Governance now blocks the removed standalone data-import stylesheet from returning to active trunk.
+
+### Removed From Active Product Trunk
+- Removed `web_demo/data-import.css`.
+- Removed the unused frontend import action from the current UI runtime.
+
+### Product Boundary
+- Frontend pages should present product API results, not internal workflow structure as the primary UI contract.
+- Standalone UI components that are no longer used by the current page should be removed instead of kept as inactive styling residue.
+
 ## v1.0.3 - 2026-06-15
 
 ### Product Decision
