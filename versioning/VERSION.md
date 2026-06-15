@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.24
+Current Version: v1.1.0
 
 ## Version History
 
@@ -50,6 +50,7 @@ Current Version: v1.0.24
 - v1.0.22: Report page was repositioned as `日志`. The sidebar label changed from `报告` to `日志`, the old Markdown report panel was replaced by an operation log center, and logs now record task completion, AI judgment, data import/export, and user actions with source, product context, reason, result, detail, source jump, and export actions.
 - v1.0.23: Dashboard task board now uses a unified cross-module task pool. Homepage metrics are calculated from active tasks, task cards bind to precise product/store context, and each top task links to 待办、来源模块、商品页 while completed items leave the homepage and move to 日志.
 - v1.0.24: Dashboard task board was simplified into a command-board style scheduling view. Homepage tasks now emphasize order, deadline, source navigation, and short judgment tags; long handling explanations are removed from the overview and left to 待办.
+- v1.1.0: Added a unified front-end task store and dynamic module-driven task flow. 商品、竞品、上新、流量 and 报表 can now create shared tasks; dashboard and 待办 read the same task pool; task actions create operation logs; refresh preserves the demo task state through localStorage.
 
 ## Version Rules
 
