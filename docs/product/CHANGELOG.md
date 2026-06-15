@@ -1,5 +1,29 @@
 # Product Changelog
 
+## v1.0.2 - 2026-06-15
+
+### Product Decision
+- Active product docs now describe only the current ERP operating-unit workbench, not future multi-page product blueprints.
+- Current product truth remains: `src.api.main:app` → `/api/business/*` → `web_demo/index.html` + `web_demo/app-v2.js`.
+- Future product maps or multi-page flows must be created as clearly marked proposals, not as current MVP docs.
+
+### Changed
+- Rewrote README product-doc rules so product changelog, decision log, and cleanup log have distinct responsibilities.
+- Rewrote `docs/product/README.md` to list only the active current product docs.
+- Rewrote `docs/product/mvp-scope.md` around the current `/api/business/*` MVP and current smoke-test commands.
+- Rewrote `docs/product/module-boundary.md` around current API, workflow, frontend, scripts, CI, and documentation boundaries.
+- Extended version governance so active docs are checked for stale legacy snippets.
+- API version is aligned to `v1.0.2` for this documentation-trunk cleanup.
+
+### Removed From Active Product Docs
+- Removed `docs/product/product-map.md`.
+- Removed `docs/product/user-flow.md`.
+- Removed `docs/product/domain-model.md`.
+
+### Product Boundary
+- Active docs must not describe removed routes, old demo commands, old Agent chains, or future pages as current reality.
+- Current docs should protect the runnable product trunk from being pulled back into obsolete structures.
+
 ## v1.0.1 - 2026-06-15
 
 ### Product Decision
