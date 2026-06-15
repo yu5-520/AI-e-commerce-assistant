@@ -28,7 +28,7 @@ web_demo/app-v2.js 产品化前端
 ERP 决定经营单元，经营单元决定类目知识，商品节奏决定循环频率，系统只生成建议、草案、复盘和待确认动作。
 ```
 
-系统不再保留旧版 demo 入口、旧版前端模板和旧兼容 API。历史版本由 Git commits 保存，不放在 main 分支干扰当前产品。
+系统不再保留旧版 demo 入口、旧版前端模板、旧 Agent 链路和旧兼容 API。历史版本由 Git commits 保存，不放在 main 分支干扰当前产品。
 
 ## 2. 当前目录职责
 
@@ -54,10 +54,16 @@ web_demo/index.html                 当前前端入口
 web_demo/app-v2.js                  当前前端逻辑
 scripts/start_server.sh             本机启动脚本
 scripts/deploy_server.sh            服务器部署脚本
+scripts/check_version_governance.py 版本治理检查脚本
+scripts/smoke_test_runtime.py       当前 workflow smoke test
+scripts/smoke_test_api.py           当前产品 API smoke test
 deploy/nginx-ai-operating-advisor.conf
                                   Nginx 反向代理配置
-versioning/CHANGELOG.md             版本更新日志
+versioning/CHANGELOG.md             工程版本更新日志
 versioning/VERSION.md               当前版本与版本规则
+docs/product/CHANGELOG.md           产品更新日志
+docs/product/mvp-scope.md           当前 MVP 范围与验收标准
+docs/product/module-boundary.md     当前模块边界
 docs/product/product-decision-log.md
                                   产品决策日志
 docs/product/product-structure-cleanup-log.md
@@ -113,6 +119,14 @@ http://127.0.0.1:3000
 ```bash
 curl http://127.0.0.1:3000/api/health
 curl http://127.0.0.1:3000/api/business/today
+```
+
+本地脚本验收：
+
+```bash
+python scripts/check_version_governance.py
+python scripts/smoke_test_runtime.py
+python scripts/smoke_test_api.py
 ```
 
 ## 5. 服务器部署
@@ -171,16 +185,16 @@ docs/server-deploy.md
 main 分支只保留当前产品主线。
 
 ```text
-旧模板、旧 demo、旧兼容接口、旧运行命令不放在当前主分支。
+旧模板、旧 demo、旧 Agent、旧兼容接口、旧运行命令不放在当前主分支。
 需要回看历史版本时，从 Git commit 历史查找。
 ```
 
 ## 8. 版本记录规则
 
 ```text
-结构级变更：更新 versioning/CHANGELOG.md
-版本号变更：更新 versioning/VERSION.md
-产品决策：更新 docs/product/product-decision-log.md
-产品结构清理：更新 docs/product/product-structure-cleanup-log.md
+结构级变更：更新 versioning/CHANGELOG.md 和 versioning/VERSION.md
+产品主链路 / 页面 / API 边界变化：更新 docs/product/CHANGELOG.md
+重大产品取舍：补充 docs/product/product-decision-log.md
+结构清理 / 删除旧链路：补充 docs/product/product-structure-cleanup-log.md
 测试脚本：必须跟随当前 API 主线同步
 ```
