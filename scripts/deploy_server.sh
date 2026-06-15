@@ -6,6 +6,8 @@ APP_DIR="${APP_DIR:-/opt/ai-ecommerce-assistant}"
 BRANCH="${BRANCH:-main}"
 SERVICE_NAME="${SERVICE_NAME:-ai-operating-advisor}"
 APP_PORT="${APP_PORT:-3000}"
+PUBLIC_HOST="${PUBLIC_HOST:-47.118.29.46}"
+NGINX_SITE_NAME="${NGINX_SITE_NAME:-ai-operating-advisor}"
 
 if [ "${EUID}" -ne 0 ]; then
   echo "Please run as root: sudo bash scripts/deploy_server.sh"
@@ -13,7 +15,7 @@ if [ "${EUID}" -ne 0 ]; then
 fi
 
 apt-get update
-apt-get install -y git python3 python3-venv python3-pip curl
+apt-get install -y git python3 python3-venv python3-pip curl nginx
 
 if [ ! -d "$APP_DIR/.git" ]; then
   mkdir -p "$APP_DIR"
@@ -29,8 +31,10 @@ if [ ! -f ".env" ]; then
   cp .env.example .env
 fi
 
+# Security default: app only listens on localhost. Public access goes through Nginx 80/443.
 sed -i "s/^APP_PORT=.*/APP_PORT=${APP_PORT}/" .env
-sed -i "s/^APP_HOST=.*/APP_HOST=0.0.0.0/" .env
+sed -i "s/^APP_HOST=.*/APP_HOST=127.0.0.1/" .env
+sed -i "s#^PUBLIC_BASE_URL=.*#PUBLIC_BASE_URL=http://${PUBLIC_HOST}#" .env
 
 chmod +x scripts/start_server.sh
 
@@ -51,9 +55,33 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 SERVICE
 
+cat > "/etc/nginx/sites-available/${NGINX_SITE_NAME}" <<NGINX
+server {
+    listen 80;
+    server_name ${PUBLIC_HOST};
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+NGINX
+
+ln -sf "/etc/nginx/sites-available/${NGINX_SITE_NAME}" "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}"
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
+systemctl enable nginx
+systemctl reload nginx
 
 sleep 2
 systemctl --no-pager --full status "$SERVICE_NAME" || true
@@ -61,5 +89,7 @@ systemctl --no-pager --full status "$SERVICE_NAME" || true
 echo ""
 echo "Service: ${SERVICE_NAME}"
 echo "App dir: ${APP_DIR}"
-echo "URL: http://$(curl -s ifconfig.me || echo SERVER_IP):${APP_PORT}"
+echo "Public URL: http://${PUBLIC_HOST}"
+echo "Local app: http://127.0.0.1:${APP_PORT}"
 echo "Health: curl http://127.0.0.1:${APP_PORT}/api/health"
+echo "Security group: open 80/443 to public; do not open ${APP_PORT} to 0.0.0.0/0."
