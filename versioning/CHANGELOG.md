@@ -5,9 +5,11 @@
 ### Changed
 - Recut the repository into a single current product trunk: `src.api.main:app` → `/api/business/*` → `web_demo/app-v2.js`.
 - Updated `src/api/main.py` so it only mounts the current product-facing API surface plus health, data import, approval, and system maintenance routes.
+- Aligned the FastAPI app version with the version governance record: `version="1.0.0"`.
 - Updated `scripts/start_server.sh` to default to `127.0.0.1:3000`, keeping public access behind Nginx.
 - Rewrote `README.md` around the current AI ERP operating-unit product architecture and deployment path.
 - Updated `scripts/smoke_test_api.py` so API smoke tests verify only current product routes.
+- Added `docs/product/CHANGELOG.md` as the product-level log for positioning, page/API boundary, and active trunk changes.
 
 ### Removed
 - Removed the old frontend template `web_demo/app.js`.
