@@ -16,7 +16,7 @@ into the main product flow.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,7 +30,7 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="1.0.5",
+    version="1.0.6",
     description="Product API for ERP-based ecommerce operating unit advice.",
 )
 
@@ -46,8 +46,8 @@ if WEB_DEMO_DIR.exists():
     app.mount("/web_demo", StaticFiles(directory=WEB_DEMO_DIR), name="web_demo")
 
 
-@app.get("/")
-def index() -> FileResponse | Dict[str, str]:
+@app.get("/", response_model=None)
+def index() -> Any:
     """Serve the current product homepage when available."""
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
