@@ -1,5 +1,59 @@
 # 产品结构清理日志
 
+## 2026-06-15：v1.0.2 文档主干清理
+
+### 清理目标
+
+将产品文档从“未来多页面蓝图 / 旧对象模型混杂”收敛为“当前 v1.x 可运行产品主线”。
+
+### 本轮保留文档
+
+```text
+README.md
+docs/server-deploy.md
+versioning/VERSION.md
+versioning/CHANGELOG.md
+docs/product/README.md
+docs/product/CHANGELOG.md
+docs/product/mvp-scope.md
+docs/product/module-boundary.md
+docs/product/product-decision-log.md
+docs/product/product-structure-cleanup-log.md
+```
+
+### 本轮删除文档
+
+```text
+docs/product/product-map.md
+docs/product/user-flow.md
+docs/product/domain-model.md
+```
+
+删除原因：这些文档描述未来多页面产品结构或宽泛领域对象，容易把当前 MVP 拉回 `/products`、`/customers`、`/diagnosis`、`/tasks`、`/reports` 等已从 active trunk 移除的旧页面 / 旧接口假设。
+
+### 本轮同步修正
+
+```text
+README.md
+docs/product/README.md
+docs/product/mvp-scope.md
+docs/product/module-boundary.md
+scripts/check_version_governance.py
+src/api/main.py
+versioning/VERSION.md
+versioning/CHANGELOG.md
+docs/product/CHANGELOG.md
+```
+
+### 新规则
+
+- active docs 只描述当前可运行主线。
+- 未来产品地图、未来多页面用户流、未来领域模型不得混入当前 MVP 文档。
+- 如需恢复规划，应创建明确带 `proposal` 或 `future` 标记的新文档。
+- 版本治理脚本需要检查 active docs 是否重新出现旧 demo 命令、旧 route 验收或旧 Agent 链路。
+
+---
+
 ## 2026-06-15：v1.0.0 主分支产品主线清理
 
 ### 清理目标
@@ -57,40 +111,3 @@ scripts/smoke_test_api.py
 
 - 线上服务器需要重新 `git pull` 并执行部署脚本，否则页面仍可能来自旧进程或旧代码。
 - 若还有文档引用已删除接口，应视为过期文档，继续更新或删除。
-
----
-
-## 2026-06-14：产品仓库结构清理
-
-## 清理目标
-
-将仓库从“求职展示导向”收敛为“产品完成导向”。
-
-## 本轮新增产品骨架文档
-
-```text
-docs/product/README.md
-docs/product/product-map.md
-docs/product/domain-model.md
-docs/product/user-flow.md
-docs/product/module-boundary.md
-docs/product/mvp-scope.md
-docs/product/product-decision-log.md
-```
-
-## 本轮原则
-
-- 不新增简历、面试、HR、BOSS 类文档。
-- 不继续堆解释型包装材料。
-- 产品文档只服务用户、场景、模块、对象、流程、边界和 MVP。
-- 后续围绕产品结构继续重构 API 和前端。
-
-## 下一步建议
-
-```text
-1. 拆分 FastAPI routes
-2. 按 product-map 重构前端信息架构
-3. 增加 SQLite / JSON 日志持久化
-4. 增加 Data Import 页面和 API
-5. 从 Demo Workflow 逐步拆成产品级 workflows
-```
