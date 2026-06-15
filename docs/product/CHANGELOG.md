@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v1.0.5 - 2026-06-15
+
+### Product Decision
+- Product-facing business APIs must expose the same state that users create through confirmation actions.
+- Current product truth remains: `web_demo/app-v2.js` → `/api/business/*` → approval records only, no real RPA execution.
+
+### Changed
+- `/api/business/actions` now merges persisted approval status before returning action cards.
+- `/api/health` now returns the current version and product name.
+- Added `/api/system/clear-runtime-data` as the current runtime cleanup endpoint.
+- Kept `/api/system/clear-demo-data` as a backward-compatible alias.
+- API smoke tests now verify that approve/reject updates reappear through `/api/business/actions`.
+- API version is aligned to `v1.0.5` for this backend API contract repair.
+
+### Product Boundary
+- Confirmation APIs record user decisions only; they do not execute real shop operations.
+- Product APIs should reflect approval state without requiring the UI to call low-level approval records directly.
+
 ## v1.0.4 - 2026-06-15
 
 ### Product Decision
