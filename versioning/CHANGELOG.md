@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.17 - 2026-06-15
+
+### Changed
+- Switched the 商品 page from forced table columns to responsive product cards so long product titles no longer collapse into unreadable vertical text.
+- Product rows now show the product title block, platform/shop context, operation metrics, and actions as separate card areas instead of squeezed table cells.
+- `全部平台`, `全部店铺`, and status controls are now interactive filter buttons with selectable option menus.
+- Added product search for title, ID, platform, store, inventory status, and after-sales status.
+- Filtered product counts now update in the 商品列表 header.
+- `web_demo/index.html` now appends `?v=1.0.17` to assets and reloads the responsive product card workflow.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.17`.
+
+### Product Engineering Rule
+- Product list pages should use card rows at tablet widths; dense table columns are only safe when the viewport can protect every field.
+- Filter controls must change visible data or open a selector. Decorative filters are not allowed on user-facing pages.
+
 ## v1.0.16 - 2026-06-15
 
 ### Fixed
