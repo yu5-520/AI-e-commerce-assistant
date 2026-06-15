@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -21,7 +21,7 @@ from src.repositories.sqlite_repository import (
     upsert_task_status,
 )
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
-from src.services.workflow_service import get_task
+from src.workflow.mock_workflow import build_mock_workflow_result
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 LOG_DIR = ROOT_DIR / "logs"
@@ -38,6 +38,13 @@ def append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as file:
         file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def get_task(task_id: str) -> Optional[Dict[str, Any]]:
+    """Return one current approval action by task_id."""
+    result = build_mock_workflow_result(write_outputs=False, record_logs=False)
+    tasks = result.get("approval_required_tasks") or result.get("rpa_tasks", [])
+    return next((item for item in tasks if item.get("task_id") == task_id), None)
 
 
 def update_task_status(task_id: str, status: str, operator: str = "demo_user") -> Dict[str, Any]:
