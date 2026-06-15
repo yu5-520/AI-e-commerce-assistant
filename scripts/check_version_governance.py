@@ -18,6 +18,14 @@ PRODUCT_CHANGELOG_FILE = ROOT / "docs" / "product" / "CHANGELOG.md"
 API_MAIN_FILE = ROOT / "src" / "api" / "main.py"
 WORKFLOW_FILE = ROOT / ".github" / "workflows" / "runtime-smoke-test.yml"
 
+ACTIVE_DOCS = [
+    "README.md",
+    "docs/server-deploy.md",
+    "docs/product/README.md",
+    "docs/product/mvp-scope.md",
+    "docs/product/module-boundary.md",
+]
+
 REMOVED_ACTIVE_PATHS = [
     "src/run_demo.py",
     "src/services/workflow_service.py",
@@ -30,6 +38,9 @@ REMOVED_ACTIVE_PATHS = [
     "agents/base.py",
     "agents/__init__.py",
     "runtime/agent_registry.json",
+    "docs/product/product-map.md",
+    "docs/product/user-flow.md",
+    "docs/product/domain-model.md",
 ]
 
 REMOVED_ROUTE_PREFIXES = [
@@ -53,6 +64,16 @@ REQUIRED_CURRENT_ROUTES = [
     "/api/business/traffic",
     "/api/business/actions",
     "/api/business/report",
+]
+
+FORBIDDEN_DOC_SNIPPETS = [
+    "python -m src.run_demo",
+    "/api/demo/run",
+    "暴露 Evals 结果",
+    "frontend/app.js",
+    "frontend/material-sampler.js",
+    "scripts/material_observer.py::",
+    "runtime/agent_registry.json",
 ]
 
 
@@ -99,8 +120,8 @@ def main() -> None:
     assert_contains(changelog_text, version_header, "versioning/CHANGELOG.md")
     assert_contains(product_changelog_text, version_header, "docs/product/CHANGELOG.md")
 
-    for route in REQUIRED_CURRENT_ROUTES:
-        assert_contains(changelog_text, route.split("/", 3)[0] if False else "/api/business", "versioning/CHANGELOG.md")
+    assert_contains(changelog_text, "/api/business", "versioning/CHANGELOG.md")
+    assert_contains(product_changelog_text, "/api/business", "docs/product/CHANGELOG.md")
 
     forbidden_workflow_refs = [
         "src/run_demo.py",
@@ -126,10 +147,15 @@ def main() -> None:
         if path.exists():
             raise AssertionError(f"Removed legacy path still exists in active trunk: {path_text}")
 
-    main_text = read(API_MAIN_FILE)
     for route_prefix in REMOVED_ROUTE_PREFIXES:
-        if route_prefix in main_text:
+        if route_prefix in api_text:
             raise AssertionError(f"src/api/main.py should not mount removed route prefix: {route_prefix}")
+
+    for doc_path_text in ACTIVE_DOCS:
+        doc_text = read(ROOT / doc_path_text)
+        for snippet in FORBIDDEN_DOC_SNIPPETS:
+            if snippet in doc_text:
+                raise AssertionError(f"Active doc {doc_path_text} still contains stale snippet: {snippet}")
 
     print(f"Version governance check passed for v{current_version}.")
 
