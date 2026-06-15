@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.0.14 - 2026-06-15
+
+### Product Decision
+- Report pages must support both import and export as real actions.
+- `导出报表` cannot remain a decorative button; it must generate a downloadable file for the visible report data.
+- `下载模板` should also generate a usable local CSV template, not only show prompt text.
+- Current product truth remains: `web_demo/index.html?v=1.0.14` → `web_demo/app-v2.js?v=1.0.14` + `web_demo/data-report-hotfix.js?v=1.0.14` → actionable report manager UI.
+
+### Fixed
+- `导出报表` now downloads the current report as a CSV file.
+- Report manager cards now include `查看报表`、`导入数据`、`导出`.
+- Report detail pages now include `导入报表` and functional `导出报表`.
+- `下载模板` now downloads a CSV template for the selected report.
+- Added operation notices so users can see when export/template/import actions have been triggered.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.14`.
+- API version is aligned to `v1.0.14` for this product interaction fix.
+
+### Product Boundary
+- Export and template download are real local browser actions.
+- Import remains a mock validation and confirmation flow until real ERP / CRM / 聚水潭 connectors are connected.
+- Report contents are still Mock ERP / CRM data.
+
 ## v1.0.11 - 2026-06-15
 
 ### Product Decision
