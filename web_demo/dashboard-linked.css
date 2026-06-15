@@ -1,0 +1,151 @@
+.dashboard-linked-board {
+  margin-bottom: 14px;
+}
+
+.dashboard-linked-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-linked-header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-linked-header button,
+.dashboard-linked-actions button {
+  border: 0;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #343b49;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.dashboard-linked-header button,
+.dashboard-linked-actions button:first-child {
+  background: #080b12;
+  color: #ffffff;
+}
+
+.dashboard-task-card.dashboard-linked-task {
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.dashboard-linked-main {
+  min-width: 0;
+}
+
+.dashboard-linked-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dashboard-linked-title-row > div:last-child {
+  min-width: 0;
+}
+
+.dashboard-linked-thumb {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: #eef2ff;
+  color: #080b12;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.dashboard-linked-title-row h3 {
+  margin: 0 0 4px;
+  font-size: 23px;
+  letter-spacing: -0.05em;
+}
+
+.dashboard-linked-title-row strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #080b12;
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-linked-title-row small {
+  display: block;
+  margin-top: 5px;
+  color: #7a8190;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.dashboard-linked-meta {
+  margin-top: 12px;
+}
+
+.dashboard-linked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 190px;
+}
+
+.dashboard-done-notice,
+.dashboard-empty {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.dashboard-done-notice {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1380px) {
+  .dashboard-task-card.dashboard-linked-task {
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .dashboard-linked-actions {
+    grid-column: 2 / -1;
+    max-width: none;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-task-card.dashboard-linked-task {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-linked-actions {
+    grid-column: auto;
+  }
+
+  .dashboard-linked-title-row {
+    align-items: flex-start;
+  }
+}
