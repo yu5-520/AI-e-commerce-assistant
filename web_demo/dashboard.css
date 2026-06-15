@@ -1,0 +1,91 @@
+.dashboard-hero h2 {
+  font-size: clamp(48px, 8vw, 104px);
+}
+
+.card-desc {
+  display: block;
+  margin-top: 10px;
+  color: #7a8190;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-queue {
+  padding: 24px;
+}
+
+.dashboard-queue .section-header h3 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.dashboard-task-list {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-task-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+}
+
+.task-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #080b12;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.task-main h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  letter-spacing: -0.05em;
+}
+
+.task-main p {
+  display: block !important;
+  margin: 12px 0 0;
+  color: #343b49;
+  font-size: 15px;
+  line-height: 1.7;
+  font-weight: 750;
+}
+
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-meta span:not(.badge) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #5b6472;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 640px) {
+  .dashboard-task-card {
+    grid-template-columns: 1fr;
+  }
+}
