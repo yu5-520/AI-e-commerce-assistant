@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.0.7 - 2026-06-15
+
+### Product Decision
+- The homepage overview is an operations task board, not a single-theme analysis report.
+- The primary homepage job is to show task order, urgency, deadline, item count, and operating impact.
+- Internal boundary language should not be shown as a main dashboard module; merchant-facing confirmation and execution rules belong in the confirmation flow or API contract, not in the overview layout.
+- Current product truth remains: `web_demo/index.html` → `web_demo/app-v2.js` → `/api/business/today` task board payload.
+
+### Changed
+- `/api/business/today` now returns `task_distribution` and `task_queue` for the homepage dashboard.
+- `web_demo/app-v2.js` renders the hero title as `今日任务清单` instead of using the next internal module label as the page theme.
+- The old homepage `下一步` bullet block was replaced by ordered task cards with urgency, deadline, count, impact, and reason.
+- The old homepage `边界` card was removed from the dashboard rendering.
+- Added `web_demo/dashboard.css` and loaded it from `web_demo/index.html` for the task board layout.
+- API smoke tests now verify the task board contract and prevent `boundaries` from returning to the merchant overview payload.
+- API version is aligned to `v1.0.7` for this dashboard contract update.
+
+### Product Boundary
+- The product still does not execute real shop operations.
+- Confirmation remains a user decision record, not automated RPA execution.
+- Safety rules can exist in product APIs as execution guidance, but the homepage must prioritize merchant execution order over engineering wording.
+
 ## v1.0.5 - 2026-06-15
 
 ### Product Decision
