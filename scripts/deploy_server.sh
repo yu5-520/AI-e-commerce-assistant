@@ -14,8 +14,28 @@ if [ "${EUID}" -ne 0 ]; then
   exit 1
 fi
 
-apt-get update
-apt-get install -y git python3 python3-venv python3-pip curl nginx
+install_packages() {
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y git python3 python3-venv python3-pip curl nginx
+    return
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y git python3 python3-pip curl nginx
+    return
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    yum install -y git python3 python3-pip curl nginx
+    return
+  fi
+
+  echo "No supported package manager found. Please install git python3 python3-pip curl nginx manually."
+  exit 1
+}
+
+install_packages
 
 if [ ! -d "$APP_DIR/.git" ]; then
   mkdir -p "$APP_DIR"
@@ -55,7 +75,18 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 SERVICE
 
-cat > "/etc/nginx/sites-available/${NGINX_SITE_NAME}" <<NGINX
+NGINX_AVAILABLE_DIR="/etc/nginx/sites-available"
+NGINX_ENABLED_DIR="/etc/nginx/sites-enabled"
+NGINX_CONF_PATH="${NGINX_AVAILABLE_DIR}/${NGINX_SITE_NAME}"
+
+if [ ! -d "$NGINX_AVAILABLE_DIR" ] || [ ! -d "$NGINX_ENABLED_DIR" ]; then
+  # RHEL / CentOS / Alibaba Cloud Linux usually uses /etc/nginx/conf.d/*.conf
+  NGINX_CONF_PATH="/etc/nginx/conf.d/${NGINX_SITE_NAME}.conf"
+else
+  rm -f /etc/nginx/sites-enabled/default
+fi
+
+cat > "$NGINX_CONF_PATH" <<NGINX
 server {
     listen 80;
     server_name ${PUBLIC_HOST};
@@ -73,15 +104,17 @@ server {
 }
 NGINX
 
-ln -sf "/etc/nginx/sites-available/${NGINX_SITE_NAME}" "/etc/nginx/sites-enabled/${NGINX_SITE_NAME}"
-rm -f /etc/nginx/sites-enabled/default
+if [ -d "$NGINX_AVAILABLE_DIR" ] && [ -d "$NGINX_ENABLED_DIR" ]; then
+  ln -sf "$NGINX_CONF_PATH" "${NGINX_ENABLED_DIR}/${NGINX_SITE_NAME}"
+fi
+
 nginx -t
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
 systemctl enable nginx
-systemctl reload nginx
+systemctl restart nginx
 
 sleep 2
 systemctl --no-pager --full status "$SERVICE_NAME" || true
