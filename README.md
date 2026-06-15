@@ -1,213 +1,115 @@
 # AI ERP 经营单元电商循环系统 MVP
 
-> 一个基于商家 ERP 商品结构识别经营单元的货架电商 AI 工作流原型：先从商品、库存、订单、退款和客户数据中推断当前经营单元，再匹配类目知识、循环频率、竞品比对、上新增长和流量测试回流，最后生成下一轮动作草案。
+> 一个基于商家 ERP 商品结构识别经营单元的货架电商 AI 工作流原型。系统从商品、库存、订单、退款和客户数据中推断当前经营单元，再生成经营判断、竞品机会、上新建议、流量复盘、待确认动作和经营报告。
 
-## 1. 项目定位
+## 1. 当前主定位
 
-本项目当前主定位升级为：
-
-> **AI ERP 经营单元电商循环系统 MVP**
-
-它不是先默认某个垂直类目，也不是只生成标题 / 主图的一次性工具，而是一个围绕商家真实 ERP 商品结构运行的 **Workflow-first，Agent-ready** 经营循环原型。
-
-真实产品逻辑不是：
+本仓库当前只保留一条主产品链路：
 
 ```text
-默认防晒服
+ERP / CRM Mock 数据
 ↓
-跑一轮经营循环
-```
-
-而是：
-
-```text
-读取 ERP 商品、库存、订单、退款、客户数据
-↓
-识别经营单元 / 商品群
-↓
-匹配经营单元知识档案
-↓
-生成日 / 周循环策略
-↓
-经营判断、竞品比对、上新增长、流量测试回流
-↓
-经营循环总控决定下一轮回到哪里
-```
-
-一句话：
-
-> **ERP 决定经营单元，经营单元决定类目知识，商品节奏决定循环频率，系统再生成经营判断、竞品比对、上新草案、测试复盘和下一轮动作。**
-
-## 2. 当前版本边界
-
-当前仓库已经完成的是 **V0.8 - V1.4 的 Mock 闭环骨架**，并新增了 ERP 经营单元识别、循环频率策略和产品化后端接口。
-
-当前可运行能力：
-
-```text
-Mock ERP / CRM 数据
-↓
-ERP 商品结构识别
-↓
-经营单元推断
+经营单元识别
 ↓
 循环频率策略
 ↓
-经营单元知识档案
-↓
-商品经营诊断
-↓
-同经营单元竞品比对
-↓
-同经营单元上新增长草案
-↓
-流量测试与数据回流
+商品体检、竞品机会、上新建议、流量复盘
 ↓
 经营循环总控
 ↓
-CRM 客户分层
+/api/business/* 产品接口
 ↓
-轻量 RAG 知识召回
-↓
-RPA 任务草案
-↓
-人工确认
-↓
-报告与日志回写
+web_demo/app-v2.js 产品化前端
 ```
 
-当前 mock ERP 商品会推断为：
+核心原则：
 
 ```text
-经营单元：家居生活商品
-类目档案：knowledge_base/category_profiles/home_living_goods.md
-循环频率：daily
-报告类型：daily_operation_report
+ERP 决定经营单元，经营单元决定类目知识，商品节奏决定循环频率，系统只生成建议、草案、复盘和待确认动作。
 ```
 
-防晒服仍然保留为一个可复制的 demo 样板，但不再是产品默认前提。
+系统不再保留旧版 demo 入口、旧版前端模板和旧兼容 API。历史版本由 Git commits 保存，不放在 main 分支干扰当前产品。
 
-## 3. 核心架构
+## 2. 当前目录职责
 
 ```text
-0. ERP 商品结构识别
-商品标题 / 平台类目 / 商品群 / 库存 / 订单 / 销售额 / 价格带
-↓
-1. 经营单元推断
-家居生活商品 / 防晒商品 / 服饰商品 / 大宗商品 / 快消商品等
-↓
-2. 循环频率策略
-日循环 / 周循环 / 月循环 / 异常触发
-↓
-3. ERP + CRM 经营判断系统
-已有商品 / 库存 / 订单 / 退款 / 客户 / 售前售后
-↓
-4. 同经营单元竞品比对系统
-价格 / 标题 / 主图 / SKU / 评价 / 差评 / 活动 / 售后承诺
-↓
-5. 同经营单元上新增长系统
-新品候选 / 上新草案 / 标题主图 / SKU / 定价 / 测试计划
-↓
-6. 流量测试与数据回流系统
-曝光 / 点击 / 转化 / 退款 / ROI / 库存变化 / 客户反馈 / 复盘日志
-↓
-7. 经营循环总控
-决定下一轮回到 ERP、CRM、竞品、上新、流量测试或继续循环
-↓
-8. 产品化 API 层
-把内部工作流结果包装成今日建议、经营单元、商品体检、竞品机会、上新建议、流量复盘、待确认动作和经营报告
+src/api/main.py                    FastAPI 唯一入口
+src/api/routes/business.py          当前产品业务 API
+src/api/routes/approvals.py         确认 / 拒绝动作记录
+src/api/routes/data_import.py       Mock 数据校验与导入记录
+src/api/routes/health.py            健康检查
+src/api/routes/system.py            系统状态与运行数据清理
+src/services/business_view_service.py
+                                  产品视图包装层
+src/workflow/mock_workflow.py       当前 Mock workflow 编排
+src/operating_unit/                 ERP 经营单元识别
+src/scheduler/                      循环频率策略
+src/category/                       经营单元知识档案加载
+src/competitor/                     同经营单元竞品比对
+src/listing/                        上新增长建议
+src/traffic_test/                   流量测试回流
+src/operating_loop/                 经营循环总控
+src/repositories/                   SQLite / JSONL 记录层
+web_demo/index.html                 当前前端入口
+web_demo/app-v2.js                  当前前端逻辑
+scripts/start_server.sh             本机启动脚本
+scripts/deploy_server.sh            服务器部署脚本
+deploy/nginx-ai-operating-advisor.conf
+                                  Nginx 反向代理配置
 ```
 
-## 4. 当前可运行内容
+## 3. 当前产品 API
 
-### 4.1 命令行 Mock Workflow
-
-```bash
-python -m src.run_demo
-```
-
-运行后生成：
+前端只应使用下面这组产品接口：
 
 ```text
-outputs/operating_unit.json
-outputs/cycle_policy.json
-outputs/category_context.json
-outputs/product_diagnosis.json
-outputs/customer_segmentation.json
-outputs/competitor_analysis.json
-outputs/listing_growth_plan.json
-outputs/traffic_feedback_report.json
-outputs/operating_loop_summary.json
-outputs/rpa_task_draft.json
-outputs/approval_required_tasks.json
-outputs/rag_retrieval_context.json
-outputs/demo_report.md
+GET  /api/business/today
+GET  /api/business/operating-unit
+GET  /api/business/data-health
+GET  /api/business/products
+GET  /api/business/competitors
+GET  /api/business/listing
+GET  /api/business/traffic
+GET  /api/business/actions
+GET  /api/business/report
 ```
 
-### 4.2 Evals 评测
-
-```bash
-python evals/run_evals.py
-```
-
-运行后生成：
-
-```text
-evals/results/latest_results.json
-```
-
-### 4.3 FastAPI 后端
-
-本地开发：
-
-```bash
-pip install -r requirements.txt
-uvicorn src.api.main:app --reload
-```
-
-前端优先使用产品化接口：
-
-```text
-GET  /api/business/today             今日经营建议
-GET  /api/business/operating-unit    经营单元与循环频率
-GET  /api/business/data-health       数据体检
-GET  /api/business/products          商品体检
-GET  /api/business/competitors       竞品机会
-GET  /api/business/listing           上新建议
-GET  /api/business/traffic           流量复盘
-GET  /api/business/actions           待确认动作
-GET  /api/business/report            经营报告
-```
-
-兼容旧版和内部调试接口：
+辅助接口：
 
 ```text
 GET  /api/health
-GET  /api/demo/run
-GET  /api/demo/report
-GET  /api/evals/run
-POST /api/tasks/{task_id}/approve
-POST /api/tasks/{task_id}/reject
-GET  /api/tasks/status
+POST /api/data/validate
+POST /api/data/import/mock
+GET  /api/data/imports
+GET  /api/approvals
+GET  /api/approvals/records
+POST /api/approvals/{task_id}/approve
+POST /api/approvals/{task_id}/reject
+GET  /api/system/db-status
+POST /api/system/clear-demo-data?confirm=true
 ```
 
-### 4.4 前端 Demo
+## 4. 本地运行
 
-本地启动 FastAPI 后打开：
+```bash
+cp .env.example .env
+bash scripts/start_server.sh
+```
+
+本地访问：
 
 ```text
-http://127.0.0.1:8000/
+http://127.0.0.1:3000
 ```
 
-或：
+健康检查：
 
-```text
-http://127.0.0.1:8000/web_demo/index.html
+```bash
+curl http://127.0.0.1:3000/api/health
+curl http://127.0.0.1:3000/api/business/today
 ```
 
-页面会优先调用 `/api/business/today` 和其他 `/api/business/*` 产品接口。如果没有启动 API，直接打开 `web_demo/index.html` 时会自动回退到本地样例数据。
-
-### 4.5 服务器部署
+## 5. 服务器部署
 
 服务器推荐结构：
 
@@ -215,7 +117,7 @@ http://127.0.0.1:8000/web_demo/index.html
 公网用户 → 80/443 → Nginx → 127.0.0.1:3000 → FastAPI
 ```
 
-安全组建议只开放：
+安全组建议：
 
 ```text
 80 / 443：公网访问
@@ -223,7 +125,7 @@ http://127.0.0.1:8000/web_demo/index.html
 3000：不要对公网开放
 ```
 
-一键部署入口：
+一键部署：
 
 ```bash
 sudo apt-get update
@@ -234,137 +136,35 @@ cd /opt/ai-ecommerce-assistant
 sudo bash scripts/deploy_server.sh
 ```
 
-部署完成后访问：
+部署后访问：
 
 ```text
 http://47.118.29.46
 ```
 
-健康检查：
-
-```bash
-curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:3000/api/business/today
-curl http://47.118.29.46/api/health
-```
-
-详细部署说明见：
+详细部署说明：
 
 ```text
 docs/server-deploy.md
 ```
 
-## 5. 当前已经完成
+## 6. 当前边界
 
 ```text
-统一产品文档
-+ ERP 经营单元推断模块
-+ 循环频率策略模块
-+ 产品化 Business API
-+ 安全服务器部署脚本（Nginx 公网入口 + FastAPI 本机监听）
-+ 家居生活经营单元档案
-+ 家居生活竞品 / 货盘 / 流量测试 Mock 数据
-+ 防晒服 demo 样板保留
-+ 类目上下文加载模块
-+ 同经营单元竞品比对模块
-+ 同经营单元上新增长模块
-+ 流量测试与回流模块
-+ 经营循环总控模块
-+ Mock ERP / CRM 数据
-+ Python Mock Workflow
-+ 简单 RAG 检索
-+ RPA 任务草案
-+ Human-in-the-loop 风控
-+ Evals
-+ FastAPI API
-+ 产品化前端 UI
-+ SQLite / JSONL 日志记录
+不接真实店铺后台
+不自动改价
+不自动投放
+不自动报名活动
+不自动群发客户
+不自动处理退款
+只生成经营判断、动作草案、复盘报告和待确认事项
 ```
 
-## 6. 当前核心模块
+## 7. 清理规则
 
-### 6.1 ERP 经营单元推断
+main 分支只保留当前产品主线。
 
 ```text
-src/operating_unit/
+旧模板、旧 demo、旧兼容接口、旧运行命令不放在当前主分支。
+需要回看历史版本时，从 Git commit 历史查找。
 ```
-
-当前能力：
-
-```text
-读取 ERP 商品表
-识别商品类目、标题关键词、商品群和库存结构
-推断经营单元
-输出经营单元 ID、商品群、关键词信号和推断理由
-```
-
-当前 mock ERP 会从遮阳伞、厨房置物架、护腰坐垫等商品推断出：
-
-```text
-home_living_goods / 家居生活商品
-```
-
-### 6.2 循环频率策略
-
-```text
-src/scheduler/
-```
-
-当前能力：
-
-```text
-根据经营单元、价格带、库存和商品节奏生成循环策略
-快消 / 低客单 / 高库存商品 → daily
-大宗 / 高客单 / 低频商品 → weekly
-其他商品 → weekly operation review
-```
-
-当前 mock ERP 推断为：
-
-```text
-daily_fast_moving_goods_loop
-```
-
-### 6.3 产品化 Business API
-
-```text
-src/api/routes/business.py
-src/services/business_view_service.py
-```
-
-当前能力：
-
-```text
-把内部 workflow 结果包装成前端可直接消费的产品视图
-隐藏 workflow、RAG、SQLite、ExecutionLog 等工程表达
-保留 raw 字段用于兼容旧前端数据结构
-```
-
-### 6.4 服务器部署
-
-```text
-scripts/start_server.sh
-scripts/deploy_server.sh
-deploy/nginx-ai-operating-advisor.conf
-docs/server-deploy.md
-```
-
-当前能力：
-
-```text
-FastAPI 绑定 127.0.0.1:3000
-Nginx 作为公网入口
-安全组无需开放 3000
-生成 systemd 服务
-支持 Nginx 反向代理配置
-```
-
-### 6.5 经营单元知识档案
-
-```text
-knowledge_base/category_profiles/home_living_goods.md
-knowledge_base/category_profiles/sun_protection_clothing.md
-src/category/
-```
-
-家居生活商品是当前 ERP 推断出的主经营单元。防晒服保留为可复制的第二样板，但不再作为默认值。
