@@ -158,6 +158,8 @@ evals/results/latest_results.json
 
 ### 4.3 FastAPI 后端
 
+本地开发：
+
 ```bash
 pip install -r requirements.txt
 uvicorn src.api.main:app --reload
@@ -191,7 +193,7 @@ GET  /api/tasks/status
 
 ### 4.4 前端 Demo
 
-启动 FastAPI 后打开：
+本地启动 FastAPI 后打开：
 
 ```text
 http://127.0.0.1:8000/
@@ -207,7 +209,19 @@ http://127.0.0.1:8000/web_demo/index.html
 
 ### 4.5 服务器部署
 
-默认服务器端口为 `3000`，FastAPI 会同时服务前端页面和产品接口。
+服务器推荐结构：
+
+```text
+公网用户 → 80/443 → Nginx → 127.0.0.1:3000 → FastAPI
+```
+
+安全组建议只开放：
+
+```text
+80 / 443：公网访问
+22：仅限你的固定公网 IP
+3000：不要对公网开放
+```
 
 一键部署入口：
 
@@ -223,7 +237,7 @@ sudo bash scripts/deploy_server.sh
 部署完成后访问：
 
 ```text
-http://47.118.29.46:3000
+http://47.118.29.46
 ```
 
 健康检查：
@@ -231,6 +245,7 @@ http://47.118.29.46:3000
 ```bash
 curl http://127.0.0.1:3000/api/health
 curl http://127.0.0.1:3000/api/business/today
+curl http://47.118.29.46/api/health
 ```
 
 详细部署说明见：
@@ -246,7 +261,7 @@ docs/server-deploy.md
 + ERP 经营单元推断模块
 + 循环频率策略模块
 + 产品化 Business API
-+ 服务器启动与部署脚本
++ 安全服务器部署脚本（Nginx 公网入口 + FastAPI 本机监听）
 + 家居生活经营单元档案
 + 家居生活竞品 / 货盘 / 流量测试 Mock 数据
 + 防晒服 demo 样板保留
@@ -337,8 +352,9 @@ docs/server-deploy.md
 当前能力：
 
 ```text
-启动 FastAPI + 前端静态页
-绑定 0.0.0.0:3000
+FastAPI 绑定 127.0.0.1:3000
+Nginx 作为公网入口
+安全组无需开放 3000
 生成 systemd 服务
 支持 Nginx 反向代理配置
 ```
