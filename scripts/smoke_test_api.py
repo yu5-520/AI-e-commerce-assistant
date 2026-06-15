@@ -1,11 +1,11 @@
-"""API smoke test for the product workbench.
+"""API smoke test for the current AI ERP operating advisor product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
-process. It intentionally checks only product-critical API contracts, not deep
-business correctness.
+process. It intentionally checks only current product-critical API contracts.
+Legacy demo/debug routes are not tested because they are no longer mounted.
 """
 
 from __future__ import annotations
@@ -54,42 +54,50 @@ def run_smoke_test() -> None:
     imports = assert_status("GET", "/api/data/imports")
     assert isinstance(imports, list), "imports should be a list"
 
-    demo = assert_status("GET", "/api/demo/run")
-    assert_keys(demo, ["workflow_name", "summary", "rpa_tasks", "workflow_run_id"], "demo run")
-    assert demo["rpa_tasks"], "demo run should generate at least one task"
+    today = assert_status("GET", "/api/business/today")
+    assert_keys(today, ["page_title", "priority", "operating_unit", "cycle", "cards", "boundaries", "raw"], "business today")
+    assert today["operating_unit"]["name"] == "家居生活商品", "business today should expose ERP-inferred operating unit"
+    assert today["cycle"]["frequency_label"] == "每天", "business today should expose readable cycle frequency"
 
-    task_id = demo["rpa_tasks"][0]["task_id"]
-    approved = assert_status("POST", f"/api/approvals/{task_id}/approve")
+    operating_unit = assert_status("GET", "/api/business/operating-unit")
+    assert_keys(operating_unit, ["unit_name", "unit_id", "source", "cycle_policy"], "operating unit")
+    assert operating_unit["unit_id"] == "home_living_goods", "operating unit should be inferred from ERP mock data"
+
+    data_health = assert_status("GET", "/api/business/data-health")
+    assert_keys(data_health, ["status", "summary", "datasets", "message"], "business data health")
+
+    products = assert_status("GET", "/api/business/products")
+    assert_keys(products, ["title", "summary", "items"], "business products")
+    assert products["items"], "business products should contain product cards"
+
+    competitors = assert_status("GET", "/api/business/competitors")
+    assert_keys(competitors, ["title", "category_name", "competitor_count", "opportunity_actions", "next_action"], "business competitors")
+    assert competitors["competitor_count"] > 0, "competitors should contain same-operating-unit references"
+
+    listing = assert_status("GET", "/api/business/listing")
+    assert_keys(listing, ["title", "candidate_count", "top_candidate", "title_draft", "image_plan", "sku_plan"], "business listing")
+    assert listing["title_draft"], "listing should include a draft title"
+
+    traffic = assert_status("GET", "/api/business/traffic")
+    assert_keys(traffic, ["title", "experiment_count", "next_action", "loopback_actions", "items"], "business traffic")
+    assert traffic["experiment_count"] > 0, "traffic should contain experiments"
+
+    actions = assert_status("GET", "/api/business/actions")
+    assert_keys(actions, ["items"], "business actions")
+    assert actions["items"], "actions should include confirmation items"
+
+    action_id = actions["items"][0]["action_id"]
+    approved = assert_status("POST", f"/api/approvals/{action_id}/approve")
     assert approved["approval_status"] == "approved", "approval status should be approved"
 
-    rejected = assert_status("POST", f"/api/approvals/{task_id}/reject")
+    rejected = assert_status("POST", f"/api/approvals/{action_id}/reject")
     assert rejected["approval_status"] == "rejected", "approval status should be rejected"
 
     approval_records = assert_status("GET", "/api/approvals/records")
     assert isinstance(approval_records, list), "approval records should be a list"
 
-    tasks = assert_status("GET", "/api/tasks")
-    assert isinstance(tasks, list), "tasks should be a list"
-
-    reports = assert_status("GET", "/api/reports")
-    assert "reports" in reports, "reports payload should contain reports"
-
-    report_text = assert_status("GET", "/api/reports/demo")
-    assert isinstance(report_text, str) and report_text.strip(), "demo report should not be empty"
-
-    workflow_runs = assert_status("GET", "/api/logs/workflow-runs?limit=5&status=success")
-    assert_keys(workflow_runs, ["items", "total", "limit", "offset", "filters"], "workflow run logs")
-
-    execution_logs = assert_status("GET", "/api/logs/execution-logs?limit=5")
-    assert_keys(execution_logs, ["items", "total", "limit", "offset", "filters"], "execution logs")
-
-    filtered_runs = assert_status("GET", "/api/logs/workflow-runs?limit=5&workflow_type=full_mock_workflow")
-    assert_keys(filtered_runs, ["items", "total", "filters"], "filtered workflow runs")
-
-    if workflow_runs["items"]:
-        run_id = workflow_runs["items"][0]["workflow_run_id"]
-        run_logs = assert_status("GET", f"/api/logs/workflow-runs/{run_id}/execution-logs?limit=10")
-        assert_keys(run_logs, ["items", "total", "workflow_run_id"], "logs by run")
+    report_text = assert_status("GET", "/api/business/report")
+    assert isinstance(report_text, str) and report_text.strip(), "business report should not be empty"
 
     final_db_status = assert_status("GET", "/api/system/db-status")
     assert final_db_status["summary"]["total_records"] >= 1, "db should contain records after smoke test"
