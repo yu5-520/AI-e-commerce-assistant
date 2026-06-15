@@ -32,6 +32,7 @@ REMOVED_ACTIVE_PATHS = [
     "src/services/eval_service.py",
     "evals/run_evals.py",
     "web_demo/app.js",
+    "web_demo/data-import.css",
     "scripts/material_observer.py",
     "agents/material_observer_agent.py",
     "agents/registry.py",
@@ -72,6 +73,7 @@ FORBIDDEN_DOC_SNIPPETS = [
     "demo_report.md",
     "modules/operation_modes",
     "modules/platforms",
+    "data-import.css",
 ]
 
 
