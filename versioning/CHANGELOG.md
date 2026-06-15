@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.7 - 2026-06-15
+
+### Changed
+- Repositioned the homepage overview as a merchant-facing task board instead of a single analysis-theme page.
+- `/api/business/today` now exposes `task_distribution`, `task_queue`, and `execution_rules` for ordered dashboard rendering.
+- `web_demo/app-v2.js` now renders the dashboard as a dated task list with urgency, deadline, item count, impact, and reason fields.
+- Added `web_demo/dashboard.css` for dashboard task queue layout and loaded it from `web_demo/index.html`.
+- Updated API smoke tests so the current dashboard contract checks task distribution and ordered task queue, and blocks internal `boundaries` wording from returning to the merchant overview contract.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.7`.
+
+### Product Engineering Rule
+- The homepage overview should answer: what to do first, by when, how many items are involved, and why it matters.
+- Internal safety/boundary language should not occupy the merchant dashboard. User-facing execution rules can remain in API payloads, but the homepage should prioritize task order and operating urgency.
+
 ## v1.0.6 - 2026-06-15
 
 ### Fixed
