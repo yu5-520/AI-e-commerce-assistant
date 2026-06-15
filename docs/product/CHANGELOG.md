@@ -1,5 +1,26 @@
 # Product Changelog
 
+## v1.0.17 - 2026-06-15
+
+### Product Decision
+- The 商品 page should use responsive product cards at tablet widths instead of forcing a dense table layout.
+- Product title readability comes before column density: title, platform/shop, metrics, and actions should be separate visual areas.
+- `全部平台`、`全部店铺`、`状态` controls must open selectable menus and change the visible product list.
+- Current product truth remains: `web_demo/index.html?v=1.0.17` → `web_demo/product-manager-hotfix.js?v=1.0.17` + `web_demo/product-center.css?v=1.0.17` → responsive product cards with working filters.
+
+### Changed
+- Product rows now render as card rows instead of table rows.
+- Long titles remain readable inside the product title block while metrics sit in a separate operation strip.
+- Platform, store, and status filters now open option menus and filter the product list.
+- Added search across product title, product ID, platform, store, inventory status, and after-sales status.
+- 商品列表 count now reflects the active filters.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.17`.
+- API version is aligned to `v1.0.17` for this product interaction and layout update.
+
+### Product Boundary
+- This is a frontend product-list interaction patch.
+- Product data, links, inventory, and after-sales status are still Mock ERP / CRM data until real shop connectors are attached.
+
 ## v1.0.16 - 2026-06-15
 
 ### Product Decision
@@ -118,4 +139,3 @@
 - The hotfix changes cached `今日任务清单` to `任务清单` and cached `今日到期` to `到期任务`.
 - `web_demo/dashboard.css` now includes fallback styling for old `.hero-card.dashboard-hero` markup so the top module shrinks even when cached old JavaScript still renders it.
 - `web_demo/index.html` now bumps all frontend assets to `?v=1.0.9` and loads the hotfix after the main app script.
-- API version is aligned to `v1.0.9` for this cache-compatibility correction.
