@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.15
+Current Version: v1.0.16
 
 ## Version History
 
@@ -41,6 +41,7 @@ Current Version: v1.0.15
 - v1.0.13: Report center adds user-driven report import. Report manager and report-detail pages now include `导入报表` / `导入数据`, local CSV/XLSX file selection, required-field checks, template download prompts, and mock import confirmation flow.
 - v1.0.14: Report export is now functional. Report manager and report-detail pages can download CSV report files, template download now creates a CSV file instead of showing an alert, and the page explicitly supports 导入 / 导出.
 - v1.0.15: Product page was productized from oversized diagnosis cards into a compact goods-operation list. Each product row now includes main image placeholder, full title, platform, shop, link, inventory, price, margin, after-sales status, copy-link action, report jump, and detail view; ambiguous `中` / `高` badges were removed from the visible product list.
+- v1.0.16: Product list layout was hardened for long titles. Product titles are now two-line clamped inside their own grid cell, row children use `min-width: 0`, store/status cells are ellipsized, action width is reduced, and frontend assets were bumped to avoid cached overlapping layouts.
 
 ## Version Rules
 
