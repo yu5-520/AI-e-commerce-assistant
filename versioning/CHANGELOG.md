@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.13 - 2026-06-15
+
+### Changed
+- Added user-driven report import to the ERP / CRM report center.
+- Report manager now shows a primary `导入报表` action and per-report `导入数据` actions next to `查看报表`.
+- Report detail pages now show `导入报表` next to `重新同步` and `导出报表`.
+- Added local CSV/XLS/XLSX file selection, required-field checklist, template prompt, and mock import confirmation flow.
+- Extended `web_demo/report-center.css` with import toolbar, import panel, file-drop area, import status, and responsive import controls.
+- `web_demo/index.html` now appends `?v=1.0.13` to assets and reloads the report import workflow.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.13`.
+
+### Product Engineering Rule
+- Report pages must support both import and export. Export is for taking data out; import is for users to refresh or add report data before full ERP / 聚水潭 integration exists.
+- Manual import should validate fields first and then enter a confirmation flow, rather than silently replacing report data.
+- Future real connectors can replace the mock import confirmation without changing the merchant-facing report workflow.
+
 ## v1.0.11 - 2026-06-15
 
 ### Changed
