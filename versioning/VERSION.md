@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.20
+Current Version: v1.0.21
 
 ## Version History
 
@@ -46,6 +46,7 @@ Current Version: v1.0.20
 - v1.0.18: Competitor page was productized into a competitor observation list aligned with the product page structure. Engineering price codes were replaced with business wording, competitor count was expanded to eight mock competitors, and platform/target/status filters plus search and detail actions were added.
 - v1.0.19: Listing page was repositioned as `上新测试台`. It now separates existing-product tests from competitor-opportunity tests, covering title, main image, SKU, platform coupon/activity, promotion, and competitor-driven launch experiments with confirmation and task-list actions.
 - v1.0.20: Traffic page was repositioned as `流量测试台`. Traffic rows now bind every judgment to precise product information, including image placeholder, title, platform, shop, link, traffic source, exposure, CTR, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
+- v1.0.21: Actions page was repositioned as `待办任务`. The sidebar label changed from `确认` to `待办`, and tasks from 商品、竞品、上新、流量、报表 and AI 自动判定 now appear in a priority-ordered task center with deadlines, source modules, precise product context, reasons, status, and task-specific actions.
 
 ## Version Rules
 
