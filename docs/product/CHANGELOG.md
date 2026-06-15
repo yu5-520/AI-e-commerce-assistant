@@ -1,5 +1,28 @@
 # Product Changelog
 
+## v1.0.18 - 2026-06-15
+
+### Product Decision
+- The 竞品 page should use the same scan pattern as the 商品 page: image, title, platform, store, link, core metrics, status, and actions.
+- Competitor analysis should be a list of comparable competitor goods, not a single backend conclusion page.
+- Engineering codes such as `below_market` must be translated into business wording before they reach the merchant-facing UI.
+- Current product truth remains: `web_demo/index.html?v=1.0.18` → `web_demo/competitor-manager-hotfix.js?v=1.0.18` + `web_demo/competitor-center.css?v=1.0.18` → responsive competitor observation list.
+
+### Changed
+- Added `web_demo/competitor-manager-hotfix.js` to replace the old competitor analysis page after render.
+- Added `web_demo/competitor-center.css` for responsive competitor rows, filter menus, metric strips, opportunity blocks, and detail pages.
+- The competitor page now shows 8 comparable competitor items instead of one narrow analysis block.
+- Competitor cards now show title, image placeholder, platform, store, link, price, monthly sales, rating, bad-review keywords, opportunity point, and actions.
+- Added platform, target product, and status filters, plus competitor search.
+- Added `详情`, `复制链接`, and `加入观察` actions.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.18` and loads the competitor manager script.
+- API version is aligned to `v1.0.18` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing UI productization patch.
+- Competitor links, sales, ratings, and review keywords are Mock data until real marketplace or crawler connectors are attached.
+- `加入观察` is a local confirmation-style interaction, not a real external platform subscription.
+
 ## v1.0.17 - 2026-06-15
 
 ### Product Decision
@@ -63,79 +86,12 @@
 - Product links are mock links until real shop platform connectors are attached.
 - Inventory and after-sales states are Mock ERP / CRM values.
 
-## v1.0.14 - 2026-06-15
+## Earlier History
 
-### Product Decision
-- Report pages must support both import and export as real actions.
-- `导出报表` cannot remain a decorative button; it must generate a downloadable file for the visible report data.
-- `下载模板` should also generate a usable local CSV template, not only show prompt text.
-- Current product truth remains: `web_demo/index.html?v=1.0.14` → `web_demo/app-v2.js?v=1.0.14` + `web_demo/data-report-hotfix.js?v=1.0.14` → actionable report manager UI.
-
-### Fixed
-- `导出报表` now downloads the current report as a CSV file.
-- Report manager cards now include `查看报表`、`导入数据`、`导出`.
-- Report detail pages now include `导入报表` and functional `导出报表`.
-- `下载模板` now downloads a CSV template for the selected report.
-- Added operation notices so users can see when export/template/import actions have been triggered.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.14`.
-- API version is aligned to `v1.0.14` for this product interaction fix.
-
-### Product Boundary
-- Export and template download are real local browser actions.
-- Import remains a mock validation and confirmation flow until real ERP / CRM / 聚水潭 connectors are connected.
-- Report contents are still Mock ERP / CRM data.
-
-## v1.0.11 - 2026-06-15
-
-### Product Decision
-- The data page is now an ERP / CRM report-management page, not a black-box data-health page.
-- The sidebar label should be `报表`, while the page title should clearly state `ERP / CRM 报表管理`.
-- Report rows must be actionable: each report needs a `查看报表` entry that opens a detailed report view.
-- Current product truth remains: `web_demo/index.html?v=1.0.11` → `web_demo/app-v2.js?v=1.0.11` + `web_demo/data-report-hotfix.js?v=1.0.11` → report manager UI.
-
-### Changed
-- Added `web_demo/data-report-hotfix.js` to replace the old data-health page after render.
-- Added `web_demo/report-center.css` for report manager cards, detail pages, and report tables.
-- The data navigation label is now `报表`.
-- The page now shows ERP / CRM report groups with status, record counts, source labels, and `查看报表` buttons.
-- Added drill-down pages for 商品报表、订单报表、库存报表、退款报表、客户报表、客户标签报表、客户互动报表.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.11` and loads the report manager hotfix script.
-- API version is aligned to `v1.0.11` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing UI productization patch.
-- Report contents are still Mock ERP / CRM data.
-- Real 聚水潭、ERP、CRM、广告后台 connectors are future integrations, not active production connections.
-
-## v1.0.10 - 2026-06-15
-
-### Product Decision
-- The operating unit page is a store-group management page, not an engineering category-recognition page.
-- The page should show which platforms and shops are managed, what data is connected, and which systems can be connected next.
-- Distribution and trigger-rule blocks should be removed from the visible operating-unit page because they do not help merchants manage store groups.
-- Current product truth remains: `web_demo/index.html?v=1.0.10` → `web_demo/app-v2.js?v=1.0.10` + `web_demo/operating-unit-hotfix.js?v=1.0.10` → store-group operating unit UI.
-
-### Changed
-- Added `web_demo/operating-unit-hotfix.js` to replace the old operating-unit page after render.
-- The page now shows `家居生活店铺组`, linked platforms, shop count, connected data, pending integrations, associated shops, and data-source status.
-- `web_demo/dashboard.css` now includes store-group layout styles for hero, metric cards, shop rows, and data-source rows.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.10` and loads the operating-unit hotfix script after existing frontend scripts.
-- API version is aligned to `v1.0.10` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing UI productization patch.
-- Real 聚水潭、千牛、店铺后台、广告后台 connections are still future integrations, not active production connectors.
-- The product still uses Mock ERP / CRM data.
-
-## v1.0.9 - 2026-06-15
-
-### Product Decision
-- The screenshot showed the ECS/browser was still serving the old v1.0.7 dashboard hero, so the fix must cover both current code and cached old markup.
-- The homepage must not show `今日任务清单` or `今日到期` after the compact task-list correction.
-- Current product truth remains: `web_demo/index.html?v=1.0.9` → `web_demo/app-v2.js?v=1.0.9` + `web_demo/dashboard-hotfix.js?v=1.0.9` → `/api/business/today` compact task board payload.
-
-### Fixed
-- Added `web_demo/dashboard-hotfix.js` to patch stale dashboard DOM after render.
-- The hotfix changes cached `今日任务清单` to `任务清单` and cached `今日到期` to `到期任务`.
-- `web_demo/dashboard.css` now includes fallback styling for old `.hero-card.dashboard-hero` markup so the top module shrinks even when cached old JavaScript still renders it.
-- `web_demo/index.html` now bumps all frontend assets to `?v=1.0.9` and loads the hotfix after the main app script.
+- v1.0.14: Report pages support real export and template download.
+- v1.0.11: Data page became ERP / CRM report management.
+- v1.0.10: Operating unit page became store-group management.
+- v1.0.9: Added dashboard cache hotfix and compatibility CSS.
+- v1.0.8: Compact dashboard task board was added.
+- v1.0.7: Homepage overview was repositioned as a task board.
+- v1.0.0-v1.0.6: Product trunk cleanup, API alignment, health/version repair, and current route governance.
