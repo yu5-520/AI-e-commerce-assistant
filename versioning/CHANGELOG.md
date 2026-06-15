@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.9 - 2026-06-15
+
+### Fixed
+- Added `web_demo/dashboard-hotfix.js` to patch cached v1.0.7 dashboard markup after render.
+- The hotfix changes stale `今日任务清单` text to `任务清单` and stale `今日到期` text to `到期任务` when an older cached dashboard script is still running.
+- Added compatibility CSS for `.hero-card.dashboard-hero` so the old oversized hero layout is compacted even if cached JavaScript still emits the old hero markup.
+- `web_demo/index.html` now appends `?v=1.0.9` to CSS and JS assets and loads the dashboard hotfix script after `app-v2.js`.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.9`.
+
+### Product Engineering Rule
+- Visible dashboard layout fixes must include both the current render path and a cache-compatibility path when the browser may still hold older JavaScript.
+- If the server shows old UI after a repository update, first verify whether the ECS instance has pulled the latest commit and whether the browser is still using cached frontend assets.
+
 ## v1.0.8 - 2026-06-15
 
 ### Changed
