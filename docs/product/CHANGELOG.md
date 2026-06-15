@@ -1,5 +1,29 @@
 # Product Changelog
 
+## v1.0.23 - 2026-06-15
+
+### Product Decision
+- The 首页任务清单 is now a cross-module real-time task summary, not an isolated static task board.
+- 首页 only shows the most important active tasks; 待办 remains the full execution queue.
+- Homepage tasks must show source module, product/store context, deadline, reason, impact, and action jumps.
+- Current product truth remains: `web_demo/index.html?v=1.0.23` → `web_demo/dashboard-hotfix.js?v=1.0.23` + `web_demo/dashboard-linked.css?v=1.0.23` → linked cross-module task board.
+
+### Changed
+- Replaced the old dashboard text patch with a linked dashboard task renderer.
+- Added `web_demo/dashboard-linked.css` for homepage linked task cards and module actions.
+- Homepage metrics now come from the active dashboard task pool: 紧急任务、到期任务、待确认、可测试机会.
+- Task cards now bind to precise product/report context and include source, deadline, reason, and impact.
+- Added actions for `进入待办`, `查看来源`, `查看商品`, and `标记完成`.
+- Added `查看全部待办` from the homepage queue header.
+- Completed task cards are removed from the homepage summary and are treated as traceable through 日志.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.23` and loads the linked dashboard stylesheet.
+- API version is aligned to `v1.0.23` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing task-summary UI patch.
+- `标记完成` records local homepage state only; it does not update real ERP / CRM / platform records.
+- The linked task pool remains Mock data until the shared task store and real persistence layer are attached.
+
 ## v1.0.22 - 2026-06-15
 
 ### Product Decision
@@ -73,32 +97,9 @@
 - The page does not launch real paid traffic, join platform campaigns, change budgets, or modify shop listings.
 - Traffic numbers remain Mock ERP / CRM / marketplace data until real platform connectors are attached.
 
-## v1.0.19 - 2026-06-15
-
-### Product Decision
-- The 上新 page is now a launch-test workspace, not a one-off candidate-generation page.
-- 上新 has two primary flows: existing-product tests and competitor-opportunity tests.
-- Existing-product tests cover title, main image, SKU, platform campaign, platform coupon, and promotion experiments.
-- Competitor opportunities should be converted into testable launch versions with cycle, target metrics, and execution boundaries.
-- Current product truth remains: `web_demo/index.html?v=1.0.19` → `web_demo/listing-manager-hotfix.js?v=1.0.19` + `web_demo/listing-center.css?v=1.0.19` → 上新测试台.
-
-### Changed
-- Added `web_demo/listing-manager-hotfix.js` to replace the old listing page after render.
-- Added `web_demo/listing-center.css` for launch test workspace tabs, cards, metric strips, detail pages, and confirmation actions.
-- The page now has two tabs: `已有商品测试` and `竞品机会测试`.
-- Test cards now show source, platform, store, test type, test version, test cycle, target metric, due time, status, risk, and actions.
-- Added launch-test examples for title tests, main-image tests, SKU tests, platform coupon/activity tests, promotion tests, and competitor-driven opportunity tests.
-- Added `详情`, `确认测试`, `加入任务清单`, and source jump actions.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.19` and loads the listing test workspace script.
-- API version is aligned to `v1.0.19` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing UI productization patch.
-- `确认测试` records a local confirmation-style state; it does not publish real listings, change prices, join platform campaigns, or launch paid promotions.
-- Test data remains Mock ERP / CRM / marketplace data until real platform connectors are attached.
-
 ## Earlier History
 
+- v1.0.19: 上新 page became 上新测试台.
 - v1.0.18: 竞品 page became responsive competitor observation list.
 - v1.0.17: 商品 page became responsive product cards with working filters.
 - v1.0.16: Product list layout was hardened for long titles.
