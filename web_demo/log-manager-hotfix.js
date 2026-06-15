@@ -1,188 +1,3 @@
-const logManagerPayload = {
-  logs: [
-    {
-      id: "G001",
-      time: "16:08",
-      type: "任务完成",
-      source: "流量触发",
-      status: "已加入任务清单",
-      level: "danger",
-      imageLabel: "架",
-      title: "厨房置物架免打孔收纳架壁挂多层家用置物架",
-      platform: "拼多多",
-      store: "家居百货店",
-      productId: "P002",
-      action: "搜索推广测试进入待办队列",
-      reason: "ROI 1.1，退款率 6.8%，安装和尺寸咨询偏高。",
-      result: "进入售后归因，暂不继续放大推广预算。",
-      route: "business-traffic",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G002",
-      time: "15:47",
-      type: "用户操作",
-      source: "上新触发",
-      status: "已确认测试",
-      level: "warning",
-      imageLabel: "伞",
-      title: "遮阳伞户外便携防晒防紫外线晴雨两用",
-      platform: "淘宝",
-      store: "家居生活主店",
-      productId: "P001",
-      action: "确认平台券活动价测试",
-      reason: "活动测试进入确认期，需要同时观察 ROI、退款率和库存承接。",
-      result: "进入待办执行队列，今天 20:00 前完成首轮观察。",
-      route: "business-listing",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G003",
-      time: "15:35",
-      type: "AI 判定",
-      source: "商品触发",
-      status: "异常提醒",
-      level: "danger",
-      imageLabel: "垫",
-      title: "护腰坐垫久坐办公室靠垫人体工学支撑款",
-      platform: "抖音小店",
-      store: "家居好物号",
-      productId: "P003",
-      action: "识别售后敏感商品",
-      reason: "推荐流量 ROI 0.9，退款率 8.4%，材质和支撑感反馈集中。",
-      result: "生成暂停投放和商品复查任务。",
-      route: "business-products",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G004",
-      time: "15:22",
-      type: "数据动作",
-      source: "报表触发",
-      status: "已导入",
-      level: "good",
-      imageLabel: "表",
-      title: "退款报表与商品报表同步检查",
-      platform: "ERP / CRM",
-      store: "家居生活店铺组",
-      productId: "R001",
-      action: "导入最新退款报表",
-      reason: "流量测试和售后归因需要最新退款原因数据。",
-      result: "更新退款原因字段，支持待办页售后归因任务。",
-      route: "data-check",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G005",
-      time: "15:10",
-      type: "任务完成",
-      source: "竞品触发",
-      status: "已加入观察",
-      level: "warning",
-      imageLabel: "装",
-      title: "厨房置物架：新增安装说明图 + 尺寸参照图版本",
-      platform: "拼多多",
-      store: "家居百货店",
-      productId: "P002",
-      action: "竞品机会转为上新测试",
-      reason: "竞品差评集中在安装困难 / 尺寸不符。",
-      result: "生成详情页测试版本，等待人工确认。",
-      route: "business-competitors",
-      taskRoute: "business-listing",
-    },
-    {
-      id: "G006",
-      time: "14:58",
-      type: "用户操作",
-      source: "商品触发",
-      status: "已复制链接",
-      level: "good",
-      imageLabel: "盒",
-      title: "透明收纳盒衣柜整理箱家用大容量防尘款",
-      platform: "淘宝",
-      store: "家居生活主店",
-      productId: "P004",
-      action: "复制商品链接",
-      reason: "用户从商品经营列表查看库存告急商品。",
-      result: "保留操作记录，便于回溯商品处理链路。",
-      route: "business-products",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G007",
-      time: "14:40",
-      type: "AI 判定",
-      source: "流量触发",
-      status: "已生成任务",
-      level: "warning",
-      imageLabel: "盒",
-      title: "透明收纳盒衣柜整理箱家用大容量防尘款",
-      platform: "淘宝",
-      store: "家居生活主店",
-      productId: "P004",
-      action: "判断库存承接不足",
-      reason: "活动流量 ROI 1.3，但库存仅 46，接近安全线。",
-      result: "生成补货周期确认任务，明天 12:00 前处理。",
-      route: "business-traffic",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G008",
-      time: "14:18",
-      type: "数据动作",
-      source: "报表触发",
-      status: "已导出",
-      level: "good",
-      imageLabel: "表",
-      title: "商品报表导出",
-      platform: "ERP / CRM",
-      store: "家居生活店铺组",
-      productId: "R002",
-      action: "导出商品报表 CSV",
-      reason: "用户在报表页导出当前商品明细。",
-      result: "本地生成 CSV 文件，未修改真实店铺数据。",
-      route: "data-check",
-      taskRoute: "business-actions",
-    },
-    {
-      id: "G009",
-      time: "13:55",
-      type: "任务完成",
-      source: "上新触发",
-      status: "已加入任务清单",
-      level: "warning",
-      imageLabel: "推",
-      title: "搜索推广测试：厨房置物架安装场景词",
-      platform: "拼多多",
-      store: "家居百货店",
-      productId: "P002",
-      action: "推广测试加入流量观察",
-      reason: "上新测试需要观察点击成本、收藏加购和退款率。",
-      result: "进入流量测试台，等待首轮数据回流。",
-      route: "business-listing",
-      taskRoute: "business-traffic",
-    },
-    {
-      id: "G010",
-      time: "09:00",
-      type: "AI 判定",
-      source: "经营单元",
-      status: "已生成摘要",
-      level: "good",
-      imageLabel: "报",
-      title: "生成经营日报和下一轮任务摘要",
-      platform: "经营单元",
-      store: "家居生活店铺组",
-      productId: "DAILY",
-      action: "汇总昨日任务和今日优先级",
-      reason: "用于总览页任务摘要和日常复盘。",
-      result: "输出到待办任务和总览任务清单。",
-      route: "dashboard",
-      taskRoute: "business-actions",
-    },
-  ],
-};
-
 let activeLogId = null;
 let logNotice = "";
 let openLogFilter = null;
@@ -194,6 +9,10 @@ const logFilters = {
   search: "",
 };
 
+function taskStore() {
+  return window.OPERATION_TASK_STORE;
+}
+
 function isLogRoute() {
   return location.hash.replace("#", "") === "business-report" || document.querySelector('.nav a[data-route="business-report"]')?.classList.contains("active");
 }
@@ -202,15 +21,20 @@ function logLevelClass(level) {
   return level === "danger" ? "danger" : level === "warning" ? "warning" : "good";
 }
 
+function allLogs() {
+  return taskStore()?.listLogs?.() || [];
+}
+
 function logNoticeMarkup() {
   if (!logNotice) return "";
   return `<section class="log-notice"><strong>操作结果</strong><span>${logNotice}</span></section>`;
 }
 
 function logFilterOptions(type) {
-  if (type === "type") return ["全部类型", ...new Set(logManagerPayload.logs.map((item) => item.type))];
-  if (type === "source") return ["全部来源", ...new Set(logManagerPayload.logs.map((item) => item.source))];
-  return ["全部状态", ...new Set(logManagerPayload.logs.map((item) => item.status))];
+  const logs = allLogs();
+  if (type === "type") return ["全部类型", ...new Set(logs.map((item) => item.type || "任务记录"))];
+  if (type === "source") return ["全部来源", ...new Set(logs.map((item) => item.source || "系统"))];
+  return ["全部状态", ...new Set(logs.map((item) => item.status || "已记录"))];
 }
 
 function renderLogFilter(type, label) {
@@ -237,16 +61,16 @@ function logMatchesFilters(log) {
 }
 
 function filteredLogs() {
-  return logManagerPayload.logs.filter(logMatchesFilters);
+  return allLogs().filter(logMatchesFilters);
 }
 
 function logMetrics() {
-  const logs = logManagerPayload.logs;
+  const logs = allLogs();
   return [
-    { label: "今日记录", value: logs.length, desc: "操作和系统记录" },
-    { label: "任务完成", value: logs.filter((item) => item.type === "任务完成").length, desc: "进入任务闭环" },
-    { label: "AI 判定", value: logs.filter((item) => item.type === "AI 判定").length, desc: "系统主动生成" },
-    { label: "数据动作", value: logs.filter((item) => item.type === "数据动作").length, desc: "导入 / 导出 / 同步" },
+    { label: "今日记录", value: logs.length, desc: "任务池流水" },
+    { label: "任务创建", value: logs.filter((item) => item.type === "任务创建" || item.type === "任务进入池").length, desc: "模块进入待办" },
+    { label: "任务完成", value: logs.filter((item) => item.type === "任务完成").length, desc: "闭环记录" },
+    { label: "排序动作", value: logs.filter((item) => item.type === "任务排序" || item.type === "任务置顶").length, desc: "人工调度" },
   ];
 }
 
@@ -263,30 +87,30 @@ function logFilterSummary(count) {
 function renderLogRow(log) {
   return `<article class="log-row">
     <div class="log-time-block ${logLevelClass(log.level)}">
-      <strong>${log.time}</strong>
-      <span>${log.type}</span>
+      <strong>${log.time || "--:--"}</strong>
+      <span>${log.type || "任务记录"}</span>
     </div>
     <div class="log-title-cell">
-      <div class="log-thumb">${log.imageLabel}</div>
+      <div class="log-thumb">${log.imageLabel || "记"}</div>
       <div class="log-title-block">
-        <strong>${log.title}</strong>
-        <small>${log.productId} · ${log.platform} · ${log.store}</small>
-        <span>${log.source} · ${log.status}</span>
+        <strong>${log.title || "任务记录"}</strong>
+        <small>${log.productId || "TASK"} · ${log.platform || "经营单元"} · ${log.store || "任务池"}</small>
+        <span>${log.source || "系统"} · ${log.status || "已记录"}</span>
       </div>
     </div>
     <div class="log-action-block">
       <span>动作</span>
-      <strong>${log.action}</strong>
-      <small>${log.reason}</small>
+      <strong>${log.action || "任务池动作"}</strong>
+      <small>${log.reason || "统一任务池记录。"}</small>
     </div>
     <div class="log-result-block">
       <span>结果</span>
-      <strong>${log.result}</strong>
+      <strong>${log.result || "已写入日志。"}</strong>
     </div>
     <div class="log-actions">
       <button type="button" data-log-detail="${log.id}">详情</button>
-      <button type="button" data-log-source="${log.route}">查看来源</button>
-      <button type="button" data-log-source="${log.taskRoute}">关联任务</button>
+      <button type="button" data-log-source="${log.route || "dashboard"}">查看来源</button>
+      <button type="button" data-log-source="${log.taskRoute || "business-actions"}">关联任务</button>
     </div>
   </article>`;
 }
@@ -300,9 +124,9 @@ function renderLogManager() {
   title.textContent = "日志";
   appView.innerHTML = `<section class="log-toolbar">
     <div>
-      <p class="eyebrow">OPERATION LOG</p>
-      <h2>操作日志</h2>
-      <p>记录任务完成、AI 自动判定、数据导入导出和用户操作；这里用于追溯，不做经营决策。</p>
+      <p class="eyebrow">OPERATION LOG · V1.1</p>
+      <h2>任务池日志</h2>
+      <p>记录任务创建、排序、置顶、完成、模块触发和用户操作；这里用于追溯，不做经营决策。</p>
     </div>
     <div class="log-filter-row">
       ${renderLogFilter("type", "类型")}
@@ -329,7 +153,7 @@ function renderLogManager() {
 }
 
 function renderLogDetail(logId) {
-  const log = logManagerPayload.logs.find((item) => item.id === logId);
+  const log = allLogs().find((item) => item.id === logId);
   const appView = document.getElementById("appView");
   const title = document.getElementById("pageTitle");
   if (!log || !appView || !title) return;
@@ -338,38 +162,38 @@ function renderLogDetail(logId) {
   title.textContent = "日志详情";
   appView.innerHTML = `<section class="log-detail-hero">
     <div class="log-detail-main">
-      <div class="log-thumb large">${log.imageLabel}</div>
+      <div class="log-thumb large">${log.imageLabel || "记"}</div>
       <div>
         <p class="eyebrow">LOG DETAIL</p>
-        <h2>${log.title}</h2>
-        <p>${log.time} · ${log.type} · ${log.source}</p>
-        <span>${log.platform} · ${log.store} · ${log.productId}</span>
+        <h2>${log.title || "任务记录"}</h2>
+        <p>${log.time || "--:--"} · ${log.type || "任务记录"} · ${log.source || "系统"}</p>
+        <span>${log.platform || "经营单元"} · ${log.store || "任务池"} · ${log.productId || "TASK"}</span>
       </div>
     </div>
     <div class="log-detail-actions">
       <button type="button" data-log-back>返回日志</button>
-      <button type="button" data-log-source="${log.route}">查看来源</button>
-      <button type="button" data-log-source="${log.taskRoute}">关联任务</button>
+      <button type="button" data-log-source="${log.route || "dashboard"}">查看来源</button>
+      <button type="button" data-log-source="${log.taskRoute || "business-actions"}">关联任务</button>
     </div>
   </section>
   ${logNoticeMarkup()}
   <section class="kpi-grid log-detail-metrics">
-    <article class="card"><h3>类型</h3><strong>${log.type}</strong><span class="card-desc">${log.status}</span></article>
-    <article class="card"><h3>来源</h3><strong>${log.source}</strong><span class="card-desc">${log.productId}</span></article>
-    <article class="card"><h3>时间</h3><strong>${log.time}</strong><span class="card-desc">今日记录</span></article>
-    <article class="card"><h3>状态</h3><strong class="metric-${logLevelClass(log.level)}">${log.status}</strong><span class="card-desc">可追溯</span></article>
+    <article class="card"><h3>类型</h3><strong>${log.type || "任务记录"}</strong><span class="card-desc">${log.status || "已记录"}</span></article>
+    <article class="card"><h3>来源</h3><strong>${log.source || "系统"}</strong><span class="card-desc">${log.productId || "TASK"}</span></article>
+    <article class="card"><h3>时间</h3><strong>${log.time || "--:--"}</strong><span class="card-desc">今日记录</span></article>
+    <article class="card"><h3>状态</h3><strong class="metric-${logLevelClass(log.level)}">${log.status || "已记录"}</strong><span class="card-desc">可追溯</span></article>
   </section>
   <section class="page-section log-detail-section">
-    <div class="section-header"><h3>动作</h3><span class="status-badge">${log.type}</span></div>
-    <p>${log.action}</p>
+    <div class="section-header"><h3>动作</h3><span class="status-badge">${log.type || "任务记录"}</span></div>
+    <p>${log.action || "任务池动作"}</p>
   </section>
   <section class="page-section log-detail-section">
-    <div class="section-header"><h3>原因</h3><span class="status-badge pending">${log.source}</span></div>
-    <p>${log.reason}</p>
+    <div class="section-header"><h3>原因</h3><span class="status-badge pending">${log.source || "系统"}</span></div>
+    <p>${log.reason || "统一任务池记录。"}</p>
   </section>
   <section class="page-section log-detail-section">
-    <div class="section-header"><h3>结果</h3><span class="status-badge">${log.status}</span></div>
-    <p>${log.result}</p>
+    <div class="section-header"><h3>结果</h3><span class="status-badge">${log.status || "已记录"}</span></div>
+    <p>${log.result || "已写入日志。"}</p>
   </section>`;
   bindLogButtons();
 }
@@ -378,13 +202,13 @@ function exportLogs() {
   const rows = filteredLogs();
   const header = ["时间", "类型", "来源", "状态", "商品/对象", "平台", "店铺", "动作", "原因", "结果"];
   const csvRows = [header, ...rows.map((item) => [item.time, item.type, item.source, item.status, item.title, item.platform, item.store, item.action, item.reason, item.result])]
-    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
+    .map((row) => row.map((cell) => `"${String(cell || "").replaceAll('"', '""')}"`).join(","))
     .join("\n");
   const blob = new Blob([`\ufeff${csvRows}`], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "operation-log.csv";
+  link.download = "operation-task-store-log.csv";
   link.click();
   URL.revokeObjectURL(url);
   logNotice = "当前筛选日志已导出。";
@@ -451,6 +275,9 @@ const logObserver = new MutationObserver(() => {
 });
 
 logObserver.observe(document.body, { childList: true, subtree: true });
+window.addEventListener("operation-task-store-change", () => {
+  if (isLogRoute()) scheduleLogPatch();
+});
 window.addEventListener("hashchange", () => {
   activeLogId = null;
   logNotice = "";
