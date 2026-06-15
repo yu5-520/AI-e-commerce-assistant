@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.0.24 - 2026-06-15
+
+### Product Decision
+- 首页 is now a command board: it tells the merchant task order, deadline, source, and where to continue handling.
+- Detailed handling text belongs in 待办, not in the 首页 summary.
+- Homepage tasks should use compact scheduling rows and judgment tags rather than large explanation cards.
+- Current product truth remains: `web_demo/index.html?v=1.0.24` → `web_demo/dashboard-hotfix.js?v=1.0.24` + `web_demo/dashboard-linked.css?v=1.0.24` → compact command-board task list.
+
+### Changed
+- Replaced long homepage task explanations with short task type, task signal, product short name, source, deadline, and judgment tags.
+- Added a homepage `时间系统` strip that groups active tasks by deadline bucket.
+- Simplified the row structure to emphasize task order, priority, deadline, source module, judgment tags, and navigation.
+- Reduced homepage actions to `进入待办`, `查看来源`, `商品`, and a weaker `完成` action.
+- Reworked `web_demo/dashboard-linked.css` so the homepage uses compact scheduling rows instead of heavy detail cards.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.24`.
+- API version is aligned to `v1.0.24` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing command-board UI patch.
+- `完成` only changes local homepage state and does not update real ERP / CRM / platform records.
+- The task pool remains Mock data until the shared task store and persistence layer are attached.
+
 ## v1.0.23 - 2026-06-15
 
 ### Product Decision
@@ -74,31 +96,9 @@
 - The page does not directly publish listings, launch ads, process refunds, change prices, or modify real shop data.
 - Task data remains Mock ERP / CRM / marketplace data until real platform connectors are attached.
 
-## v1.0.20 - 2026-06-15
-
-### Product Decision
-- The 流量 page is now a product-level traffic test workspace, not an abstract traffic conclusion page.
-- Every traffic judgment must bind to a specific product with image, title, platform, shop, and product link.
-- Traffic cards should show measurable signals: exposure, CTR, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
-- Current product truth remains: `web_demo/index.html?v=1.0.20` → `web_demo/traffic-manager-hotfix.js?v=1.0.20` + `web_demo/traffic-center.css?v=1.0.20` → 流量测试台.
-
-### Changed
-- Added `web_demo/traffic-manager-hotfix.js` to replace the old traffic page after render.
-- Added `web_demo/traffic-center.css` for product-level traffic cards, filters, metric strips, backflow blocks, and detail pages.
-- The page now shows product title, image placeholder, platform, store, product link, traffic channel, test source, target, cycle, exposure, CTR, conversion, ROI, refund rate, inventory, status, and next step.
-- Added filters for platform, store, traffic entrance, and status, plus search by product, shop, channel, status, backflow, and next step.
-- Added `详情`, `继续观察`, `加入任务清单`, and source jump actions to 商品 / 上新 pages.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.20` and loads the traffic test workspace script.
-- API version is aligned to `v1.0.20` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing UI productization patch.
-- `继续观察` and `加入任务清单` are local confirmation-style interactions.
-- The page does not launch real paid traffic, join platform campaigns, change budgets, or modify shop listings.
-- Traffic numbers remain Mock ERP / CRM / marketplace data until real platform connectors are attached.
-
 ## Earlier History
 
+- v1.0.20: 流量 page became product-level 流量测试台.
 - v1.0.19: 上新 page became 上新测试台.
 - v1.0.18: 竞品 page became responsive competitor observation list.
 - v1.0.17: 商品 page became responsive product cards with working filters.
