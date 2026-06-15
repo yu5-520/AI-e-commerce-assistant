@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.19
+Current Version: v1.0.20
 
 ## Version History
 
@@ -45,6 +45,7 @@ Current Version: v1.0.19
 - v1.0.17: Product page was switched from forced table columns to responsive product cards. Platform, store, and status filters now open selectable option menus, search filters the list, and filtered counts update in the 商品列表 header.
 - v1.0.18: Competitor page was productized into a competitor observation list aligned with the product page structure. Engineering price codes were replaced with business wording, competitor count was expanded to eight mock competitors, and platform/target/status filters plus search and detail actions were added.
 - v1.0.19: Listing page was repositioned as `上新测试台`. It now separates existing-product tests from competitor-opportunity tests, covering title, main image, SKU, platform coupon/activity, promotion, and competitor-driven launch experiments with confirmation and task-list actions.
+- v1.0.20: Traffic page was repositioned as `流量测试台`. Traffic rows now bind every judgment to precise product information, including image placeholder, title, platform, shop, link, traffic source, exposure, CTR, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
 
 ## Version Rules
 
