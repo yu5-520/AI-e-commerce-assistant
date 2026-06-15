@@ -6,6 +6,8 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
+API_VERSION = "1.0.5"
+
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -13,8 +15,9 @@ router = APIRouter(prefix="/api", tags=["health"])
 def health() -> Dict[str, Any]:
     return {
         "ok": True,
-        "version": "Product API MVP",
-        "mode": "mock_workflow_only",
+        "version": API_VERSION,
+        "product": "AI ERP Operating Advisor",
+        "mode": "mock_erp_crm_workflow",
         "safety": {
             "real_erp_connected": False,
             "real_crm_connected": False,
