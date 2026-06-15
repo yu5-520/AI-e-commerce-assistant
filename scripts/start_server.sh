@@ -11,7 +11,7 @@ if [ -f ".env" ]; then
   set +a
 fi
 
-APP_HOST="${APP_HOST:-0.0.0.0}"
+APP_HOST="${APP_HOST:-127.0.0.1}"
 APP_PORT="${APP_PORT:-3000}"
 APP_WORKERS="${APP_WORKERS:-1}"
 APP_RELOAD="${APP_RELOAD:-false}"
