@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.5 - 2026-06-15
+
+### Fixed
+- Repaired the backend API contract for approval status roundtrip.
+- `/api/business/actions` now merges persisted approval status from the approval service before returning product-facing action cards.
+- `/api/health` now returns the current API version and product name instead of a generic text label.
+- Added `/api/system/clear-runtime-data` as the current system cleanup endpoint while keeping `/api/system/clear-demo-data` as a backward-compatible alias.
+- Strengthened `scripts/smoke_test_api.py` so CI verifies approve/reject state is visible again through `/api/business/actions`.
+- Aligned the FastAPI app version with the repository version: `version="1.0.5"`.
+
+### Product Engineering Rule
+- Approval state must be visible through product-facing business APIs, not only through low-level approval endpoints.
+- Health output must reflect the current application version.
+- New endpoint names should use current product terminology; legacy names may remain only as compatibility aliases.
+
 ## v1.0.4 - 2026-06-15
 
 ### Changed
