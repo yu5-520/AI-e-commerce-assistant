@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.14 - 2026-06-15
+
+### Fixed
+- Made `导出报表` functional in the ERP / CRM report center.
+- Report manager and report-detail pages now download CSV files from the visible report table data.
+- `下载模板` now creates a CSV template file instead of only showing an alert.
+- Report manager now exposes `导入报表`, `下载模板`, and `导出当前报表` as concrete actions.
+- Per-report cards now expose `查看报表`, `导入数据`, and `导出` actions.
+- `web_demo/index.html` now appends `?v=1.0.14` to assets and reloads the fixed report workflow.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.14`.
+
+### Product Engineering Rule
+- Buttons shown in a product UI must either perform an action or be visibly disabled; no inert action buttons on user-facing pages.
+- Export should generate a local file immediately for the currently selected report.
+- Import remains a field-check and confirmation flow until real ERP / CRM / 聚水潭 connectors are connected.
+
 ## v1.0.13 - 2026-06-15
 
 ### Changed
