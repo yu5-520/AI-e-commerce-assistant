@@ -34,16 +34,27 @@ def assert_keys(payload: Dict[str, Any], keys: list[str], name: str) -> None:
     assert not missing, f"{name} missing keys: {missing}"
 
 
+def find_action(actions: Dict[str, Any], action_id: str) -> Dict[str, Any]:
+    for item in actions.get("items", []):
+        if item.get("action_id") == action_id:
+            return item
+    raise AssertionError(f"Action not found after status update: {action_id}")
+
+
 def run_smoke_test() -> None:
     health = assert_status("GET", "/api/health")
-    assert_keys(health, ["ok", "version", "mode", "safety"], "health")
+    assert_keys(health, ["ok", "version", "product", "mode", "safety"], "health")
     assert health["ok"] is True, "health.ok should be true"
+    assert health["version"] == app.version, "health.version should match FastAPI app version"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
 
     clear_guard = client.post("/api/system/clear-demo-data")
     assert clear_guard.status_code == 400, "clear-demo-data must require confirm=true"
+
+    clear_runtime_guard = client.post("/api/system/clear-runtime-data")
+    assert clear_runtime_guard.status_code == 400, "clear-runtime-data must require confirm=true"
 
     validation = assert_status("POST", "/api/data/validate")
     assert_keys(validation, ["status", "datasets", "relationship_checks"], "data validation")
@@ -90,8 +101,18 @@ def run_smoke_test() -> None:
     approved = assert_status("POST", f"/api/approvals/{action_id}/approve")
     assert approved["approval_status"] == "approved", "approval status should be approved"
 
+    actions_after_approve = assert_status("GET", "/api/business/actions")
+    approved_action = find_action(actions_after_approve, action_id)
+    assert approved_action.get("status") == "approved", "business actions should expose approved status"
+    assert approved_action.get("approval_status") == "approved", "business actions should expose approval_status"
+
     rejected = assert_status("POST", f"/api/approvals/{action_id}/reject")
     assert rejected["approval_status"] == "rejected", "approval status should be rejected"
+
+    actions_after_reject = assert_status("GET", "/api/business/actions")
+    rejected_action = find_action(actions_after_reject, action_id)
+    assert rejected_action.get("status") == "rejected", "business actions should expose rejected status"
+    assert rejected_action.get("approval_status") == "rejected", "business actions should expose rejected approval_status"
 
     approval_records = assert_status("GET", "/api/approvals/records")
     assert isinstance(approval_records, list), "approval records should be a list"
