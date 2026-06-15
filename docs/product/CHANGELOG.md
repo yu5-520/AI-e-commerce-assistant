@@ -1,5 +1,28 @@
 # Product Changelog
 
+## v1.0.20 - 2026-06-15
+
+### Product Decision
+- The 流量 page is now a product-level traffic test workspace, not an abstract traffic conclusion page.
+- Every traffic judgment must bind to a specific product with image, title, platform, shop, and product link.
+- Traffic cards should show measurable signals: exposure, CTR, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
+- Current product truth remains: `web_demo/index.html?v=1.0.20` → `web_demo/traffic-manager-hotfix.js?v=1.0.20` + `web_demo/traffic-center.css?v=1.0.20` → 流量测试台.
+
+### Changed
+- Added `web_demo/traffic-manager-hotfix.js` to replace the old traffic page after render.
+- Added `web_demo/traffic-center.css` for product-level traffic cards, filters, metric strips, backflow blocks, and detail pages.
+- The page now shows product title, image placeholder, platform, store, product link, traffic channel, test source, target, cycle, exposure, CTR, conversion, ROI, refund rate, inventory, status, and next step.
+- Added filters for platform, store, traffic entrance, and status, plus search by product, shop, channel, status, backflow, and next step.
+- Added `详情`, `继续观察`, `加入任务清单`, and source jump actions to 商品 / 上新 pages.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.20` and loads the traffic test workspace script.
+- API version is aligned to `v1.0.20` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing UI productization patch.
+- `继续观察` and `加入任务清单` are local confirmation-style interactions.
+- The page does not launch real paid traffic, join platform campaigns, change budgets, or modify shop listings.
+- Traffic numbers remain Mock ERP / CRM / marketplace data until real platform connectors are attached.
+
 ## v1.0.19 - 2026-06-15
 
 ### Product Decision
@@ -68,50 +91,10 @@
 - This is a frontend product-list interaction patch.
 - Product data, links, inventory, and after-sales status are still Mock ERP / CRM data until real shop connectors are attached.
 
-## v1.0.16 - 2026-06-15
-
-### Product Decision
-- Product list titles must be readable without damaging the table layout.
-- Long titles should be clamped in the list view and fully visible in the detail view.
-- The 商品 page should never allow product title text to overlap platform, shop, inventory, price, margin, after-sales, or action columns.
-- Current product truth remains: `web_demo/index.html?v=1.0.16` → `web_demo/product-center.css?v=1.0.16` → compact product list with clamped titles.
-
-### Fixed
-- Product titles now clamp to two lines in the product list.
-- Product row grid children now use `min-width: 0` so text shrinks inside its own cell.
-- Store/status fields now ellipsize instead of being pushed by long product titles.
-- Product action column was narrowed so the title column gets more stable room.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.16`.
-- API version is aligned to `v1.0.16` for this product layout fix.
-
-### Product Boundary
-- This is a frontend layout fix.
-- Product titles, links, inventory, and after-sales values are still Mock ERP / CRM data until real shop connectors are attached.
-
-## v1.0.15 - 2026-06-15
-
-### Product Decision
-- The 商品 page is now a goods-operation list, not an oversized diagnosis-card page.
-- Each product row must identify the real shop item through main image, title, platform, shop, and link.
-- Inventory and after-sales risks should be shown on the affected fields, not as ambiguous `中` / `高` badges beside the product name.
-- Current product truth remains: `web_demo/index.html?v=1.0.15` → `web_demo/app-v2.js?v=1.0.15` + `web_demo/product-manager-hotfix.js?v=1.0.15` → compact product manager UI.
-
-### Changed
-- Added `web_demo/product-manager-hotfix.js` to replace the old product diagnosis page after render.
-- Added `web_demo/product-center.css` for compact product rows, product detail view, color-coded inventory/after-sales states, and responsive controls.
-- The product page now shows platform, shop, full product title, image placeholder, link, inventory, price, margin, after-sales status, and actions.
-- Product rows now expose `详情`, `复制链接`, and `商品报表` actions.
-- Product detail page now shows a larger image placeholder, product link, store/platform context, inventory, price, margin, after-sales, and processing suggestion.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.15` and loads the product manager script.
-- API version is aligned to `v1.0.15` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing UI productization patch.
-- Product links are mock links until real shop platform connectors are attached.
-- Inventory and after-sales states are Mock ERP / CRM values.
-
 ## Earlier History
 
+- v1.0.16: Product list layout was hardened for long titles.
+- v1.0.15: Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
 - v1.0.14: Report pages support real export and template download.
 - v1.0.11: Data page became ERP / CRM report management.
 - v1.0.10: Operating unit page became store-group management.
