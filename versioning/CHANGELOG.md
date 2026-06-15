@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0.4 - 2026-06-15
+
+### Changed
+- Aligned the frontend UI with the productized `/api/business/*` API surface.
+- `web_demo/app-v2.js` now uses dedicated product endpoints for product health, competitor opportunities, listing suggestions, traffic review, action confirmations, and business reports.
+- `web_demo/index.html` now uses clearer business hash sections such as `#business-products`, `#business-traffic`, and `#business-report`.
+- Removed the unused import action from the frontend runtime.
+- Added a Chinese label for `passed` data-health status.
+- Aligned the FastAPI app version with the repository version: `version="1.0.4"`.
+- Extended `scripts/check_version_governance.py` so the removed standalone data-import stylesheet cannot return to active trunk.
+
+### Removed
+- Removed `web_demo/data-import.css` from active trunk.
+
+### Product Engineering Rule
+- Frontend pages should prefer productized `/api/business/*` endpoints instead of rendering directly from raw workflow internals.
+- Removed frontend components should be blocked by version governance, not only deleted once.
+
 ## v1.0.3 - 2026-06-15
 
 ### Changed
