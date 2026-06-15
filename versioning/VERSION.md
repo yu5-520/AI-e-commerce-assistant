@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.3
+Current Version: v1.0.4
 
 ## Version History
 
@@ -29,6 +29,7 @@ Current Version: v1.0.3
 - v1.0.1: Script chain was repaired so GitHub Actions runs current runtime/API smoke tests plus version governance checks. Legacy Material Observer Agent files and runtime registry were removed from the active product trunk.
 - v1.0.2: Documentation trunk was cleaned so active docs describe only the current ERP operating-unit product path. Outdated future product-map, user-flow, and broad domain-model docs were removed, and governance now checks active docs for stale legacy snippets.
 - v1.0.3: Legacy module-chain memory was removed from active trunk. Old runtime module-chain registry and obsolete modules were deleted, report generation was renamed from demo report to operating report, and governance now blocks removed module-chain roots.
+- v1.0.4: Frontend UI was aligned with productized `/api/business/*` endpoints. Old standalone data-import stylesheet was removed, business hash routes were clarified, and governance now blocks the removed frontend component stylesheet.
 
 ## Version Rules
 
