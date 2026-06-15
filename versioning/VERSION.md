@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.17
+Current Version: v1.0.18
 
 ## Version History
 
@@ -43,6 +43,7 @@ Current Version: v1.0.17
 - v1.0.15: Product page was productized from oversized diagnosis cards into a compact goods-operation list. Each product row now includes main image placeholder, full title, platform, shop, link, inventory, price, margin, after-sales status, copy-link action, report jump, and detail view; ambiguous `中` / `高` badges were removed from the visible product list.
 - v1.0.16: Product list layout was hardened for long titles. Product titles are now two-line clamped inside their own grid cell, row children use `min-width: 0`, store/status cells are ellipsized, action width is reduced, and frontend assets were bumped to avoid cached overlapping layouts.
 - v1.0.17: Product page was switched from forced table columns to responsive product cards. Platform, store, and status filters now open selectable option menus, search filters the list, and filtered counts update in the 商品列表 header.
+- v1.0.18: Competitor page was productized into a competitor observation list aligned with the product page structure. Engineering price codes were replaced with business wording, competitor count was expanded to eight mock competitors, and platform/target/status filters plus search and detail actions were added.
 
 ## Version Rules
 
