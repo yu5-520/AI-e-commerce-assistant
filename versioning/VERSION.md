@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.14
+Current Version: v1.0.15
 
 ## Version History
 
@@ -40,6 +40,7 @@ Current Version: v1.0.14
 - v1.0.12: Frontend hotfix scripts were integrated into `web_demo/app-v2.js`. The runtime shell now loads one main JS file, avoiding MutationObserver hotfix loops while keeping the compact task board, store-group operating unit page, and ERP/CRM report center.
 - v1.0.13: Report center adds user-driven report import. Report manager and report-detail pages now include `导入报表` / `导入数据`, local CSV/XLSX file selection, required-field checks, template download prompts, and mock import confirmation flow.
 - v1.0.14: Report export is now functional. Report manager and report-detail pages can download CSV report files, template download now creates a CSV file instead of showing an alert, and the page explicitly supports 导入 / 导出.
+- v1.0.15: Product page was productized from oversized diagnosis cards into a compact goods-operation list. Each product row now includes main image placeholder, full title, platform, shop, link, inventory, price, margin, after-sales status, copy-link action, report jump, and detail view; ambiguous `中` / `高` badges were removed from the visible product list.
 
 ## Version Rules
 
