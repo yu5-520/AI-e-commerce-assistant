@@ -117,12 +117,12 @@ def _task_queue(result: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _task_distribution(task_queue: List[Dict[str, Any]], summary: Dict[str, Any], traffic: Dict[str, Any]) -> List[Dict[str, Any]]:
     urgent_count = sum(item.get("count", 0) for item in task_queue if item.get("urgency_level") == "high")
-    today_due_count = task_queue[0].get("count", 0) if task_queue else 0
+    due_count = task_queue[0].get("count", 0) if task_queue else 0
     pending_count = summary.get("approval_required_count", 0)
     test_count = summary.get("traffic_experiment_count") or traffic.get("experiment_count") or 0
     return [
-        {"title": "紧急任务", "value": urgent_count, "desc": "需要今天先处理"},
-        {"title": "今日到期", "value": today_due_count, "desc": "有明确时间限制"},
+        {"title": "紧急任务", "value": urgent_count, "desc": "需要先处理"},
+        {"title": "到期任务", "value": due_count, "desc": "有时间限制"},
         {"title": "待确认", "value": pending_count, "desc": "确认前不执行"},
         {"title": "可测试机会", "value": test_count, "desc": "小范围观察"},
     ]
@@ -139,14 +139,14 @@ def get_today_advice(write_outputs: bool = False, record_logs: bool = False) -> 
     task_distribution = _task_distribution(task_queue, summary, traffic)
 
     return {
-        "page_title": "今日任务清单",
+        "page_title": "任务清单",
         "priority": {
-            "title": "今日任务清单",
+            "title": "任务清单",
             "reason": traffic.get("next_action") or "按紧急程度、截止时间和经营影响自动排序。",
             "next_steps": loop.get("next_iteration_plan", []),
             "pending_count": summary.get("approval_required_count", 0),
             "urgent_count": task_distribution[0]["value"],
-            "today_due_count": task_distribution[1]["value"],
+            "due_count": task_distribution[1]["value"],
             "next_module_label": _module_label(summary.get("loop_next_module") or loop.get("next_module")),
         },
         "operating_unit": {
