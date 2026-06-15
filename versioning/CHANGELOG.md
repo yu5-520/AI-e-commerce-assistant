@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.8 - 2026-06-15
+
+### Changed
+- Compact dashboard header now uses `任务清单` as the main title and moves realtime date/update copy into a small label.
+- Replaced the oversized hero-card dashboard layout with a compact status bar so the task queue gets the primary viewport.
+- Reduced dashboard metric card height and typography so numbers support the task list instead of dominating the page.
+- `/api/business/today` now uses `任务清单` and `到期任务` wording instead of date-prefixed dashboard titles.
+- `web_demo/index.html` now appends `?v=1.0.8` to frontend assets to reduce stale browser cache after deployment.
+- API smoke tests now assert compact task-list naming and dashboard metric wording.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.8`.
+
+### Product Engineering Rule
+- The overview title area should stay compact; the task list is the homepage's main visual weight.
+- Date and update time should appear as small status metadata, not as the core dashboard title.
+- Asset URLs should be versioned when visible frontend layout changes are pushed to avoid old cached JavaScript and CSS being served.
+
 ## v1.0.7 - 2026-06-15
 
 ### Changed
