@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.18
+Current Version: v1.0.19
 
 ## Version History
 
@@ -44,6 +44,7 @@ Current Version: v1.0.18
 - v1.0.16: Product list layout was hardened for long titles. Product titles are now two-line clamped inside their own grid cell, row children use `min-width: 0`, store/status cells are ellipsized, action width is reduced, and frontend assets were bumped to avoid cached overlapping layouts.
 - v1.0.17: Product page was switched from forced table columns to responsive product cards. Platform, store, and status filters now open selectable option menus, search filters the list, and filtered counts update in the 商品列表 header.
 - v1.0.18: Competitor page was productized into a competitor observation list aligned with the product page structure. Engineering price codes were replaced with business wording, competitor count was expanded to eight mock competitors, and platform/target/status filters plus search and detail actions were added.
+- v1.0.19: Listing page was repositioned as `上新测试台`. It now separates existing-product tests from competitor-opportunity tests, covering title, main image, SKU, platform coupon/activity, promotion, and competitor-driven launch experiments with confirmation and task-list actions.
 
 ## Version Rules
 
