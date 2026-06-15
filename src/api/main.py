@@ -1,11 +1,16 @@
-"""FastAPI entrypoint for the AI operating advisor MVP.
+"""FastAPI entrypoint for the AI ERP operating advisor MVP.
 
-Run:
-    uvicorn src.api.main:app --reload
+Current runtime chain:
+    src.api.main:app
+    ↓
+    / serves web_demo/index.html
+    ↓
+    web_demo/app-v2.js calls /api/business/*
 
-The API uses Mock ERP / CRM data in the MVP. It generates business advice,
-reports, and confirmation drafts, but does not connect to real shop backends or
-execute high-risk actions.
+The app keeps only the current product-facing API surface plus health,
+data-import, approval, and system maintenance routes. Legacy demo/debug route
+families are intentionally not mounted to avoid old templates being pulled back
+into the main product flow.
 """
 
 from __future__ import annotations
@@ -18,15 +23,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import approvals, business, customers, data_import, demo, diagnosis, evals, health, logs, products, reports, system, tasks
+from src.api.routes import approvals, business, data_import, health, system
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
-    title="AI Operating Advisor API",
-    version="1.4.1",
-    description="Productized API for ERP-based ecommerce operating unit advice.",
+    title="AI ERP Operating Advisor API",
+    version="1.5.0",
+    description="Product API for ERP-based ecommerce operating unit advice.",
 )
 
 app.add_middleware(
@@ -43,26 +48,18 @@ if WEB_DEMO_DIR.exists():
 
 @app.get("/")
 def index() -> FileResponse | Dict[str, str]:
-    """Serve the static demo homepage when available."""
+    """Serve the current product homepage when available."""
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI Operating Advisor API is running. Visit /api/business/today or /docs."}
+    return {"message": "AI ERP Operating Advisor API is running. Visit /api/business/today or /docs."}
 
 
-# Productized API used by the current frontend.
+# Current product API used by web_demo/app-v2.js.
 app.include_router(business.router)
 
-# Compatibility and internal routes kept for previous demos and debugging.
+# Supporting routes still used by the product shell and deployment checks.
 app.include_router(health.router)
-app.include_router(system.router)
 app.include_router(data_import.router)
-app.include_router(demo.router)
-app.include_router(products.router)
-app.include_router(customers.router)
-app.include_router(diagnosis.router)
-app.include_router(tasks.router)
 app.include_router(approvals.router)
-app.include_router(reports.router)
-app.include_router(evals.router)
-app.include_router(logs.router)
+app.include_router(system.router)
