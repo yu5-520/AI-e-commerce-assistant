@@ -1,5 +1,28 @@
 # Product Changelog
 
+## v1.0.3 - 2026-06-15
+
+### Product Decision
+- Active module memory now comes only from the current ERP operating-unit runtime path.
+- The old standalone module-chain registry and obsolete module files are no longer part of active trunk.
+- Current product truth remains: `src.api.main:app` → `/api/business/*` → `business_view_service` → `mock_workflow` → current ERP operating-unit modules.
+
+### Changed
+- Report generation now uses `src/reports/generate_operating_report.py`.
+- Product report output now uses `outputs/operating_report.md`.
+- Workflow documentation inside `mock_workflow.py` now points to FastAPI business APIs and smoke tests, not removed CLI demo entrypoints.
+- API version is aligned to `v1.0.3` for this module-chain cleanup.
+- Governance now blocks removed module-chain roots and old report naming from returning to active trunk.
+
+### Removed From Active Product Trunk
+- Removed `runtime/module_chain.json`.
+- Removed obsolete module files under the old `modules/` tree.
+- Removed `src/reports/generate_demo_report.py`.
+
+### Product Boundary
+- Future module chains must be connected to the current ERP operating-unit workflow before entering active trunk.
+- Old prompt/module experiments should remain recoverable from Git history, not from current runtime folders.
+
 ## v1.0.2 - 2026-06-15
 
 ### Product Decision
