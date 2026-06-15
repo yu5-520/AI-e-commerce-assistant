@@ -240,7 +240,7 @@ def get_action_confirmations() -> Dict[str, List[Dict[str, Any]]]:
 
 
 def get_business_report_text() -> str:
-    report_path = OUTPUT_DIR / "demo_report.md"
+    report_path = OUTPUT_DIR / "operating_report.md"
     if not report_path.exists():
         _workflow(write_outputs=True, record_logs=True)
     return report_path.read_text(encoding="utf-8")
