@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.9
+Current Version: v1.0.10
 
 ## Version History
 
@@ -35,6 +35,7 @@ Current Version: v1.0.9
 - v1.0.7: Homepage overview was repositioned as a task board. `/api/business/today` now exposes task distribution and ordered task queue, the frontend renders deadlines/urgency/counts/impact, and internal boundary wording is blocked from the merchant overview contract.
 - v1.0.8: Dashboard task board was compacted. The main title is now `任务清单`, the date appears as a small realtime update label, dashboard metrics are smaller, the task queue gets the primary viewport, and frontend assets use query-version cache busting.
 - v1.0.9: Added a dashboard hotfix script and compatibility CSS so cached v1.0.7 dashboard markup is patched after render: `今日任务清单` becomes `任务清单`, `今日到期` becomes `到期任务`, and the oversized hero layout is compacted even if old JavaScript is still cached.
+- v1.0.10: Operating unit page was productized into a store-group management surface. Engineering category fields, distribution, and trigger blocks were removed from the visible page; the page now shows connected platforms, store count, connected data, pending systems, associated shops, and future integrations such as 聚水潭 and ad backends.
 
 ## Version Rules
 
