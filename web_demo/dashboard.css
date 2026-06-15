@@ -1,3 +1,33 @@
+.hero-card.dashboard-hero,
+.hero-card.dashboard-hero.dashboard-hero-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px;
+  align-items: center;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  border-radius: 28px;
+}
+
+.hero-card.dashboard-hero h2,
+.hero-card.dashboard-hero.dashboard-hero-compact h2 {
+  font-size: clamp(38px, 5vw, 58px);
+  line-height: 0.95;
+  letter-spacing: -0.08em;
+}
+
+.hero-card.dashboard-hero .hero-actions,
+.hero-card.dashboard-hero.dashboard-hero-compact .hero-actions {
+  padding: 18px 20px;
+  border-radius: 22px;
+}
+
+.hero-card.dashboard-hero .hero-actions strong,
+.hero-card.dashboard-hero.dashboard-hero-compact .hero-actions strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
 .dashboard-status {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
@@ -48,21 +78,25 @@
   letter-spacing: -0.05em;
 }
 
-.dashboard-metrics {
+.dashboard-metrics,
+.kpi-grid {
   gap: 12px;
   margin-bottom: 14px;
 }
 
-.metric-card {
+.metric-card,
+.kpi-grid .card {
   min-height: 104px;
   padding: 18px 20px;
 }
 
-.metric-card h3 {
+.metric-card h3,
+.kpi-grid .card h3 {
   margin-bottom: 12px;
 }
 
-.metric-card strong {
+.metric-card strong,
+.kpi-grid .card strong {
   font-size: 34px;
 }
 
@@ -153,7 +187,9 @@
 }
 
 @media (max-width: 1040px) {
-  .dashboard-status {
+  .dashboard-status,
+  .hero-card.dashboard-hero,
+  .hero-card.dashboard-hero.dashboard-hero-compact {
     grid-template-columns: 1fr;
   }
 }
