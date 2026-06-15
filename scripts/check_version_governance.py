@@ -38,6 +38,11 @@ REMOVED_ACTIVE_PATHS = [
     "agents/base.py",
     "agents/__init__.py",
     "runtime/agent_registry.json",
+    "runtime/module_chain.json",
+    "modules/platforms",
+    "modules/operation_modes",
+    "modules/frontend",
+    "src/reports/generate_demo_report.py",
     "docs/product/product-map.md",
     "docs/product/user-flow.md",
     "docs/product/domain-model.md",
@@ -54,18 +59,6 @@ REMOVED_ROUTE_PREFIXES = [
     "/api/logs",
 ]
 
-REQUIRED_CURRENT_ROUTES = [
-    "/api/business/today",
-    "/api/business/operating-unit",
-    "/api/business/data-health",
-    "/api/business/products",
-    "/api/business/competitors",
-    "/api/business/listing",
-    "/api/business/traffic",
-    "/api/business/actions",
-    "/api/business/report",
-]
-
 FORBIDDEN_DOC_SNIPPETS = [
     "python -m src.run_demo",
     "/api/demo/run",
@@ -74,6 +67,11 @@ FORBIDDEN_DOC_SNIPPETS = [
     "frontend/material-sampler.js",
     "scripts/material_observer.py::",
     "runtime/agent_registry.json",
+    "runtime/module_chain.json",
+    "generate_demo_report.py",
+    "demo_report.md",
+    "modules/operation_modes",
+    "modules/platforms",
 ]
 
 
