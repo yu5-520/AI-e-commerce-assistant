@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.0.11 - 2026-06-15
+
+### Product Decision
+- The data page is now an ERP / CRM report-management page, not a black-box data-health page.
+- The sidebar label should be `报表`, while the page title should clearly state `ERP / CRM 报表管理`.
+- Report rows must be actionable: each report needs a `查看报表` entry that opens a detailed report view.
+- Current product truth remains: `web_demo/index.html?v=1.0.11` → `web_demo/app-v2.js?v=1.0.11` + `web_demo/data-report-hotfix.js?v=1.0.11` → report manager UI.
+
+### Changed
+- Added `web_demo/data-report-hotfix.js` to replace the old data-health page after render.
+- Added `web_demo/report-center.css` for report manager cards, detail pages, and report tables.
+- The data navigation label is now `报表`.
+- The page now shows ERP / CRM report groups with status, record counts, source labels, and `查看报表` buttons.
+- Added drill-down pages for 商品报表、订单报表、库存报表、退款报表、客户报表、客户标签报表、客户互动报表.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.11` and loads the report manager hotfix script.
+- API version is aligned to `v1.0.11` for this product surface update.
+
+### Product Boundary
+- This is a merchant-facing UI productization patch.
+- Report contents are still Mock ERP / CRM data.
+- Real 聚水潭、ERP、CRM、广告后台 connectors are future integrations, not active production connections.
+
 ## v1.0.10 - 2026-06-15
 
 ### Product Decision
