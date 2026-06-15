@@ -56,6 +56,12 @@ scripts/start_server.sh             本机启动脚本
 scripts/deploy_server.sh            服务器部署脚本
 deploy/nginx-ai-operating-advisor.conf
                                   Nginx 反向代理配置
+versioning/CHANGELOG.md             版本更新日志
+versioning/VERSION.md               当前版本与版本规则
+docs/product/product-decision-log.md
+                                  产品决策日志
+docs/product/product-structure-cleanup-log.md
+                                  产品结构清理日志
 ```
 
 ## 3. 当前产品 API
@@ -167,4 +173,14 @@ main 分支只保留当前产品主线。
 ```text
 旧模板、旧 demo、旧兼容接口、旧运行命令不放在当前主分支。
 需要回看历史版本时，从 Git commit 历史查找。
+```
+
+## 8. 版本记录规则
+
+```text
+结构级变更：更新 versioning/CHANGELOG.md
+版本号变更：更新 versioning/VERSION.md
+产品决策：更新 docs/product/product-decision-log.md
+产品结构清理：更新 docs/product/product-structure-cleanup-log.md
+测试脚本：必须跟随当前 API 主线同步
 ```
