@@ -1,5 +1,73 @@
 # 产品决策日志
 
+## 2026-06-15：main 分支只保留当前产品主线
+
+### 背景
+
+仓库曾同时存在旧前端模板、旧 demo 接口、旧 CLI 入口、旧测试脚本和当前 ERP 经营单元产品链路。多套入口并存会导致服务器部署、AI 代码更新、README 说明和测试脚本反复拉回旧模板。
+
+### 决策
+
+从 v1.0.0 开始，main 分支只保留当前可运行产品主线：
+
+```text
+src/api/main.py
+↓
+/api/business/*
+↓
+web_demo/index.html
+↓
+web_demo/app-v2.js
+```
+
+旧版 demo、旧兼容 API、旧前端模板、旧 CLI 入口不再留在当前主分支。需要回看旧实现时，通过 Git commit 历史查看。
+
+### 保留能力
+
+```text
+ERP / CRM Mock 数据
+经营单元识别
+循环频率策略
+商品体检
+竞品机会
+上新建议
+流量复盘
+待确认动作
+经营报告
+审批记录
+数据校验
+系统状态
+服务器部署
+```
+
+### 停止保留
+
+```text
+旧 web_demo/app.js
+旧 /api/demo
+旧 /api/products
+旧 /api/customers
+旧 /api/diagnosis
+旧 /api/tasks
+旧 /api/reports
+旧 /api/evals
+旧 /api/logs
+旧 src.run_demo
+旧 standalone eval runner
+```
+
+### 新规则
+
+```text
+结构级变更必须更新 versioning/CHANGELOG.md
+版本号变更必须更新 versioning/VERSION.md
+产品决策必须更新 docs/product/product-decision-log.md
+产品结构清理必须更新 docs/product/product-structure-cleanup-log.md
+测试脚本必须跟随当前 API 主线同步
+```
+
+---
+
 ## 2026-06-14：从简历展示仓库切回产品仓库
 
 ### 背景
