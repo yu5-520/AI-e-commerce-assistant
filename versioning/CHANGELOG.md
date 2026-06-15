@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.15 - 2026-06-15
+
+### Changed
+- Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
+- Added `web_demo/product-manager-hotfix.js` so the product route now shows main image placeholder, full product title, platform, shop, product link, inventory, price, margin, after-sales status, and row actions.
+- Added `web_demo/product-center.css` for compact product rows, colored inventory/after-sales states, product detail view, and responsive actions.
+- Removed visible ambiguous `中` / `高` risk badges from the product list; inventory and after-sales states are now shown directly in the relevant fields.
+- Product rows now support `详情`, `复制链接`, and `商品报表` actions.
+- `web_demo/index.html` now appends `?v=1.0.15` to assets and loads the product manager script.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.15`.
+
+### Product Engineering Rule
+- Product pages should show specific shop goods, not abstract analysis cards.
+- Product list rows must include store, platform, title, image, link, and operational fields so merchants can identify the real item.
+- Risk should be expressed on the affected field, such as inventory number or after-sales status, instead of generic severity badges.
+
 ## v1.0.14 - 2026-06-15
 
 ### Fixed
@@ -177,7 +193,7 @@
 - Updated README and `docs/product/README.md` to use the same product-log rules and current file map.
 - Rewrote `docs/product/mvp-scope.md` around the current single-page product, `/api/business/*`, and current smoke tests.
 - Rewrote `docs/product/module-boundary.md` around current API, workflow, frontend, scripts, CI, and documentation boundaries.
-- Extended `scripts/check_version_governance.py` so active docs are checked for stale legacy snippets.
+- Extended version governance so active docs are checked for stale legacy snippets.
 - Aligned the FastAPI app version with the repository version: `version="1.0.2"`.
 
 ### Removed
