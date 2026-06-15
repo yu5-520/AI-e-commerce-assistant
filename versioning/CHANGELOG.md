@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.0.2 - 2026-06-15
+
+### Changed
+- Cleaned the active documentation trunk so current docs describe only the v1.x ERP operating-unit product path.
+- Updated README and `docs/product/README.md` to use the same product-log rules and current file map.
+- Rewrote `docs/product/mvp-scope.md` around the current single-page product, `/api/business/*`, and current smoke tests.
+- Rewrote `docs/product/module-boundary.md` around current API, workflow, frontend, scripts, CI, and documentation boundaries.
+- Extended `scripts/check_version_governance.py` so active docs are checked for stale legacy snippets.
+- Aligned the FastAPI app version with the repository version: `version="1.0.2"`.
+
+### Removed
+- Removed outdated planning documents from the active product docs: `docs/product/product-map.md`, `docs/product/user-flow.md`, and `docs/product/domain-model.md`.
+- These documents described future multi-page product structure or broad domain models that could pull the current MVP back toward removed routes and old UI assumptions.
+
+### Product Engineering Rule
+- Active docs must describe the current runnable trunk, not future blueprints or deleted route families.
+- Future planning belongs in a new clearly marked proposal document, not in current MVP docs.
+- Version governance must fail if active docs reintroduce stale commands such as old demo runs or removed route checks.
+
 ## v1.0.1 - 2026-06-15
 
 ### Fixed
@@ -9,7 +28,7 @@
 - Aligned the FastAPI app version with the repository version: `version="1.0.1"`.
 
 ### Removed
-- Removed legacy Material Observer Agent files from the active product trunk: `scripts/material_observer.py`, `agents/material_observer_agent.py`, `agents/registry.py`, `agents/base.py`, `agents/__init__.py`, and `runtime/agent_registry.json`.
+- Removed legacy Material Observer Agent files from the active product trunk.
 - The old v0.9.x material-observation Agent remains recoverable from Git history, but it is no longer part of the current v1.x ERP operating-unit product path.
 
 ### Product Engineering Rule
@@ -29,8 +48,7 @@
 
 ### Removed
 - Removed the old frontend template `web_demo/app.js`.
-- Removed legacy compatibility routes: `/api/demo`, `/api/products`, `/api/customers`, `/api/diagnosis`, `/api/tasks`, `/api/reports`, `/api/evals`, and `/api/logs`.
-- Removed old helper entrypoints and services that pulled the project back toward the previous demo shape: `src/run_demo.py`, `src/services/workflow_service.py`, `src/services/eval_service.py`, and `evals/run_evals.py`.
+- Removed legacy compatibility routes and old helper entrypoints that pulled the project back toward the previous demo shape.
 
 ### Added
 - Added `.gitignore` rules for runtime outputs, local logs, local databases, virtual environments, and environment files.
