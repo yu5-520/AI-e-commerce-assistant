@@ -1,171 +1,17 @@
-const todoManagerPayload = {
-  tasks: [
-    {
-      id: "A001",
-      priority: "高",
-      priorityLevel: "danger",
-      deadline: "今天 18:00 前",
-      deadlineRank: 1,
-      source: "流量触发",
-      moduleRoute: "business-traffic",
-      productId: "P002",
-      imageLabel: "架",
-      title: "厨房置物架免打孔收纳架壁挂多层家用置物架",
-      platform: "拼多多",
-      store: "家居百货店",
-      link: "https://shop.example.com/products/P002",
-      task: "先查售后，不继续放大推广预算",
-      reason: "搜索推广 ROI 1.1，退款率 6.8%，安装和尺寸咨询偏高。",
-      status: "待确认",
-      actions: ["进入售后归因", "继续观察", "拒绝"],
-    },
-    {
-      id: "A002",
-      priority: "高",
-      priorityLevel: "danger",
-      deadline: "今天内",
-      deadlineRank: 2,
-      source: "AI 自动判定",
-      moduleRoute: "business-products",
-      productId: "P003",
-      imageLabel: "垫",
-      title: "护腰坐垫久坐办公室靠垫人体工学支撑款",
-      platform: "抖音小店",
-      store: "家居好物号",
-      link: "https://shop.example.com/products/P003",
-      task: "暂停投放并复查材质、支撑感和客服承诺",
-      reason: "售后敏感未解决，推荐流量 ROI 0.9，退款率 8.4%。",
-      status: "待确认",
-      actions: ["暂停投放", "进入商品复查", "拒绝"],
-    },
-    {
-      id: "A003",
-      priority: "高",
-      priorityLevel: "danger",
-      deadline: "今天 20:00 前",
-      deadlineRank: 3,
-      source: "上新触发",
-      moduleRoute: "business-listing",
-      productId: "P001",
-      imageLabel: "伞",
-      title: "遮阳伞户外便携防晒防紫外线晴雨两用",
-      platform: "淘宝",
-      store: "家居生活主店",
-      link: "https://shop.example.com/products/P001",
-      task: "确认平台券活动价和利润安全线",
-      reason: "活动测试进入确认期，需确认 ROI、退款率和库存承接。",
-      status: "待确认",
-      actions: ["确认测试", "推迟测试", "取消测试"],
-    },
-    {
-      id: "A004",
-      priority: "中",
-      priorityLevel: "warning",
-      deadline: "明天 12:00 前",
-      deadlineRank: 4,
-      source: "商品触发",
-      moduleRoute: "business-products",
-      productId: "P004",
-      imageLabel: "盒",
-      title: "透明收纳盒衣柜整理箱家用大容量防尘款",
-      platform: "淘宝",
-      store: "家居生活主店",
-      link: "https://shop.example.com/products/P004",
-      task: "确认补货周期，再决定是否继续活动流量",
-      reason: "库存 46，接近安全线；活动流量 ROI 1.3，可谨慎放量。",
-      status: "待确认",
-      actions: ["确认处理", "继续观察", "拒绝"],
-    },
-    {
-      id: "A005",
-      priority: "中",
-      priorityLevel: "warning",
-      deadline: "明天 18:00 前",
-      deadlineRank: 5,
-      source: "竞品触发",
-      moduleRoute: "business-competitors",
-      productId: "P002",
-      imageLabel: "装",
-      title: "厨房置物架：新增安装说明图 + 尺寸参照图版本",
-      platform: "拼多多",
-      store: "家居百货店",
-      link: "https://shop.example.com/products/P002",
-      task: "生成详情页测试版本并加入上新测试",
-      reason: "竞品差评集中在安装困难 / 尺寸不符，可转为测试动作。",
-      status: "待确认",
-      actions: ["生成上新版本", "加入观察", "拒绝"],
-    },
-    {
-      id: "A006",
-      priority: "中",
-      priorityLevel: "warning",
-      deadline: "3 天后复盘",
-      deadlineRank: 6,
-      source: "上新触发",
-      moduleRoute: "business-listing",
-      productId: "P004",
-      imageLabel: "盒",
-      title: "透明收纳盒衣柜整理箱家用大容量防尘款",
-      platform: "淘宝",
-      store: "家居生活主店",
-      link: "https://shop.example.com/products/P004",
-      task: "复盘 SKU 基础款 / 加厚款 / 组合款测试",
-      reason: "组合款会占用库存，需观察转化率和库存承接。",
-      status: "处理中",
-      actions: ["进入复盘", "继续观察", "取消测试"],
-    },
-    {
-      id: "A007",
-      priority: "低",
-      priorityLevel: "good",
-      deadline: "本周内",
-      deadlineRank: 7,
-      source: "报表触发",
-      moduleRoute: "data-check",
-      productId: "R001",
-      imageLabel: "表",
-      title: "退款报表与商品报表同步检查",
-      platform: "ERP / CRM",
-      store: "家居生活店铺组",
-      link: "#data-check",
-      task: "导入最新退款报表，生成本轮复盘摘要",
-      reason: "流量测试和售后归因需要最新退款原因数据。",
-      status: "待确认",
-      actions: ["导入报表", "生成报告", "稍后处理"],
-    },
-    {
-      id: "A008",
-      priority: "低",
-      priorityLevel: "good",
-      deadline: "每天 09:00",
-      deadlineRank: 8,
-      source: "AI 自动判定",
-      moduleRoute: "business-report",
-      productId: "DAILY",
-      imageLabel: "报",
-      title: "生成经营日报和下一轮任务摘要",
-      platform: "经营单元",
-      store: "家居生活店铺组",
-      link: "#business-report",
-      task: "生成日报，沉淀商品、竞品、上新、流量任务结论",
-      reason: "用于总览页任务摘要和明日复盘。",
-      status: "待确认",
-      actions: ["生成报告", "稍后处理", "拒绝"],
-    },
-  ],
-};
-
 let activeTodoId = null;
 let todoNotice = "";
 let openTodoFilter = null;
 let todoRenderScheduled = false;
-const todoState = {};
 const todoFilters = {
   source: "全部来源",
   status: "全部状态",
   priority: "全部优先级",
   search: "",
 };
+
+function taskStore() {
+  return window.OPERATION_TASK_STORE;
+}
 
 function isTodoRoute() {
   return location.hash.replace("#", "") === "business-actions" || document.querySelector('.nav a[data-route="business-actions"]')?.classList.contains("active");
@@ -175,8 +21,12 @@ function todoStatusClass(level) {
   return level === "danger" ? "danger" : level === "warning" ? "warning" : "good";
 }
 
+function allTodoTasks() {
+  return taskStore()?.listTasks?.() || [];
+}
+
 function currentTodoStatus(task) {
-  return todoState[task.id] || task.status;
+  return task.status || "待确认";
 }
 
 function todoNoticeMarkup() {
@@ -185,8 +35,9 @@ function todoNoticeMarkup() {
 }
 
 function todoFilterOptions(type) {
-  if (type === "source") return ["全部来源", ...new Set(todoManagerPayload.tasks.map((item) => item.source))];
-  if (type === "status") return ["全部状态", "待确认", "处理中", "已确认", "已拒绝", "稍后处理"];
+  const tasks = allTodoTasks();
+  if (type === "source") return ["全部来源", ...new Set(tasks.map((item) => item.source || item.sourceModule || "系统"))];
+  if (type === "status") return ["全部状态", ...new Set(["待确认", "处理中", "已完成", "已拒绝", ...tasks.map((item) => currentTodoStatus(item))])];
   return ["全部优先级", "高", "中", "低"];
 }
 
@@ -202,30 +53,29 @@ function renderTodoFilter(type, label) {
 }
 
 function todoMatchesFilters(task) {
-  if (todoFilters.source !== "全部来源" && task.source !== todoFilters.source) return false;
+  const source = task.source || task.sourceModule || "系统";
+  if (todoFilters.source !== "全部来源" && source !== todoFilters.source) return false;
   if (todoFilters.status !== "全部状态" && currentTodoStatus(task) !== todoFilters.status) return false;
   if (todoFilters.priority !== "全部优先级" && task.priority !== todoFilters.priority) return false;
   const keyword = todoFilters.search.trim().toLowerCase();
   if (!keyword) return true;
-  return [task.id, task.productId, task.title, task.platform, task.store, task.source, task.task, task.reason, task.deadline, currentTodoStatus(task)]
+  return [task.id, task.productId, task.title, task.productTitle, task.platform, task.store, source, task.taskType, task.taskSignal, task.task, task.reason, task.deadline, currentTodoStatus(task)]
     .join(" ")
     .toLowerCase()
     .includes(keyword);
 }
 
 function sortedTodoTasks() {
-  return todoManagerPayload.tasks
-    .filter(todoMatchesFilters)
-    .sort((a, b) => a.deadlineRank - b.deadlineRank);
+  return allTodoTasks().filter(todoMatchesFilters);
 }
 
 function todoMetrics() {
-  const tasks = todoManagerPayload.tasks;
+  const tasks = allTodoTasks();
   return [
-    { label: "紧急任务", value: tasks.filter((item) => item.priority === "高" && currentTodoStatus(item) !== "已确认").length, desc: "优先处理" },
-    { label: "今日到期", value: tasks.filter((item) => item.deadline.includes("今天") && currentTodoStatus(item) !== "已确认").length, desc: "有明确时间限制" },
+    { label: "紧急任务", value: tasks.filter((item) => item.priority === "高" && currentTodoStatus(item) !== "已完成").length, desc: "优先处理" },
+    { label: "今日到期", value: tasks.filter((item) => String(item.deadline || "").includes("今天") && currentTodoStatus(item) !== "已完成").length, desc: "有明确时间限制" },
     { label: "待确认", value: tasks.filter((item) => currentTodoStatus(item) === "待确认").length, desc: "需要人工判断" },
-    { label: "AI 自动判定", value: tasks.filter((item) => item.source === "AI 自动判定").length, desc: "系统主动生成" },
+    { label: "已完成", value: tasks.filter((item) => currentTodoStatus(item) === "已完成").length, desc: "进入日志追溯" },
   ];
 }
 
@@ -240,9 +90,12 @@ function todoFilterSummary(count) {
 }
 
 function renderTodoActions(task) {
-  return task.actions
-    .map((action, index) => `<button type="button" class="${index === 0 ? "primary" : ""}" data-todo-action="${task.id}:${action}">${action}</button>`)
-    .join("");
+  return `<button type="button" class="primary" data-todo-complete="${task.id}">完成</button>
+    <button type="button" data-todo-pin="${task.id}">置顶</button>
+    <button type="button" data-todo-reorder="${task.id}:up">上移</button>
+    <button type="button" data-todo-reorder="${task.id}:down">下移</button>
+    <button type="button" data-todo-source="${task.sourceRoute || "dashboard"}">来源</button>
+    <button type="button" data-todo-detail="${task.id}">详情</button>`;
 }
 
 function renderTodoCard(task, index) {
@@ -250,26 +103,25 @@ function renderTodoCard(task, index) {
   return `<article class="todo-card">
     <div class="todo-rank ${todoStatusClass(task.priorityLevel)}">${index + 1}</div>
     <div class="todo-title-cell">
-      <div class="todo-thumb">${task.imageLabel}</div>
+      <div class="todo-thumb">${task.imageLabel || "任"}</div>
       <div class="todo-title-block">
-        <strong>${task.title}</strong>
-        <small>${task.productId} · ${task.platform} · ${task.store}</small>
-        <span>来源：${task.source} · 截止：${task.deadline}</span>
+        <strong>${task.title || task.productTitle || task.task || "经营任务"}</strong>
+        <small>${task.productId || task.id} · ${task.platform || "经营单元"} · ${task.store || "任务池"}</small>
+        <span>来源：${task.source || task.sourceModule || "系统"} · 截止：${task.deadline || "本周内"}</span>
       </div>
     </div>
     <div class="todo-task-block">
       <span>任务</span>
-      <strong>${task.task}</strong>
-      <small>${task.reason}</small>
+      <strong>${task.task || task.taskType || task.taskSignal || "处理经营任务"}</strong>
+      <small>${task.reason || "由统一任务池同步生成。"}</small>
     </div>
     <div class="todo-meta-strip">
-      <div class="todo-number-cell ${todoStatusClass(task.priorityLevel)}"><span>优先级</span><strong>${task.priority}</strong><small>${task.deadline}</small></div>
-      <div class="todo-number-cell"><span>来源</span><strong>${task.source}</strong><small>模块回流</small></div>
-      <div class="todo-number-cell ${status === "已确认" ? "good" : status === "已拒绝" ? "danger" : "warning"}"><span>状态</span><strong>${status}</strong><small>人工处理</small></div>
+      <div class="todo-number-cell ${todoStatusClass(task.priorityLevel)}"><span>优先级</span><strong>${task.priority || "中"}</strong><small>${task.deadline || "本周内"}</small></div>
+      <div class="todo-number-cell"><span>来源</span><strong>${task.source || task.sourceModule || "系统"}</strong><small>统一任务池</small></div>
+      <div class="todo-number-cell ${status === "已完成" ? "good" : status === "已拒绝" ? "danger" : "warning"}"><span>状态</span><strong>${status}</strong><small>人工处理</small></div>
     </div>
     <div class="todo-actions">
       ${renderTodoActions(task)}
-      <button type="button" data-todo-detail="${task.id}">详情</button>
     </div>
   </article>`;
 }
@@ -283,15 +135,16 @@ function renderTodoManager() {
   title.textContent = "待办";
   appView.innerHTML = `<section class="todo-toolbar">
     <div>
-      <p class="eyebrow">TASK CENTER</p>
-      <h2>待办任务</h2>
-      <p>集中排列商品、竞品、上新、流量、报表和 AI 自动判定产生的任务，并按时间限制和紧急程度排序。</p>
+      <p class="eyebrow">TASK CENTER · V1.1</p>
+      <h2>统一任务池</h2>
+      <p>商品、竞品、上新、流量、报表和首页共用同一套任务状态；排序、完成和日志同步刷新。</p>
     </div>
     <div class="todo-filter-row">
       ${renderTodoFilter("source", "来源")}
       ${renderTodoFilter("status", "状态")}
       ${renderTodoFilter("priority", "优先级")}
       <label class="todo-search"><input type="search" value="${todoFilters.search}" placeholder="搜索任务 / 商品" data-todo-search /></label>
+      <button type="button" data-todo-reset>重置演示</button>
     </div>
   </section>
   ${todoNoticeMarkup()}
@@ -311,7 +164,7 @@ function renderTodoManager() {
 }
 
 function renderTodoDetail(taskId) {
-  const task = todoManagerPayload.tasks.find((item) => item.id === taskId);
+  const task = allTodoTasks().find((item) => item.id === taskId);
   const appView = document.getElementById("appView");
   const title = document.getElementById("pageTitle");
   if (!task || !appView || !title) return;
@@ -321,47 +174,37 @@ function renderTodoDetail(taskId) {
   title.textContent = "待办详情";
   appView.innerHTML = `<section class="todo-detail-hero">
     <div class="todo-detail-main">
-      <div class="todo-thumb large">${task.imageLabel}</div>
+      <div class="todo-thumb large">${task.imageLabel || "任"}</div>
       <div>
         <p class="eyebrow">TASK DETAIL</p>
-        <h2>${task.title}</h2>
-        <p>${task.platform} · ${task.store} · ${task.source}</p>
-        <a href="${task.link}" target="_blank" rel="noreferrer">${task.link}</a>
+        <h2>${task.title || task.productTitle || task.task}</h2>
+        <p>${task.platform || "经营单元"} · ${task.store || "任务池"} · ${task.source || task.sourceModule || "系统"}</p>
+        <span>${task.link || "统一任务池"}</span>
       </div>
     </div>
     <div class="todo-detail-actions">
       <button type="button" data-todo-back>返回待办</button>
-      <button type="button" data-todo-source="${task.moduleRoute}">查看来源</button>
-      ${renderTodoActions(task)}
+      <button type="button" data-todo-source="${task.sourceRoute || "dashboard"}">查看来源</button>
+      <button type="button" data-todo-pin="${task.id}">置顶</button>
+      <button type="button" data-todo-complete="${task.id}">完成</button>
     </div>
   </section>
   ${todoNoticeMarkup()}
   <section class="kpi-grid todo-detail-metrics">
-    <article class="card"><h3>优先级</h3><strong class="metric-${todoStatusClass(task.priorityLevel)}">${task.priority}</strong><span class="card-desc">${task.deadline}</span></article>
-    <article class="card"><h3>来源</h3><strong>${task.source}</strong><span class="card-desc">${task.productId}</span></article>
+    <article class="card"><h3>优先级</h3><strong class="metric-${todoStatusClass(task.priorityLevel)}">${task.priority || "中"}</strong><span class="card-desc">${task.deadline || "本周内"}</span></article>
+    <article class="card"><h3>来源</h3><strong>${task.source || task.sourceModule || "系统"}</strong><span class="card-desc">${task.productId || task.id}</span></article>
     <article class="card"><h3>状态</h3><strong>${status}</strong><span class="card-desc">人工处理</span></article>
-    <article class="card"><h3>排序</h3><strong>${task.deadlineRank}</strong><span class="card-desc">越小越优先</span></article>
+    <article class="card"><h3>排序</h3><strong>${task.manualOrder || "-"}</strong><span class="card-desc">可人工调整</span></article>
   </section>
   <section class="page-section todo-detail-section">
-    <div class="section-header"><h3>任务动作</h3><span class="status-badge">${task.deadline}</span></div>
-    <p>${task.task}</p>
+    <div class="section-header"><h3>任务动作</h3><span class="status-badge">${task.deadline || "本周内"}</span></div>
+    <p>${task.task || task.taskType || task.taskSignal || "处理经营任务"}</p>
   </section>
   <section class="page-section todo-detail-section">
-    <div class="section-header"><h3>生成原因</h3><span class="status-badge pending">${task.source}</span></div>
-    <p>${task.reason}</p>
+    <div class="section-header"><h3>生成原因</h3><span class="status-badge pending">${task.source || task.sourceModule || "系统"}</span></div>
+    <p>${task.reason || "由统一任务池同步生成。"}</p>
   </section>`;
   bindTodoButtons();
-}
-
-function applyTodoAction(taskId, action) {
-  const task = todoManagerPayload.tasks.find((item) => item.id === taskId);
-  if (!task) return;
-  if (action === "拒绝" || action === "取消测试") todoState[taskId] = "已拒绝";
-  else if (action === "稍后处理" || action === "继续观察" || action === "加入观察") todoState[taskId] = "处理中";
-  else todoState[taskId] = "已确认";
-  todoNotice = `${task.title}：${action}已记录。`;
-  if (activeTodoId) renderTodoDetail(activeTodoId);
-  else renderTodoManager();
 }
 
 function bindTodoButtons() {
@@ -385,12 +228,6 @@ function bindTodoButtons() {
     renderTodoManager();
     document.querySelector("[data-todo-search]")?.focus();
   });
-  document.querySelectorAll("[data-todo-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const [taskId, action] = button.dataset.todoAction.split(":");
-      applyTodoAction(taskId, action);
-    });
-  });
   document.querySelectorAll("[data-todo-detail]").forEach((button) => {
     button.addEventListener("click", () => {
       todoNotice = "";
@@ -408,6 +245,35 @@ function bindTodoButtons() {
     button.addEventListener("click", () => {
       location.hash = button.dataset.todoSource;
     });
+  });
+  document.querySelectorAll("[data-todo-complete]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const task = taskStore()?.completeTask?.(button.dataset.todoComplete);
+      todoNotice = `${task?.title || "任务"}已完成，并写入日志。`;
+      if (activeTodoId) renderTodoDetail(activeTodoId);
+      else renderTodoManager();
+    });
+  });
+  document.querySelectorAll("[data-todo-pin]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const task = taskStore()?.pinTask?.(button.dataset.todoPin);
+      todoNotice = `${task?.title || "任务"}已置顶。`;
+      if (activeTodoId) renderTodoDetail(activeTodoId);
+      else renderTodoManager();
+    });
+  });
+  document.querySelectorAll("[data-todo-reorder]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const [taskId, direction] = button.dataset.todoReorder.split(":");
+      const task = taskStore()?.reorderTask?.(taskId, direction);
+      todoNotice = task ? "任务顺序已调整，并同步首页。" : "当前任务已经在边界位置。";
+      renderTodoManager();
+    });
+  });
+  document.querySelector("[data-todo-reset]")?.addEventListener("click", () => {
+    taskStore()?.resetDemoData?.();
+    todoNotice = "演示任务池已重置。";
+    renderTodoManager();
   });
 }
 
@@ -429,6 +295,9 @@ const todoObserver = new MutationObserver(() => {
 });
 
 todoObserver.observe(document.body, { childList: true, subtree: true });
+window.addEventListener("operation-task-store-change", () => {
+  if (isTodoRoute()) scheduleTodoPatch();
+});
 window.addEventListener("hashchange", () => {
   activeTodoId = null;
   todoNotice = "";
