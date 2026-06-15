@@ -1,6 +1,6 @@
 const reportManagerPayload = {
   title: "ERP / CRM 报表管理",
-  subtitle: "统一查看、导入、校验商品、订单、库存、退款和客户报表，支撑任务清单和经营判断。",
+  subtitle: "统一查看、导入、校验、导出商品、订单、库存、退款和客户报表，支撑任务清单和经营判断。",
   metrics: [
     { label: "已接入系统", value: "2", desc: "ERP / CRM Mock" },
     { label: "报表数量", value: "7", desc: "商品、订单、库存、售后、客户" },
@@ -154,6 +154,7 @@ let activeReportId = null;
 let activeImportReportId = null;
 let selectedImportFileName = "";
 let importPreviewRows = 0;
+let reportNotice = "";
 
 function isReportRoute() {
   return location.hash.replace("#", "") === "data-check" || document.querySelector('.nav a[data-route="data-check"]')?.classList.contains("active");
@@ -170,6 +171,54 @@ function findReportCard(reportId) {
 
 function getDefaultImportReportId() {
   return activeReportId || reportManagerPayload.groups[0].reports[0].id;
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function downloadTextFile(filename, text, mime = "text/csv;charset=utf-8") {
+  const blob = new Blob(["\uFEFF" + text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildReportCsv(reportId, rowsOverride = null) {
+  const report = reportManagerPayload.details[reportId] || reportManagerPayload.details.products;
+  const rows = rowsOverride || report.rows;
+  return [report.columns.map(csvCell).join(","), ...rows.map((row) => row.map(csvCell).join(","))].join("\n");
+}
+
+function exportReport(reportId) {
+  const report = reportManagerPayload.details[reportId] || reportManagerPayload.details.products;
+  const fileName = `${report.title}_${new Date().toISOString().slice(0, 10)}.csv`;
+  downloadTextFile(fileName, buildReportCsv(reportId));
+  reportNotice = `${report.title}已导出为 CSV 文件。`;
+  if (activeReportId) renderReportDetail(activeReportId);
+  else renderReportManager();
+}
+
+function downloadReportTemplate(reportId) {
+  const report = reportManagerPayload.details[reportId] || reportManagerPayload.details.products;
+  const example = report.columns.map((column, index) => report.rows[0]?.[index] || "");
+  const fileName = `${report.title}_导入模板.csv`;
+  downloadTextFile(fileName, buildReportCsv(reportId, [example]));
+  reportNotice = `${report.title}导入模板已下载。`;
+  if (activeReportId) renderReportDetail(activeReportId);
+  else renderReportManager();
+}
+
+function noticeMarkup() {
+  if (!reportNotice) return "";
+  return `<section class="report-import-notice"><strong>操作结果</strong><span>${reportNotice}</span><em>本地文件已生成</em></section>`;
 }
 
 function importPanelMarkup(reportId) {
@@ -189,9 +238,7 @@ function importPanelMarkup(reportId) {
       </label>
       <div class="report-import-checklist">
         <h4>导入前校验</h4>
-        <ul>
-          ${required.map((field) => `<li>${field}</li>`).join("")}
-        </ul>
+        <ul>${required.map((field) => `<li>${field}</li>`).join("")}</ul>
       </div>
       <div class="report-import-result">
         <h4>导入结果</h4>
@@ -230,22 +277,24 @@ function renderReportManager() {
     </div>
     <div class="report-hero-side">
       <span>报表操作</span>
-      <strong>导入 / 查看</strong>
+      <strong>导入 / 导出</strong>
       <small>聚水潭待接入</small>
     </div>
   </section>
   <section class="report-toolbar">
     <button type="button" data-report-import="${importTarget}">导入报表</button>
     <button type="button" data-report-template="${importTarget}">下载模板</button>
-    <span>手动导入用于用户自主管理新报表，自动同步留给后续聚水潭/ERP连接。</span>
+    <button type="button" data-report-export="${importTarget}">导出当前报表</button>
+    <span>手动导入用于用户自主管理新报表；导出会生成可下载 CSV 文件。</span>
   </section>
+  ${noticeMarkup()}
   ${importedNoticeMarkup()}
   ${activeImportReportId ? importPanelMarkup(activeImportReportId) : ""}
   <section class="kpi-grid report-metrics">
     ${reportManagerPayload.metrics.map((item) => `<article class="card report-metric-card"><h3>${item.label}</h3><strong>${item.value}</strong><span class="card-desc">${item.desc}</span></article>`).join("")}
   </section>
   ${reportManagerPayload.groups.map((group) => `<section class="page-section report-section">
-    <div class="section-header"><h3>${group.title}</h3><span class="status-badge">可查看 / 可导入</span></div>
+    <div class="section-header"><h3>${group.title}</h3><span class="status-badge">可查看 / 可导入 / 可导出</span></div>
     <div class="report-card-list">
       ${group.reports.map((report) => `<article class="report-card">
         <div>
@@ -256,6 +305,7 @@ function renderReportManager() {
         <div class="report-card-actions">
           <button type="button" data-report-id="${report.id}">查看报表</button>
           <button type="button" data-report-import="${report.id}">导入数据</button>
+          <button type="button" data-report-export="${report.id}">导出</button>
         </div>
       </article>`).join("")}
     </div>
@@ -274,15 +324,16 @@ function renderReportDetail(reportId) {
     <div>
       <p class="eyebrow">${report.source} REPORT</p>
       <h2>${report.title}</h2>
-      <p>从报表明细进入真实经营判断，支持导入新报表数据，不只停留在导出。</p>
+      <p>从报表明细进入真实经营判断，支持导入新报表数据，也支持导出当前明细。</p>
     </div>
     <div class="report-actions">
       <button type="button" data-report-back>返回报表管理</button>
       <button type="button" data-report-import="${reportId}">导入报表</button>
       <button type="button">重新同步</button>
-      <button type="button">导出报表</button>
+      <button type="button" data-report-export="${reportId}">导出报表</button>
     </div>
   </section>
+  ${noticeMarkup()}
   ${importedNoticeMarkup()}
   ${activeImportReportId === reportId ? importPanelMarkup(reportId) : ""}
   <section class="kpi-grid report-metrics">
@@ -304,6 +355,7 @@ function bindReportButtons() {
   document.querySelectorAll("[data-report-id]").forEach((button) => {
     button.addEventListener("click", () => {
       activeImportReportId = null;
+      reportNotice = "";
       renderReportDetail(button.dataset.reportId);
     });
   });
@@ -312,9 +364,13 @@ function bindReportButtons() {
       activeImportReportId = button.dataset.reportImport || getDefaultImportReportId();
       selectedImportFileName = "";
       importPreviewRows = 0;
+      reportNotice = "";
       if (activeReportId) renderReportDetail(activeReportId);
       else renderReportManager();
     });
+  });
+  document.querySelectorAll("[data-report-export]").forEach((button) => {
+    button.addEventListener("click", () => exportReport(button.dataset.reportExport || getDefaultImportReportId()));
   });
   document.querySelectorAll("[data-report-cancel-import]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -326,10 +382,7 @@ function bindReportButtons() {
     });
   });
   document.querySelectorAll("[data-report-template]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const report = findReportCard(button.dataset.reportTemplate) || findReportCard(getDefaultImportReportId());
-      alert(`${report?.name || "报表"}模板：请包含平台、店铺、主键、金额/库存/状态等核心字段。`);
-    });
+    button.addEventListener("click", () => downloadReportTemplate(button.dataset.reportTemplate || getDefaultImportReportId()));
   });
   document.querySelectorAll("[data-report-confirm-import]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -338,7 +391,7 @@ function bindReportButtons() {
         return;
       }
       const report = findReportCard(button.dataset.reportConfirmImport) || findReportCard(getDefaultImportReportId());
-      alert(`${report?.name || "报表"}已进入导入队列：字段校验通过后会刷新报表明细。`);
+      reportNotice = `${report?.name || "报表"}已进入导入队列：字段校验通过后会刷新报表明细。`;
       activeImportReportId = null;
       if (activeReportId) renderReportDetail(activeReportId);
       else renderReportManager();
@@ -347,6 +400,7 @@ function bindReportButtons() {
   document.querySelector("[data-report-back]")?.addEventListener("click", () => {
     activeReportId = null;
     activeImportReportId = null;
+    reportNotice = "";
     renderReportManager();
   });
   document.querySelector("[data-report-file-input]")?.addEventListener("change", (event) => {
@@ -354,6 +408,7 @@ function bindReportButtons() {
     if (!file) return;
     selectedImportFileName = file.name;
     importPreviewRows = Math.max(3, Math.min(99, Math.round((file.size || 3000) / 1000)));
+    reportNotice = "";
     if (activeReportId) renderReportDetail(activeReportId);
     else renderReportManager();
   });
@@ -381,6 +436,7 @@ reportObserver.observe(document.body, { childList: true, subtree: true });
 window.addEventListener("hashchange", () => {
   activeReportId = null;
   activeImportReportId = null;
+  reportNotice = "";
   scheduleReportPatch();
 });
 window.addEventListener("load", scheduleReportPatch);
