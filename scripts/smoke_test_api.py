@@ -66,9 +66,20 @@ def run_smoke_test() -> None:
     assert isinstance(imports, list), "imports should be a list"
 
     today = assert_status("GET", "/api/business/today")
-    assert_keys(today, ["page_title", "priority", "operating_unit", "cycle", "cards", "boundaries", "raw"], "business today")
+    assert_keys(
+        today,
+        ["page_title", "priority", "operating_unit", "cycle", "task_distribution", "task_queue", "execution_rules", "raw"],
+        "business today",
+    )
+    assert today["page_title"] == "今日任务清单", "dashboard should be a task board, not a single analysis theme"
+    assert "boundaries" not in today, "merchant dashboard contract should not expose internal boundary wording"
     assert today["operating_unit"]["name"] == "家居生活商品", "business today should expose ERP-inferred operating unit"
     assert today["cycle"]["frequency_label"] == "每天", "business today should expose readable cycle frequency"
+    assert today["task_distribution"], "business today should expose dashboard number distribution"
+    assert today["task_queue"], "business today should expose ordered task queue"
+    first_task = today["task_queue"][0]
+    assert_keys(first_task, ["rank", "title", "urgency", "deadline", "count", "impact", "reason"], "first dashboard task")
+    assert first_task["deadline"], "dashboard tasks must include time limit"
 
     operating_unit = assert_status("GET", "/api/business/operating-unit")
     assert_keys(operating_unit, ["unit_name", "unit_id", "source", "cycle_policy"], "operating unit")
