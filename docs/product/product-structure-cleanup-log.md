@@ -1,5 +1,45 @@
 # 产品结构清理日志
 
+## 2026-06-15：v1.0.5 后端接口契约修复
+
+### 修复目标
+
+让产品业务接口、审批接口、系统接口和 smoke test 形成闭环，避免“状态写入了，但产品接口看不到”的断层。
+
+### 本轮修复内容
+
+```text
+/api/business/actions
+/api/approvals/{task_id}/approve
+/api/approvals/{task_id}/reject
+/api/health
+/api/system/clear-runtime-data
+scripts/smoke_test_api.py
+```
+
+### 本轮同步修正
+
+```text
+src/api/routes/business.py
+src/api/routes/health.py
+src/api/routes/system.py
+src/api/main.py
+scripts/smoke_test_api.py
+versioning/VERSION.md
+versioning/CHANGELOG.md
+docs/product/CHANGELOG.md
+```
+
+### 新规则
+
+- 审批状态写入后，必须能从 `/api/business/actions` 读回。
+- 前端不应该为了知道动作状态，再额外读取低层审批记录。
+- `/api/health` 必须返回当前应用版本。
+- 当前清理接口优先使用 `/api/system/clear-runtime-data`，旧 `/api/system/clear-demo-data` 只作为兼容别名保留。
+- API smoke test 必须覆盖产品接口状态回写，而不是只测试低层写入接口。
+
+---
+
 ## 2026-06-15：v1.0.4 前端 UI 主线清理
 
 ### 清理目标
