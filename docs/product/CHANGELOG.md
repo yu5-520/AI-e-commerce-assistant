@@ -1,5 +1,28 @@
 # Product Changelog
 
+## v1.0.8 - 2026-06-15
+
+### Product Decision
+- The dashboard module bar must not dominate the first screen; task cards should be the main viewport content.
+- The homepage title is `任务清单`, not `今日任务清单`; date and update time are small realtime metadata.
+- Numbers are secondary distribution indicators. The ordered task queue is the primary product interaction surface.
+- Visible frontend layout updates should carry asset query versions so old cached UI files do not keep showing removed dashboard blocks.
+- Current product truth remains: `web_demo/index.html?v=1.0.8` → `web_demo/app-v2.js?v=1.0.8` → `/api/business/today` compact task board payload.
+
+### Changed
+- `web_demo/app-v2.js` now renders a compact dashboard status bar instead of the oversized hero card.
+- The main dashboard title is fixed to `任务清单`; realtime date/update copy appears below as small status text.
+- `web_demo/dashboard.css` now reduces header and metric card height so task cards occupy the main visual area.
+- `/api/business/today` now returns `任务清单` and `到期任务` wording for the compact task-list contract.
+- `web_demo/index.html` now appends `?v=1.0.8` to CSS and JS assets for cache busting.
+- API smoke tests now verify the compact task-list title and distribution wording.
+- API version is aligned to `v1.0.8` for this dashboard layout correction.
+
+### Product Boundary
+- The product still does not execute real shop operations.
+- Confirmation remains a user decision record, not automated RPA execution.
+- Homepage layout should express task priority and operating urgency before explanation, policy, or report-style wording.
+
 ## v1.0.7 - 2026-06-15
 
 ### Product Decision
