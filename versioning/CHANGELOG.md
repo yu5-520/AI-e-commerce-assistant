@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.24 - 2026-06-15
+
+### Changed
+- Simplified the homepage `任务清单` into a command-board style scheduling and navigation view.
+- Reworked `web_demo/dashboard-hotfix.js` so homepage task data now uses short task types, product short names, source modules, time buckets, and judgment tags instead of long handling explanations.
+- Reworked `web_demo/dashboard-linked.css` so task rows are compact scheduling rows instead of large detail cards.
+- Added a `时间系统` strip that groups active tasks by deadline buckets such as `今天 18:00 前`, `今天内`, `明天前`, and `本周内`.
+- Homepage cards now emphasize `排序号 / 优先级 / 截止时间 / 来源 / 判断标签 / 导航按钮`.
+- Reduced homepage actions to navigation-first controls: `进入待办`, `查看来源`, `商品`, and a weaker `完成` action.
+- `web_demo/index.html` now appends `?v=1.0.24` to assets.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.24`.
+
+### Product Engineering Rule
+- 首页 is a command board, not an execution page.
+- Long reasons and detailed handling text belong in 待办, not on the 首页.
+- 首页 should highlight task order, navigation, time, and judgment signals.
+
 ## v1.0.23 - 2026-06-15
 
 ### Changed
@@ -54,26 +71,9 @@
 - Task rows must show what to do, by when, why it exists, which module created it, and which product/store it affects.
 - The overview page should show only top tasks; the 待办 page is the complete execution queue.
 
-## v1.0.20 - 2026-06-15
-
-### Changed
-- Repositioned the 流量 page as `流量测试台` instead of an abstract traffic conclusion panel.
-- Added `web_demo/traffic-manager-hotfix.js` with product-level traffic tests bound to image placeholder, product title, platform, shop, product link, channel, test source, and action state.
-- Added `web_demo/traffic-center.css` for traffic test cards, filter menus, metric strips, backflow blocks, detail pages, and responsive layout.
-- Traffic rows now show exposure, click-through rate, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
-- Added interactive filters for platform, store, traffic channel, and status, plus search across product title, ID, shop, channel, status, backflow, and next action.
-- Added actions for `详情`, `继续观察`, `加入任务清单`, and source jumps to 商品 / 上新 pages.
-- `web_demo/index.html` now appends `?v=1.0.20` to assets and loads the traffic test workspace script.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.20`.
-
-### Product Engineering Rule
-- Traffic judgments must be product-level. A traffic row without product title, platform, shop, and link is incomplete.
-- Traffic pages should show measurable signals: exposure, CTR, conversion, ROI, refund rate, and inventory承接.
-- Backflow should be a concise field such as 售后归因、经营判断、库存承接, not a long process paragraph on the list page.
-- Traffic execution remains confirmation-first; the page should not imply automatic ad spend or campaign changes.
-
 ## Earlier History
 
+- v1.0.20: Traffic page was repositioned as `流量测试台`.
 - v1.0.19: Listing page was repositioned as `上新测试台`.
 - v1.0.18: Productized the 竞品 page from an analysis result panel into a competitor observation list.
 - v1.0.17: Product page was switched from forced table columns to responsive product cards.
