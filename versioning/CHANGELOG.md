@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0.20 - 2026-06-15
+
+### Changed
+- Repositioned the 流量 page as `流量测试台` instead of an abstract traffic conclusion panel.
+- Added `web_demo/traffic-manager-hotfix.js` with product-level traffic tests bound to image placeholder, product title, platform, shop, product link, channel, test source, and action state.
+- Added `web_demo/traffic-center.css` for traffic test cards, filter menus, metric strips, backflow blocks, detail pages, and responsive layout.
+- Traffic rows now show exposure, click-through rate, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
+- Added interactive filters for platform, store, traffic channel, and status, plus search across product title, ID, shop, channel, status, backflow, and next action.
+- Added actions for `详情`, `继续观察`, `加入任务清单`, and source jumps to 商品 / 上新 pages.
+- `web_demo/index.html` now appends `?v=1.0.20` to assets and loads the traffic test workspace script.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.20`.
+
+### Product Engineering Rule
+- Traffic judgments must be product-level. A traffic row without product title, platform, shop, and link is incomplete.
+- Traffic pages should show measurable signals: exposure, CTR, conversion, ROI, refund rate, and inventory承接.
+- Backflow should be a concise field such as 售后归因、经营判断、库存承接, not a long process paragraph on the list page.
+- Traffic execution remains confirmation-first; the page should not imply automatic ad spend or campaign changes.
+
 ## v1.0.19 - 2026-06-15
 
 ### Changed
@@ -65,51 +83,14 @@
 - Long ecommerce titles should be clamped in list views and fully shown in detail views.
 - Product list layout must protect neighboring fields: title, store, inventory, price, margin, after-sales, and actions should never visually overlap.
 
-## v1.0.15 - 2026-06-15
-
-### Changed
-- Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
-- Added `web_demo/product-manager-hotfix.js` so the product route now shows main image placeholder, full product title, platform, shop, product link, inventory, price, margin, after-sales status, and row actions.
-- Added `web_demo/product-center.css` for compact product rows, colored inventory/after-sales states, product detail view, and responsive actions.
-- Removed visible ambiguous `中` / `高` risk badges from the product list; inventory and after-sales states are now shown directly in the relevant fields.
-- Product rows now support `详情`, `复制链接`, and `商品报表` actions.
-- `web_demo/index.html` now appends `?v=1.0.15` to assets and loads the product manager script.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.15`.
-
-### Product Engineering Rule
-- Product pages should show specific shop goods, not abstract analysis cards.
-- Product list rows must include store, platform, title, image, link, and operational fields so merchants can identify the real item.
-- Risk should be expressed on the affected field, such as inventory number or after-sales status, instead of generic severity badges.
-
-## v1.0.14 - 2026-06-15
-
-### Fixed
-- Made `导出报表` functional in the ERP / CRM report center.
-- Report manager and report-detail pages now download CSV files from the visible report table data.
-- `下载模板` now creates a CSV template file instead of only showing an alert.
-- Report manager now exposes `导入报表`, `下载模板`, and `导出当前报表` as concrete actions.
-- Per-report cards now expose `查看报表`, `导入数据`, and `导出` actions.
-- `web_demo/index.html` now appends `?v=1.0.14` to assets and reloads the fixed report workflow.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.14`.
-
-### Product Engineering Rule
-- Buttons shown in a product UI must either perform an action or be visibly disabled; no inert action buttons on user-facing pages.
-- Export should generate a local file immediately for the currently selected report.
-- Import remains a field-check and confirmation flow until real ERP / CRM / 聚水潭 connectors are connected.
-
 ## Earlier History
 
+- v1.0.15: Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
+- v1.0.14: Report pages support real export and template download.
 - v1.0.13: Report center added user-driven report import.
 - v1.0.11: Data page was renamed and productized into `ERP / CRM 报表管理`.
 - v1.0.10: Operating unit page was productized into a store-group management surface.
 - v1.0.9: Added dashboard cache hotfix and compatibility CSS.
 - v1.0.8: Compact dashboard task board was added.
 - v1.0.7: Homepage overview was repositioned as a task board.
-- v1.0.6: Fixed FastAPI homepage response model import failure.
-- v1.0.5: Repaired approval status roundtrip and health version output.
-- v1.0.4: Frontend UI was aligned with productized `/api/business/*` endpoints.
-- v1.0.3: Removed old module-chain memory layer from active trunk.
-- v1.0.2: Cleaned active documentation trunk.
-- v1.0.1: Repaired GitHub Actions script chain.
-- v1.0.0: Recut the repository into the current AI ERP operating advisor product trunk.
-- v0.x: Earlier title/image generation, RAG, vector store, module governance, and workflow iterations remain recoverable from Git history.
+- v1.0.0-v1.0.6: Product trunk cleanup, API alignment, health/version repair, and current route governance.
