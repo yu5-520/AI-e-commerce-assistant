@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.1.0 - 2026-06-16
+
+### Added
+- Added `web_demo/task-store.js` as the unified front-end task store for V1.1.
+- Added `web_demo/module-task-bridge.js` so 商品、竞品、上新、流量 and 报表 actions can create shared tasks without direct high-risk execution.
+- The task store now persists tasks and logs through browser `localStorage`, so refresh does not erase the current demo task flow.
+
+### Changed
+- Dashboard now reads top tasks from the unified task store instead of its own static dashboard-only pool.
+- 待办 now reads the complete shared task pool and supports completion, pinning, up/down ordering, source jumps, and demo reset.
+- 日志 now reads operation logs from the same task store, including task creation, completion, ordering, and module-triggered actions.
+- `web_demo/index.html` now loads `task-store.js` before the business modules and loads `module-task-bridge.js` after all module scripts.
+- Frontend asset cache version was bumped to `?v=1.1.0`.
+- FastAPI app version and health version are aligned to `1.1.0`.
+
+### Product Engineering Rule
+- V1.1 is a dynamic task-flow release, not a UI copy patch.
+- 商品、竞品、上新、流量、报表 should push tasks into the shared task pool.
+- 首页 is the command board; 待办 is the full task pool; 日志 is the trace record.
+- AI and module actions only create advice/tasks/logs in this version. They do not change real shop data, ad budgets, refunds, pricing, or ERP records.
+
 ## v1.0.24 - 2026-06-15
 
 ### Changed
@@ -45,6 +66,7 @@
 - Added `web_demo/log-center.css` for log rows, metrics, filters, detail pages, source jumps, export action, and responsive layout.
 - Removed the visible Markdown-style report panel from the user-facing page; logs now show productized records with time, type, source, status, product/store context, action, reason, and result.
 - Added filters for type, source, and status, plus search across log content and export of the currently filtered logs.
+- Added log detail page, source jump, related-task jump, and CSV export of the filtered logs.
 - `web_demo/index.html` now appends `?v=1.0.22` to assets and loads the operation log center script.
 - Aligned the FastAPI app version and health version with the repository version: `1.0.22`.
 
@@ -63,6 +85,7 @@
 - Tasks now include precise product or report context: image placeholder, title, platform, shop, link, source module, priority, deadline, reason, status, and actions.
 - Task cards are sorted by deadline/urgency and expose task-specific actions instead of generic `确认 / 拒绝` only.
 - Added filters for source, status, and priority, plus search across task, product, source, deadline, and reason.
+- Added task detail page and source jump actions.
 - `web_demo/index.html` now appends `?v=1.0.21` to assets and loads the todo task center script.
 - Aligned the FastAPI app version and health version with the repository version: `1.0.21`.
 
