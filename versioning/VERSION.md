@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.0
+Current Version: v1.0.1
 
 ## Version History
 
@@ -26,6 +26,7 @@ Current Version: v1.0.0
 - v0.9.1: Material observation was moved back into an implicit backend pipeline so users only see generation progress and final copyable outputs.
 - v0.9.2: Agent module governance was added with a stable material observer contract, source policy, confidence, risk flags, and runtime registry.
 - v1.0.0: Main branch was recut into one current product trunk, removing old frontend templates, legacy compatibility APIs, stale demo helpers, and aligning README, smoke tests, and version logs with `/api/business/*`.
+- v1.0.1: Script chain was repaired so GitHub Actions runs current runtime/API smoke tests plus version governance checks. Legacy Material Observer Agent files and runtime registry were removed from the active product trunk.
 
 ## Version Rules
 
