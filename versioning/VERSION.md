@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.6
+Current Version: v1.0.7
 
 ## Version History
 
@@ -32,6 +32,7 @@ Current Version: v1.0.6
 - v1.0.4: Frontend UI was aligned with productized `/api/business/*` endpoints. Old standalone data-import stylesheet was removed, business hash routes were clarified, and governance now blocks the removed frontend component stylesheet.
 - v1.0.5: Backend API contract was repaired so business actions merge persisted approval status, health returns the current version, system cleanup has a runtime-data alias, and API smoke tests verify approval status roundtrip.
 - v1.0.6: Server runtime import failure was fixed by disabling the homepage response model and removing the invalid `FileResponse | Dict` response annotation.
+- v1.0.7: Homepage overview was repositioned as a task board. `/api/business/today` now exposes task distribution and ordered task queue, the frontend renders deadlines/urgency/counts/impact, and internal boundary wording is blocked from the merchant overview contract.
 
 ## Version Rules
 
