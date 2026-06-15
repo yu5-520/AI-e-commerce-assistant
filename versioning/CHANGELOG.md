@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.0.19 - 2026-06-15
+
+### Changed
+- Repositioned the 上新 page as `上新测试台` instead of a single candidate-generation report.
+- Added `web_demo/listing-manager-hotfix.js` with two launch-test flows: `已有商品测试` and `竞品机会测试`.
+- Added `web_demo/listing-center.css` for launch test tabs, test cards, metric strips, confirmation actions, and detail pages.
+- Existing-product tests now cover title tests, main-image tests, SKU tests, platform coupon/activity tests, and promotion tests.
+- Competitor-opportunity tests now turn competitor gaps into launch experiments, such as installation images, dimension references, structure stability, material explanation, and support proof.
+- Test cards now include source, platform, store, test type, test plan, cycle, target metric, status, risk, and actions.
+- Added actions for `详情`, `确认测试`, `加入任务清单`, and source jumps to 商品 / 竞品 / 流量 pages.
+- `web_demo/index.html` now appends `?v=1.0.19` to assets and loads the listing test workspace script.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.19`.
+
+### Product Engineering Rule
+- 上新 should mean controlled launch testing, not only new product generation.
+- Existing products can be re-launched for title, main image, SKU, platform campaign, coupon, and promotion tests.
+- Competitor opportunities should flow into launch experiments only after being turned into clear test actions and metrics.
+- Test execution remains confirmation-first; the page should not imply automatic real shop publishing.
+
 ## v1.0.18 - 2026-06-15
 
 ### Changed
