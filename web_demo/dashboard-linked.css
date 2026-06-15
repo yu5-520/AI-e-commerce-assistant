@@ -268,6 +268,29 @@
   margin-bottom: 14px;
 }
 
+.v110-task-bridge-notice {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #f8fafc;
+  color: #343b49;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.v110-task-bridge-notice strong {
+  color: #080b12;
+}
+
+.v110-task-bridge-notice span {
+  color: #64748b;
+}
+
 @media (max-width: 1480px) {
   .dashboard-task-card.dashboard-linked-task,
   .dashboard-task-card.dashboard-schedule-row {
