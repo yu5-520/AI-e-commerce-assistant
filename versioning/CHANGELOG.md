@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.18 - 2026-06-15
+
+### Changed
+- Productized the 竞品 page from an analysis result panel into a competitor observation list aligned with the 商品 page structure.
+- Added `web_demo/competitor-manager-hotfix.js` with eight mock competitor records, business-language price positions, platform/store/title/link fields, metrics, opportunity points, and detail views.
+- Added `web_demo/competitor-center.css` for responsive competitor card rows, metric strips, opportunity blocks, filter menus, and detail pages.
+- Removed visible engineering wording such as `below_market`; pricing is now shown as `低于市场价`、`高于市场价`、`接近市场价`.
+- Added interactive filters for platform, target product, and status, plus search across competitor title, platform, store, bad-review keywords, and opportunity points.
+- `web_demo/index.html` now appends `?v=1.0.18` to assets and loads the competitor manager script.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.18`.
+
+### Product Engineering Rule
+- Competitor pages should mirror product pages: title, image, platform, store, link, core metrics, status, and actions belong in the same scan-friendly row pattern.
+- Engineering enum values must be translated before reaching the merchant-facing UI.
+- Competitor analysis should show multiple comparable items, not a single backend conclusion block.
+
 ## v1.0.17 - 2026-06-15
 
 ### Changed
@@ -62,39 +78,10 @@
 - Export should generate a local file immediately for the currently selected report.
 - Import remains a field-check and confirmation flow until real ERP / CRM / 聚水潭 connectors are connected.
 
-## v1.0.13 - 2026-06-15
-
-### Changed
-- Added user-driven report import to the ERP / CRM report center.
-- Report manager now shows a primary `导入报表` action and per-report `导入数据` actions next to `查看报表`.
-- Report detail pages now show `导入报表` next to `重新同步` and `导出报表`.
-- Added local CSV/XLS/XLSX file selection, required-field checklist, template prompt, and mock import confirmation flow.
-- Extended `web_demo/report-center.css` with import toolbar, import panel, file-drop area, import status, and responsive import controls.
-- `web_demo/index.html` now appends `?v=1.0.13` to assets and reloads the report import workflow.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.13`.
-
-### Product Engineering Rule
-- Report pages must support both import and export. Export is for taking data out; import is for users to refresh or add report data before full ERP / 聚水潭 integration exists.
-- Manual import should validate fields first and then enter a confirmation flow, rather than silently replacing report data.
-- Future real connectors can replace the mock import confirmation without changing the merchant-facing report workflow.
-
-## v1.0.11 - 2026-06-15
-
-### Changed
-- Renamed the visible data navigation concept into a report-management surface: `ERP / CRM 报表管理`.
-- Added `web_demo/data-report-hotfix.js` so the old static data-health page is replaced after render with ERP/CRM report groups and clickable report cards.
-- Added `web_demo/report-center.css` for report hero, report cards, drill-down actions, and table detail layouts.
-- Added report drill-down pages for 商品报表、订单报表、库存报表、退款报表、客户报表、客户标签报表、客户互动报表.
-- `web_demo/index.html` now appends `?v=1.0.11` to assets, renames the sidebar item from 数据 to 报表, and loads the report manager hotfix script.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.11`.
-
-### Product Engineering Rule
-- The report page should answer: where the data comes from, how many records are available, and what report can be opened next.
-- Data-health checks are internal support signals; merchants need report cards and detailed tables, not static pass/fail rows.
-- Report detail pages should use product terms such as 商品报表 and 订单报表 instead of database/table wording.
-
 ## Earlier History
 
+- v1.0.13: Report center added user-driven report import.
+- v1.0.11: Data page was renamed and productized into `ERP / CRM 报表管理`.
 - v1.0.10: Operating unit page was productized into a store-group management surface.
 - v1.0.9: Added dashboard cache hotfix and compatibility CSS.
 - v1.0.8: Compact dashboard task board was added.
