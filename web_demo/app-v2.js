@@ -8,7 +8,7 @@ const fallbackData = {
     competitor_count: 4,
     listing_candidate_count: 4,
     traffic_experiment_count: 4,
-    approval_required_count: 7,
+    approval_required_count: 13,
     loop_next_module: "crm_after_sales_diagnosis",
   },
   operating_unit: {
@@ -121,7 +121,9 @@ const cnModule = (module) => ({
 }[module] || module || "继续循环");
 
 const riskLabel = (level) => ({ high: "高", medium: "中", low: "低" }[level] || "低");
+const urgencyLabel = (level) => ({ high: "紧急", medium: "中", low: "观察" }[level] || "观察");
 const badge = (level) => `<span class="badge ${level || "low"}">${riskLabel(level)}</span>`;
+const urgencyBadge = (level, label) => `<span class="badge ${level || "low"}">${label || urgencyLabel(level)}</span>`;
 const statusBadge = (status) => `<span class="status-badge ${status || "ready"}">${({ passed: "通过", success: "完成", failed: "失败", running: "运行", approved: "确认", rejected: "拒绝", pending: "待定", preview: "演示", ready: "可用" }[status]) || status || "可用"}</span>`;
 const card = (title, body, extra = "") => `<article class="card ${extra}"><h3>${title}</h3>${body}</article>`;
 const list = (items) => `<ul class="clean-list">${safeArray(items).map((item) => `<li>${item}</li>`).join("")}</ul>`;
@@ -174,6 +176,71 @@ async function renderRoute() {
   await renderer();
 }
 
+function fallbackTaskQueue(d) {
+  const s = d.summary || {};
+  const loop = d.operating_loop_summary || {};
+  const traffic = d.traffic_feedback_report || {};
+  return [
+    {
+      rank: 1,
+      title: "复查高退款商品",
+      urgency: "紧急",
+      urgency_level: "high",
+      deadline: "今天 18:00 前",
+      count: Math.max(1, safeArray(d.product_diagnosis).filter((item) => item.risk_level === "high").length || 3),
+      impact: "退款率 / 评分",
+      reason: "退款异常商品需要先复查尺码、材质、物流和客服承诺。",
+    },
+    {
+      rank: 2,
+      title: "确认售后敏感问题",
+      urgency: "紧急",
+      urgency_level: "high",
+      deadline: "今天内",
+      count: 1,
+      impact: "客服承接",
+      reason: "售后问题未归因前，不建议继续放量。",
+    },
+    {
+      rank: 3,
+      title: "小范围流量测试",
+      urgency: "中",
+      urgency_level: "medium",
+      deadline: "明天 12:00 前",
+      count: s.traffic_experiment_count || traffic.experiment_count || 0,
+      impact: "ROI / 库存承接",
+      reason: "可继续小幅测试，但必须观察退款率、ROI 和库存承接。",
+    },
+    {
+      rank: 4,
+      title: "上新前确认素材",
+      urgency: "中",
+      urgency_level: "medium",
+      deadline: "明天内",
+      count: s.listing_candidate_count || 0,
+      impact: "转化率",
+      reason: safeArray(loop.next_iteration_plan).join(" / ") || "确认后再进入下一步。",
+    },
+  ];
+}
+
+function renderTaskQueue(tasks) {
+  const rows = safeArray(tasks).map((task, index) => `<article class="dashboard-task-card">
+    <div class="task-rank">${task.rank || index + 1}</div>
+    <div class="task-main">
+      <h3>${task.title || task.task_type || "待处理任务"}</h3>
+      <div class="task-meta">
+        ${urgencyBadge(task.urgency_level || task.risk_level, task.urgency)}
+        <span>${task.deadline || "待定"}</span>
+        <span>${task.count ?? 1} 项</span>
+        <span>${task.impact || "经营承接"}</span>
+      </div>
+      <p>${task.reason || task.ai_suggestion || task.suggestion || "确认后再进入下一步。"}</p>
+    </div>
+  </article>`).join("");
+  return `<section class="dashboard-task-list">${rows}</section>`;
+}
+
 function renderDashboard() {
   const d = raw();
   const today = state.businessToday;
@@ -181,26 +248,31 @@ function renderDashboard() {
   const loop = d.operating_loop_summary || {};
   const traffic = d.traffic_feedback_report || {};
   const priority = today?.priority;
-  const cards = today?.cards || [
-    { title: "经营单元", value: s.unit_name || "-" },
-    { title: "商品", value: s.product_count || safeArray(d.product_diagnosis).length },
-    { title: "流量", value: s.traffic_experiment_count || traffic.experiment_count || 0 },
-    { title: "确认", value: s.approval_required_count || safeArray(d.approval_required_tasks).length },
+  const tasks = today?.task_queue || fallbackTaskQueue(d);
+  const cards = today?.task_distribution || today?.cards || [
+    { title: "紧急任务", value: 4, desc: "需要今天先处理" },
+    { title: "今日到期", value: 3, desc: "有明确时间限制" },
+    { title: "待确认", value: s.approval_required_count || safeArray(d.approval_required_tasks).length, desc: "确认前不执行" },
+    { title: "可测试机会", value: s.traffic_experiment_count || traffic.experiment_count || 0, desc: "小范围观察" },
   ];
-  view().innerHTML = `<section class="hero-card">
+  const pendingCount = priority?.pending_count ?? s.approval_required_count ?? safeArray(d.approval_required_tasks).length;
+  view().innerHTML = `<section class="hero-card dashboard-hero">
     <div>
-      <p class="eyebrow">PRIORITY</p>
-      <h2>${priority?.title || cnModule(s.loop_next_module || loop.next_module)}</h2>
+      <p class="eyebrow">TASK BOARD</p>
+      <h2>${priority?.title || "今日任务清单"}</h2>
     </div>
     <div class="hero-actions">
       <span>${today?.operating_unit?.name || s.unit_name || d.operating_unit?.unit_name || "-"}</span>
-      <strong>${today?.cycle?.frequency_label || cnFrequency(s.cycle_frequency || d.cycle_policy?.cycle_frequency)}</strong>
+      <strong>${pendingCount} 项待确认</strong>
     </div>
   </section>
-  <section class="kpi-grid">${cards.map((item) => card(item.title, `<strong>${item.value}</strong>`)).join("")}</section>
-  <section class="two-column">
-    ${card("下一步", list(priority?.next_steps || loop.next_iteration_plan || []))}
-    ${card("边界", list(today?.boundaries || ["只生成建议", "只生成草案", "确认后再执行"]))}
+  <section class="kpi-grid">${cards.map((item) => card(item.title, `<strong>${item.value}</strong><span class="card-desc">${item.desc || ""}</span>`)).join("")}</section>
+  <section class="page-section dashboard-queue">
+    <div class="section-header">
+      <h3>处理顺序</h3>
+      <span class="status-badge">${today?.cycle?.frequency_label || cnFrequency(s.cycle_frequency || d.cycle_policy?.cycle_frequency)}</span>
+    </div>
+    ${renderTaskQueue(tasks)}
   </section>`;
 }
 
