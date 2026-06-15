@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Runtime outputs
+outputs/
+logs/*
+!logs/.gitkeep
+data/runtime_results/*
+!data/runtime_results/.gitkeep
+data/runtime_feedback/*
+!data/runtime_feedback/.gitkeep
+
+# Local databases and logs
+*.sqlite
+*.sqlite3
+*.db
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
