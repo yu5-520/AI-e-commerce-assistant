@@ -30,7 +30,7 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="1.0.18",
+    version="1.0.19",
     description="Product API for ERP-based ecommerce operating unit advice.",
 )
 
