@@ -35,7 +35,28 @@ install_packages() {
   exit 1
 }
 
+stop_legacy_processes() {
+  echo "Stopping legacy processes that may occupy ${APP_PORT}..."
+  systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+  pkill -f "/root/apps/AI-e-commerce-assistant/.venv/bin/python backend/server.py" >/dev/null 2>&1 || true
+  pkill -f "backend/server.py" >/dev/null 2>&1 || true
+  pkill -f "uvicorn src.api.main:app" >/dev/null 2>&1 || true
+  pkill -f "scripts/start_server.sh" >/dev/null 2>&1 || true
+
+  if command -v ss >/dev/null 2>&1; then
+    PORT_PIDS="$(ss -lntp 2>/dev/null | awk -v port=":${APP_PORT}" '$4 ~ port {print $0}' | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | sort -u || true)"
+    for pid in $PORT_PIDS; do
+      if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
+        kill "$pid" >/dev/null 2>&1 || true
+      fi
+    done
+  fi
+
+  sleep 1
+}
+
 install_packages
+stop_legacy_processes
 
 if [ ! -d "$APP_DIR/.git" ]; then
   mkdir -p "$APP_DIR"
@@ -66,7 +87,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${APP_DIR}
-ExecStart=${APP_DIR}/scripts/start_server.sh
+ExecStart=/bin/bash ${APP_DIR}/scripts/start_server.sh
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -88,8 +109,8 @@ fi
 
 cat > "$NGINX_CONF_PATH" <<NGINX
 server {
-    listen 80;
-    server_name ${PUBLIC_HOST};
+    listen 80 default_server;
+    server_name _ ${PUBLIC_HOST};
 
     client_max_body_size 20m;
 
