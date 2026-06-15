@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.0.11
+Current Version: v1.0.12
 
 ## Version History
 
@@ -37,6 +37,7 @@ Current Version: v1.0.11
 - v1.0.9: Added a dashboard hotfix script and compatibility CSS so cached v1.0.7 dashboard markup is patched after render: `今日任务清单` becomes `任务清单`, `今日到期` becomes `到期任务`, and the oversized hero layout is compacted even if old JavaScript is still cached.
 - v1.0.10: Operating unit page was productized into a store-group management surface. Engineering category fields, distribution, and trigger blocks were removed from the visible page; the page now shows connected platforms, store count, connected data, pending systems, associated shops, and future integrations such as 聚水潭 and ad backends.
 - v1.0.11: Data page was renamed and productized into `ERP / CRM 报表管理`. Static data-health rows were replaced with report cards and `查看报表` drill-down pages for product, order, inventory, refund, customer, tag, and interaction reports.
+- v1.0.12: Frontend hotfix scripts were integrated into `web_demo/app-v2.js`. The runtime shell now loads one main JS file, avoiding MutationObserver hotfix loops while keeping the compact task board, store-group operating unit page, and ERP/CRM report center.
 
 ## Version Rules
 
