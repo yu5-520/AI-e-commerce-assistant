@@ -51,6 +51,83 @@ def _frequency_label(frequency: str | None) -> str:
     return {"daily": "每天", "weekly": "每周", "monthly": "每月"}.get(frequency or "", frequency or "未设置")
 
 
+def _count_high_risk(items: List[Dict[str, Any]]) -> int:
+    return len([item for item in items if item.get("risk_level") == "high"])
+
+
+def _task_queue(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    summary = result.get("summary", {})
+    products = result.get("product_diagnosis", [])
+    traffic = result.get("traffic_feedback_report", {})
+    listing = result.get("listing_growth_plan", {})
+    tasks = result.get("approval_required_tasks") or result.get("rpa_tasks", [])
+
+    product_count = summary.get("product_count") or len(products)
+    high_action_count = _count_high_risk(tasks)
+    if tasks and high_action_count == 0:
+        high_action_count = 1
+
+    return [
+        {
+            "rank": 1,
+            "title": "复查高退款商品",
+            "urgency": "紧急",
+            "urgency_level": "high",
+            "deadline": "今天 18:00 前",
+            "count": product_count,
+            "impact": "退款率 / 评分",
+            "reason": "先复查尺码、面料、物流、客服 SOP 和卖点承诺，售后原因完成前不建议继续放量。",
+            "source": "商品体检 + 售后回流",
+        },
+        {
+            "rank": 2,
+            "title": "确认售后敏感问题",
+            "urgency": "紧急",
+            "urgency_level": "high",
+            "deadline": "今天内",
+            "count": high_action_count,
+            "impact": "客服承接",
+            "reason": "退款、客户触达和高风险动作必须先由人工确认，系统只生成判断与草案。",
+            "source": "确认动作",
+        },
+        {
+            "rank": 3,
+            "title": "小范围流量测试",
+            "urgency": "中",
+            "urgency_level": "medium",
+            "deadline": "明天 12:00 前",
+            "count": summary.get("traffic_experiment_count") or traffic.get("experiment_count") or 0,
+            "impact": "ROI / 库存承接",
+            "reason": "可小幅测试，但必须继续观察退款率、ROI 和库存承接，不直接扩大投放。",
+            "source": "流量复盘",
+        },
+        {
+            "rank": 4,
+            "title": "上新前确认素材",
+            "urgency": "中",
+            "urgency_level": "medium",
+            "deadline": "明天内",
+            "count": summary.get("listing_candidate_count") or listing.get("candidate_count") or 0,
+            "impact": "转化率",
+            "reason": "上新候选只进入标题、主图、规格和合规检查，确认后再进入下一步。",
+            "source": "上新建议",
+        },
+    ]
+
+
+def _task_distribution(task_queue: List[Dict[str, Any]], summary: Dict[str, Any], traffic: Dict[str, Any]) -> List[Dict[str, Any]]:
+    urgent_count = sum(item.get("count", 0) for item in task_queue if item.get("urgency_level") == "high")
+    today_due_count = task_queue[0].get("count", 0) if task_queue else 0
+    pending_count = summary.get("approval_required_count", 0)
+    test_count = summary.get("traffic_experiment_count") or traffic.get("experiment_count") or 0
+    return [
+        {"title": "紧急任务", "value": urgent_count, "desc": "需要今天先处理"},
+        {"title": "今日到期", "value": today_due_count, "desc": "有明确时间限制"},
+        {"title": "待确认", "value": pending_count, "desc": "确认前不执行"},
+        {"title": "可测试机会", "value": test_count, "desc": "小范围观察"},
+    ]
+
+
 def get_today_advice(write_outputs: bool = False, record_logs: bool = False) -> Dict[str, Any]:
     result = _workflow(write_outputs=write_outputs, record_logs=record_logs)
     summary = result.get("summary", {})
@@ -58,13 +135,19 @@ def get_today_advice(write_outputs: bool = False, record_logs: bool = False) -> 
     traffic = result.get("traffic_feedback_report", {})
     operating_unit = result.get("operating_unit", {})
     cycle_policy = result.get("cycle_policy", {})
+    task_queue = _task_queue(result)
+    task_distribution = _task_distribution(task_queue, summary, traffic)
 
     return {
-        "page_title": "今日经营建议",
+        "page_title": "今日任务清单",
         "priority": {
-            "title": _module_label(summary.get("loop_next_module") or loop.get("next_module")),
-            "reason": traffic.get("next_action") or "先完成商品、竞品、上新和流量复盘，再生成下一轮动作。",
+            "title": "今日任务清单",
+            "reason": traffic.get("next_action") or "按紧急程度、截止时间和经营影响自动排序。",
             "next_steps": loop.get("next_iteration_plan", []),
+            "pending_count": summary.get("approval_required_count", 0),
+            "urgent_count": task_distribution[0]["value"],
+            "today_due_count": task_distribution[1]["value"],
+            "next_module_label": _module_label(summary.get("loop_next_module") or loop.get("next_module")),
         },
         "operating_unit": {
             "name": summary.get("unit_name") or operating_unit.get("unit_name"),
@@ -78,17 +161,13 @@ def get_today_advice(write_outputs: bool = False, record_logs: bool = False) -> 
             "run_time": cycle_policy.get("run_time"),
             "report_type": cycle_policy.get("report_type"),
         },
-        "cards": [
-            {"title": "商品体检", "value": summary.get("product_count", 0), "desc": "已检查商品"},
-            {"title": "竞品机会", "value": summary.get("competitor_count", 0), "desc": "同经营单元参考对象"},
-            {"title": "流量测试", "value": summary.get("traffic_experiment_count", 0), "desc": "已复盘测试"},
-            {"title": "待确认", "value": summary.get("approval_required_count", 0), "desc": "关键动作不自动执行"},
-        ],
-        "boundaries": [
-            "只生成判断、草案和报告",
-            "不自动上架、改价、投放",
-            "不自动触达客户或退款",
-            "确认后再进入下一步",
+        "task_distribution": task_distribution,
+        "cards": task_distribution,
+        "task_queue": task_queue,
+        "execution_rules": [
+            "未确认前，不自动上架、改价或投放",
+            "涉及退款、客户触达和库存调整，必须人工确认",
+            "系统只生成任务、判断、草案和报告",
         ],
         "raw": result,
     }
