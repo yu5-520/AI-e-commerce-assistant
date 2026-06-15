@@ -13,8 +13,10 @@ const fallbackData = {
   },
   operating_unit: {
     unit_name: "家居生活商品",
+    operating_unit_id: "home_living_goods",
     dominant_product_group: "home_living_goods",
     product_group_summary: { sun_protection_goods: 1, home_storage_goods: 1, health_home_goods: 1 },
+    reason: "根据 Mock ERP 商品结构识别",
   },
   cycle_policy: {
     cycle_frequency: "daily",
@@ -62,28 +64,42 @@ const fallbackData = {
 fallbackData.approval_required_tasks = fallbackData.rpa_tasks;
 
 const state = {
-  apiData: null,
+  rawWorkflow: fallbackData,
   businessToday: null,
   apiMode: false,
   importValidation: null,
   reportText: "",
+  productsView: null,
+  competitorsView: null,
+  listingView: null,
+  trafficView: null,
+  actionsView: null,
 };
 
 const routes = {
   dashboard: ["总览", renderDashboard],
   "operating-unit": ["经营单元", renderOperatingUnit],
   "data-check": ["数据", renderDataCheck],
-  products: ["商品", renderProducts],
-  competitors: ["竞品", renderCompetitors],
-  listing: ["上新", renderListing],
-  traffic: ["流量", renderTraffic],
-  approvals: ["确认", renderApprovals],
-  reports: ["报告", renderReports],
+  "business-products": ["商品", renderProducts],
+  "business-competitors": ["竞品", renderCompetitors],
+  "business-listing": ["上新", renderListing],
+  "business-traffic": ["流量", renderTraffic],
+  "business-actions": ["确认", renderApprovals],
+  "business-report": ["报告", renderReports],
+};
+
+const legacyRouteMap = {
+  products: "business-products",
+  competitors: "business-competitors",
+  listing: "business-listing",
+  traffic: "business-traffic",
+  approvals: "business-actions",
+  reports: "business-report",
 };
 
 const $ = (id) => document.getElementById(id);
 const view = () => $("appView");
-const data = () => state.apiData || fallbackData;
+const raw = () => state.rawWorkflow || fallbackData;
 const safeArray = (value) => Array.isArray(value) ? value : [];
 const cnFrequency = (frequency) => ({ daily: "每日", weekly: "每周", monthly: "每月" }[frequency] || frequency || "未设定");
 const cnDecision = (decision) => ({
@@ -106,7 +122,7 @@ const cnModule = (module) => ({
 
 const riskLabel = (level) => ({ high: "高", medium: "中", low: "低" }[level] || "低");
 const badge = (level) => `<span class="badge ${level || "low"}">${riskLabel(level)}</span>`;
-const statusBadge = (status) => `<span class="status-badge ${status || "ready"}">${({ success: "完成", failed: "失败", running: "运行", approved: "确认", rejected: "拒绝", pending: "待定", preview: "演示", ready: "可用" }[status]) || status || "可用"}</span>`;
+const statusBadge = (status) => `<span class="status-badge ${status || "ready"}">${({ passed: "通过", success: "完成", failed: "失败", running: "运行", approved: "确认", rejected: "拒绝", pending: "待定", preview: "演示", ready: "可用" }[status]) || status || "可用"}</span>`;
 const card = (title, body, extra = "") => `<article class="card ${extra}"><h3>${title}</h3>${body}</article>`;
 const list = (items) => `<ul class="clean-list">${safeArray(items).map((item) => `<li>${item}</li>`).join("")}</ul>`;
 const kv = (items) => `<div class="info-list">${items.map(([key, value]) => `<div><span>${key}</span><strong>${value ?? "-"}</strong></div>`).join("")}</div>`;
@@ -117,17 +133,32 @@ async function fetchJson(url, options = {}) {
   return response.json();
 }
 
+async function fetchProductView(url, fallbackValue) {
+  if (!state.apiMode) return fallbackValue;
+  try {
+    return await fetchJson(url);
+  } catch {
+    return fallbackValue;
+  }
+}
+
 async function refreshWorkflow() {
   try {
     const payload = await fetchJson("/api/business/today");
     state.businessToday = payload;
-    state.apiData = payload.raw || fallbackData;
+    state.rawWorkflow = payload.raw || fallbackData;
     state.apiMode = true;
+    state.reportText = "";
+    state.productsView = null;
+    state.competitorsView = null;
+    state.listingView = null;
+    state.trafficView = null;
+    state.actionsView = null;
     $("apiModeBadge").textContent = "在线";
     $("apiModeBadge").className = "mode-badge api";
   } catch {
     state.businessToday = null;
-    state.apiData = fallbackData;
+    state.rawWorkflow = fallbackData;
     state.apiMode = false;
     $("apiModeBadge").textContent = "演示";
     $("apiModeBadge").className = "mode-badge local";
@@ -135,7 +166,8 @@ async function refreshWorkflow() {
 }
 
 async function renderRoute() {
-  const route = routes[location.hash.replace("#", "")] ? location.hash.replace("#", "") : "dashboard";
+  const hash = location.hash.replace("#", "");
+  const route = routes[hash] ? hash : (legacyRouteMap[hash] || "dashboard");
   document.querySelectorAll(".nav a").forEach((link) => link.classList.toggle("active", link.dataset.route === route));
   const [title, renderer] = routes[route];
   $("pageTitle").textContent = title;
@@ -143,7 +175,7 @@ async function renderRoute() {
 }
 
 function renderDashboard() {
-  const d = data();
+  const d = raw();
   const today = state.businessToday;
   const s = d.summary || {};
   const loop = d.operating_loop_summary || {};
@@ -168,20 +200,24 @@ function renderDashboard() {
   <section class="kpi-grid">${cards.map((item) => card(item.title, `<strong>${item.value}</strong>`)).join("")}</section>
   <section class="two-column">
     ${card("下一步", list(priority?.next_steps || loop.next_iteration_plan || []))}
-    ${card("边界", list(today?.boundaries || ["建议", "草案", "确认"]))}
+    ${card("边界", list(today?.boundaries || ["只生成建议", "只生成草案", "确认后再执行"]))}
   </section>`;
 }
 
 async function renderOperatingUnit() {
-  let payload = null;
-  if (state.apiMode) {
-    try { payload = await fetchJson("/api/business/operating-unit"); } catch { payload = null; }
-  }
-  const d = data();
-  const unit = payload || d.operating_unit || {};
-  const policy = payload?.cycle_policy || d.cycle_policy || {};
+  const d = raw();
+  const fallback = {
+    unit_name: d.operating_unit?.unit_name,
+    unit_id: d.operating_unit?.operating_unit_id,
+    dominant_product_group: d.operating_unit?.dominant_product_group,
+    reason: d.operating_unit?.reason,
+    product_group_summary: d.operating_unit?.product_group_summary || {},
+    cycle_policy: d.cycle_policy || {},
+  };
+  const unit = await fetchProductView("/api/business/operating-unit", fallback);
+  const policy = unit.cycle_policy || {};
   view().innerHTML = `<section class="page-section">
-    ${kv([["经营单元", unit.unit_name || "-"], ["商品群", unit.dominant_product_group || "-"], ["频率", policy.frequency_label || cnFrequency(policy.cycle_frequency || policy.frequency)], ["时间", policy.run_time || "-"]])}
+    ${kv([["经营单元", unit.unit_name || "-"], ["商品群", unit.dominant_product_group || "-"], ["频率", policy.frequency_label || cnFrequency(policy.frequency || policy.cycle_frequency)], ["时间", policy.run_time || "-"]])}
   </section>
   <section class="two-column">
     ${card("分布", list(Object.entries(unit.product_group_summary || {}).map(([key, value]) => `${key} · ${value}`)))}
@@ -195,46 +231,89 @@ async function renderDataCheck() {
   }
   const validation = state.importValidation || { datasets: ["商品", "订单", "库存", "退款", "客户"].map((name) => ({ name, status: "ready" })) };
   const rows = safeArray(validation.datasets).map((item) => `<div><strong>${item.name || item.label}</strong>${statusBadge(item.status || "ready")}</div>`).join("");
-  view().innerHTML = `<section class="page-section"><div class="table-like compact-table">${rows}</div></section>`;
-}
-
-function renderProducts() {
-  const rows = safeArray(data().product_diagnosis).map((item) => `<div class="result-card"><h3>${item.product_name} ${badge(item.risk_level)}</h3>${kv([["库存", item.stock ?? "-"], ["毛利", item.gross_margin ?? "-"], ["活动毛利", item.activity_margin ?? "-"]])}${list(safeArray(item.suggested_actions))}</div>`).join("");
-  view().innerHTML = `<section class="result-list">${rows}</section>`;
-}
-
-function renderCompetitors() {
-  const c = data().competitor_analysis || {};
   view().innerHTML = `<section class="page-section">
-    ${kv([["触发商品", c.reference_product?.product_name || "-"], ["参考对象", c.competitor_count || 0], ["价格", c.price_gap?.position || "-"], ["动作", c.next_action || "-"]])}
-  </section>
-  <section class="two-column">
-    ${card("差评", list(c.review_gap?.top_bad_review_keywords || []))}
-    ${card("机会", list(c.review_gap?.opportunity_actions || []))}
+    <div class="section-header"><h3>数据健康</h3><button onclick="refreshCurrentView()">重新检查</button></div>
+    <div class="table-like compact-table">${rows}</div>
   </section>`;
 }
 
-function renderListing() {
-  const plan = data().listing_growth_plan || {};
-  const top = plan.top_candidate || {};
+async function renderProducts() {
+  const d = raw();
+  const fallback = { title: "商品体检结果", summary: d.summary || {}, items: safeArray(d.product_diagnosis) };
+  const payload = state.productsView || await fetchProductView("/api/business/products", fallback);
+  state.productsView = payload;
+  const rows = safeArray(payload.items).map((item) => `<div class="result-card"><h3>${item.product_name} ${badge(item.risk_level)}</h3>${kv([["库存", item.stock ?? "-"], ["毛利", item.gross_margin ?? "-"], ["活动毛利", item.activity_margin ?? "-"]])}${list(item.suggestions || item.suggested_actions || [])}</div>`).join("");
+  view().innerHTML = `<section class="result-list">${rows || card("暂无商品体检", "<p>当前没有可展示的商品结果。</p>")}</section>`;
+}
+
+async function renderCompetitors() {
+  const d = raw();
+  const c = d.competitor_analysis || {};
+  const fallback = {
+    title: "竞品机会",
+    category_name: c.category_name,
+    competitor_count: c.competitor_count || 0,
+    trigger_product: c.reference_product || {},
+    price_gap: c.price_gap || {},
+    bad_review_keywords: c.review_gap?.top_bad_review_keywords || [],
+    opportunity_actions: c.review_gap?.opportunity_actions || [],
+    next_action: c.next_action,
+  };
+  const payload = state.competitorsView || await fetchProductView("/api/business/competitors", fallback);
+  state.competitorsView = payload;
+  view().innerHTML = `<section class="page-section">
+    ${kv([["触发商品", payload.trigger_product?.product_name || "-"], ["参考对象", payload.competitor_count || 0], ["价格", payload.price_gap?.position || "-"], ["动作", payload.next_action || "-"]])}
+  </section>
+  <section class="two-column">
+    ${card("差评", list(payload.bad_review_keywords || []))}
+    ${card("机会", list(payload.opportunity_actions || []))}
+  </section>`;
+}
+
+async function renderListing() {
+  const d = raw();
+  const plan = d.listing_growth_plan || {};
   const draft = plan.listing_draft || {};
+  const fallback = {
+    title: "上新建议",
+    candidate_count: plan.candidate_count || 0,
+    top_candidate: plan.top_candidate || {},
+    title_draft: draft.title_draft,
+    image_plan: draft.image_plan || [],
+    sku_plan: draft.sku_plan || [],
+    compliance_checklist: draft.compliance_checklist || [],
+    next_action: plan.next_action,
+  };
+  const payload = state.listingView || await fetchProductView("/api/business/listing", fallback);
+  state.listingView = payload;
+  const top = payload.top_candidate || {};
   view().innerHTML = `<section class="page-section">
     ${kv([["候选", top.product_name || "-"], ["评分", top.score || "-"], ["毛利", top.expected_margin ?? "-"], ["毛利率", top.margin_rate ?? "-"]])}
   </section>
   <section class="two-column">
-    ${card("标题", `<div class="title-draft">${draft.title_draft || "-"}</div>`)}
-    ${card("检查", list(draft.compliance_checklist || []))}
+    ${card("标题", `<div class="title-draft">${payload.title_draft || "-"}</div>`)}
+    ${card("检查", list(payload.compliance_checklist || []))}
   </section>
   <section class="two-column">
-    ${card("主图", list(draft.image_plan || []))}
-    ${card("规格", list(draft.sku_plan || []))}
+    ${card("主图", list(payload.image_plan || []))}
+    ${card("规格", list(payload.sku_plan || []))}
   </section>`;
 }
 
-function renderTraffic() {
-  const report = data().traffic_feedback_report || {};
-  const rows = safeArray(report.diagnoses).map((item) => `<div class="task-row"><strong>${item.product_id || item.experiment_id}</strong><span>${item.traffic_source || "-"}</span>${badge(item.risk_level)}<small>${cnDecision(item.decision)}</small></div>`).join("");
-  view().innerHTML = `<section class="page-section">${kv([["测试", report.experiment_count || 0], ["结论", report.next_action || "-"], ["回流", safeArray(report.loopback_actions).join(" / ") || "-"], ["状态", "待确认"]])}</section><section class="task-table">${rows}</section>`;
+async function renderTraffic() {
+  const d = raw();
+  const report = d.traffic_feedback_report || {};
+  const fallback = {
+    title: "流量复盘",
+    experiment_count: report.experiment_count || 0,
+    next_action: report.next_action,
+    loopback_actions: report.loopback_actions || [],
+    items: safeArray(report.diagnoses),
+  };
+  const payload = state.trafficView || await fetchProductView("/api/business/traffic", fallback);
+  state.trafficView = payload;
+  const rows = safeArray(payload.items).map((item) => `<div class="task-row"><strong>${item.product_id || item.experiment_id}</strong><span>${item.traffic_source || "-"}</span>${badge(item.risk_level)}<small>${item.decision_label || cnDecision(item.decision)}</small></div>`).join("");
+  view().innerHTML = `<section class="page-section">${kv([["测试", payload.experiment_count || 0], ["结论", payload.next_action || "-"], ["回流", safeArray(payload.loopback_actions).join(" / ") || "-"], ["状态", "待确认"]])}</section><section class="task-table">${rows}</section>`;
 }
 
 async function renderApprovals() {
@@ -242,7 +321,7 @@ async function renderApprovals() {
   if (state.apiMode) {
     try { actions = (await fetchJson("/api/business/actions")).items || []; } catch { actions = []; }
   }
-  const d = data();
+  const d = raw();
   const tasks = actions.length ? actions : safeArray(d.approval_required_tasks?.length ? d.approval_required_tasks : d.rpa_tasks).map((task) => ({ action_id: task.task_id, action_name: task.task_type, risk_level: task.risk_level, suggestion: task.ai_suggestion }));
   const rows = tasks.map((task) => `<div class="result-card"><h3>${task.action_name || "动作"} ${badge(task.risk_level)}</h3><div class="action-line">${task.suggestion || "待确认"}</div><div class="task-actions"><button onclick="updateTask('${task.action_id}', 'approve')">确认</button><button class="secondary" onclick="updateTask('${task.action_id}', 'reject')">拒绝</button></div></div>`).join("");
   view().innerHTML = `<section class="result-list">${rows}</section>`;
@@ -252,15 +331,10 @@ async function renderReports() {
   if (state.apiMode && !state.reportText) {
     try { state.reportText = await (await fetch("/api/business/report")).text(); } catch { state.reportText = "暂无报告"; }
   }
-  const summary = data().summary || {};
+  const summary = raw().summary || {};
   view().innerHTML = `<section class="page-section">${kv([["经营单元", summary.unit_name || "-"], ["频率", cnFrequency(summary.cycle_frequency)], ["重点", cnModule(summary.loop_next_module)], ["确认", summary.approval_required_count || 0]])}</section><section class="page-section"><div class="report-preview"><pre>${state.reportText || "暂无报告"}</pre></div></section>`;
 }
 
-async function importMockData() {
-  if (!state.apiMode) return;
-  await fetchJson("/api/data/import/mock", { method: "POST" });
-  await renderDataCheck();
-}
 async function updateTask(taskId, action) {
   if (!state.apiMode) return;
   const response = await fetch(`/api/approvals/${taskId}/${action}`, { method: "POST" });
@@ -268,10 +342,10 @@ async function updateTask(taskId, action) {
   await refreshWorkflow();
   await renderApprovals();
 }
+
 async function refreshCurrentView() { await renderRoute(); }
 async function refreshAndRender() { await refreshWorkflow(); await renderRoute(); }
 
-window.importMockData = importMockData;
 window.updateTask = updateTask;
 window.refreshCurrentView = refreshCurrentView;
 window.refreshAndRender = refreshAndRender;
