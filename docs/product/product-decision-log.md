@@ -1,5 +1,57 @@
 # 产品决策日志
 
+## 2026-06-15：active docs 只描述当前可运行主线
+
+### 背景
+
+v1.0.1 后，代码、脚本和版本治理已经收敛到当前 ERP 经营单元产品主线，但产品文档中仍残留未来多页面蓝图、宽泛领域模型和旧验收命令。这些文档会误导后续 AI 或人工修改，把仓库重新拉回旧页面、旧 route 或旧 demo 结构。
+
+### 决策
+
+从 v1.0.2 开始，active docs 只描述当前可运行产品主线：
+
+```text
+src.api.main:app
+↓
+/api/business/*
+↓
+web_demo/index.html
+↓
+web_demo/app-v2.js
+```
+
+未来产品地图、未来多页面用户流程、宽泛领域模型不再作为当前 MVP 文档保留。需要规划未来能力时，必须新建明确带 `proposal` 或 `future` 标记的文档，不能混入当前验收文档。
+
+### 删除
+
+```text
+docs/product/product-map.md
+docs/product/user-flow.md
+docs/product/domain-model.md
+```
+
+### 保留
+
+```text
+docs/product/CHANGELOG.md
+docs/product/mvp-scope.md
+docs/product/module-boundary.md
+docs/product/product-decision-log.md
+docs/product/product-structure-cleanup-log.md
+```
+
+### 新规则
+
+```text
+当前说明看 README.md
+当前部署看 docs/server-deploy.md
+当前产品边界看 docs/product/mvp-scope.md 和 docs/product/module-boundary.md
+当前产品变化看 docs/product/CHANGELOG.md
+当前工程变化看 versioning/CHANGELOG.md
+```
+
+---
+
 ## 2026-06-15：main 分支只保留当前产品主线
 
 ### 背景
@@ -61,8 +113,9 @@ ERP / CRM Mock 数据
 ```text
 结构级变更必须更新 versioning/CHANGELOG.md
 版本号变更必须更新 versioning/VERSION.md
-产品决策必须更新 docs/product/product-decision-log.md
-产品结构清理必须更新 docs/product/product-structure-cleanup-log.md
+产品主线变化必须更新 docs/product/CHANGELOG.md
+重大产品决策补充 docs/product/product-decision-log.md
+结构清理补充 docs/product/product-structure-cleanup-log.md
 测试脚本必须跟随当前 API 主线同步
 ```
 
@@ -77,51 +130,3 @@ ERP / CRM Mock 数据
 ### 决策
 
 从本阶段开始，仓库文档层优先服务产品本体，只保留产品骨架、运行说明、API、日志和必要架构文档。
-
-新增 `docs/product/` 目录，作为产品结构的主目录。
-
-### 当前产品主线
-
-```text
-导入经营数据
-↓
-数据校验与清洗
-↓
-建立商品档案与客户档案
-↓
-AI / RAG 经营诊断
-↓
-生成任务草案
-↓
-人工确认
-↓
-导出报告 / 低风险执行
-↓
-日志回写与复盘
-```
-
-### 保留方向
-
-```text
-产品地图
-领域模型
-用户流程
-模块边界
-MVP 范围
-运行日志
-API 说明
-```
-
-### 暂停方向
-
-```text
-简历包装
-面试话术
-HR 展示
-BOSS 展示
-重复的 DONE / STOP / FINAL 标记
-```
-
-## 下一步
-
-基于 `docs/product/`，继续重构 API 路由和前端信息架构。
