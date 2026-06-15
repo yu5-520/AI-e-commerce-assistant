@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v1.0.16 - 2026-06-15
+
+### Product Decision
+- Product list titles must be readable without damaging the table layout.
+- Long titles should be clamped in the list view and fully visible in the detail view.
+- The 商品 page should never allow product title text to overlap platform, shop, inventory, price, margin, after-sales, or action columns.
+- Current product truth remains: `web_demo/index.html?v=1.0.16` → `web_demo/product-center.css?v=1.0.16` → compact product list with clamped titles.
+
+### Fixed
+- Product titles now clamp to two lines in the product list.
+- Product row grid children now use `min-width: 0` so text shrinks inside its own cell.
+- Store/status fields now ellipsize instead of being pushed by long product titles.
+- Product action column was narrowed so the title column gets more stable room.
+- `web_demo/index.html` now bumps frontend assets to `?v=1.0.16`.
+- API version is aligned to `v1.0.16` for this product layout fix.
+
+### Product Boundary
+- This is a frontend layout fix.
+- Product titles, links, inventory, and after-sales values are still Mock ERP / CRM data until real shop connectors are attached.
+
 ## v1.0.15 - 2026-06-15
 
 ### Product Decision
