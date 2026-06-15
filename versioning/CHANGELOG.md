@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.6 - 2026-06-15
+
+### Fixed
+- Fixed the FastAPI server import failure on the homepage route.
+- Disabled response model generation for `/` with `response_model=None`.
+- Replaced the invalid homepage return annotation with `Any` so FastAPI no longer tries to build a Pydantic model from `FileResponse | Dict`.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.6`.
+
+### Product Engineering Rule
+- Routes that can return `FileResponse` should not expose mixed response type annotations as FastAPI response models.
+- Server import checks should be run after endpoint signature changes.
+
 ## v1.0.5 - 2026-06-15
 
 ### Fixed
