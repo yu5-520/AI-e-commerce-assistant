@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.10 - 2026-06-15
+
+### Changed
+- Productized the operating unit page from an ERP/category recognition panel into a store-group management surface.
+- Added `web_demo/operating-unit-hotfix.js` so the page now shows platform count, shop count, connected data types, pending integrations, associated shops, and data-source status.
+- Removed visible dependence on engineering category fields such as `sun_protection_goods`, `home_storage_goods`, distribution blocks, and trigger-rule blocks from the operating-unit user experience.
+- Extended `web_demo/dashboard.css` with store-group layout styles for the operating unit hero, metrics, shop rows, and data-source rows.
+- `web_demo/index.html` now appends `?v=1.0.10` to assets and loads the operating-unit hotfix script after the dashboard hotfix.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.10`.
+
+### Product Engineering Rule
+- The operating unit page should answer: which platforms and shops are managed, what data is connected, and which systems can be connected next.
+- Engineering category IDs and trigger rules belong in backend diagnosis, not in the merchant-facing operating-unit page.
+- Store group is the product anchor: 店铺群 → ERP/CRM/聚水潭 → 商品/库存/售后/流量 → 任务清单。
+
 ## v1.0.9 - 2026-06-15
 
 ### Fixed
