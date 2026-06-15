@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.0.22 - 2026-06-15
+
+### Changed
+- Repositioned the old `报告` page as `日志` / operation log center.
+- Changed the sidebar label from `报告` to `日志` while keeping the existing `#business-report` route for compatibility.
+- Added `web_demo/log-manager-hotfix.js` with operation logs for task completion, AI judgment, data import/export, and user actions.
+- Added `web_demo/log-center.css` for log rows, metrics, filters, detail pages, source jumps, export action, and responsive layout.
+- Removed the visible Markdown-style report panel from the user-facing page; logs now show productized records with time, type, source, status, product/store context, action, reason, and result.
+- Added filters for type, source, and status, plus search across log content and export of the currently filtered logs.
+- `web_demo/index.html` now appends `?v=1.0.22` to assets and loads the operation log center script.
+- Aligned the FastAPI app version and health version with the repository version: `1.0.22`.
+
+### Product Engineering Rule
+- Reports are user-facing conclusions; logs are trace records of what the system and user already did.
+- The log page should support追溯: when, what source, which product/store, what action, why it happened, and what result was produced.
+- Log pages should not become primary decision pages; they should link back to source modules and related tasks.
+
 ## v1.0.21 - 2026-06-15
 
 ### Changed
@@ -55,24 +72,9 @@
 - Competitor opportunities should flow into launch experiments only after being turned into clear test actions and metrics.
 - Test execution remains confirmation-first; the page should not imply automatic real shop publishing.
 
-## v1.0.18 - 2026-06-15
-
-### Changed
-- Productized the 竞品 page from an analysis result panel into a competitor observation list aligned with the 商品 page structure.
-- Added `web_demo/competitor-manager-hotfix.js` with eight mock competitor records, business-language price positions, platform/store/title/link fields, metrics, opportunity points, and detail views.
-- Added `web_demo/competitor-center.css` for responsive competitor card rows, metric strips, opportunity blocks, filter menus, and detail pages.
-- Removed visible engineering wording such as `below_market`; pricing is now shown as `低于市场价`、`高于市场价`、`接近市场价`.
-- Added interactive filters for platform, target product, and status, plus search across competitor title, platform, store, bad-review keywords, and opportunity points.
-- `web_demo/index.html` now appends `?v=1.0.18` to assets and loads the competitor manager script.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.18`.
-
-### Product Engineering Rule
-- Competitor pages should mirror product pages: title, image, platform, store, link, core metrics, status, and actions belong in the same scan-friendly row pattern.
-- Engineering enum values must be translated before reaching the merchant-facing UI.
-- Competitor analysis should show multiple comparable items, not a single backend conclusion block.
-
 ## Earlier History
 
+- v1.0.18: Productized the 竞品 page from an analysis result panel into a competitor observation list.
 - v1.0.17: Product page was switched from forced table columns to responsive product cards.
 - v1.0.16: Product list layout was hardened for long titles.
 - v1.0.15: Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
