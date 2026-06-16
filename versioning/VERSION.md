@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v2.0.0
+Current Version: v2.1.0
 
 ## Version History
 
@@ -26,6 +26,7 @@ Current Version: v2.0.0
 - v1.6.0: Added independent task detail report pages. 待办 tasks now have `详情报告`; source modules have `查看预警` / `任务报告`; backend exposes task and candidate report APIs as the future Agent report generation boundary.
 - v1.6.1: Added report-to-task conversion. Candidate report pages now include `加入任务清单`, create the matching module task from the detail page, refresh task/module state, and jump to the new task in 待办.
 - v2.0.0: Cleaned the architecture around the modular `/api/modules/*` trunk, added the `/api/accounts` role-permission layer, added the 账号 page, and upgraded the task pool into a dispatch / submit / review collaboration flow.
+- v2.1.0: Added global mock account switching, role-based task visibility, permission-based todo actions, productized permission labels, and role-specific insight depth for account pages and task reports.
 
 ## Version Rules
 
