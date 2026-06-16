@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v2.3.7
+Current Version: v2.3.8
 
 ## Version History
 
+- v2.3.8: Reworked the manager role into a store-group execution management workflow: 店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表.
 - v2.3.7: Simplified `账号` into a basic account center for profile, login security, phone / email / third-party binding, platform authorization status, notification settings, local cache, and logout actions.
 - v2.3.6: Changed `复盘审计` from wide tables into expandable retrospective cards, audit detail cards, and next-cycle task draft cards with Agent judgment placeholders.
 - v2.3.5: Rebuilt owner `复核审计` into `复盘审计`, receiving daily / weekly / monthly retrospectives, auditing missed targets and execution failures, and forming next-cycle task drafts.
