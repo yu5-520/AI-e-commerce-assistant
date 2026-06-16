@@ -1,5 +1,48 @@
 # Changelog
 
+## v1.3.0 - 2026-06-16
+
+### Added
+- Added modular frontend structure:
+  - `web_demo/core/mock-data.js`
+  - `web_demo/core/shell.js`
+  - `web_demo/core/router.js`
+  - `web_demo/core/task-actions.js`
+  - `web_demo/stores/task-store.js`
+  - `web_demo/modules/*/page.js`
+  - `web_demo/bootstrap.js`
+- Added page modules for dashboard, operating unit, report, product, competitor, listing, traffic, todo, and log routes.
+- Added a route registry so pages register themselves through `AppRouter.register(page)` and render through one router lifecycle.
+
+### Changed
+- `web_demo/index.html` now loads only the modular frontend entry chain and uses `?v=1.3.0`.
+- `task-store` moved into `web_demo/stores/task-store.js` while keeping `window.OPERATION_TASK_STORE` compatibility.
+- Task generation moved from global DOM bridge behavior into `web_demo/core/task-actions.js` and module-local event binding.
+- FastAPI app version and health version are aligned to `1.3.0`.
+
+### Removed
+- Removed legacy root task store: `web_demo/task-store.js`.
+- Removed legacy router shell: `web_demo/app-v2.js`.
+- Removed temporary lifecycle shim: `web_demo/route-lifecycle.js`.
+- Removed legacy hotfix scripts:
+  - `web_demo/dashboard-hotfix.js`
+  - `web_demo/operating-unit-hotfix.js`
+  - `web_demo/data-report-hotfix.js`
+  - `web_demo/product-manager-hotfix.js`
+  - `web_demo/competitor-manager-hotfix.js`
+  - `web_demo/listing-manager-hotfix.js`
+  - `web_demo/traffic-manager-hotfix.js`
+  - `web_demo/todo-manager-hotfix.js`
+  - `web_demo/log-manager-hotfix.js`
+- Removed legacy global task bridge: `web_demo/module-task-bridge.js`.
+
+### Product Engineering Rule
+- New frontend features should be added as route modules under `web_demo/modules/<name>/page.js`.
+- Shared state belongs in `web_demo/stores/`.
+- Shared page shell and routing logic belongs in `web_demo/core/`.
+- Modules must not own global `hashchange` listeners or global `MutationObserver` loops.
+- Each module owns its own `render / mount / unmount` boundary through the router context.
+
 ## v1.2.0 - 2026-06-16
 
 ### Added
@@ -32,66 +75,12 @@
 - Module bridge scripts may observe route DOM changes, but they must not rewrite the same DOM nodes on every observer callback.
 - Observer-based hotfix scripts should be throttled and idempotent, otherwise switching modules can create render loops.
 
-## v1.1.1 - 2026-06-16
-
-### Added
-- Added task identity fields to the front-end task store: `entityType`, `entityId`, `riskDomain`, `actionType`, and `dedupeKey`.
-- Added task-store helpers for dedupe matching: `buildDedupeKey()` and `findOpenTask()`.
-- Added merge behavior for repeated same-problem tasks. If an active task already exists with the same dedupe key, the new action is merged into the existing task instead of creating a duplicate.
-- Added source-trail and judgment-tag merging so repeated module actions still leave traceable context.
-
-### Changed
-- `web_demo/module-task-bridge.js` now checks task identity before creating a task.
-- 商品、竞品、上新、流量 and 报表 buttons now show existing-task state when the same problem is already in 待办.
-- Same-product same-problem manual actions now route to 待办 instead of creating another task.
-- Different problem domains can still create separate tasks, such as `商品:P002:售后:复查` and `商品:P002:上新:测试`.
-- Frontend assets were bumped to `?v=1.1.1`.
-- FastAPI app version and health version are aligned to `1.1.1`.
-
-### Product Engineering Rule
-- Manual task creation is still allowed, but it must pass through task identity dedupe.
-- Same entity + same risk domain + same action type means merge / view existing task.
-- Same entity + different risk domain or action type can create a new task.
-- This prevents the unified task pool from becoming noisy after modules begin generating tasks dynamically.
-
-## v1.1.0 - 2026-06-16
-
-### Added
-- Added `web_demo/task-store.js` as the unified front-end task store for V1.1.
-- Added `web_demo/module-task-bridge.js` so 商品、竞品、上新、流量 and 报表 actions can create shared tasks without direct high-risk execution.
-- The task store now persists tasks and logs through browser `localStorage`, so refresh does not erase the current demo task flow.
-
-### Changed
-- Dashboard now reads top tasks from the unified task store instead of its own static dashboard-only pool.
-- 待办 now reads the complete shared task pool and supports completion, pinning, up/down ordering, source jumps, and demo reset.
-- 日志 now reads operation logs from the same task store, including task creation, completion, ordering, and module-triggered actions.
-- `web_demo/index.html` now loads `task-store.js` before the business modules and loads `module-task-bridge.js` after all module scripts.
-- Frontend asset cache version was bumped to `?v=1.1.0`.
-- FastAPI app version and health version are aligned to `1.1.0`.
-
-### Product Engineering Rule
-- V1.1 is a dynamic task-flow release, not a UI copy patch.
-- 商品、竞品、上新、流量、报表 should push tasks into the shared task pool.
-- 首页 is the command board; 待办 is the full task pool; 日志 is the trace record.
-- AI and module actions only create advice/tasks/logs in this version. They do not change real shop data, ad budgets, refunds, pricing, or ERP records.
-
 ## Earlier History
 
+- v1.1.1: Added task identity and dedupe keys for same-product same-problem task merging.
+- v1.1.0: Added unified front-end task store and dynamic module-driven task flow.
 - v1.0.24: Dashboard task board was simplified into a command-board scheduling view with short judgment tags.
 - v1.0.23: Dashboard task board linked the homepage to a cross-module task pool.
 - v1.0.22: Report page became 日志 / operation log center.
 - v1.0.21: Actions page became 待办任务 / task center.
-- v1.0.20: Traffic page was repositioned as `流量测试台`.
-- v1.0.19: Listing page was repositioned as `上新测试台`.
-- v1.0.18: Productized the 竞品 page from an analysis result panel into a competitor observation list.
-- v1.0.17: Product page was switched from forced table columns to responsive product cards.
-- v1.0.16: Product list layout was hardened for long titles.
-- v1.0.15: Productized the 商品 page from oversized diagnosis cards into a compact goods-operation list.
-- v1.0.14: Report pages support real export and template download.
-- v1.0.13: Report center added user-driven report import.
-- v1.0.11: Data page was renamed and productized into `ERP / CRM 报表管理`.
-- v1.0.10: Operating unit page was productized into a store-group management surface.
-- v1.0.9: Added dashboard cache hotfix and compatibility CSS.
-- v1.0.8: Compact dashboard task board was added.
-- v1.0.7: Homepage overview was repositioned as a task board.
-- v1.0.0-v1.0.6: Product trunk cleanup, API alignment, health/version repair, and current route governance.
+- v1.0.0-v1.0.20: Product trunk cleanup and page-level productization.
