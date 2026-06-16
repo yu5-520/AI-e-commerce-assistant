@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v1.5.2 - 2026-06-16
+
+### Product Decision
+- V1.5.2 unifies the behavior of `已在任务清单` buttons across 商品、竞品、上新、流量、报表.
+- Product truth: if a task already exists, the module should navigate to the exact active task in 待办 instead of trying to create or merge the same task again.
+
+### Changed
+- Added router state support so a module can navigate to `business-actions` with a target `focusTaskId`.
+- Added shared task navigation helpers in `web_demo/core/task-actions.js`.
+- Product, competitor, listing, traffic, and report modules now render existing-task buttons as `已在任务清单`.
+- Clicking `已在任务清单` now jumps to the matching task card in 待办 and briefly highlights it.
+- Competitor, listing, and report backend module responses now include task-state identity fields, matching product and traffic behavior.
+- Todo cards now expose task ids through `data-task-card` for focused navigation.
+- Frontend assets now use `?v=1.5.2`; API and health versions are aligned.
+
+### Product Boundary
+- This does not add database persistence.
+- Completed tasks still disappear from 待办 and remain in 日志.
+- Existing-task navigation only works for active tasks; completed tasks correctly restore the module button to `加入任务清单`.
+
 ## v1.5.1 - 2026-06-16
 
 ### Product Decision
@@ -58,7 +78,3 @@
 - v1.3.0: Frontend changed from hotfix-script stacking into a modular route-registry structure.
 - v1.2.0: Added unified front-end route lifecycle coordinator.
 - v1.1.2: Fixed fast module-switch crash introduced by observer-based task bridge binding.
-- v1.1.1: Added dedupe identity to task-store tasks.
-- v1.1.0: Added unified front-end task store and dynamic module task flow.
-- v1.0.24: 首页 became a command-board scheduling view.
-- v1.0.0-v1.0.23: Product trunk cleanup and page productization.
