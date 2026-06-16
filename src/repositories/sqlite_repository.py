@@ -2,6 +2,8 @@
 
 The repository is intentionally lightweight and stdlib-only. JSONL logs remain
 as a readable audit trail, while SQLite provides queryable state for the product.
+V2 also prepares account, role, permission, store scope, and task collaboration
+schemas so the mock collaboration layer can later move out of memory cleanly.
 """
 
 from __future__ import annotations
@@ -102,6 +104,9 @@ def init_db() -> None:
                 risk_level TEXT,
                 approval_status TEXT,
                 status TEXT,
+                workflow_status TEXT,
+                assignee_id TEXT,
+                reviewer_id TEXT,
                 auto_execution_allowed INTEGER,
                 payload TEXT,
                 updated_at TEXT
@@ -121,12 +126,123 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS accounts (
+                user_id TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                role_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                payload TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS roles (
+                role_id TEXT PRIMARY KEY,
+                role_name TEXT NOT NULL,
+                role_level INTEGER,
+                scope TEXT,
+                payload TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS role_permissions (
+                role_id TEXT NOT NULL,
+                permission_id TEXT NOT NULL,
+                PRIMARY KEY(role_id, permission_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS store_groups (
+                store_group_id TEXT PRIMARY KEY,
+                store_group_name TEXT NOT NULL,
+                owner_id TEXT,
+                manager_id TEXT,
+                payload TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stores (
+                store_id TEXT PRIMARY KEY,
+                store_name TEXT NOT NULL,
+                platform TEXT,
+                store_group_id TEXT,
+                payload TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_memberships (
+                user_id TEXT NOT NULL,
+                store_group_id TEXT NOT NULL,
+                store_id TEXT,
+                PRIMARY KEY(user_id, store_group_id, store_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_assignments (
+                assignment_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                assignee_id TEXT NOT NULL,
+                reviewer_id TEXT,
+                assigned_by_id TEXT,
+                note TEXT,
+                created_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_submissions (
+                submission_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                submitter_id TEXT NOT NULL,
+                note TEXT,
+                payload TEXT,
+                created_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_reviews (
+                review_id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                reviewer_id TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                note TEXT,
+                payload TEXT,
+                created_at TEXT
+            )
+            """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_workflow_runs_time ON workflow_runs(finished_at, started_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_execution_logs_run ON execution_logs(workflow_run_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_import_records_time ON import_records(created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_approval_records_task ON approval_records(task_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_task_status_status ON task_status(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_task_status_assignee ON task_status(assignee_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_report_records_time ON report_records(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_accounts_role ON accounts(role_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stores_group ON stores(store_group_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_task_assignments_task ON task_assignments(task_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_task_submissions_task ON task_submissions(task_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_task_reviews_task ON task_reviews(task_id)")
         conn.commit()
 
 
@@ -272,16 +388,22 @@ def upsert_task_status(task: Dict[str, Any]) -> None:
                 risk_level,
                 approval_status,
                 status,
+                workflow_status,
+                assignee_id,
+                reviewer_id,
                 auto_execution_allowed,
                 payload,
                 updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 workflow_run_id=excluded.workflow_run_id,
                 task_type=excluded.task_type,
                 risk_level=excluded.risk_level,
                 approval_status=excluded.approval_status,
                 status=excluded.status,
+                workflow_status=excluded.workflow_status,
+                assignee_id=excluded.assignee_id,
+                reviewer_id=excluded.reviewer_id,
                 auto_execution_allowed=excluded.auto_execution_allowed,
                 payload=excluded.payload,
                 updated_at=excluded.updated_at
@@ -293,9 +415,12 @@ def upsert_task_status(task: Dict[str, Any]) -> None:
                 task.get("risk_level"),
                 task.get("approval_status"),
                 task.get("status"),
+                task.get("workflow_status") or task.get("workflowStatus"),
+                task.get("assignee_id") or task.get("assigneeId"),
+                task.get("reviewer_id") or task.get("reviewerId"),
                 1 if task.get("auto_execution_allowed") is True else 0,
                 dumps(task),
-                task.get("updated_at"),
+                task.get("updated_at") or task.get("updatedAt"),
             ),
         )
         conn.commit()
@@ -338,177 +463,4 @@ def row_to_workflow_run(row: sqlite3.Row) -> Dict[str, Any]:
         "output_snapshot": loads(row["output_snapshot"]),
         "started_at": row["started_at"],
         "finished_at": row["finished_at"],
-        "error_message": row["error_message"],
     }
-
-
-def row_to_execution_log(row: sqlite3.Row) -> Dict[str, Any]:
-    return {
-        "log_id": row["log_id"],
-        "workflow_run_id": row["workflow_run_id"],
-        "node_name": row["node_name"],
-        "status": row["status"],
-        "input_snapshot": loads(row["input_snapshot"]),
-        "output_snapshot": loads(row["output_snapshot"]),
-        "error_message": row["error_message"],
-        "created_at": row["created_at"],
-    }
-
-
-def row_to_import_record(row: sqlite3.Row) -> Dict[str, Any]:
-    return {
-        "import_id": row["import_id"],
-        "workflow_run_id": row["workflow_run_id"],
-        "mode": row["mode"],
-        "status": row["status"],
-        "dataset_count": row["dataset_count"],
-        "total_rows": row["total_rows"],
-        "validation": loads(row["validation"]),
-        "created_at": row["created_at"],
-    }
-
-
-def row_to_approval_record(row: sqlite3.Row) -> Dict[str, Any]:
-    payload = loads(row["payload"])
-    return {
-        **payload,
-        "approval_id": row["approval_id"],
-        "workflow_run_id": row["workflow_run_id"],
-        "task_id": row["task_id"],
-        "approval_status": row["approval_status"],
-        "operator": row["operator"],
-        "risk_level": row["risk_level"],
-        "task_type": row["task_type"],
-        "created_at": row["created_at"],
-    }
-
-
-def row_to_task_status(row: sqlite3.Row) -> Dict[str, Any]:
-    payload = loads(row["payload"])
-    return {
-        **payload,
-        "task_id": row["task_id"],
-        "workflow_run_id": row["workflow_run_id"],
-        "task_type": row["task_type"],
-        "risk_level": row["risk_level"],
-        "approval_status": row["approval_status"],
-        "status": row["status"],
-        "auto_execution_allowed": bool(row["auto_execution_allowed"]),
-        "updated_at": row["updated_at"],
-    }
-
-
-def row_to_report_record(row: sqlite3.Row) -> Dict[str, Any]:
-    payload = loads(row["payload"])
-    return {
-        **payload,
-        "report_id": row["report_id"],
-        "workflow_run_id": row["workflow_run_id"],
-        "report_type": row["report_type"],
-        "path": row["path"],
-        "format": row["format"],
-        "created_at": row["created_at"],
-    }
-
-
-def list_workflow_runs(limit: int = 50) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM workflow_runs
-            ORDER BY COALESCE(finished_at, started_at) DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [row_to_workflow_run(row) for row in rows]
-
-
-def list_execution_logs(limit: int = 100) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM execution_logs
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [row_to_execution_log(row) for row in rows]
-
-
-def list_execution_logs_by_run(workflow_run_id: str, limit: int = 100) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM execution_logs
-            WHERE workflow_run_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (workflow_run_id, limit),
-        ).fetchall()
-    return [row_to_execution_log(row) for row in rows]
-
-
-def list_import_records(limit: int = 20) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM import_records
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [row_to_import_record(row) for row in rows]
-
-
-def list_approval_records(limit: int = 50) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM approval_records
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [row_to_approval_record(row) for row in rows]
-
-
-def list_task_status(limit: int = 100) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM task_status
-            ORDER BY updated_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [row_to_task_status(row) for row in rows]
-
-
-def get_task_status_map() -> Dict[str, Dict[str, Any]]:
-    return {item["task_id"]: item for item in list_task_status(limit=1000)}
-
-
-def list_report_records(limit: int = 50) -> List[Dict[str, Any]]:
-    init_db()
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM report_records
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return [row_to_report_record(row) for row in rows]
