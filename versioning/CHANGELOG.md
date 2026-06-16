@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.5.2 - 2026-06-16
+
+### Added
+- Added route state support in `web_demo/core/router.js` so module pages can navigate to 待办 with a target task id.
+- Added shared frontend helpers in `web_demo/core/task-actions.js` for existing-task lookup and task-focus navigation.
+- Competitor, listing, and report backend module responses now include backend-generated `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask`.
+
+### Changed
+- Product, competitor, listing, traffic, and report module buttons now use the same behavior:
+  - no active task: show `加入任务清单` or the module-specific create label.
+  - active task exists: show `已在任务清单`.
+  - clicking `已在任务清单`: jump to the matching task card inside 待办.
+- Todo cards now expose `data-task-card` and scroll/highlight when opened from a module.
+- Frontend assets were bumped to `?v=1.5.2`.
+- FastAPI app version and health version are aligned to `1.5.2`.
+
+### Product Engineering Rule
+- Existing-task buttons should route to the active task position instead of re-creating or re-merging the same task.
+- All task-source modules must use backend task identity and the hydrated active task store to decide button state.
+
 ## v1.5.1 - 2026-06-16
 
 ### Added
