@@ -1,5 +1,22 @@
 # Product Changelog
 
+## v2.3.0 - 2026-06-16
+
+### Product Decision
+- V2.3.0 removes the redundant owner `经营驾驶舱`.
+- Product truth: 老板第一层应该先看经营盘面，不是先看风险结论。
+- `风险中心` is repositioned into `店群总览`: platform / store / product / order / sales / profit / comment / refund / inventory / task summary first, risk and exceptions later drill down from these data points.
+
+### Changed
+- Owner navigation is now: 总览、店群总览、任务指挥、利润预算、组织效率、复核审计、账号.
+- 店群总览 shows platform summary and store-level business data.
+- 商品、竞品、上新、流量 remain first-line evidence and execution modules for 总管 / 运营, not owner daily tabs.
+- Frontend assets now use `?v=2.3.0`; API and health versions are aligned.
+
+### Product Boundary
+- Store overview still uses mock operating data.
+- The next step is to connect ERP / CRM / platform API data and let exceptions grow out of real metrics.
+
 ## v2.2.0 - 2026-06-16
 
 ### Product Decision
