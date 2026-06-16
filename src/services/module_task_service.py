@@ -126,6 +126,27 @@ def list_logs() -> List[Dict[str, Any]]:
     return deepcopy(LOGS)
 
 
+def find_open_task_by_key(dedupe_key: str) -> Dict[str, Any] | None:
+    return next((task for task in TASKS if task.get("dedupeKey") == dedupe_key and task.get("status") not in DONE_STATUS), None)
+
+
+def task_state_for_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    suggested_key = build_dedupe_key(payload)
+    active = find_open_task_by_key(suggested_key)
+    return {
+        "suggestedTaskKey": suggested_key,
+        "activeTaskId": active.get("id") if active else None,
+        "activeTaskStatus": active.get("status") if active else None,
+        "hasActiveTask": bool(active),
+    }
+
+
+def attach_task_state(item: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    result = deepcopy(item)
+    result.update(task_state_for_payload(payload))
+    return result
+
+
 def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
     task = payload.get("task") or {}
     log = {
@@ -154,7 +175,7 @@ def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     task = normalize_task(payload)
-    duplicate = next((item for item in TASKS if item.get("dedupeKey") == task["dedupeKey"] and item.get("status") not in DONE_STATUS), None)
+    duplicate = find_open_task_by_key(task["dedupeKey"])
     if duplicate:
         duplicate["judgmentTags"] = list(dict.fromkeys([*(duplicate.get("judgmentTags") or []), *(task.get("judgmentTags") or [])]))[:8]
         duplicate["sourceTrail"] = list(dict.fromkeys([*(duplicate.get("sourceTrail") or []), task.get("sourceModule")]))
