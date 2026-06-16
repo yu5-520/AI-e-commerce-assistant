@@ -1,0 +1,8 @@
+(function () {
+  let notice = "";
+  const s = (value) => AppShell.escape(value);
+  function row(item) {
+    return `<article class="listing-row"><div class="listing-title-cell"><div class="listing-thumb">${s(item.imageLabel)}</div><div class="listing-title-block"><strong>${s(item.title)}</strong><small>${s(item.platform)} · ${s(item.store)} · ${s(item.sourceLabel)}</small><span>${s(item.testPlan)}</span></div></div><div class="listing-metric-strip"><div class="listing-number-cell ${AppShell.statusClass(item.statusLevel)}"><span>截止</span><strong>${s(item.due)}</strong><small>${s(item.testType)}</small></div><div class="listing-number-cell"><span>指标</span><strong>${s(item.targetMetric)}</strong><small>测试目标</small></div><div class="listing-number-cell warning"><span>风险</span><strong>${s(item.risk)}</strong><small>需人工确认</small></div></div><div class="listing-actions"><button type="button" data-task="${s(item.id)}">加入任务清单</button></div></article>`;
+  }
+  window.ListingPage = { route: "business-listing", title: "上新", render() { return `<section class="listing-toolbar"><div><p class="eyebrow">LISTING TEST</p><h2>上新测试台</h2><p>承接商品和竞品信号，把标题、主图、SKU、活动价转成小范围测试任务。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="page-section listing-list-section"><div class="section-header"><h3>测试任务</h3><span class="status-badge">${AppMockData.listings.length} 个测试</span></div><div class="listing-card-list">${AppMockData.listings.map(row).join("")}</div></section>`; }, mount(ctx) { ctx.delegate("[data-task]", "click", (_, node) => { const result = AppTaskActions.createListingTask(node.dataset.task); notice = result?.message || "上新任务已处理。"; AppRouter.schedule("listing-task"); }); } };
+})();
