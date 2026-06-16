@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.4.1 - 2026-06-16
+
+### Added
+- Added `src/services/module_data_service.py` as the backend source of truth for current Mock ERP / CRM module data.
+- Added `src/services/module_task_service.py` as the server-side mock task/log authority.
+- Added server-side task actions for create, merge, complete, pin, reorder, reset, and log creation.
+- Added frontend API methods for module task creation, todo completion, pinning, reordering, reset, and task/log refresh.
+
+### Changed
+- `src/api/routes/modules/__init__.py` now imports module data from `module_data_service` instead of keeping large duplicated constants inside the route file.
+- `GET /api/modules/todo` now returns service-side task state instead of old approval/action-confirmation data.
+- `GET /api/modules/log` now returns service-side operation logs.
+- Product, competitor, listing, traffic, and report task actions now create tasks on the backend module endpoints first, then hydrate the frontend task store.
+- Todo page actions now call backend task endpoints first, then refresh frontend state from `/api/modules/todo` and `/api/modules/log`.
+- Frontend `mock-data.js` was reduced to a minimal fallback shell so module demo data is no longer maintained twice.
+- Frontend badge now shows whether the UI is using `服务端接口` or `本地兜底`.
+- Frontend assets were bumped to `?v=1.4.1`.
+- FastAPI app version and health version are aligned to `1.4.1`.
+
+### Product Engineering Rule
+- Backend module data is now the current source of truth for module lists.
+- Backend task/log service is now the current source of truth for task and log state.
+- Frontend localStorage remains a hydrated cache, not the product authority.
+- This is still mock server memory, not database persistence; account roles and multi-user consistency still require a later persistence layer.
+
 ## v1.4.0 - 2026-06-16
 
 ### Added
@@ -37,14 +62,7 @@
 ## v1.3.0 - 2026-06-16
 
 ### Added
-- Added modular frontend structure:
-  - `web_demo/core/mock-data.js`
-  - `web_demo/core/shell.js`
-  - `web_demo/core/router.js`
-  - `web_demo/core/task-actions.js`
-  - `web_demo/stores/task-store.js`
-  - `web_demo/modules/*/page.js`
-  - `web_demo/bootstrap.js`
+- Added modular frontend structure: `web_demo/core/*`, `web_demo/stores/task-store.js`, `web_demo/modules/*/page.js`, and `web_demo/bootstrap.js`.
 - Added page modules for dashboard, operating unit, report, product, competitor, listing, traffic, todo, and log routes.
 - Added a route registry so pages register themselves through `AppRouter.register(page)` and render through one router lifecycle.
 
