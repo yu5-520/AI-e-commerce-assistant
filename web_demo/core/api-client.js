@@ -36,6 +36,8 @@
     report: () => request("/api/modules/report", { reportGroups: window.AppMockData.reportGroups, reportDetails: window.AppMockData.reportDetails }),
     todo: () => request("/api/modules/todo", { tasks: window.AppTaskStore?.listTasks?.() || [], activeTasks: window.AppTaskStore?.listActiveTasks?.() || [] }),
     log: () => request("/api/modules/log", window.AppTaskStore?.listLogs?.() || []),
+    taskReport: (id) => request(`/api/modules/task-reports/tasks/${encodeURIComponent(id)}`, null),
+    candidateReport: (module, id) => request(`/api/modules/task-reports/candidates/${encodeURIComponent(module)}/${encodeURIComponent(id)}`, null),
     post: (path, fallback, body) => request(path, fallback, { method: "POST", body }),
     createProductTask: (id) => api.post(`/api/modules/product/${id}/tasks`, null),
     createCompetitorTask: (id) => api.post(`/api/modules/competitor/${id}/tasks`, null),
