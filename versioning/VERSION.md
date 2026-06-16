@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v2.3.0
+Current Version: v2.3.1
 
 ## Version History
 
@@ -29,6 +29,7 @@ Current Version: v2.3.0
 - v2.1.0: Added global mock account switching, role-based task visibility, permission-based todo actions, productized permission labels, and role-specific insight depth for account pages and task reports.
 - v2.2.0: Refactored owner navigation from first-line operation modules into executive modules, slimmed account page, and added a role permission console for mock role, store-scope, and permission changes.
 - v2.3.0: Removed the redundant owner `经营驾驶舱`, changed `风险中心` into `店群总览`, and rebuilt the owner first layer around platform / store / product / order / sales / profit / comments / inventory summaries.
+- v2.3.1: Fixed store overview layout, changed store details from long cards into a realtime table, added sync status, trend chips, platform live cards, and a realtime status strip.
 
 ## Version Rules
 
