@@ -1,23 +1,26 @@
 # Product Changelog
 
-## v2.3.9 - 2026-06-16
+## v2.4.0 - 2026-06-16
 
 ### Product Decision
-- V2.3.9 upgrades 店群总管 from a static execution board into an actionable task dispatch workbench.
-- Product truth: 店群总管必须能按时间、优先级、来源、状态排序任务，并能从任务卡直接进入详情、拆分、派发和复核。
-- 任务详情页是后续 Agent 判断的承接层，不是普通列表行。
+- V2.4.0 changes 老板账号 `总览` from task list into business overview.
+- Product truth: 老板总览不是任务池，是全局经营首页；老板看经营摘要和决策入口，任务拆分、派发和复核属于店群总管。
+- 老板关注事项只进入对应模块查看详情，不做“完成任务”。
 
 ### Changed
-- Added sort controls for manager task list: 按时间、按优先级、按来源、按状态.
-- Added task actions on manager cards: 查看详情、拆分任务、派发运营.
-- Added `manager-task-detail` route with task source, source report, impact scope, data evidence, Agent judgment placeholders, and suggested split actions.
-- Added mock task state transitions: 待拆分 → 待派发 → 已派发 → 待复核 → 已归档.
-- Manager dashboard task cards can now jump to task detail, dispatch, or review.
-- Frontend assets now use `?v=2.3.9`; API and health versions are aligned.
+- Owner dashboard now shows operating metrics: 今日销售额、今日利润、今日订单、库存资金、广告消耗、退款率、待审计问题、待确认复盘.
+- Added owner module entry cards: 店群总览、人员总览、供投财务、组织效率、复盘审计.
+- Added owner attention items: 周报目标未达标、抖音 ROAS 偏低、拼多多退款率上升、总管复核节奏偏慢.
+- Added `web_demo/owner-dashboard.css`.
+- Frontend assets now use `?v=2.4.0`; API and health versions are aligned.
 
 ### Product Boundary
-- This remains local mock task state.
-- Real version should connect task splitting records, operator assignment APIs, task detail reports, Agent evidence retrieval, review records, and retrospective submission APIs.
+- This remains mock overview data.
+- Real version should connect store metrics, people workload, supply / ad / finance metrics, organization exceptions, and retrospective audit records.
+
+## v2.3.9 - 2026-06-16
+
+- 店群总管 upgraded from a static execution board into an actionable task dispatch workbench.
 
 ## v2.3.8 - 2026-06-16
 
