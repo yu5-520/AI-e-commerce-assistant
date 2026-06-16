@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v1.1.1 - 2026-06-16
+
+### Product Decision
+- V1.1.1 fixes the first dynamic-task-pool problem: same商品 / same问题 should not create repeated 待办 tasks.
+- Manual task creation remains available, but it now uses task identity before creating anything.
+- Product truth: `entityType + entityId + riskDomain + actionType` defines whether a task is the same business issue.
+
+### Changed
+- Added dedupe identity to task-store tasks: `entityType`, `entityId`, `riskDomain`, `actionType`, `dedupeKey`.
+- Same-product same-problem repeated actions now merge source and judgment tags into the existing active task.
+- 商品 / 竞品 / 上新 / 流量 / 报表 bridge actions now check whether a matching active task already exists.
+- Buttons can show existing-task state and route the user to 待办 instead of creating another copy.
+- Different risk domains still create separate tasks, so售后复查、库存复查、上新测试 and 流量观察 can coexist for the same product when they are truly different jobs.
+- Frontend assets now use `?v=1.1.1`; API and health versions are aligned.
+
+### Product Boundary
+- This is still browser-side mock persistence, not real server persistence.
+- Dedupe prevents repeated task cards, but does not yet support multi-user conflict resolution.
+- When later adding accounts, dedupe must move server-side so老板、总管、运营看到同一任务 truth.
+
 ## v1.1.0 - 2026-06-16
 
 ### Product Decision
@@ -45,82 +65,11 @@
 - `完成` only changes local homepage state and does not update real ERP / CRM / platform records.
 - The task pool remains Mock data until the shared task store and persistence layer are attached.
 
-## v1.0.23 - 2026-06-15
-
-### Product Decision
-- The 首页任务清单 is now a cross-module real-time task summary, not an isolated static task board.
-- 首页 only shows the most important active tasks; 待办 remains the full execution queue.
-- Homepage tasks must show source module, product/store context, deadline, reason, impact, and action jumps.
-- Current product truth remains: `web_demo/index.html?v=1.0.23` → `web_demo/dashboard-hotfix.js?v=1.0.23` + `web_demo/dashboard-linked.css?v=1.0.23` → linked cross-module task board.
-
-### Changed
-- Replaced the old dashboard text patch with a linked dashboard task renderer.
-- Added `web_demo/dashboard-linked.css` for homepage linked task cards and module actions.
-- Homepage metrics now come from the active dashboard task pool: 紧急任务、到期任务、待确认、可测试机会.
-- Task cards now bind to precise product/report context and include source, deadline, reason, and impact.
-- Added actions for `进入待办`, `查看来源`, `查看商品`, and `标记完成`.
-- Added `查看全部待办` from the homepage queue header.
-- Completed task cards are removed from the homepage summary and are treated as traceable through 日志.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.23` and loads the linked dashboard stylesheet.
-- API version is aligned to `v1.0.23` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing task-summary UI patch.
-- `标记完成` records local homepage state only; it does not update real ERP / CRM / platform records.
-- The linked task pool remains Mock data until the shared task store and real persistence layer are attached.
-
-## v1.0.22 - 2026-06-15
-
-### Product Decision
-- The old `报告` page is now `日志`, because the page content is a trace record rather than a user-facing operating report.
-- Reports are conclusions for decision-making; logs are records of tasks, system judgments, data actions, and user operations that already happened.
-- Each log must show time, type, source, status, product/store context, action, reason, and result.
-- Current product truth remains: `web_demo/index.html?v=1.0.22` → `web_demo/log-manager-hotfix.js?v=1.0.22` + `web_demo/log-center.css?v=1.0.22` → 操作日志.
-
-### Changed
-- Sidebar label changed from `报告` to `日志`.
-- Added `web_demo/log-manager-hotfix.js` to replace the old Markdown report page after render.
-- Added `web_demo/log-center.css` for log rows, filters, metrics, detail pages, source jumps, export action, and responsive layout.
-- The page now shows metrics for 今日记录、任务完成、AI 判定、数据动作.
-- Logs now include task completion records, AI automatic judgments, report/data actions, and user operations.
-- Added filters for type, source, and status, plus log search.
-- Added log detail page, source jump, related-task jump, and CSV export of the filtered logs.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.22` and loads the operation log center script.
-- API version is aligned to `v1.0.22` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing traceability UI patch.
-- The log page records actions and links back to source modules; it does not make operational decisions itself.
-- Export creates a local CSV from mock log data.
-- Log data remains Mock ERP / CRM / marketplace data until real persistence and platform connectors are attached.
-
-## v1.0.21 - 2026-06-15
-
-### Product Decision
-- The old `确认` page is now `待办`, because the page represents a task queue rather than a narrow approval screen.
-- The 待办 page is the complete execution queue generated by 商品、竞品、上新、流量、报表 and AI 自动判定.
-- Each task must show source, deadline, priority, product/store context, reason, status, and task-specific actions.
-- Current product truth remains: `web_demo/index.html?v=1.0.21` → `web_demo/todo-manager-hotfix.js?v=1.0.21` + `web_demo/todo-center.css?v=1.0.21` → 待办任务.
-
-### Changed
-- Sidebar label changed from `确认` to `待办`.
-- Added `web_demo/todo-manager-hotfix.js` to replace the old action-confirmation page after render.
-- Added `web_demo/todo-center.css` for task queue cards, filters, urgency metrics, detail pages, and responsive layout.
-- The page now shows metrics for 紧急任务、今日到期、待确认、AI 自动判定.
-- Tasks now include precise product/report context, source module, priority, deadline, generated reason, status, and action buttons.
-- Added filters for source, status, and priority, plus task search.
-- Added task detail page and source jump actions.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.21` and loads the todo task center script.
-- API version is aligned to `v1.0.21` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing task-center UI patch.
-- Task actions record local confirmation-style states only.
-- The page does not directly publish listings, launch ads, process refunds, change prices, or modify real shop data.
-- Task data remains Mock ERP / CRM / marketplace data until real platform connectors are attached.
-
 ## Earlier History
 
+- v1.0.23: 首页 became a cross-module task summary.
+- v1.0.22: 报告 page became 日志 / operation log center.
+- v1.0.21: 确认 page became 待办 / task center.
 - v1.0.20: 流量 page became product-level 流量测试台.
 - v1.0.19: 上新 page became 上新测试台.
 - v1.0.18: 竞品 page became responsive competitor observation list.
