@@ -1,4 +1,6 @@
 (function () {
+  let bindScheduled = false;
+
   function store() {
     return window.OPERATION_TASK_STORE;
   }
@@ -11,7 +13,8 @@
       const host = document.querySelector(".product-toolbar, .competitor-toolbar, .listing-toolbar, .traffic-toolbar, .report-hero, .product-detail-hero, .competitor-detail-hero, .listing-detail-hero, .traffic-detail-hero, .report-detail-hero");
       host?.after(notice);
     }
-    if (notice) notice.innerHTML = `<strong>任务池同步</strong><span>${text}</span>`;
+    const html = `<strong>任务池同步</strong><span>${text}</span>`;
+    if (notice && notice.innerHTML !== html) notice.innerHTML = html;
   }
 
   function addButton(container, label, attr, value) {
@@ -21,6 +24,14 @@
     button.textContent = label;
     button.setAttribute(attr, value);
     container.appendChild(button);
+  }
+
+  function setButtonState(button, label, hasExisting) {
+    if (!button) return;
+    if (button.textContent !== label) button.textContent = label;
+    if (button.classList.contains("ghost") !== hasExisting) button.classList.toggle("ghost", hasExisting);
+    const title = hasExisting ? "已有同商品/同问题待办，点击跳转任务池" : "创建新的待办任务";
+    if (button.title !== title) button.title = title;
   }
 
   function riskForProduct(product) {
@@ -37,51 +48,26 @@
 
   function productIdentity(product) {
     const riskDomain = riskForProduct(product);
-    return {
-      entityType: "商品",
-      entityId: product.id,
-      riskDomain,
-      actionType: actionForRisk(riskDomain),
-    };
+    return { entityType: "商品", entityId: product.id, riskDomain, actionType: actionForRisk(riskDomain) };
   }
 
   function competitorIdentity(item) {
-    return {
-      entityType: "竞品",
-      entityId: item.id,
-      riskDomain: item.status === "风险" ? "风险" : "上新",
-      actionType: item.status === "风险" ? "复查" : "测试",
-    };
+    return { entityType: "竞品", entityId: item.id, riskDomain: item.status === "风险" ? "风险" : "上新", actionType: item.status === "风险" ? "复查" : "测试" };
   }
 
   function listingIdentity(item) {
-    return {
-      entityType: item.mode === "competitor" ? "竞品机会" : "商品",
-      entityId: item.id,
-      riskDomain: "上新",
-      actionType: item.testType.includes("复盘") ? "复盘" : "测试",
-    };
+    return { entityType: item.mode === "competitor" ? "竞品机会" : "商品", entityId: item.id, riskDomain: "上新", actionType: item.testType.includes("复盘") ? "复盘" : "测试" };
   }
 
   function trafficIdentity(item) {
     const text = `${item.status} ${item.backflow} ${item.nextStep}`;
     const riskDomain = /售后|退款|材质|尺寸|安装|客服/.test(text) ? "售后" : /库存|补货|承接/.test(text) ? "库存" : "流量";
     const actionType = riskDomain === "流量" && item.statusLevel === "good" ? "观察" : "复查";
-    return {
-      entityType: "商品",
-      entityId: item.productId,
-      riskDomain,
-      actionType,
-    };
+    return { entityType: "商品", entityId: item.productId, riskDomain, actionType };
   }
 
   function reportIdentity(card) {
-    return {
-      entityType: "报表",
-      entityId: card.id,
-      riskDomain: "报表",
-      actionType: "导入",
-    };
+    return { entityType: "报表", entityId: card.id, riskDomain: "报表", actionType: "导入" };
   }
 
   function existingTask(identity) {
@@ -89,12 +75,10 @@
   }
 
   function routeToTodo(existing, name) {
-    if (existing) {
-      notify(`${name}已有相关待办，已跳转任务池，不重复创建。`);
-      location.hash = "business-actions";
-      return true;
-    }
-    return false;
+    if (!existing) return false;
+    notify(`${name}已有相关待办，已跳转任务池，不重复创建。`);
+    location.hash = "business-actions";
+    return true;
   }
 
   function createProductTask(productId) {
@@ -102,8 +86,7 @@
     const product = productManagerPayload.products.find((item) => item.id === productId);
     if (!product || !store()) return;
     const identity = productIdentity(product);
-    const existed = existingTask(identity);
-    if (routeToTodo(existed, product.shortName)) return;
+    if (routeToTodo(existingTask(identity), product.shortName)) return;
     const highRisk = product.afterSalesLevel !== "good" || product.inventoryLevel === "danger";
     const task = store().createTask({
       ...identity,
@@ -137,8 +120,7 @@
     const item = competitorManagerPayload.competitors.find((competitor) => competitor.id === competitorId);
     if (!item || !store()) return;
     const identity = competitorIdentity(item);
-    const existed = existingTask(identity);
-    if (routeToTodo(existed, item.targetProduct)) return;
+    if (routeToTodo(existingTask(identity), item.targetProduct)) return;
     const task = store().createTask({
       ...identity,
       sourceModule: "竞品观察列表",
@@ -171,8 +153,7 @@
     const item = listingManagerPayload.experiments.find((experiment) => experiment.id === listingId);
     if (!item || !store()) return;
     const identity = listingIdentity(item);
-    const existed = existingTask(identity);
-    if (routeToTodo(existed, item.testType)) return;
+    if (routeToTodo(existingTask(identity), item.testType)) return;
     const task = store().createTask({
       ...identity,
       sourceModule: "上新测试台",
@@ -206,8 +187,7 @@
     const item = trafficManagerPayload.tests.find((test) => test.id === trafficId);
     if (!item || !store()) return;
     const identity = trafficIdentity(item);
-    const existed = existingTask(identity);
-    if (routeToTodo(existed, item.title.slice(0, 8))) return;
+    if (routeToTodo(existingTask(identity), item.title.slice(0, 8))) return;
     const task = store().createTask({
       ...identity,
       sourceModule: "流量测试台",
@@ -240,8 +220,7 @@
     const card = reportManagerPayload.groups.flatMap((group) => group.reports).find((report) => report.id === reportId);
     if (!card || !store()) return;
     const identity = reportIdentity(card);
-    const existed = existingTask(identity);
-    if (routeToTodo(existed, card.name)) return;
+    if (routeToTodo(existingTask(identity), card.name)) return;
     const task = store().createTask({
       ...identity,
       sourceModule: "ERP / CRM 报表管理",
@@ -272,9 +251,7 @@
   function updateButtonState(button, identity, activeLabel = "加入待办") {
     if (!button || !store()) return;
     const existed = existingTask(identity);
-    button.textContent = existed ? "已在待办" : activeLabel;
-    button.classList.toggle("ghost", Boolean(existed));
-    button.title = existed ? "已有同商品/同问题待办，点击跳转任务池" : "创建新的待办任务";
+    setButtonState(button, existed ? "已在待办" : activeLabel, Boolean(existed));
   }
 
   function bindButtons() {
@@ -332,10 +309,19 @@
     }
   }
 
-  const observer = new MutationObserver(() => bindButtons());
+  function scheduleBind() {
+    if (bindScheduled) return;
+    bindScheduled = true;
+    requestAnimationFrame(() => {
+      bindScheduled = false;
+      bindButtons();
+    });
+  }
+
+  const observer = new MutationObserver(() => scheduleBind());
   observer.observe(document.body, { childList: true, subtree: true });
-  window.addEventListener("operation-task-store-change", () => setTimeout(bindButtons, 0));
-  window.addEventListener("hashchange", () => setTimeout(bindButtons, 0));
-  window.addEventListener("load", () => setTimeout(bindButtons, 0));
-  setTimeout(bindButtons, 0);
+  window.addEventListener("operation-task-store-change", scheduleBind);
+  window.addEventListener("hashchange", scheduleBind);
+  window.addEventListener("load", scheduleBind);
+  scheduleBind();
 })();
