@@ -16,7 +16,7 @@
   if (window.AppApi?.prefetch) {
     await window.AppApi.prefetch();
     const badge = document.getElementById("apiModeBadge");
-    if (badge) badge.textContent = "模块接口";
+    if (badge) badge.textContent = window.AppApi.status.source === "server" ? "服务端接口" : "本地兜底";
   }
 
   AppRouter.start();
