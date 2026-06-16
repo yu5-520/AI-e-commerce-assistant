@@ -1,0 +1,173 @@
+.manager-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  align-items: center;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 32px;
+  background: #fff;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.06);
+}
+
+.manager-hero h2 {
+  margin: 0 0 8px;
+  font-size: clamp(34px, 5vw, 58px);
+  letter-spacing: -0.08em;
+}
+
+.manager-hero p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.7;
+}
+
+.manager-hero-side {
+  padding: 22px;
+  border-radius: 26px;
+  background: #070b15;
+  color: #fff;
+}
+
+.manager-hero-side span,
+.manager-hero-side small {
+  display: block;
+  color: rgba(255,255,255,.7);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.manager-hero-side strong {
+  display: block;
+  margin: 6px 0;
+  font-size: 34px;
+  letter-spacing: -0.06em;
+}
+
+.manager-section,
+.manager-task-card,
+.manager-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.045);
+}
+
+.manager-task-list,
+.manager-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.manager-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.manager-task-card,
+.manager-card {
+  padding: 18px;
+  border-radius: 24px;
+}
+
+.manager-task-top,
+.manager-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.manager-task-top strong,
+.manager-card-head strong {
+  flex: 1;
+  font-size: 19px;
+  letter-spacing: -0.04em;
+}
+
+.manager-task-top b,
+.manager-card-head span {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.manager-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.manager-task-meta span {
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.manager-task-card p,
+.manager-card p,
+.manager-card small {
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.7;
+}
+
+.manager-progress {
+  height: 8px;
+  margin: 14px 0;
+  border-radius: 999px;
+  background: #edf0f5;
+  overflow: hidden;
+}
+
+.manager-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #111827;
+}
+
+.manager-table {
+  overflow-x: auto;
+  border: 1px solid #edf0f5;
+  border-radius: 24px;
+}
+
+.manager-table-row {
+  display: grid;
+  grid-template-columns: 160px 120px 260px 180px;
+  gap: 14px;
+  min-width: 780px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #edf0f5;
+  align-items: center;
+}
+
+.manager-table-row.head {
+  background: #f8fafc;
+  color: #7a8190;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.manager-table-row strong,
+.manager-table-row span {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+@media (max-width: 920px) {
+  .manager-hero,
+  .manager-grid {
+    grid-template-columns: 1fr;
+  }
+}
