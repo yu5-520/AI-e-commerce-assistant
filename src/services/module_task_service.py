@@ -3,13 +3,19 @@
 This is still in-memory mock persistence, but it moves task/log authority away
 from browser-only localStorage so frontend modules can call backend actions and
 then hydrate from `/api/modules/todo` + `/api/modules/log`.
+
+Source candidate lifecycle:
+    pending_candidate -> active_task -> completed_archived -> log only
+
+Completed candidates should leave their source module list so they do not keep
+occupying the next work cycle position.
 """
 
 from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 from uuid import uuid4
 
 PRIORITY_RANK = {"高": 1, "中": 2, "低": 3}
@@ -126,18 +132,41 @@ def list_logs() -> List[Dict[str, Any]]:
     return deepcopy(LOGS)
 
 
+def find_task_by_key(dedupe_key: str, *, active_only: bool = False, done_only: bool = False) -> Dict[str, Any] | None:
+    for task in TASKS:
+        if task.get("dedupeKey") != dedupe_key:
+            continue
+        is_done = task.get("status") in DONE_STATUS
+        if active_only and is_done:
+            continue
+        if done_only and not is_done:
+            continue
+        return task
+    return None
+
+
 def find_open_task_by_key(dedupe_key: str) -> Dict[str, Any] | None:
-    return next((task for task in TASKS if task.get("dedupeKey") == dedupe_key and task.get("status") not in DONE_STATUS), None)
+    return find_task_by_key(dedupe_key, active_only=True)
+
+
+def find_completed_task_by_key(dedupe_key: str) -> Dict[str, Any] | None:
+    return find_task_by_key(dedupe_key, done_only=True)
 
 
 def task_state_for_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     suggested_key = build_dedupe_key(payload)
     active = find_open_task_by_key(suggested_key)
+    completed = find_completed_task_by_key(suggested_key)
+    archived = bool(completed and not active)
     return {
         "suggestedTaskKey": suggested_key,
         "activeTaskId": active.get("id") if active else None,
         "activeTaskStatus": active.get("status") if active else None,
+        "completedTaskId": completed.get("id") if completed else None,
+        "completedTaskStatus": completed.get("status") if completed else None,
         "hasActiveTask": bool(active),
+        "candidateArchived": archived,
+        "candidateStatus": "completed_archived" if archived else "active_task" if active else "pending_candidate",
     }
 
 
@@ -145,6 +174,16 @@ def attach_task_state(item: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str
     result = deepcopy(item)
     result.update(task_state_for_payload(payload))
     return result
+
+
+def visible_candidates(items: List[Dict[str, Any]], payload_builder: Callable[[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
+    visible: List[Dict[str, Any]] = []
+    for item in items:
+        annotated = attach_task_state(item, payload_builder(item))
+        if annotated.get("candidateArchived"):
+            continue
+        visible.append(annotated)
+    return visible
 
 
 def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,6 +224,14 @@ def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
         result = deepcopy(duplicate)
         result["dedupeHit"] = True
         return result
+    completed = find_completed_task_by_key(task["dedupeKey"])
+    if completed:
+        result = deepcopy(completed)
+        result["dedupeHit"] = True
+        result["candidateArchived"] = True
+        result["candidateStatus"] = "completed_archived"
+        create_log({"type": "任务归档拦截", "task": completed, "status": "已归档", "action": f"{task.get('sourceModule')} 尝试重复进入任务池", "reason": f"去重键已完成归档：{completed['dedupeKey']}", "result": "未重新创建任务；等待新一轮信号进入候选池。"})
+        return result
     TASKS.append(task)
     create_log({"type": "任务创建", "task": task, "status": "已加入任务池", "action": f"{task.get('sourceModule')} 创建任务：{task.get('taskType') or task.get('task') or task.get('title')}", "result": "已同步到首页、待办和日志。"})
     result = deepcopy(task)
@@ -203,7 +250,7 @@ def update_task(task_id: str, patch: Dict[str, Any], log_type: str = "任务更�
 
 
 def complete_task(task_id: str) -> Dict[str, Any] | None:
-    return update_task(task_id, {"status": "已完成", "completedAt": datetime.now().isoformat()}, "任务完成", "任务已完成", "首页移除该任务，日志保留处理记录。")
+    return update_task(task_id, {"status": "已完成", "completedAt": datetime.now().isoformat(), "candidateStatus": "completed_archived"}, "任务完成", "任务已完成并归档来源候选", "待办移除该任务，来源模块释放循环位，日志保留复盘记录。")
 
 
 def pin_task(task_id: str) -> Dict[str, Any] | None:
