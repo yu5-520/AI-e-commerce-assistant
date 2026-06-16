@@ -1,22 +1,28 @@
 # Product Changelog
 
-## v2.3.6 - 2026-06-16
+## v2.3.7 - 2026-06-16
 
 ### Product Decision
-- V2.3.6 changes `复盘审计` from table-style rows into summary-first expandable cards.
-- Product truth: 日报、周报、月报、审计问题和任务草案都需要展开详情层，后续才能承接 Agent 的信息检索、证据判断和任务生成依据。
-- 老板第一眼看摘要，需要判断时再展开，不应该被宽表格和长文本挤压。
+- V2.3.7 changes `账号` into a basic account center.
+- Product truth: 账号管登录、安全、绑定、通知和本地账号操作；组织效率管职位关系、角色权限、店铺范围和权限治理。
+- `账号`不再承载复杂权限管理。
 
 ### Changed
-- 周期复盘接收改为可展开卡片：每条复盘可展开目标、实际、达成率、复盘要点和 Agent 预留判断。
-- 审计问题清单改为可展开卡片：每条问题可展开审计证据和 Agent 判断项。
-- 下周期任务草案改为可展开卡片：每条任务可展开目标、拆分方向和后续按钮入口。
-- Added `web_demo/review-audit.css` for expandable retrospective layout.
-- Frontend assets now use `?v=2.3.6`; API and health versions are aligned.
+- Account page now shows profile, account id, current login identity, phone, email, and account status.
+- Added security settings: 修改密码、绑定手机号、绑定邮箱、二次验证、登录设备.
+- Added binding and authorization status: 微信、企业微信、淘宝、拼多多、抖音小店、ERP 数据授权.
+- Added notification settings: 日报提醒、周报提醒、任务提醒、审计提醒.
+- Added `web_demo/account-center.css` for the basic account center layout.
+- Legacy `role-console` remains only as compatibility and points users back to `组织效率`.
+- Frontend assets now use `?v=2.3.7`; API and health versions are aligned.
 
 ### Product Boundary
-- This remains mock retrospective data.
-- Real version should connect daily / weekly / monthly report submissions, task timeout records, KPI target rules, Agent evidence retrieval, and task-generation approvals.
+- This remains mock account settings.
+- Real version should connect password management, SMS / email verification, OAuth bindings, login-device records, and notification channels.
+
+## v2.3.6 - 2026-06-16
+
+- `复盘审计` changed from table-style rows into summary-first expandable cards.
 
 ## v2.3.5 - 2026-06-16
 
