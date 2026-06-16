@@ -1,6 +1,11 @@
 (function () {
   const status = { source: "unknown", failures: [] };
 
+  function failureSummary() {
+    if (!status.failures.length) return "所有模块接口请求正常。";
+    return status.failures.slice(-5).map((item) => `${item.path}: ${item.message}`).join("\n");
+  }
+
   async function request(path, fallback, options = {}) {
     try {
       const response = await fetch(path, {
@@ -9,7 +14,7 @@
         body: options.body ? JSON.stringify(options.body) : undefined,
       });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      status.source = "server";
+      if (status.source !== "fallback") status.source = "server";
       return await response.json();
     } catch (error) {
       status.source = "fallback";
@@ -21,6 +26,7 @@
 
   const api = {
     status,
+    failureSummary,
     dashboard: () => request("/api/modules/dashboard", null),
     operatingUnit: () => request("/api/modules/operating-unit", null),
     product: () => request("/api/modules/product", window.AppMockData.products),
