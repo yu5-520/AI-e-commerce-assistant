@@ -8,7 +8,7 @@ from fastapi import APIRouter
 
 from src.api.routes.modules.common import find_or_404
 from src.services.module_data_service import TRAFFIC
-from src.services.module_task_service import attach_task_state, create_task
+from src.services.module_task_service import create_task, visible_candidates
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ def traffic_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.get("/traffic")
 def traffic() -> List[Dict[str, Any]]:
-    return [attach_task_state(item, traffic_task_payload(item)) for item in TRAFFIC]
+    return visible_candidates(TRAFFIC, traffic_task_payload)
 
 
 @router.post("/traffic/{traffic_id}/tasks")
