@@ -48,24 +48,28 @@
 
 .manager-section,
 .manager-task-card,
-.manager-card {
+.manager-card,
+.manager-detail-block {
   border: 1px solid var(--line);
   background: #fff;
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.045);
 }
 
 .manager-task-list,
-.manager-grid {
+.manager-grid,
+.manager-detail-panels {
   display: grid;
   gap: 14px;
 }
 
-.manager-grid {
+.manager-grid,
+.manager-detail-panels {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .manager-task-card,
-.manager-card {
+.manager-card,
+.manager-detail-block {
   padding: 18px;
   border-radius: 24px;
 }
@@ -95,7 +99,9 @@
   font-weight: 950;
 }
 
-.manager-task-meta {
+.manager-task-meta,
+.manager-action-row,
+.manager-sort-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -111,9 +117,26 @@
   font-weight: 900;
 }
 
+.manager-sort-bar {
+  padding: 10px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+}
+
+.manager-sort-bar button.active {
+  background: #070b15;
+  color: #fff;
+}
+
+.manager-action-row {
+  margin-bottom: 0;
+}
+
 .manager-task-card p,
 .manager-card p,
-.manager-card small {
+.manager-card small,
+.manager-detail-note {
   margin: 0;
   color: #4b5563;
   font-size: 13px;
@@ -134,6 +157,56 @@
   height: 100%;
   border-radius: inherit;
   background: #111827;
+}
+
+.manager-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manager-detail-grid article {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid #edf0f5;
+  background: #f8fafc;
+}
+
+.manager-detail-grid span {
+  display: block;
+  color: #7a8190;
+  font-size: 12px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.manager-detail-grid strong {
+  font-size: 15px;
+  font-weight: 950;
+  color: #111827;
+}
+
+.manager-detail-note {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #fbfcfe;
+  border: 1px solid #edf0f5;
+}
+
+.manager-detail-block h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  letter-spacing: -0.04em;
+}
+
+.manager-detail-block ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.8;
 }
 
 .manager-table {
@@ -167,7 +240,9 @@
 
 @media (max-width: 920px) {
   .manager-hero,
-  .manager-grid {
+  .manager-grid,
+  .manager-detail-grid,
+  .manager-detail-panels {
     grid-template-columns: 1fr;
   }
 }
