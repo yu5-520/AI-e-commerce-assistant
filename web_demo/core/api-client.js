@@ -46,9 +46,29 @@
     pinTodo: (id) => api.post(`/api/modules/todo/${id}/pin`, null),
     reorderTodo: (id, direction) => api.post(`/api/modules/todo/${id}/reorder?direction=${encodeURIComponent(direction)}`, null),
     resetTodo: () => api.post("/api/modules/todo/reset", null),
+    applyModuleData({ products, competitors, listings, traffic, report } = {}) {
+      if (Array.isArray(products)) window.AppMockData.products = products;
+      if (Array.isArray(competitors)) window.AppMockData.competitors = competitors;
+      if (Array.isArray(listings)) window.AppMockData.listings = listings;
+      if (Array.isArray(traffic)) window.AppMockData.traffic = traffic;
+      if (report?.reportGroups) window.AppMockData.reportGroups = report.reportGroups;
+      if (report?.reportDetails) window.AppMockData.reportDetails = report.reportDetails;
+    },
+    async refreshModuleData() {
+      const [products, competitors, listings, traffic, report] = await Promise.all([
+        api.product(),
+        api.competitor(),
+        api.listing(),
+        api.traffic(),
+        api.report(),
+      ]);
+      api.applyModuleData({ products, competitors, listings, traffic, report });
+      return window.AppMockData;
+    },
     async refreshTaskState() {
       const [todo, logs] = await Promise.all([api.todo(), api.log()]);
       window.AppTaskStore?.hydrate?.(todo?.tasks || [], Array.isArray(logs) ? logs : []);
+      await api.refreshModuleData();
       return { todo, logs };
     },
     async prefetch() {
@@ -61,12 +81,7 @@
         api.todo(),
         api.log(),
       ]);
-      if (Array.isArray(products)) window.AppMockData.products = products;
-      if (Array.isArray(competitors)) window.AppMockData.competitors = competitors;
-      if (Array.isArray(listings)) window.AppMockData.listings = listings;
-      if (Array.isArray(traffic)) window.AppMockData.traffic = traffic;
-      if (report?.reportGroups) window.AppMockData.reportGroups = report.reportGroups;
-      if (report?.reportDetails) window.AppMockData.reportDetails = report.reportDetails;
+      api.applyModuleData({ products, competitors, listings, traffic, report });
       window.AppTaskStore?.hydrate?.(todo?.tasks || [], Array.isArray(logs) ? logs : []);
       return window.AppMockData;
     },
