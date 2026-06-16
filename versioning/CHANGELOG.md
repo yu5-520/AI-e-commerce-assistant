@@ -1,21 +1,28 @@
 # Changelog
 
-## v2.3.6 - 2026-06-16
+## v2.3.7 - 2026-06-16
 
 ### Added
-- Added expandable retrospective cards for daily / weekly / monthly / special reports.
-- Added expandable audit detail cards with evidence and Agent judgment placeholders.
-- Added expandable next-cycle task draft cards with goal, split direction, and future action buttons.
-- Added `web_demo/review-audit.css` for detail-card layout and mobile-safe wrapping.
+- Added a basic `账号中心` page for profile, account id, current login identity, phone, email, and account status.
+- Added security settings cards for password, phone binding, email binding, two-factor verification, and login devices.
+- Added binding / authorization cards for WeChat, Enterprise WeChat, Taobao, Pinduoduo, Douyin Shop, and ERP data authorization status.
+- Added notification settings for daily report, weekly report, task, and audit reminders.
+- Added `web_demo/account-center.css` for account-center layout.
 
 ### Changed
-- Replaced wide retrospective audit tables with summary-first expandable panels to avoid compressed / garbled layout on iPad and smaller screens.
-- Frontend assets were bumped to `?v=2.3.6`.
-- FastAPI app version and health version are aligned to `2.3.6`.
+- `账号` no longer acts as a role / permission management page.
+- Role, store, and permission governance stays in `组织效率`.
+- Legacy `role-console` remains only as a compatibility route pointing users back to `组织效率`.
+- Frontend assets were bumped to `?v=2.3.7`.
+- FastAPI app version and health version are aligned to `2.3.7`.
 
 ### Product Engineering Rule
-- `复盘审计` should not be a wide table page.
-- The owner should scan summaries first, then expand details when Agent evidence, audit reasoning, or task-generation basis is needed.
+- `账号` answers login, security, binding, notification, and local account operations.
+- `组织效率` answers position relationship, role permissions, store authorization, and organizational governance.
+
+## v2.3.6 - 2026-06-16
+
+- `复盘审计` changed from wide tables into expandable retrospective cards.
 
 ## v2.3.5 - 2026-06-16
 
