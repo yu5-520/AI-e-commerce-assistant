@@ -32,6 +32,7 @@ REMOVED_ACTIVE_PATHS = [
     "src/services/eval_service.py",
     "evals/run_evals.py",
     "web_demo/app.js",
+    "web_demo/app-v2.js",
     "web_demo/data-import.css",
     "scripts/material_observer.py",
     "agents/material_observer_agent.py",
@@ -74,6 +75,10 @@ FORBIDDEN_DOC_SNIPPETS = [
     "modules/operation_modes",
     "modules/platforms",
     "data-import.css",
+    "web_demo/app-v2.js",
+    "当前 v1.0.2",
+    "GET  /api/business/today",
+    "GET  /api/business/products",
 ]
 
 
@@ -120,8 +125,10 @@ def main() -> None:
     assert_contains(changelog_text, version_header, "versioning/CHANGELOG.md")
     assert_contains(product_changelog_text, version_header, "docs/product/CHANGELOG.md")
 
-    assert_contains(changelog_text, "/api/business", "versioning/CHANGELOG.md")
-    assert_contains(product_changelog_text, "/api/business", "docs/product/CHANGELOG.md")
+    assert_contains(changelog_text, "/api/modules", "versioning/CHANGELOG.md")
+    assert_contains(product_changelog_text, "/api/modules", "docs/product/CHANGELOG.md")
+    assert_contains(changelog_text, "/api/accounts", "versioning/CHANGELOG.md")
+    assert_contains(product_changelog_text, "/api/accounts", "docs/product/CHANGELOG.md")
 
     forbidden_workflow_refs = [
         "src/run_demo.py",
