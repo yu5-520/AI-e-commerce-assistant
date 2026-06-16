@@ -33,8 +33,8 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="2.2.0",
-    description="Modular product API with executive navigation, role console, and collaboration workflow.",
+    version="2.3.0",
+    description="Modular product API with store overview, role console, and collaboration workflow.",
 )
 
 app.add_middleware(
@@ -58,13 +58,8 @@ def index() -> Any:
     return {"message": "AI ERP Operating Advisor API is running. Visit /api/modules/dashboard or /docs."}
 
 
-# Current modular product API used by the frontend route registry.
 app.include_router(modules.router)
-
-# V2 enterprise collaboration layer.
 app.include_router(accounts.router)
-
-# Supporting routes still used by product operations and deployment checks.
 app.include_router(health.router)
 app.include_router(data_import.router)
 app.include_router(approvals.router)
