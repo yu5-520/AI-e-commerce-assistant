@@ -35,6 +35,13 @@ def loads(value: str | None) -> Dict[str, Any]:
     return json.loads(value)
 
 
+def ensure_columns(conn: sqlite3.Connection, table_name: str, columns: Dict[str, str]) -> None:
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    for name, definition in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}")
+
+
 def init_db() -> None:
     with connect() as conn:
         conn.execute(
@@ -112,6 +119,15 @@ def init_db() -> None:
                 updated_at TEXT
             )
             """
+        )
+        ensure_columns(
+            conn,
+            "task_status",
+            {
+                "workflow_status": "TEXT",
+                "assignee_id": "TEXT",
+                "reviewer_id": "TEXT",
+            },
         )
         conn.execute(
             """
@@ -252,14 +268,8 @@ def upsert_workflow_run(run: Dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT INTO workflow_runs (
-                workflow_run_id,
-                workflow_type,
-                status,
-                input_snapshot,
-                output_snapshot,
-                started_at,
-                finished_at,
-                error_message
+                workflow_run_id, workflow_type, status, input_snapshot,
+                output_snapshot, started_at, finished_at, error_message
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(workflow_run_id) DO UPDATE SET
                 workflow_type=excluded.workflow_type,
@@ -290,14 +300,8 @@ def insert_execution_log(log: Dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO execution_logs (
-                log_id,
-                workflow_run_id,
-                node_name,
-                status,
-                input_snapshot,
-                output_snapshot,
-                error_message,
-                created_at
+                log_id, workflow_run_id, node_name, status, input_snapshot,
+                output_snapshot, error_message, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -320,14 +324,8 @@ def insert_import_record(record: Dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO import_records (
-                import_id,
-                workflow_run_id,
-                mode,
-                status,
-                dataset_count,
-                total_rows,
-                validation,
-                created_at
+                import_id, workflow_run_id, mode, status, dataset_count,
+                total_rows, validation, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -350,15 +348,8 @@ def insert_approval_record(record: Dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO approval_records (
-                approval_id,
-                workflow_run_id,
-                task_id,
-                approval_status,
-                operator,
-                risk_level,
-                task_type,
-                payload,
-                created_at
+                approval_id, workflow_run_id, task_id, approval_status,
+                operator, risk_level, task_type, payload, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -378,22 +369,14 @@ def insert_approval_record(record: Dict[str, Any]) -> None:
 
 def upsert_task_status(task: Dict[str, Any]) -> None:
     init_db()
+    task_id = task.get("task_id") or task.get("id")
     with connect() as conn:
         conn.execute(
             """
             INSERT INTO task_status (
-                task_id,
-                workflow_run_id,
-                task_type,
-                risk_level,
-                approval_status,
-                status,
-                workflow_status,
-                assignee_id,
-                reviewer_id,
-                auto_execution_allowed,
-                payload,
-                updated_at
+                task_id, workflow_run_id, task_type, risk_level, approval_status,
+                status, workflow_status, assignee_id, reviewer_id,
+                auto_execution_allowed, payload, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 workflow_run_id=excluded.workflow_run_id,
@@ -409,10 +392,10 @@ def upsert_task_status(task: Dict[str, Any]) -> None:
                 updated_at=excluded.updated_at
             """,
             (
-                task.get("task_id"),
+                task_id,
                 task.get("workflow_run_id"),
-                task.get("task_type"),
-                task.get("risk_level"),
+                task.get("task_type") or task.get("taskType"),
+                task.get("risk_level") or task.get("priority"),
                 task.get("approval_status"),
                 task.get("status"),
                 task.get("workflow_status") or task.get("workflowStatus"),
@@ -432,13 +415,7 @@ def insert_report_record(record: Dict[str, Any]) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO report_records (
-                report_id,
-                workflow_run_id,
-                report_type,
-                path,
-                format,
-                payload,
-                created_at
+                report_id, workflow_run_id, report_type, path, format, payload, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -463,4 +440,108 @@ def row_to_workflow_run(row: sqlite3.Row) -> Dict[str, Any]:
         "output_snapshot": loads(row["output_snapshot"]),
         "started_at": row["started_at"],
         "finished_at": row["finished_at"],
+        "error_message": row["error_message"],
     }
+
+
+def row_to_execution_log(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "log_id": row["log_id"],
+        "workflow_run_id": row["workflow_run_id"],
+        "node_name": row["node_name"],
+        "status": row["status"],
+        "input_snapshot": loads(row["input_snapshot"]),
+        "output_snapshot": loads(row["output_snapshot"]),
+        "error_message": row["error_message"],
+        "created_at": row["created_at"],
+    }
+
+
+def list_workflow_runs(limit: int = 50) -> List[Dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM workflow_runs ORDER BY COALESCE(finished_at, started_at) DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [row_to_workflow_run(row) for row in rows]
+
+
+def list_execution_logs(limit: int = 100) -> List[Dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM execution_logs ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [row_to_execution_log(row) for row in rows]
+
+
+def list_execution_logs_by_run(workflow_run_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM execution_logs WHERE workflow_run_id = ? ORDER BY created_at DESC LIMIT ?",
+            (workflow_run_id, limit),
+        ).fetchall()
+    return [row_to_execution_log(row) for row in rows]
+
+
+def list_import_records(limit: int = 50) -> List[Dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM import_records ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "import_id": row["import_id"],
+            "workflow_run_id": row["workflow_run_id"],
+            "mode": row["mode"],
+            "status": row["status"],
+            "dataset_count": row["dataset_count"],
+            "total_rows": row["total_rows"],
+            "validation": loads(row["validation"]),
+            "created_at": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def get_task_status_map() -> Dict[str, Dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute("SELECT * FROM task_status").fetchall()
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        payload = loads(row["payload"])
+        payload.setdefault("task_id", row["task_id"])
+        payload.setdefault("status", row["status"])
+        payload.setdefault("workflowStatus", row["workflow_status"])
+        payload.setdefault("assigneeId", row["assignee_id"])
+        payload.setdefault("reviewerId", row["reviewer_id"])
+        result[row["task_id"]] = payload
+    return result
+
+
+def list_approval_records(limit: int = 50) -> List[Dict[str, Any]]:
+    init_db()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM approval_records ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    records: List[Dict[str, Any]] = []
+    for row in rows:
+        payload = loads(row["payload"])
+        payload.setdefault("approval_id", row["approval_id"])
+        payload.setdefault("workflow_run_id", row["workflow_run_id"])
+        payload.setdefault("task_id", row["task_id"])
+        payload.setdefault("approval_status", row["approval_status"])
+        payload.setdefault("operator", row["operator"])
+        payload.setdefault("risk_level", row["risk_level"])
+        payload.setdefault("task_type", row["task_type"])
+        payload.setdefault("created_at", row["created_at"])
+        records.append(payload)
+    return records
