@@ -7,23 +7,16 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 
 from src.api.routes.modules.common import find_or_404
-from src.services.module_data_service import PRODUCTS, clone
-from src.services.module_task_service import create_task
+from src.services.module_data_service import PRODUCTS
+from src.services.module_task_service import attach_task_state, create_task
 
 router = APIRouter()
 
 
-@router.get("/product")
-def product() -> List[Dict[str, Any]]:
-    return clone(PRODUCTS)
-
-
-@router.post("/product/{product_id}/tasks")
-def product_task(product_id: str) -> Dict[str, Any]:
-    item = find_or_404(PRODUCTS, product_id, "product")
+def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
     risk_domain = "售后" if item["afterSalesLevel"] != "good" else "库存" if item["inventoryLevel"] == "danger" else "商品"
     high_risk = item["afterSalesLevel"] != "good" or item["inventoryLevel"] == "danger"
-    return create_task({
+    return {
         "entityType": "商品",
         "entityId": item["id"],
         "riskDomain": risk_domain,
@@ -47,4 +40,15 @@ def product_task(product_id: str) -> Dict[str, Any]:
         "task": "复查售后原因，暂不扩大推广" if item["afterSalesLevel"] != "good" else "确认补货周期，再决定活动节奏" if item["inventoryLevel"] == "danger" else "加入商品优化观察",
         "reason": item["suggestion"],
         "judgmentTags": [item["inventoryStatus"], item["afterSales"], f"毛利 {item['grossMargin']}"],
-    })
+    }
+
+
+@router.get("/product")
+def product() -> List[Dict[str, Any]]:
+    return [attach_task_state(item, product_task_payload(item)) for item in PRODUCTS]
+
+
+@router.post("/product/{product_id}/tasks")
+def product_task(product_id: str) -> Dict[str, Any]:
+    item = find_or_404(PRODUCTS, product_id, "product")
+    return create_task(product_task_payload(item))
