@@ -12,12 +12,35 @@
     return serverTask;
   }
 
-  function productIdentity(product) {
+  function identityFromItem(item = {}) {
     return {
-      dedupeKey: product.suggestedTaskKey || product.dedupeKey,
-      suggestedTaskKey: product.suggestedTaskKey || product.dedupeKey,
-      activeTaskId: product.activeTaskId,
+      dedupeKey: item.suggestedTaskKey || item.dedupeKey,
+      suggestedTaskKey: item.suggestedTaskKey || item.dedupeKey,
+      activeTaskId: item.activeTaskId,
     };
+  }
+
+  function findOpenTask(item = {}) {
+    return store().findOpenTask(identityFromItem(item));
+  }
+
+  function openTodoTask(taskOrId) {
+    const taskId = typeof taskOrId === "string" ? taskOrId : taskOrId?.id || taskOrId?.activeTaskId;
+    if (!taskId) return false;
+    AppRouter.navigate("business-actions", { focusTaskId: taskId });
+    return true;
+  }
+
+  function buttonLabel(item = {}) {
+    return findOpenTask(item) ? "已在任务清单" : "加入任务清单";
+  }
+
+  function buttonClass(item = {}) {
+    return findOpenTask(item) ? "ghost" : "";
+  }
+
+  function productIdentity(product) {
+    return identityFromItem(product);
   }
 
   async function createProductTask(productId) {
@@ -55,5 +78,5 @@
     return { task, message: notifyTask(task, card.name) };
   }
 
-  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, productIdentity };
+  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, productIdentity, identityFromItem, findOpenTask, openTodoTask, buttonLabel, buttonClass };
 })();
