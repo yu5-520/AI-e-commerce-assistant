@@ -68,7 +68,7 @@ def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
 @router.post("/todo/{task_id}/submit")
 def submit_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
-    require_any_permission(viewer_id, {"submit_tasks"})
+    require_any_permission(viewer_id, {"submit_tasks", "dispatch_tasks", "assign_tasks"})
     body = body or {}
     task = submit_task(
         task_id,
@@ -99,7 +99,7 @@ def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
 @router.post("/todo/{task_id}/complete")
 def complete_todo(request: Request, task_id: str) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
-    require_any_permission(viewer_id, {"review_tasks", "submit_tasks"})
+    require_any_permission(viewer_id, {"review_tasks", "submit_tasks", "dispatch_tasks", "assign_tasks"})
     task = complete_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="task not found")
