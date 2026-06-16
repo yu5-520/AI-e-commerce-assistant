@@ -29,12 +29,20 @@
     failureSummary,
     dashboard: () => request("/api/modules/dashboard", null),
     operatingUnit: () => request("/api/modules/operating-unit", null),
+    accounts: () => request("/api/accounts", null),
+    me: () => request("/api/accounts/me", null),
     product: () => request("/api/modules/product", window.AppMockData.products),
     competitor: () => request("/api/modules/competitor", window.AppMockData.competitors),
     listing: () => request("/api/modules/listing", window.AppMockData.listings),
     traffic: () => request("/api/modules/traffic", window.AppMockData.traffic),
     report: () => request("/api/modules/report", { reportGroups: window.AppMockData.reportGroups, reportDetails: window.AppMockData.reportDetails }),
-    todo: () => request("/api/modules/todo", { tasks: window.AppTaskStore?.listTasks?.() || [], activeTasks: window.AppTaskStore?.listActiveTasks?.() || [] }),
+    todo: (params = {}) => {
+      const query = new URLSearchParams();
+      if (params.scope) query.set("scope", params.scope);
+      if (params.assigneeId) query.set("assignee_id", params.assigneeId);
+      const suffix = query.toString() ? `?${query.toString()}` : "";
+      return request(`/api/modules/todo${suffix}`, { tasks: window.AppTaskStore?.listTasks?.() || [], activeTasks: window.AppTaskStore?.listActiveTasks?.() || [] });
+    },
     log: () => request("/api/modules/log", window.AppTaskStore?.listLogs?.() || []),
     taskReport: (id) => request(`/api/modules/task-reports/tasks/${encodeURIComponent(id)}`, null),
     candidateReport: (module, id) => request(`/api/modules/task-reports/candidates/${encodeURIComponent(module)}/${encodeURIComponent(id)}`, null),
@@ -44,6 +52,9 @@
     createListingTask: (id) => api.post(`/api/modules/listing/${id}/tasks`, null),
     createTrafficTask: (id) => api.post(`/api/modules/traffic/${id}/tasks`, null),
     createReportTask: (id) => api.post(`/api/modules/report/${id}/tasks`, null),
+    assignTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/assign`, null, body),
+    submitTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/submit`, null, body),
+    reviewTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/review`, null, body),
     completeTodo: (id) => api.post(`/api/modules/todo/${id}/complete`, null),
     pinTodo: (id) => api.post(`/api/modules/todo/${id}/pin`, null),
     reorderTodo: (id, direction) => api.post(`/api/modules/todo/${id}/reorder?direction=${encodeURIComponent(direction)}`, null),
