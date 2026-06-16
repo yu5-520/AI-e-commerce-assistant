@@ -7,21 +7,14 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 
 from src.api.routes.modules.common import find_or_404
-from src.services.module_data_service import COMPETITORS, clone
-from src.services.module_task_service import create_task
+from src.services.module_data_service import COMPETITORS
+from src.services.module_task_service import attach_task_state, create_task
 
 router = APIRouter()
 
 
-@router.get("/competitor")
-def competitor() -> List[Dict[str, Any]]:
-    return clone(COMPETITORS)
-
-
-@router.post("/competitor/{competitor_id}/tasks")
-def competitor_task(competitor_id: str) -> Dict[str, Any]:
-    item = find_or_404(COMPETITORS, competitor_id, "competitor")
-    return create_task({
+def competitor_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
         "entityType": "竞品",
         "entityId": item["id"],
         "riskDomain": "风险" if item["status"] == "风险" else "上新",
@@ -44,4 +37,15 @@ def competitor_task(competitor_id: str) -> Dict[str, Any]:
         "task": "复查竞品风险，不直接跟价" if item["status"] == "风险" else "生成对标测试任务",
         "reason": item["suggestion"],
         "judgmentTags": [item["pricePosition"], item["badReview"], item["status"]],
-    })
+    }
+
+
+@router.get("/competitor")
+def competitor() -> List[Dict[str, Any]]:
+    return [attach_task_state(item, competitor_task_payload(item)) for item in COMPETITORS]
+
+
+@router.post("/competitor/{competitor_id}/tasks")
+def competitor_task(competitor_id: str) -> Dict[str, Any]:
+    item = find_or_404(COMPETITORS, competitor_id, "competitor")
+    return create_task(competitor_task_payload(item))
