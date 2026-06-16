@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v2.5.0
+Current Version: v2.5.1
 
 ## Version History
 
+- v2.5.1: Added cross-account task lifecycle sync with task events, per-user counters, operator accept action, manager review sync, and recap handoff.
 - v2.5.0: Rebuilt the task system into a role-scoped task flow with store permissions, visible roles/users/stores, owner decision tasks, manager dispatch tasks, operator execution tasks, warning-to-operator todo routing, and manager split endpoint.
 - v2.4.2: Restored operator-side store operation modules and added a scoped operator dashboard for assigned stores, reports, products, competitors, listings, traffic, tasks, logs, and account settings.
 - v2.4.1: Optimized the store-group manager task queue layout by restoring the schedule-style dispatch row with rank, time / priority, main task, source, judgment tags, and action buttons.
