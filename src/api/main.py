@@ -17,8 +17,8 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="2.3.8",
-    description="Modular product API with manager execution workflow and owner operating overview.",
+    version="2.3.9",
+    description="Modular product API with manager task action loop, detail pages, and owner operating overview.",
 )
 
 app.add_middleware(
