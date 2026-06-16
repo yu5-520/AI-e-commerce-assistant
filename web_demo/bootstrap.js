@@ -1,7 +1,14 @@
 (async function () {
   const pages = [
     window.DashboardPage,
+    window.ExecutiveCockpitPage,
+    window.RiskCenterPage,
+    window.TaskCommandPage,
+    window.ProfitBudgetPage,
+    window.OrgEfficiencyPage,
+    window.ReviewAuditPage,
     window.AccountPage,
+    window.RoleConsolePage,
     window.OperatingUnitPage,
     window.ReportPage,
     window.ProductPage,
