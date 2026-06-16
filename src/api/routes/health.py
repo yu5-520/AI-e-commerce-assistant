@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "2.4.2"
+API_VERSION = "2.5.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,26 +17,26 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "owner_manager_operator_role_scoped_workbenches",
+        "mode": "role_scoped_task_flow_system",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "owner_business_overview": True,
         "owner_dashboard_not_task_list": True,
-        "owner_module_entry_cards": True,
-        "owner_attention_items": True,
-        "store_overview": True,
-        "people_overview": True,
-        "supply_finance": True,
-        "org_governance": True,
-        "retrospective_audit": True,
-        "basic_account_center": True,
         "manager_execution_dashboard": True,
-        "manager_task_sorting": True,
         "manager_dispatch_queue_layout": True,
-        "manager_task_detail": True,
-        "manager_split_action": True,
-        "manager_dispatch_action": True,
         "operator_store_scope": True,
         "operator_operation_modules": True,
-        "operator_dashboard_store_overview": True,
+        "role_scoped_task_flow": True,
+        "task_store_permission_filtering": True,
+        "task_visible_roles": True,
+        "task_visible_users": True,
+        "task_visible_stores": True,
+        "task_parent_child_split": True,
+        "task_source_type": True,
+        "task_layer_owner_manager_operator": True,
+        "warning_to_operator_todo": True,
+        "manager_split_endpoint": "/api/modules/todo/{task_id}/split",
+        "manager_assign_endpoint": "/api/modules/todo/{task_id}/assign",
+        "operator_submit_endpoint": "/api/modules/todo/{task_id}/submit",
+        "manager_review_endpoint": "/api/modules/todo/{task_id}/review",
     }
