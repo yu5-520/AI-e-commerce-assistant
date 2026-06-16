@@ -1,23 +1,30 @@
 # Changelog
 
-## v2.3.9 - 2026-06-16
+## v2.4.0 - 2026-06-16
 
 ### Added
+- Added owner-specific business overview dashboard.
+- Added owner operating metrics: sales, profit, orders, inventory capital, ad spend, refund rate, audit issues, and retrospective confirmations.
+- Added owner module entry cards for 店群总览、人员总览、供投财务、组织效率、复盘审计.
+- Added owner attention items with detail-entry buttons instead of task-completion actions.
+- Added `web_demo/owner-dashboard.css` for owner dashboard layout.
+
+### Changed
+- Owner `总览` no longer shows the execution-layer task list.
+- Task completion / 待办 actions remain for manager / operator contexts, not owner overview.
+- Frontend assets were bumped to `?v=2.4.0`.
+- FastAPI app version and health version are aligned to `2.4.0`.
+
+### Product Engineering Rule
+- 老板总览不是任务池，是全局经营首页。
+- 老板看经营摘要和决策入口；任务拆分、派发、复核属于店群总管。
+
+## v2.3.9 - 2026-06-16
+
 - Added manager task sorting by time, priority, source, and status.
 - Added manager task detail route `manager-task-detail` with source report, impact scope, evidence, Agent judgment placeholders, and suggested split actions.
 - Added task card actions: 查看详情、拆分任务、派发运营.
 - Added mock state transitions for manager tasks: 待拆分 → 待派发 → 已派发 → 待复核 → 已归档.
-- Added dashboard-side manager task actions so the manager overview can jump directly to task detail or dispatch/review pages.
-
-### Changed
-- Manager task lists now behave like an action workbench instead of a static board.
-- Manager dispatch page now filters and sorts tasks needing split / dispatch.
-- Frontend assets were bumped to `?v=2.3.9`.
-- FastAPI app version and health version are aligned to `2.3.9`.
-
-### Product Engineering Rule
-- 店群总管不是只看任务，而是按时间、优先级、来源和状态处理任务。
-- 每个任务必须能进入详情页，后续 Agent 的信息检索、证据判断、拆分建议和复核判断都应落在详情页。
 
 ## v2.3.8 - 2026-06-16
 
