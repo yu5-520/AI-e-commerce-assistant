@@ -86,7 +86,8 @@ http://47.118.29.46
 
 ```bash
 curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:3000/api/business/today
+curl http://127.0.0.1:3000/api/modules/dashboard
+curl http://127.0.0.1:3000/api/accounts
 curl http://47.118.29.46/api/health
 ```
 
@@ -179,11 +180,13 @@ sudo systemctl reload nginx
 ## 9. 当前服务入口
 
 ```text
-/                         前端首页
-/api/business/today       产品主接口
-/api/business/report      经营报告
-/api/health               健康检查
-/docs                     FastAPI 接口文档
+/                                  前端首页
+/api/modules/dashboard              模块总览
+/api/modules/todo                   待办任务池
+/api/modules/task-reports/tasks/{id} 任务详情报告
+/api/accounts                       账号角色权限
+/api/health                         健康检查
+/docs                               FastAPI 接口文档
 ```
 
 ## 10. 安全检查清单
@@ -220,6 +223,7 @@ ss -lntp | grep 3000
 
 ```text
 不连接真实店铺后台
+不接真实企业 SSO
 不执行真实上架、改价、投放
 不触达真实客户
 不保存真实客户隐私数据
