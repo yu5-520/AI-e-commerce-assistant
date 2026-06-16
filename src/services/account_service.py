@@ -32,8 +32,7 @@ PERMISSION_NAME_MAP = {item["id"]: item["name"] for item in PERMISSIONS}
 
 EXECUTIVE_MODULES = [
     "dashboard",
-    "executive-cockpit",
-    "risk-center",
+    "store-overview",
     "task-command",
     "profit-budget",
     "org-efficiency",
@@ -63,12 +62,12 @@ ROLES: List[Dict[str, Any]] = [
         "scope": "全部店群",
         "insightDepth": "owner_strategy",
         "insightName": "老板统筹视角",
-        "description": "看经营结果、利润预算、组织效率、任务闭环和审计，不进入一线运营细模块。",
+        "description": "看店群盘面、利润预算、组织效率、任务闭环和审计，不进入一线运营细模块。",
         "permissions": ["view_all_stores", "view_finance", "view_org_risk", "view_command", "dispatch_tasks", "review_tasks", "manage_roles", "view_only"],
         "visibleModules": EXECUTIVE_MODULES,
-        "allowedActions": ["查看经营驾驶舱", "查看风险中心", "下发任务", "查看利润预算", "管理角色权限"],
-        "hiddenFields": ["一线商品操作台", "一线上新操作台", "一线流量操作台"],
-        "managementInsights": ["利润拖累", "风险聚合", "任务闭环", "预算承接", "组织效率", "复核审计"],
+        "allowedActions": ["查看店群总览", "查看任务指挥", "查看利润预算", "查看组织效率", "管理角色权限"],
+        "hiddenFields": ["一线商品操作台", "一线上新操作台", "一线流量操作台", "一线竞品操作台"],
+        "managementInsights": ["平台盘面", "店铺经营", "利润预算", "任务闭环", "组织效率", "复核审计"],
     },
     {
         "id": "manager",
@@ -107,7 +106,7 @@ ROLES: List[Dict[str, Any]] = [
         "insightName": "财务经营视角",
         "description": "查看利润、预算、ROI、退款成本和库存资金风险，不处理运营动作。",
         "permissions": ["view_finance", "view_only"],
-        "visibleModules": ["dashboard", "profit-budget", "risk-center", "data-check", "business-report", "accounts"],
+        "visibleModules": ["dashboard", "store-overview", "profit-budget", "data-check", "business-report", "accounts"],
         "allowedActions": ["查看财务报告", "标记数据异常", "补充财务说明"],
         "hiddenFields": ["任务派发按钮", "运营复核按钮", "角色管理"],
         "managementInsights": ["利润承接", "退款成本", "ROI 可信度", "库存资金"],
@@ -121,10 +120,10 @@ ROLES: List[Dict[str, Any]] = [
         "insightName": "只读摘要视角",
         "description": "只能查看摘要、进度和日志结果，不能操作任务。",
         "permissions": ["view_only"],
-        "visibleModules": ["dashboard", "review-audit", "business-report", "accounts"],
+        "visibleModules": ["dashboard", "store-overview", "review-audit", "business-report", "accounts"],
         "allowedActions": ["查看摘要", "查看日志"],
         "hiddenFields": ["财务细节", "任务责任链", "全部操作按钮"],
-        "managementInsights": ["风险状态", "处理进度", "归档结果"],
+        "managementInsights": ["平台摘要", "店铺状态", "处理进度", "归档结果"],
     },
 ]
 
@@ -264,8 +263,8 @@ def role_view_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
     pages = {
         "owner": {
             "headline": "老板统筹台",
-            "summary": "不进入商品、竞品、上新、流量的一线操作台，只看经营结果、风险、预算、组织和审计。",
-            "sections": ["经营驾驶舱", "风险中心", "任务指挥", "利润预算", "组织效率", "复核审计"],
+            "summary": "先看平台、店铺、商品、订单、销售、利润、评论和库存的经营盘面，再进入任务、利润、组织和审计。",
+            "sections": ["店群总览", "任务指挥", "利润预算", "组织效率", "复核审计"],
         },
         "manager": {
             "headline": "店群总管工作台",
@@ -279,13 +278,13 @@ def role_view_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
         },
         "finance": {
             "headline": "数据 / 财务台",
-            "summary": "看利润、预算、ROI、退款成本、库存资金和数据异常，不处理运营动作。",
-            "sections": ["利润预算", "风险中心", "报表异常", "日志"],
+            "summary": "看店铺经营盘面、利润、预算、ROI、退款成本、库存资金和数据异常，不处理运营动作。",
+            "sections": ["店群总览", "利润预算", "报表异常", "日志"],
         },
         "observer": {
             "headline": "只读观察台",
             "summary": "只看摘要、进度和归档日志，不参与任务流转。",
-            "sections": ["总览", "复核审计", "日志摘要"],
+            "sections": ["总览", "店群总览", "复核审计", "日志摘要"],
         },
     }
     return pages.get(role_id, pages["observer"])
@@ -333,6 +332,6 @@ def account_summary(user_id: str | None = None) -> Dict[str, Any]:
         "storeGroups": list_store_groups(),
         "stores": list_stores(),
         "roleChangeLogs": list_role_change_logs(),
-        "taskFlow": ["经营信号进入统筹模块", "老板在任务指挥中下发", "总管拆分给运营", "运营处理后提交", "总管复核后归档"],
+        "taskFlow": ["店群盘面汇总", "异常字段进入任务指挥", "老板下发给总管", "总管拆分给运营", "运营提交后复核归档"],
         "boundary": {"authMode": "mock_account_context_header", "switchHeader": "X-Mock-User-Id", "realSsoConnected": False, "realEnterpriseTenantConnected": False, "permissionEnforcement": "mock_backend_scope_and_ui_actions"},
     }
