@@ -1,11 +1,16 @@
 (function () {
   const routes = new Map();
+  const aliases = new Map([
+    ["risk-center", "store-overview"],
+    ["executive-cockpit", "store-overview"],
+  ]);
   let current = null;
   let scheduled = false;
   let renderToken = 0;
   let pendingState = {};
 
-  function routeFromHash() { return location.hash.replace("#", "") || "dashboard"; }
+  function rawRouteFromHash() { return location.hash.replace("#", "") || "dashboard"; }
+  function routeFromHash() { return aliases.get(rawRouteFromHash()) || rawRouteFromHash(); }
 
   function createContext(route, token, state = {}) {
     const cleanup = [];
@@ -75,15 +80,18 @@
 
   function navigate(route, state = null) {
     if (!route) return;
+    const target = aliases.get(route) || route;
     if (state) pendingState = { ...pendingState, ...state };
-    if (routeFromHash() === route) schedule("same-route", state);
-    else location.hash = route;
+    if (routeFromHash() === target) schedule("same-route", state);
+    else location.hash = target;
   }
 
   function start() {
     window.addEventListener("hashchange", () => schedule("hashchange"));
     document.getElementById("refreshBtn")?.addEventListener("click", () => schedule("refresh"));
-    schedule("start");
+    const target = routeFromHash();
+    if (target !== rawRouteFromHash()) location.hash = target;
+    else schedule("start");
   }
 
   window.AppRouter = { register, start, navigate, schedule, routeFromHash };
