@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.1.0
+Current Version: v1.1.1
 
 ## Version History
 
@@ -26,31 +26,15 @@ Current Version: v1.1.0
 - v0.9.1: Material observation was moved back into an implicit backend pipeline so users only see generation progress and final copyable outputs.
 - v0.9.2: Agent module governance was added with a stable material observer contract, source policy, confidence, risk flags, and runtime registry.
 - v1.0.0: Main branch was recut into one current product trunk, removing old frontend templates, legacy compatibility APIs, stale demo helpers, and aligning README, smoke tests, and version logs with `/api/business/*`.
-- v1.0.1: Script chain was repaired so GitHub Actions runs current runtime/API smoke tests plus version governance checks. Legacy Material Observer Agent files and runtime registry were removed from the active product trunk.
-- v1.0.2: Documentation trunk was cleaned so active docs describe only the current ERP operating-unit product path. Outdated future product-map, user-flow, and broad domain-model docs were removed, and governance now checks active docs for stale legacy snippets.
-- v1.0.3: Legacy module-chain memory was removed from active trunk. Old runtime module-chain registry and obsolete modules were deleted, report generation was renamed from demo report to operating report, and governance now blocks removed module-chain roots.
-- v1.0.4: Frontend UI was aligned with productized `/api/business/*` endpoints. Old standalone data-import stylesheet was removed, business hash routes were clarified, and governance now blocks the removed frontend component stylesheet.
-- v1.0.5: Backend API contract was repaired so business actions merge persisted approval status, health returns the current version, system cleanup has a runtime-data alias, and API smoke tests verify approval status roundtrip.
-- v1.0.6: Server runtime import failure was fixed by disabling the homepage response model and removing the invalid `FileResponse | Dict` response annotation.
-- v1.0.7: Homepage overview was repositioned as a task board. `/api/business/today` now exposes task distribution and ordered task queue, the frontend renders deadlines/urgency/counts/impact, and internal boundary wording is blocked from the merchant overview contract.
-- v1.0.8: Dashboard task board was compacted. The main title is now `任务清单`, the date appears as a small realtime update label, dashboard metrics are smaller, the task queue gets the primary viewport, and frontend assets use query-version cache busting.
-- v1.0.9: Added a dashboard hotfix script and compatibility CSS so cached v1.0.7 dashboard markup is patched after render: `今日任务清单` becomes `任务清单`, `今日到期` becomes `到期任务`, and the oversized hero layout is compacted even if old JavaScript is still cached.
-- v1.0.10: Operating unit page was productized into a store-group management surface. Engineering category fields, distribution, and trigger blocks were removed from the visible page; the page now shows connected platforms, store count, connected data, pending systems, associated shops, and future integrations such as 聚水潭 and ad backends.
-- v1.0.11: Data page was renamed and productized into `ERP / CRM 报表管理`. Static data-health rows were replaced with report cards and `查看报表` drill-down pages for product, order, inventory, refund, customer, tag, and interaction reports.
-- v1.0.12: Frontend hotfix scripts were integrated into `web_demo/app-v2.js`. The runtime shell now loads one main JS file, avoiding MutationObserver hotfix loops while keeping the compact task board, store-group operating unit page, and ERP/CRM report center.
-- v1.0.13: Report center adds user-driven report import. Report manager and report-detail pages now include `导入报表` / `导入数据`, local CSV/XLSX file selection, required-field checks, template download prompts, and mock import confirmation flow.
-- v1.0.14: Report export is now functional. Report manager and report-detail pages can download CSV report files, template download now creates a CSV file instead of showing an alert, and the page explicitly supports 导入 / 导出.
-- v1.0.15: Product page was productized from oversized diagnosis cards into a compact goods-operation list. Each product row now includes main image placeholder, full title, platform, shop, link, inventory, price, margin, after-sales status, copy-link action, report jump, and detail view; ambiguous `中` / `高` badges were removed from the visible product list.
-- v1.0.16: Product list layout was hardened for long titles. Product titles are now two-line clamped inside their own grid cell, row children use `min-width: 0`, store/status cells are ellipsized, action width is reduced, and frontend assets were bumped to avoid cached overlapping layouts.
-- v1.0.17: Product page was switched from forced table columns to responsive product cards. Platform, store, and status filters now open selectable option menus, search filters the list, and filtered counts update in the 商品列表 header.
-- v1.0.18: Competitor page was productized into a competitor observation list aligned with the product page structure. Engineering price codes were replaced with business wording, competitor count was expanded to eight mock competitors, and platform/target/status filters plus search and detail actions were added.
-- v1.0.19: Listing page was repositioned as `上新测试台`. It now separates existing-product tests from competitor-opportunity tests, covering title, main image, SKU, platform coupon/activity, promotion, and competitor-driven launch experiments with confirmation and task-list actions.
-- v1.0.20: Traffic page was repositioned as `流量测试台`. Traffic rows now bind every judgment to precise product information, including image placeholder, title, platform, shop, link, traffic source, exposure, CTR, conversion, ROI, refund rate, inventory, status, backflow destination, and next action.
-- v1.0.21: Actions page was repositioned as `待办任务`. The sidebar label changed from `确认` to `待办`, and tasks from 商品、竞品、上新、流量、报表 and AI 自动判定 now appear in a priority-ordered task center with deadlines, source modules, precise product context, reasons, status, and task-specific actions.
-- v1.0.22: Report page was repositioned as `日志`. The sidebar label changed from `报告` to `日志`, the old Markdown report panel was replaced by an operation log center, and logs now record task completion, AI judgment, data import/export, and user actions with source, product context, reason, result, detail, source jump, and export actions.
-- v1.0.23: Dashboard task board now uses a unified cross-module task pool. Homepage metrics are calculated from active tasks, task cards bind to precise product/store context, and each top task links to 待办、来源模块、商品页 while completed items leave the homepage and move to 日志.
-- v1.0.24: Dashboard task board was simplified into a command-board style scheduling view. Homepage tasks now emphasize order, deadline, source navigation, and short judgment tags; long handling explanations are removed from the overview and left to 待办.
+- v1.0.1-v1.0.6: Product trunk cleanup, script repair, legacy route removal, active API alignment, and server startup fixes.
+- v1.0.7-v1.0.14: Dashboard task board, operating unit, ERP/CRM report center, import/export, and frontend cache/version governance were added.
+- v1.0.15-v1.0.20: 商品、竞品、上新 and 流量 pages were productized into compact operating surfaces.
+- v1.0.21: Actions page was repositioned as `待办任务`, showing tasks from 商品、竞品、上新、流量、报表 and AI 自动判定.
+- v1.0.22: Report page was repositioned as `日志`, recording task completion, AI judgment, data import/export, and user actions.
+- v1.0.23: Dashboard task board used a unified cross-module task pool for homepage summaries.
+- v1.0.24: Dashboard task board was simplified into a command-board scheduling view with short judgment tags.
 - v1.1.0: Added a unified front-end task store and dynamic module-driven task flow. 商品、竞品、上新、流量 and 报表 can now create shared tasks; dashboard and 待办 read the same task pool; task actions create operation logs; refresh preserves the demo task state through localStorage.
+- v1.1.1: Added task identity and dedupe keys. Manual module actions now check `entityType + entityId + riskDomain + actionType`; same-product same-problem tasks are merged or routed to existing 待办 instead of duplicated, while different problem domains can still create separate tasks.
 
 ## Version Rules
 
