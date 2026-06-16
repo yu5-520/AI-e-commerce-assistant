@@ -1,5 +1,5 @@
 (function () {
-  const ACCOUNT_KEY = "ai_ecommerce_v210_current_user_id";
+  const ACCOUNT_KEY = "ai_ecommerce_v220_current_user_id";
   const status = { source: "unknown", failures: [] };
   let account = null;
 
@@ -55,6 +55,13 @@
     return account;
   }
 
+  async function applyAccountMutation(path, body) {
+    const result = await request(path, null, { method: "POST", body });
+    account = result?.account || (await loadAccount());
+    window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } }));
+    return result;
+  }
+
   const api = {
     status,
     failureSummary,
@@ -74,6 +81,9 @@
       window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } }));
       return account;
     },
+    updateUserRole: (userId, roleId) => applyAccountMutation(`/api/accounts/users/${encodeURIComponent(userId)}/role`, { roleId }),
+    updateUserStores: (userId, storeIds) => applyAccountMutation(`/api/accounts/users/${encodeURIComponent(userId)}/stores`, { storeIds }),
+    updateRolePermissions: (roleId, permissions) => applyAccountMutation(`/api/accounts/roles/${encodeURIComponent(roleId)}/permissions`, { permissions }),
     product: () => request("/api/modules/product", window.AppMockData.products),
     competitor: () => request("/api/modules/competitor", window.AppMockData.competitors),
     listing: () => request("/api/modules/listing", window.AppMockData.listings),
@@ -111,13 +121,7 @@
       if (report?.reportDetails) window.AppMockData.reportDetails = report.reportDetails;
     },
     async refreshModuleData() {
-      const [products, competitors, listings, traffic, report] = await Promise.all([
-        api.product(),
-        api.competitor(),
-        api.listing(),
-        api.traffic(),
-        api.report(),
-      ]);
+      const [products, competitors, listings, traffic, report] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report()]);
       api.applyModuleData({ products, competitors, listings, traffic, report });
       return window.AppMockData;
     },
@@ -129,15 +133,7 @@
     },
     async prefetch() {
       await loadAccount();
-      const [products, competitors, listings, traffic, report, todo, logs] = await Promise.all([
-        api.product(),
-        api.competitor(),
-        api.listing(),
-        api.traffic(),
-        api.report(),
-        api.todo(),
-        api.log(),
-      ]);
+      const [products, competitors, listings, traffic, report, todo, logs] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report(), api.todo(), api.log()]);
       api.applyModuleData({ products, competitors, listings, traffic, report });
       window.AppTaskStore?.hydrate?.(todo?.tasks || [], Array.isArray(logs) ? logs : []);
       return window.AppMockData;
