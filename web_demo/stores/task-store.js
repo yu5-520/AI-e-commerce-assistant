@@ -1,7 +1,7 @@
 (function () {
-  const TASK_KEY = "ai_ecommerce_v151_tasks";
-  const LOG_KEY = "ai_ecommerce_v151_logs";
-  const doneStatus = new Set(["已完成", "已拒绝", "已确认"]);
+  const TASK_KEY = "ai_ecommerce_v200_tasks";
+  const LOG_KEY = "ai_ecommerce_v200_logs";
+  const doneStatus = new Set(["已完成", "已拒绝", "已确认", "已归档", "已通过"]);
   const priorityRank = { 高: 1, 中: 2, 低: 3 };
 
   function read(key, fallback) {
@@ -26,7 +26,8 @@
     const priority = task.priority || "中";
     const item = {
       id: task.id || `A${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase(),
-      status: "待确认",
+      status: task.status || "待确认",
+      workflowStatus: task.workflowStatus || "待派发",
       priority,
       priorityLevel: task.priorityLevel || (priority === "高" ? "danger" : priority === "低" ? "good" : "warning"),
       deadline: task.deadline || "本周内",
@@ -43,6 +44,14 @@
       actionType: task.actionType || "复查",
       judgmentTags: task.judgmentTags || [],
       sourceTrail: task.sourceTrail || [],
+      assigneeId: task.assigneeId || null,
+      assigneeName: task.assigneeName || "未派发",
+      reviewerId: task.reviewerId || null,
+      reviewerName: task.reviewerName || "未设置复核人",
+      assignedByName: task.assignedByName || "未下发",
+      assignmentNote: task.assignmentNote || "",
+      submissionNote: task.submissionNote || "",
+      reviewNote: task.reviewNote || "",
       createdAt: task.createdAt || new Date().toISOString(),
       updatedAt: task.updatedAt || task.createdAt || new Date().toISOString(),
       manualOrder: Number.isFinite(task.manualOrder) ? task.manualOrder : Date.now(),
@@ -114,7 +123,7 @@
   }
 
   function completeTask(taskId) {
-    return updateTask(taskId, { status: "已完成", completedAt: new Date().toISOString() });
+    return updateTask(taskId, { status: "已完成", workflowStatus: "已归档", completedAt: new Date().toISOString() });
   }
 
   function pinTask(taskId) {
