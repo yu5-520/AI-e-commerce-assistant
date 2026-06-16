@@ -1,11 +1,12 @@
-"""API smoke test for the current AI ERP operating advisor product surface.
+"""API smoke test for the current AI ERP operating advisor v2 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
-process. It intentionally checks only current product-critical API contracts.
-Legacy demo/debug routes are not tested because they are no longer mounted.
+process. It intentionally checks only current product-critical API contracts:
+modular routes, account roles, task reports, and the v2 dispatch / submit /
+review flow.
 """
 
 from __future__ import annotations
@@ -29,26 +30,33 @@ def assert_status(method: str, path: str, expected_status: int = 200) -> Any:
     return response.text
 
 
+def assert_post_json(path: str, payload: Dict[str, Any], expected_status: int = 200) -> Any:
+    response = client.post(path, json=payload)
+    assert response.status_code == expected_status, (
+        f"POST {path} expected {expected_status}, got {response.status_code}: {response.text}"
+    )
+    if response.headers.get("content-type", "").startswith("application/json"):
+        return response.json()
+    return response.text
+
+
 def assert_keys(payload: Dict[str, Any], keys: list[str], name: str) -> None:
     missing = [key for key in keys if key not in payload]
     assert not missing, f"{name} missing keys: {missing}"
 
 
-def find_action(actions: Dict[str, Any], action_id: str) -> Dict[str, Any]:
-    for item in actions.get("items", []):
-        if item.get("action_id") == action_id:
-            return item
-    raise AssertionError(f"Action not found after status update: {action_id}")
-
-
 def run_smoke_test() -> None:
     health = assert_status("GET", "/api/health")
-    assert_keys(health, ["ok", "version", "product", "mode", "safety"], "health")
+    assert_keys(health, ["ok", "version", "product", "mode", "safety", "account_entry"], "health")
     assert health["ok"] is True, "health.ok should be true"
     assert health["version"] == app.version, "health.version should match FastAPI app version"
+    assert health["api_entry"] == "/api/modules/*", "active API entry should be modular"
+    assert health["account_entry"] == "/api/accounts", "v2 account entry should be exposed"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
+    table_names = {item["table_name"] for item in db_status["tables"]}
+    assert "task_status" in table_names, "db should keep task status table"
 
     clear_guard = client.post("/api/system/clear-demo-data")
     assert clear_guard.status_code == 400, "clear-demo-data must require confirm=true"
@@ -65,76 +73,88 @@ def run_smoke_test() -> None:
     imports = assert_status("GET", "/api/data/imports")
     assert isinstance(imports, list), "imports should be a list"
 
-    today = assert_status("GET", "/api/business/today")
-    assert_keys(
-        today,
-        ["page_title", "priority", "operating_unit", "cycle", "task_distribution", "task_queue", "execution_rules", "raw"],
-        "business today",
+    accounts = assert_status("GET", "/api/accounts")
+    assert_keys(accounts, ["currentUser", "roles", "permissions", "users", "stores", "taskFlow"], "accounts")
+    role_names = {role["name"] for role in accounts["roles"]}
+    assert {"老板账号", "店群总管账号", "运营账号", "数据 / 财务账号", "只读观察账号"}.issubset(role_names), "v2 roles should be present"
+
+    me = assert_status("GET", "/api/accounts/me")
+    assert me["roleName"] == "老板账号", "mock current user should be owner"
+
+    dashboard = assert_status("GET", "/api/modules/dashboard")
+    assert_keys(dashboard, ["tasks", "api_entry", "service"], "modules dashboard")
+    assert dashboard["api_entry"] == "/api/modules/dashboard"
+
+    operating_unit = assert_status("GET", "/api/modules/operating-unit")
+    assert operating_unit, "operating unit route should return payload"
+
+    products = assert_status("GET", "/api/modules/product")
+    assert isinstance(products, list) and products, "product module should return cards"
+    assert "suggestedTaskKey" in products[0], "product cards should carry backend task identity"
+
+    competitors = assert_status("GET", "/api/modules/competitor")
+    assert isinstance(competitors, list), "competitor module should return list"
+
+    listing = assert_status("GET", "/api/modules/listing")
+    assert isinstance(listing, list), "listing module should return list"
+
+    traffic = assert_status("GET", "/api/modules/traffic")
+    assert isinstance(traffic, list), "traffic module should return list"
+
+    report = assert_status("GET", "/api/modules/report")
+    assert_keys(report, ["reportGroups", "reportDetails"], "report module")
+
+    todo_reset = assert_status("POST", "/api/modules/todo/reset")
+    assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
+
+    todo = assert_status("GET", "/api/modules/todo")
+    assert_keys(todo, ["tasks", "activeTasks", "scope"], "todo")
+    assert todo["activeTasks"], "todo should expose active task pool"
+    task_id = todo["activeTasks"][0]["id"]
+
+    task_report = assert_status("GET", f"/api/modules/task-reports/tasks/{task_id}")
+    assert_keys(task_report, ["reportType", "title", "evidence", "suggestedActions", "relatedTask"], "task report")
+
+    assigned = assert_post_json(
+        f"/api/modules/todo/{task_id}/assign",
+        {"assignee_id": "U003", "reviewer_id": "U002", "operator_id": "U002", "note": "smoke test assignment"},
     )
-    assert today["page_title"] == "任务清单", "dashboard should be a compact real-time task list"
-    assert today["priority"]["title"] == "任务清单", "dashboard title should not be date-prefixed"
-    assert "boundaries" not in today, "merchant dashboard contract should not expose internal boundary wording"
-    assert today["operating_unit"]["name"] == "家居生活商品", "business today should expose ERP-inferred operating unit"
-    assert today["cycle"]["frequency_label"] == "每天", "business today should expose readable cycle frequency"
-    assert today["task_distribution"], "business today should expose dashboard number distribution"
-    assert today["task_distribution"][1]["title"] == "到期任务", "dashboard metrics should avoid oversized today-prefixed title wording"
-    assert today["task_queue"], "business today should expose ordered task queue"
-    first_task = today["task_queue"][0]
-    assert_keys(first_task, ["rank", "title", "urgency", "deadline", "count", "impact", "reason"], "first dashboard task")
-    assert first_task["deadline"], "dashboard tasks must include time limit"
+    assert assigned["status"] == "处理中", "assigned task should enter processing status"
+    assert assigned["assigneeId"] == "U003", "assigned task should target operator account"
 
-    operating_unit = assert_status("GET", "/api/business/operating-unit")
-    assert_keys(operating_unit, ["unit_name", "unit_id", "source", "cycle_policy"], "operating unit")
-    assert operating_unit["unit_id"] == "home_living_goods", "operating unit should be inferred from ERP mock data"
+    submitted = assert_post_json(
+        f"/api/modules/todo/{task_id}/submit",
+        {"submitter_id": "U003", "note": "smoke test submission"},
+    )
+    assert submitted["status"] == "待复核", "submitted task should enter review status"
 
-    data_health = assert_status("GET", "/api/business/data-health")
-    assert_keys(data_health, ["status", "summary", "datasets", "message"], "business data health")
+    returned = assert_post_json(
+        f"/api/modules/todo/{task_id}/review",
+        {"reviewer_id": "U002", "decision": "return", "note": "need more evidence"},
+    )
+    assert returned["workflowStatus"] == "已退回", "returned task should keep active workflow"
 
-    products = assert_status("GET", "/api/business/products")
-    assert_keys(products, ["title", "summary", "items"], "business products")
-    assert products["items"], "business products should contain product cards"
+    submitted_again = assert_post_json(
+        f"/api/modules/todo/{task_id}/submit",
+        {"submitter_id": "U003", "note": "second submission"},
+    )
+    assert submitted_again["status"] == "待复核", "task should be submittable again after return"
 
-    competitors = assert_status("GET", "/api/business/competitors")
-    assert_keys(competitors, ["title", "category_name", "competitor_count", "opportunity_actions", "next_action"], "business competitors")
-    assert competitors["competitor_count"] > 0, "competitors should contain same-operating-unit references"
+    approved = assert_post_json(
+        f"/api/modules/todo/{task_id}/review",
+        {"reviewer_id": "U002", "decision": "approve", "note": "approved"},
+    )
+    assert approved["status"] == "已完成", "approved task should complete"
+    assert approved["workflowStatus"] == "已归档", "approved task should archive workflow"
 
-    listing = assert_status("GET", "/api/business/listing")
-    assert_keys(listing, ["title", "candidate_count", "top_candidate", "title_draft", "image_plan", "sku_plan"], "business listing")
-    assert listing["title_draft"], "listing should include a draft title"
+    active_after_review = assert_status("GET", "/api/modules/todo")
+    assert task_id not in {task["id"] for task in active_after_review["activeTasks"]}, "approved task should leave active todo"
 
-    traffic = assert_status("GET", "/api/business/traffic")
-    assert_keys(traffic, ["title", "experiment_count", "next_action", "loopback_actions", "items"], "business traffic")
-    assert traffic["experiment_count"] > 0, "traffic should contain experiments"
-
-    actions = assert_status("GET", "/api/business/actions")
-    assert_keys(actions, ["items"], "business actions")
-    assert actions["items"], "actions should include confirmation items"
-
-    action_id = actions["items"][0]["action_id"]
-    approved = assert_status("POST", f"/api/approvals/{action_id}/approve")
-    assert approved["approval_status"] == "approved", "approval status should be approved"
-
-    actions_after_approve = assert_status("GET", "/api/business/actions")
-    approved_action = find_action(actions_after_approve, action_id)
-    assert approved_action.get("status") == "approved", "business actions should expose approved status"
-    assert approved_action.get("approval_status") == "approved", "business actions should expose approval_status"
-
-    rejected = assert_status("POST", f"/api/approvals/{action_id}/reject")
-    assert rejected["approval_status"] == "rejected", "approval status should be rejected"
-
-    actions_after_reject = assert_status("GET", "/api/business/actions")
-    rejected_action = find_action(actions_after_reject, action_id)
-    assert rejected_action.get("status") == "rejected", "business actions should expose rejected status"
-    assert rejected_action.get("approval_status") == "rejected", "business actions should expose rejected approval_status"
-
-    approval_records = assert_status("GET", "/api/approvals/records")
-    assert isinstance(approval_records, list), "approval records should be a list"
-
-    report_text = assert_status("GET", "/api/business/report")
-    assert isinstance(report_text, str) and report_text.strip(), "business report should not be empty"
+    logs = assert_status("GET", "/api/modules/log")
+    assert isinstance(logs, list) and logs, "log module should include task workflow logs"
 
     final_db_status = assert_status("GET", "/api/system/db-status")
-    assert final_db_status["summary"]["total_records"] >= 1, "db should contain records after smoke test"
+    assert final_db_status["summary"]["table_count"] >= 6, "db should expose runtime tables"
 
     print("API smoke test passed.")
 
