@@ -1,7 +1,7 @@
 (function () {
-  const TASK_KEY = "ai_ecommerce_v110_tasks";
-  const LOG_KEY = "ai_ecommerce_v110_logs";
-  const BOOT_KEY = "ai_ecommerce_v110_booted";
+  const TASK_KEY = "ai_ecommerce_v111_tasks";
+  const LOG_KEY = "ai_ecommerce_v111_logs";
+  const BOOT_KEY = "ai_ecommerce_v111_booted";
 
   const priorityRank = { 高: 1, 中: 2, 低: 3 };
   const statusDone = new Set(["已完成", "已确认", "已拒绝"]);
@@ -19,6 +19,10 @@
       todoRoute: "business-actions",
       productRoute: "business-products",
       productId: "P002",
+      entityType: "商品",
+      entityId: "P002",
+      riskDomain: "售后",
+      actionType: "复查",
       imageLabel: "架",
       taskType: "售后优先",
       taskSignal: "先查售后",
@@ -46,6 +50,10 @@
       todoRoute: "business-actions",
       productRoute: "business-products",
       productId: "P003",
+      entityType: "商品",
+      entityId: "P003",
+      riskDomain: "售后",
+      actionType: "复查",
       imageLabel: "垫",
       taskType: "商品复查",
       taskSignal: "暂停投放",
@@ -73,6 +81,10 @@
       todoRoute: "business-actions",
       productRoute: "business-products",
       productId: "P001",
+      entityType: "商品",
+      entityId: "P001",
+      riskDomain: "价格",
+      actionType: "确认",
       imageLabel: "伞",
       taskType: "活动价确认",
       taskSignal: "确认利润线",
@@ -100,6 +112,10 @@
       todoRoute: "business-actions",
       productRoute: "business-products",
       productId: "P004",
+      entityType: "商品",
+      entityId: "P004",
+      riskDomain: "库存",
+      actionType: "复查",
       imageLabel: "盒",
       taskType: "库存承接",
       taskSignal: "确认补货周期",
@@ -127,6 +143,10 @@
       todoRoute: "business-actions",
       productRoute: "business-products",
       productId: "P002",
+      entityType: "商品",
+      entityId: "P002",
+      riskDomain: "上新",
+      actionType: "测试",
       imageLabel: "装",
       taskType: "竞品机会",
       taskSignal: "确认测试版本",
@@ -154,6 +174,10 @@
       todoRoute: "business-actions",
       productRoute: "business-products",
       productId: "P004",
+      entityType: "商品",
+      entityId: "P004",
+      riskDomain: "上新",
+      actionType: "复盘",
       imageLabel: "盒",
       taskType: "SKU 复盘",
       taskSignal: "复盘测试结果",
@@ -181,6 +205,10 @@
       todoRoute: "business-actions",
       productRoute: "data-check",
       productId: "R001",
+      entityType: "报表",
+      entityId: "refunds",
+      riskDomain: "报表",
+      actionType: "导入",
       imageLabel: "表",
       taskType: "报表补齐",
       taskSignal: "导入退款报表",
@@ -195,33 +223,6 @@
       reason: "流量测试和售后归因需要最新退款原因数据。",
       status: "待确认",
       manualOrder: 7,
-    },
-    {
-      id: "A008",
-      priority: "低",
-      priorityLevel: "good",
-      deadline: "每天 09:00",
-      timeBucket: "每日",
-      source: "AI 自动判定",
-      sourceModule: "总览 / 日报",
-      sourceRoute: "dashboard",
-      todoRoute: "business-actions",
-      productRoute: "business-report",
-      productId: "DAILY",
-      imageLabel: "报",
-      taskType: "经营日报",
-      taskSignal: "生成摘要",
-      productShort: "日报",
-      productTitle: "生成经营日报和下一轮任务摘要",
-      title: "生成经营日报和下一轮任务摘要",
-      platform: "经营单元",
-      store: "家居生活店铺组",
-      link: "#business-report",
-      judgmentTags: ["日报", "复盘", "明日任务"],
-      task: "生成日报，沉淀商品、竞品、上新、流量任务结论",
-      reason: "用于总览页任务摘要和明日复盘。",
-      status: "待确认",
-      manualOrder: 8,
     },
   ];
 
@@ -253,16 +254,51 @@
     return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
   }
 
+  function normalizeDomain(value) {
+    return String(value || "").trim() || "通用";
+  }
+
+  function inferRiskDomain(task) {
+    const text = [task.riskDomain, task.taskType, task.taskSignal, task.task, task.reason, ...(task.judgmentTags || [])].join(" ");
+    if (/售后|退款|材质|尺寸|安装|客服/.test(text)) return "售后";
+    if (/库存|补货|承接/.test(text)) return "库存";
+    if (/流量|ROI|投放|推广|点击|转化/.test(text)) return "流量";
+    if (/上新|主图|标题|SKU|测试版本|详情页/.test(text)) return "上新";
+    if (/价格|活动价|利润|券/.test(text)) return "价格";
+    if (/报表|导入|同步|数据/.test(text)) return "报表";
+    return "通用";
+  }
+
+  function inferActionType(task) {
+    const text = [task.actionType, task.taskType, task.taskSignal, task.task].join(" ");
+    if (/复盘/.test(text)) return "复盘";
+    if (/测试|版本|上新/.test(text)) return "测试";
+    if (/导入|同步/.test(text)) return "导入";
+    if (/观察/.test(text)) return "观察";
+    if (/确认/.test(text)) return "确认";
+    return "复查";
+  }
+
+  function buildDedupeKey(input = {}) {
+    if (input.dedupeKey) return input.dedupeKey;
+    const entityType = normalizeDomain(input.entityType || (String(input.productId || "").startsWith("R") ? "报表" : "商品"));
+    const entityId = normalizeDomain(input.entityId || input.productId || input.sourceEvent || input.id || "unknown");
+    const riskDomain = normalizeDomain(input.riskDomain || inferRiskDomain(input));
+    const actionType = normalizeDomain(input.actionType || inferActionType(input));
+    return `${entityType}:${entityId}:${riskDomain}:${actionType}`;
+  }
+
   function normalizeTask(task) {
     const priority = task.priority || "中";
     const createdAt = task.createdAt || new Date().toISOString();
     const id = task.id || makeId("A");
-    return {
+    const normalized = {
       todoRoute: "business-actions",
       productRoute: task.productRoute || task.sourceRoute || "business-products",
       logRoute: "business-report",
       status: "待确认",
       judgmentTags: [],
+      sourceTrail: [],
       actions: ["确认处理", "继续观察", "拒绝"],
       ...task,
       id,
@@ -272,10 +308,17 @@
       productTitle: task.productTitle || task.title || "经营任务",
       productShort: task.productShort || task.shortName || task.sourceName || task.productId || "任务",
       timeBucket: task.timeBucket || task.deadline || "本周内",
+      entityType: task.entityType || (String(task.productId || "").startsWith("R") ? "报表" : "商品"),
+      entityId: task.entityId || task.productId || id,
+      riskDomain: task.riskDomain || inferRiskDomain(task),
+      actionType: task.actionType || inferActionType(task),
       createdAt,
       updatedAt: task.updatedAt || createdAt,
       manualOrder: Number.isFinite(task.manualOrder) ? task.manualOrder : Date.now(),
     };
+    normalized.dedupeKey = buildDedupeKey(normalized);
+    normalized.sourceTrail = Array.from(new Set([...(normalized.sourceTrail || []), normalized.sourceModule || normalized.source || "系统"].filter(Boolean)));
+    return normalized;
   }
 
   function sortTasks(tasks) {
@@ -340,18 +383,52 @@
     return log;
   }
 
+  function findOpenTask(input) {
+    const key = typeof input === "string" ? input : buildDedupeKey(input || {});
+    return getTasks().find((item) => item.dedupeKey === key && !statusDone.has(item.status));
+  }
+
+  function mergeDuplicateTask(existing, incoming) {
+    const tasks = getTasks();
+    const index = tasks.findIndex((item) => item.id === existing.id);
+    if (index < 0) return existing;
+    const mergedTags = Array.from(new Set([...(existing.judgmentTags || []), ...(incoming.judgmentTags || [])].filter(Boolean))).slice(0, 8);
+    const mergedTrail = Array.from(new Set([...(existing.sourceTrail || []), incoming.sourceModule || incoming.source || "手动加入"].filter(Boolean)));
+    const merged = normalizeTask({
+      ...existing,
+      judgmentTags: mergedTags,
+      sourceTrail: mergedTrail,
+      updatedAt: new Date().toISOString(),
+      mergeCount: (existing.mergeCount || 0) + 1,
+    });
+    tasks[index] = merged;
+    setTasks(tasks);
+    createLog({
+      type: "任务合并",
+      task: merged,
+      status: "已合并",
+      action: `${incoming.sourceModule || incoming.source || "模块"} 重复加入：已合并到现有任务`,
+      reason: `去重键：${merged.dedupeKey}`,
+      result: "没有创建重复任务，已补充来源和判断标签。",
+    });
+    notify();
+    return merged;
+  }
+
   function createTask(taskInput) {
     const tasks = getTasks();
     const task = normalizeTask(taskInput);
-    const duplicate = tasks.find((item) => item.sourceEvent && task.sourceEvent && item.sourceEvent === task.sourceEvent && !statusDone.has(item.status));
+    const duplicate = tasks.find((item) => item.dedupeKey === task.dedupeKey && !statusDone.has(item.status));
     if (duplicate) {
-      createLog({ type: "重复任务", task: duplicate, status: "已存在", action: `${duplicate.taskType || duplicate.task || duplicate.title} 已在任务池中`, result: "没有重复创建，保留原任务。`".replace("`", "") });
-      return duplicate;
+      const merged = mergeDuplicateTask(duplicate, task);
+      merged.dedupeHit = true;
+      return merged;
     }
     tasks.push(task);
     setTasks(tasks);
     createLog({ type: "任务创建", task, status: "已加入任务池", action: `${task.sourceModule || task.source || "模块"} 创建任务：${task.taskType || task.task || task.title}`, result: "已同步到首页、待办和日志。" });
     notify();
+    task.dedupeHit = false;
     return task;
   }
 
@@ -413,6 +490,8 @@
     completeTask,
     pinTask,
     reorderTask,
+    findOpenTask,
+    buildDedupeKey,
     listLogs: () => getLogs(),
     createLog,
     subscribe(listener) {
