@@ -44,6 +44,19 @@
     return true;
   }
 
+  async function createTaskFromReport(module, entityId) {
+    const actions = {
+      product: createProductTask,
+      competitor: createCompetitorTask,
+      listing: createListingTask,
+      traffic: createTrafficTask,
+      report: createReportTask,
+    };
+    const action = actions[module];
+    if (!action || !entityId) return null;
+    return action(entityId);
+  }
+
   function buttonLabel(item = {}) {
     return findOpenTask(item) ? "已在任务清单" : "加入任务清单";
   }
@@ -57,39 +70,34 @@
   }
 
   async function createProductTask(productId) {
-    const product = data().products.find((item) => item.id === productId);
-    if (!product) return null;
+    const product = data().products.find((item) => item.id === productId) || { shortName: "该商品" };
     const task = await syncAfter(await window.AppApi.createProductTask(productId));
     return { task, message: notifyTask(task, product.shortName) };
   }
 
   async function createCompetitorTask(id) {
-    const item = data().competitors.find((row) => row.id === id);
-    if (!item) return null;
+    const item = data().competitors.find((row) => row.id === id) || { targetProduct: "该竞品" };
     const task = await syncAfter(await window.AppApi.createCompetitorTask(id));
     return { task, message: notifyTask(task, item.targetProduct) };
   }
 
   async function createListingTask(id) {
-    const item = data().listings.find((row) => row.id === id);
-    if (!item) return null;
+    const item = data().listings.find((row) => row.id === id) || { testType: "该上新测试" };
     const task = await syncAfter(await window.AppApi.createListingTask(id));
     return { task, message: notifyTask(task, item.testType) };
   }
 
   async function createTrafficTask(id) {
-    const item = data().traffic.find((row) => row.id === id);
-    if (!item) return null;
+    const item = data().traffic.find((row) => row.id === id) || { channel: "该流量测试" };
     const task = await syncAfter(await window.AppApi.createTrafficTask(id));
     return { task, message: notifyTask(task, item.channel) };
   }
 
   async function createReportTask(id) {
-    const card = data().reportGroups.flatMap((group) => group.reports).find((report) => report.id === id);
-    if (!card) return null;
+    const card = data().reportGroups.flatMap((group) => group.reports).find((report) => report.id === id) || { name: "该报表" };
     const task = await syncAfter(await window.AppApi.createReportTask(id));
     return { task, message: notifyTask(task, card.name) };
   }
 
-  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, productIdentity, identityFromItem, findOpenTask, openTodoTask, openTaskReport, openCandidateReport, buttonLabel, buttonClass };
+  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, createTaskFromReport, productIdentity, identityFromItem, findOpenTask, openTodoTask, openTaskReport, openCandidateReport, buttonLabel, buttonClass };
 })();
