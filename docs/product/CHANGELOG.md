@@ -1,5 +1,22 @@
 # Product Changelog
 
+## v1.1.2 - 2026-06-16
+
+### Product Decision
+- V1.1.2 fixes the fast module-switch crash introduced by observer-based task bridge binding.
+- The issue was not script load order; it was a DOM observer loop inside `web_demo/module-task-bridge.js`.
+- Product truth: bridge scripts may listen for module DOM changes, but repeated binding must be throttled and idempotent.
+
+### Changed
+- `module-task-bridge.js` now batches repeated `MutationObserver` callbacks through `requestAnimationFrame`.
+- Button label, class, and title updates now only write to the DOM when the value truly changes.
+- Fast module switching no longer causes the bridge to continuously rewrite the same buttons.
+- Frontend assets now use `?v=1.1.2`; API and health versions are aligned.
+
+### Product Boundary
+- This still uses front-end mock persistence.
+- The fix prevents render loops during rapid module navigation; it does not replace the later need for a cleaner component lifecycle or server-side task state.
+
 ## v1.1.1 - 2026-06-16
 
 ### Product Decision
@@ -43,30 +60,9 @@
 - Module actions create tasks and logs only. They do not directly change prices, launch ads, refund orders, publish listings, or modify real shop data.
 - Account roles, real-time monitoring, module Agent depth, and real platform connectors are reserved for later versions.
 
-## v1.0.24 - 2026-06-15
-
-### Product Decision
-- 首页 is now a command board: it tells the merchant task order, deadline, source, and where to continue handling.
-- Detailed handling text belongs in 待办, not in the 首页 summary.
-- Homepage tasks should use compact scheduling rows and judgment tags rather than large explanation cards.
-- Current product truth remains: `web_demo/index.html?v=1.0.24` → `web_demo/dashboard-hotfix.js?v=1.0.24` + `web_demo/dashboard-linked.css?v=1.0.24` → compact command-board task list.
-
-### Changed
-- Replaced long homepage task explanations with short task type, task signal, product short name, source, deadline, and judgment tags.
-- Added a homepage `时间系统` strip that groups active tasks by deadline bucket.
-- Simplified the row structure to emphasize task order, priority, deadline, source module, judgment tags, and navigation.
-- Reduced homepage actions to `进入待办`, `查看来源`, `商品`, and a weaker `完成` action.
-- Reworked `web_demo/dashboard-linked.css` so the homepage uses compact scheduling rows instead of heavy detail cards.
-- `web_demo/index.html` now bumps frontend assets to `?v=1.0.24`.
-- API version is aligned to `v1.0.24` for this product surface update.
-
-### Product Boundary
-- This is a merchant-facing command-board UI patch.
-- `完成` only changes local homepage state and does not update real ERP / CRM / platform records.
-- The task pool remains Mock data until the shared task store and persistence layer are attached.
-
 ## Earlier History
 
+- v1.0.24: 首页 became a command-board scheduling view.
 - v1.0.23: 首页 became a cross-module task summary.
 - v1.0.22: 报告 page became 日志 / operation log center.
 - v1.0.21: 确认 page became 待办 / task center.
