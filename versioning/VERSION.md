@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.2.0
+Current Version: v1.3.0
 
 ## Version History
 
@@ -15,7 +15,8 @@ Current Version: v1.2.0
 - v1.1.0: Added a unified front-end task store and dynamic module-driven task flow. 商品、竞品、上新、流量 and 报表 can now create shared tasks; dashboard and 待办 read the same task pool; task actions create operation logs; refresh preserves the demo task state through localStorage.
 - v1.1.1: Added task identity and dedupe keys. Manual module actions now check `entityType + entityId + riskDomain + actionType`; same-product same-problem tasks are merged or routed to existing 待办 instead of duplicated, while different problem domains can still create separate tasks.
 - v1.1.2: Fixed the module task bridge render loop. The bridge observer is now throttled with `requestAnimationFrame`, button state updates are idempotent, and repeated text updates no longer trigger continuous DOM mutation loops when switching modules.
-- v1.2.0: Added a unified front-end route lifecycle coordinator. Hash route listeners are now centrally scheduled, legacy MutationObserver-based hotfix callbacks are converted into route-after-render callbacks, and rapid module switching is batched through one lifecycle queue.
+- v1.2.0: Added a unified front-end route lifecycle coordinator. Hash route listeners are centrally scheduled, legacy MutationObserver-based hotfix callbacks are converted into route-after-render callbacks, and rapid module switching is batched through one lifecycle queue.
+- v1.3.0: Rebuilt the frontend into a modular route registry. The old `app-v2.js`, route lifecycle shim, hotfix page scripts, root task store, and task bridge scripts were removed from the active product entry. The new entry is `core/router.js + core/shell.js + stores/task-store.js + core/task-actions.js + modules/*/page.js + bootstrap.js`.
 
 ## Version Rules
 
