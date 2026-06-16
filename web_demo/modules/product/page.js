@@ -6,7 +6,7 @@
   function status(level) { return AppShell.statusClass(level); }
   function taskButton(item) {
     const task = AppTaskActions.findOpenTask(item);
-    return task ? `<button type="button" data-open-task="${s(task.id)}" class="ghost">已在任务清单</button>` : `<button type="button" data-task="${s(item.id)}">加入任务清单</button>`;
+    return task ? `<button type="button" data-open-task="${s(task.id)}" class="ghost">已在任务清单</button><button type="button" data-task-report="${s(task.id)}">任务报告</button>` : `<button type="button" data-candidate-report="product:${s(item.id)}">查看预警</button><button type="button" data-task="${s(item.id)}">加入任务清单</button>`;
   }
   function renderRow(product) {
     return `<article class="product-row"><div class="product-title-cell"><div class="product-thumb">${s(product.imageLabel)}</div><div class="product-title-block"><strong>${s(product.title)}</strong><small>${s(product.id)} · <a href="${s(product.link)}" target="_blank" rel="noreferrer">查看商品链接</a></small><span>${s(product.platform)} · ${s(product.store)}</span></div></div><div class="product-metric-strip"><div class="product-number-cell ${status(product.inventoryLevel)}"><span>库存</span><strong>${s(product.inventory)}</strong><small>${s(product.inventoryStatus)}</small></div><div class="product-number-cell"><span>售价</span><strong>¥${s(product.price)}</strong><small>成本 ¥${s(product.cost)}</small></div><div class="product-number-cell"><span>毛利率</span><strong>${s(product.grossMargin)}</strong><small>活动需复核</small></div><div class="product-number-cell ${status(product.afterSalesLevel)}"><span>售后</span><strong>${s(product.afterSales)}</strong><small>售后状态</small></div></div><div class="product-actions"><button type="button" data-detail="${s(product.id)}">详情</button><button type="button" data-copy="${s(product.id)}">复制链接</button>${taskButton(product)}</div></article>`;
@@ -25,6 +25,8 @@
       ctx.delegate("[data-detail]", "click", (_, node) => { activeId = node.dataset.detail; notice = ""; AppRouter.schedule("product-detail"); });
       ctx.delegate("[data-back]", "click", () => { activeId = null; notice = ""; AppRouter.schedule("product-back"); });
       ctx.delegate("[data-open-task]", "click", (_, node) => AppTaskActions.openTodoTask(node.dataset.openTask));
+      ctx.delegate("[data-task-report]", "click", (_, node) => AppTaskActions.openTaskReport(node.dataset.taskReport));
+      ctx.delegate("[data-candidate-report]", "click", (_, node) => { const [module, id] = node.dataset.candidateReport.split(":"); AppTaskActions.openCandidateReport(module, id); });
       ctx.delegate("[data-task]", "click", async (_, node) => { notice = "任务提交中..."; AppRouter.schedule("product-task-start"); const result = await AppTaskActions.createProductTask(node.dataset.task); notice = result?.message || "任务已处理。"; AppRouter.schedule("product-task"); });
       ctx.delegate("[data-copy]", "click", async (_, node) => { const product = products().find((item) => item.id === node.dataset.copy); if (!product) return; try { await navigator.clipboard.writeText(product.link); notice = `${product.shortName}商品链接已复制。`; } catch { notice = product.link; } AppRouter.schedule("product-copy"); });
       ctx.addCleanup(AppTaskStore.subscribe(() => AppRouter.schedule("task-store")));
