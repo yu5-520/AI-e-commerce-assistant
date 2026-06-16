@@ -1,23 +1,27 @@
 # Product Changelog
 
-## v2.3.3 - 2026-06-16
+## v2.3.4 - 2026-06-16
 
 ### Product Decision
-- V2.3.3 changes owner-side `利润预算` into `供投财务`.
-- Product truth: 老板不是只看利润结果，而是看货、流量、钱三条链路有没有一起跑顺。
-- 供应链、投流和财务需要放在同一个经营判断页面里。
+- V2.3.4 changes owner-side `组织效率` from task-flow metrics into an organization governance console.
+- Product truth: `人员总览`看人现在忙不忙；`组织效率`看组织结构、汇报链路、账号权限、店铺归属和权限治理。
+- 账号页只回答“我是谁”，组织效率回答“组织怎么运转”。
 
 ### Changed
-- Owner navigation label changed from `利润预算` to `供投财务`.
-- Added supply overview: 供应商、品类、采购成本变化、供货周期、库存金额、安全库存、状态.
-- Added traffic overview: 广告消耗、ROAS、点击成本、转化率、付费订单、自然订单、状态.
-- Added finance summary: 销售额、毛利、广告费、退款、物流、平台扣点、库存资金、净利润.
-- Added `web_demo/supply-finance.css`.
-- Frontend assets now use `?v=2.3.3`; API and health versions are aligned.
+- Added position relationship network: 老板 → 店群总管 → 运营 / 财务 / 观察者.
+- Moved role / account permission governance into `组织效率`.
+- Added account role control, store authorization control, and role permission template control.
+- Account page management button now routes to `组织效率` instead of the legacy role console.
+- Added organization governance style file: `web_demo/org-efficiency.css`.
+- Frontend assets now use `?v=2.3.4`; API and health versions are aligned.
 
 ### Product Boundary
-- This remains mock operating data.
-- Real version should connect supplier records, inventory sync, ad platform data, order profit data, and finance settlement data.
+- This remains mock account governance.
+- Real version should add persistent org tree, manager assignment, tenant isolation, RBAC audit logs, and approval flow for high-permission changes.
+
+## v2.3.3 - 2026-06-16
+
+- Owner-side `利润预算` changed into `供投财务`.
 
 ## v2.3.2 - 2026-06-16
 
