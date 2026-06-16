@@ -5,7 +5,7 @@ Current runtime chain:
     ↓
     / serves web_demo/index.html
     ↓
-    web_demo/app-v2.js calls /api/business/*
+    modular frontend: core/router.js registers modules/*/page.js
 
 The app keeps only the current product-facing API surface plus health,
 data-import, approval, and system maintenance routes. Legacy demo/debug route
@@ -30,7 +30,7 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="1.2.0",
+    version="1.3.0",
     description="Product API for ERP-based ecommerce operating unit advice.",
 )
 
@@ -55,7 +55,7 @@ def index() -> Any:
     return {"message": "AI ERP Operating Advisor API is running. Visit /api/business/today or /docs."}
 
 
-# Current product API used by web_demo/app-v2.js.
+# Current product API used by the modular frontend.
 app.include_router(business.router)
 
 # Supporting routes still used by the product shell and deployment checks.
