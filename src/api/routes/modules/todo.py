@@ -8,8 +8,11 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from src.services.account_service import current_user, user_has_permission, user_id_from_headers
 from src.services.module_task_service import (
+    accept_task,
     assign_task,
     complete_task,
+    get_task_counters_for_user,
+    list_task_events_for_user,
     list_tasks,
     pin_task,
     reorder_task,
@@ -17,6 +20,7 @@ from src.services.module_task_service import (
     review_task,
     split_task_for_operator,
     submit_task,
+    write_task_to_recap,
 )
 
 router = APIRouter()
@@ -44,10 +48,24 @@ def todo(
     return {
         "tasks": list_tasks(assignee_id=mine_assignee, review_scope=review_scope, viewer_id=viewer_id),
         "activeTasks": list_tasks(active_only=True, assignee_id=mine_assignee, review_scope=review_scope, viewer_id=viewer_id),
+        "events": list_task_events_for_user(viewer_id),
+        "counters": get_task_counters_for_user(viewer_id),
         "scope": scope,
         "viewer": current_user(viewer_id),
-        "rule": "任务按当前账号的角色、店铺权限、负责人、复核人和可见角色过滤。",
+        "rule": "任务按当前账号的角色、店铺权限、负责人、复核人和可见范围过滤；动作会生成生命周期事件并同步相关账号视图。",
     }
+
+
+@router.get("/todo/events")
+def todo_events(request: Request) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    return {"events": list_task_events_for_user(viewer_id), "counters": get_task_counters_for_user(viewer_id), "viewer": current_user(viewer_id)}
+
+
+@router.get("/todo/counters")
+def todo_counters(request: Request) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    return {"counters": get_task_counters_for_user(viewer_id), "viewer": current_user(viewer_id)}
 
 
 @router.post("/todo/{task_id}/split")
@@ -59,6 +77,7 @@ def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bod
         task_id,
         operator_id=body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId"),
         note=body.get("note") or "",
+        actor_user_id=viewer_id,
     )
     if not task:
         raise HTTPException(status_code=400, detail="cannot split task")
@@ -79,6 +98,17 @@ def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     )
     if not task:
         raise HTTPException(status_code=400, detail="cannot assign task")
+    return task
+
+
+@router.post("/todo/{task_id}/accept")
+def accept_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"submit_tasks", "handle_tasks", "assign_tasks", "dispatch_tasks"})
+    body = body or {}
+    task = accept_task(task_id, note=body.get("note") or "", actor_user_id=viewer_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="cannot accept task")
     return task
 
 
@@ -110,6 +140,22 @@ def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     )
     if not task:
         raise HTTPException(status_code=400, detail="cannot review task")
+    return task
+
+
+@router.post("/todo/{task_id}/recap")
+def recap_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"review_tasks", "assign_tasks", "dispatch_tasks"})
+    body = body or {}
+    task = write_task_to_recap(
+        task_id,
+        recap_target=body.get("recap_target") or body.get("recapTarget") or "日报",
+        note=body.get("note") or "",
+        actor_user_id=viewer_id,
+    )
+    if not task:
+        raise HTTPException(status_code=400, detail="cannot write task to recap")
     return task
 
 
