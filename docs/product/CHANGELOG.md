@@ -1,24 +1,27 @@
 # Product Changelog
 
-## v2.3.7 - 2026-06-16
+## v2.3.8 - 2026-06-16
 
 ### Product Decision
-- V2.3.7 changes `账号` into a basic account center.
-- Product truth: 账号管登录、安全、绑定、通知和本地账号操作；组织效率管职位关系、角色权限、店铺范围和权限治理。
-- `账号`不再承载复杂权限管理。
+- V2.3.8 updates the 店群总管 side after the owner-side modules were rebuilt.
+- Product truth: 老板定方向和周期任务；店群总管承接任务、拆分派发、复核运营、提交复盘。
+- 店群总管不是另一个老板，也不是普通运营；它是老板任务和一线运营之间的执行管理层。
 
 ### Changed
-- Account page now shows profile, account id, current login identity, phone, email, and account status.
-- Added security settings: 修改密码、绑定手机号、绑定邮箱、二次验证、登录设备.
-- Added binding and authorization status: 微信、企业微信、淘宝、拼多多、抖音小店、ERP 数据授权.
-- Added notification settings: 日报提醒、周报提醒、任务提醒、审计提醒.
-- Added `web_demo/account-center.css` for the basic account center layout.
-- Legacy `role-console` remains only as compatibility and points users back to `组织效率`.
-- Frontend assets now use `?v=2.3.7`; API and health versions are aligned.
+- Manager navigation changed to: 总览、店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表、账号.
+- Manager dashboard changed into 店群执行总览.
+- 商品、竞品、上新、流量 no longer appear as scattered manager-side first-level tabs; they are grouped into 经营模块.
+- Added manager-specific pages for task intake, dispatch, review, operation modules, retrospective submission, and data reports.
+- Added `web_demo/modules/manager/page.js` and `web_demo/manager-console.css`.
+- Frontend assets now use `?v=2.3.8`; API and health versions are aligned.
 
 ### Product Boundary
-- This remains mock account settings.
-- Real version should connect password management, SMS / email verification, OAuth bindings, login-device records, and notification channels.
+- This remains mock manager workflow data.
+- Real version should connect owner retrospective task drafts, assignment records, operator submissions, review outcomes, and daily / weekly / monthly report submission APIs.
+
+## v2.3.7 - 2026-06-16
+
+- `账号` changed into a basic account center.
 
 ## v2.3.6 - 2026-06-16
 
