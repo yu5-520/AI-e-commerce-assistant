@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.3.0 - 2026-06-16
+
+### Added
+- Added owner-facing `店群总览` route at `store-overview`.
+- Added platform and store-level summary cards for platforms, store count, online products, orders, sales, profit, comments, refund rate, inventory amount, and pending tasks.
+
+### Changed
+- Removed the redundant owner `经营驾驶舱` navigation route.
+- Replaced owner `风险中心` with `店群总览` so the owner first sees the business operating board instead of direct risk conclusions.
+- `web_demo/modules/executive/page.js` now exports `StoreOverviewPage` and no longer exports `ExecutiveCockpitPage` / `RiskCenterPage`.
+- Owner visible modules now use `store-overview`, `task-command`, `profit-budget`, `org-efficiency`, `review-audit`, `accounts`, and `role-console`.
+- Frontend assets were bumped to `?v=2.3.0`.
+- FastAPI app version and health version are aligned to `2.3.0`.
+
+### Product Engineering Rule
+- Boss accounts should see the operating board before risk conclusions.
+- Risk is not the first layer; it should grow out of platform, store, product, order, sales, profit, comment, refund, inventory, and task data.
+- First-line operation modules remain evidence and execution layers for manager / operator roles.
+
 ## v2.2.0 - 2026-06-16
 
 ### Added
