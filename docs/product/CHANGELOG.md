@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.5.1 - 2026-06-16
+
+### Product Decision
+- V1.5.1 removes the remaining task-identity duplication and closes the dashboard service boundary.
+- Product truth: backend owns task identity, active-task state, and dashboard service composition; frontend only hydrates and displays.
+
+### Changed
+- Added `src/services/dashboard_service.py` as the dashboard module service boundary.
+- Dashboard route now calls `dashboard_service.get_dashboard_summary()` instead of directly calling old business view helpers.
+- Added backend task-state helpers in `module_task_service.py` for open-task lookup and task-state annotation.
+- Product list responses now include `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask` from the backend.
+- Product task creation and product list task-state annotation now share the same backend `product_task_payload()` rule.
+- Frontend `task-store.js` no longer infers risk domain or action type; it accepts backend identity fields as source of truth.
+- Frontend product button state now reads backend-provided task identity rather than recalculating it from product fields.
+- API badge tooltip now exposes recent fallback failures so server chain breaks are easier to find.
+- Frontend assets now use `?v=1.5.1`; API and health versions are aligned.
+
+### Product Boundary
+- Server task/log state is still in-memory mock persistence.
+- `business_view_service.py` remains available for dashboard workflow summary while the deeper workflow service is migrated later.
+- Database persistence, account roles, and multi-user consistency remain later work.
+
 ## v1.5.0 - 2026-06-16
 
 ### Product Decision
@@ -47,34 +69,9 @@
 - Server restart will reset demo task/log state.
 - Real account roles, permissions, multi-user consistency, and ERP / CRM connectors remain later work.
 
-## v1.4.0 - 2026-06-16
-
-### Product Decision
-- V1.4.0 aligns the backend with the v1.3 modular frontend.
-- Product truth: one frontend route module should map to one backend module endpoint under `/api/modules/*`.
-- The old `/api/business/*` product path is removed from the active backend entry to avoid two competing interface families.
-
-### Changed
-- Added modular backend API under `src/api/routes/modules/__init__.py`.
-- Added module data endpoints for dashboard, operating unit, report, product, competitor, listing, traffic, todo, and log.
-- Added module action endpoints for creating task payloads from product, competitor, listing, traffic, and report modules.
-- Added `web_demo/core/api-client.js` as the unified frontend request client.
-- `bootstrap.js` now prefetches module data before starting the frontend router.
-- `index.html` now loads `api-client.js` and uses `?v=1.4.0`.
-- `src/api/main.py` now mounts `modules.router` instead of `business.router`.
-- Health now reports `api_entry: /api/modules/*`.
-
-### Removed
-- Removed the legacy backend router file `src/api/routes/business.py`.
-- Removed active `/api/business/*` routes from the application entrypoint.
-
-### Product Boundary
-- This is an interface architecture refactor.
-- The modular endpoints still return Mock ERP / CRM product data and task payloads.
-- Real server-side task persistence, account roles, permissions, and ERP / CRM connectors remain later work.
-
 ## Earlier History
 
+- v1.4.0: Backend aligned with modular frontend and removed active `/api/business/*` routes.
 - v1.3.0: Frontend changed from hotfix-script stacking into a modular route-registry structure.
 - v1.2.0: Added unified front-end route lifecycle coordinator.
 - v1.1.2: Fixed fast module-switch crash introduced by observer-based task bridge binding.
