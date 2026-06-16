@@ -1,23 +1,27 @@
 # Product Changelog
 
-## v2.3.8 - 2026-06-16
+## v2.3.9 - 2026-06-16
 
 ### Product Decision
-- V2.3.8 updates the 店群总管 side after the owner-side modules were rebuilt.
-- Product truth: 老板定方向和周期任务；店群总管承接任务、拆分派发、复核运营、提交复盘。
-- 店群总管不是另一个老板，也不是普通运营；它是老板任务和一线运营之间的执行管理层。
+- V2.3.9 upgrades 店群总管 from a static execution board into an actionable task dispatch workbench.
+- Product truth: 店群总管必须能按时间、优先级、来源、状态排序任务，并能从任务卡直接进入详情、拆分、派发和复核。
+- 任务详情页是后续 Agent 判断的承接层，不是普通列表行。
 
 ### Changed
-- Manager navigation changed to: 总览、店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表、账号.
-- Manager dashboard changed into 店群执行总览.
-- 商品、竞品、上新、流量 no longer appear as scattered manager-side first-level tabs; they are grouped into 经营模块.
-- Added manager-specific pages for task intake, dispatch, review, operation modules, retrospective submission, and data reports.
-- Added `web_demo/modules/manager/page.js` and `web_demo/manager-console.css`.
-- Frontend assets now use `?v=2.3.8`; API and health versions are aligned.
+- Added sort controls for manager task list: 按时间、按优先级、按来源、按状态.
+- Added task actions on manager cards: 查看详情、拆分任务、派发运营.
+- Added `manager-task-detail` route with task source, source report, impact scope, data evidence, Agent judgment placeholders, and suggested split actions.
+- Added mock task state transitions: 待拆分 → 待派发 → 已派发 → 待复核 → 已归档.
+- Manager dashboard task cards can now jump to task detail, dispatch, or review.
+- Frontend assets now use `?v=2.3.9`; API and health versions are aligned.
 
 ### Product Boundary
-- This remains mock manager workflow data.
-- Real version should connect owner retrospective task drafts, assignment records, operator submissions, review outcomes, and daily / weekly / monthly report submission APIs.
+- This remains local mock task state.
+- Real version should connect task splitting records, operator assignment APIs, task detail reports, Agent evidence retrieval, review records, and retrospective submission APIs.
+
+## v2.3.8 - 2026-06-16
+
+- 店群总管 side changed into execution management workflow.
 
 ## v2.3.7 - 2026-06-16
 
