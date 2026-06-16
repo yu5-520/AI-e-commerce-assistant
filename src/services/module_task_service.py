@@ -1,18 +1,16 @@
 """Role-scoped task flow service for the modular product runtime.
 
-V2.5.0 changes the task system from a single-account todo list into a
-role-permission driven task flow:
+V2.5.1 adds cross-account lifecycle sync on top of the V2.5.0
+role-permission task flow:
 
-    warning / review / manual task
-    -> role-visible task object
-    -> manager split / dispatch
-    -> operator submit
-    -> manager review
-    -> archive / retrospective
+    one task record
+    -> many role-specific views
+    -> lifecycle event stream
+    -> counters / reminders for related accounts
 
-The service is still in-memory for the MVP, but every task now carries store
-scope, role scope, owner / assignee / reviewer, source type, parent task, and
-role-specific actions.
+The service is still in-memory for the MVP, but all task actions now pass
+through a transition function that updates task state, writes a task event,
+writes a log, and returns task / event / account update context.
 """
 
 from __future__ import annotations
@@ -32,9 +30,23 @@ from src.services.account_service import (
 )
 
 PRIORITY_RANK = {"高": 1, "中": 2, "低": 3}
-DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过"}
-OPERATOR_ROUTES = {"business-products", "business-competitors", "business-listing", "business-traffic", "business-actions", "business-report", "operating-unit", "data-check"}
+DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
 FINANCE_DOMAINS = {"报表", "价格", "流量", "库存", "利润", "财务"}
+EVENT_LABELS = {
+    "task_created": "任务创建",
+    "task_merged": "任务合并",
+    "manager_split": "总管拆分",
+    "manager_assigned": "总管派发",
+    "operator_accepted": "运营接收",
+    "operator_submitted": "运营提交",
+    "manager_approved": "复核通过",
+    "manager_returned": "复核退回",
+    "task_completed": "任务完成",
+    "task_written_to_recap": "写入复盘",
+    "task_pinned": "任务置顶",
+    "task_reordered": "任务排序",
+    "demo_reset": "演示重置",
+}
 
 
 def now_time() -> str:
@@ -165,9 +177,7 @@ def infer_task_layer(task: Dict[str, Any], source_type: str, risk_domain: str) -
 def default_visible_roles(layer: str, risk_domain: str) -> List[str]:
     if layer == "owner_decision":
         return ["owner"]
-    if layer == "review_audit":
-        return ["owner", "manager"]
-    if layer == "cycle_draft":
+    if layer in {"review_audit", "cycle_draft"}:
         return ["owner", "manager"]
     if layer == "manager_dispatch":
         return ["manager"]
@@ -231,18 +241,18 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
         if operator:
             item["assigneeId"] = operator["id"]
             item.setdefault("workflowStatus", "已派发")
-            item.setdefault("status", "待确认")
+            item.setdefault("status", "待接收")
     elif item["taskLayer"] == "finance_check" and not item.get("assigneeId"):
         finance = finance_user()
         if finance:
             item["assigneeId"] = finance["id"]
             item.setdefault("workflowStatus", "已派发")
-            item.setdefault("status", "待确认")
+            item.setdefault("status", "待接收")
     else:
         item.setdefault("assigneeId", None)
 
-    item.setdefault("status", "待拆分" if item["taskLayer"] == "manager_dispatch" else "待确认")
-    item.setdefault("workflowStatus", "待拆分" if item["taskLayer"] == "manager_dispatch" else "待派发")
+    item.setdefault("status", "待拆分" if item["taskLayer"] == "manager_dispatch" else "待接收")
+    item.setdefault("workflowStatus", "待拆分" if item["taskLayer"] == "manager_dispatch" else "待接收")
     item.setdefault("reviewerId", default_reviewer()["id"] if item["taskLayer"] in {"operator_execution", "finance_check"} else None)
     item["assigneeName"] = user_display(item.get("assigneeId"), "未派发")
     item["reviewerName"] = user_display(item.get("reviewerId"), "未设置复核人")
@@ -251,6 +261,13 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
     item.setdefault("assignmentNote", "")
     item.setdefault("submissionNote", "")
     item.setdefault("reviewNote", "")
+    item.setdefault("lastEventType", None)
+    item.setdefault("lastEventMessage", "")
+    item.setdefault("lastEventAt", None)
+    item.setdefault("acceptedAt", None)
+    item.setdefault("submittedAt", None)
+    item.setdefault("reviewedAt", None)
+    item.setdefault("recapWrittenAt", None)
     item.setdefault("visibleRoleIds", default_visible_roles(item["taskLayer"], item["riskDomain"]))
     visible_users = set(item.get("visibleUserIds") or [])
     if item.get("assigneeId"):
@@ -294,8 +311,16 @@ def seed_logs() -> List[Dict[str, Any]]:
     return [{"id": "G001", "time": "16:08", "type": "任务进入池", "source": "流量触发", "status": "已加入任务池", "level": "danger", "imageLabel": "架", "title": "厨房置物架免打孔收纳架壁挂多层家用置物架", "platform": "拼多多", "store": "家居百货店", "productId": "P002", "action": "搜索推广测试进入统一任务池", "reason": "ROI 1.1，退款率 6.8%。", "result": "进入售后归因，自动分配给负责店铺运营，并同步总管可见。", "route": "business-traffic", "taskRoute": "business-actions", "operator": "系统", "createdAt": now_iso()}]
 
 
+def seed_events(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {"id": "E-SEED-001", "taskId": task["id"], "eventType": "task_created", "eventLabel": EVENT_LABELS["task_created"], "actorUserId": "system", "actorRole": "system", "actorName": "系统预警", "fromStatus": None, "toStatus": task.get("status"), "fromWorkflowStatus": None, "toWorkflowStatus": task.get("workflowStatus"), "targetUserIds": list(dict.fromkeys([value for value in [task.get("assigneeId"), task.get("reviewerId")] if value])), "targetRoleIds": task.get("visibleRoleIds") or [], "message": "任务已按角色、店铺和账号权限生成可见视图。", "createdAt": task.get("createdAt") or now_iso()}
+        for task in tasks
+    ]
+
+
 TASKS: List[Dict[str, Any]] = seed_tasks()
 LOGS: List[Dict[str, Any]] = seed_logs()
+TASK_EVENTS: List[Dict[str, Any]] = seed_events(TASKS)
 
 
 def sort_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -314,28 +339,138 @@ def task_group_visible(task: Dict[str, Any], user: Dict[str, Any]) -> bool:
     return user_store_overlap(task, user)
 
 
+def default_event_targets(task: Dict[str, Any], event_type: str) -> Dict[str, List[str]]:
+    roles = set(task.get("visibleRoleIds") or [])
+    users = set(task.get("visibleUserIds") or [])
+    if event_type in {"manager_assigned", "manager_split", "manager_returned"}:
+        roles.update(["manager", "operator"])
+        if task.get("assigneeId"):
+            users.add(task["assigneeId"])
+    elif event_type in {"operator_accepted", "operator_submitted"}:
+        roles.add("manager")
+        if task.get("reviewerId"):
+            users.add(task["reviewerId"])
+        if task.get("assigneeId"):
+            users.add(task["assigneeId"])
+    elif event_type in {"manager_approved", "task_completed", "task_written_to_recap"}:
+        roles.update(["manager", "operator"])
+        if task.get("recapTarget") in {"周报", "月报"} or event_type == "task_written_to_recap":
+            roles.add("owner")
+        if task.get("assigneeId"):
+            users.add(task["assigneeId"])
+        if task.get("reviewerId"):
+            users.add(task["reviewerId"])
+    elif event_type == "task_created":
+        roles.update(task.get("visibleRoleIds") or [])
+    return {"targetRoleIds": list(roles), "targetUserIds": list(users)}
+
+
+def create_task_event(
+    task: Dict[str, Any],
+    event_type: str,
+    actor_user_id: str | None = None,
+    from_status: str | None = None,
+    from_workflow: str | None = None,
+    message: str | None = None,
+    target_user_ids: List[str] | None = None,
+    target_role_ids: List[str] | None = None,
+) -> Dict[str, Any]:
+    actor = get_user(actor_user_id) if actor_user_id and actor_user_id != "system" else None
+    targets = default_event_targets(task, event_type)
+    event = {
+        "id": make_id("E"),
+        "taskId": task.get("id"),
+        "eventType": event_type,
+        "eventLabel": EVENT_LABELS.get(event_type, event_type),
+        "actorUserId": actor_user_id or "system",
+        "actorRole": actor.get("roleId") if actor else "system",
+        "actorName": actor.get("name") if actor else "系统",
+        "fromStatus": from_status,
+        "toStatus": task.get("status"),
+        "fromWorkflowStatus": from_workflow,
+        "toWorkflowStatus": task.get("workflowStatus"),
+        "targetUserIds": list(dict.fromkeys(target_user_ids if target_user_ids is not None else targets["targetUserIds"])),
+        "targetRoleIds": list(dict.fromkeys(target_role_ids if target_role_ids is not None else targets["targetRoleIds"])),
+        "message": message or EVENT_LABELS.get(event_type, "任务已更新"),
+        "createdAt": now_iso(),
+    }
+    TASK_EVENTS.insert(0, event)
+    del TASK_EVENTS[300:]
+    task["lastEventType"] = event_type
+    task["lastEventMessage"] = event["message"]
+    task["lastEventAt"] = event["createdAt"]
+    return deepcopy(event)
+
+
+def event_visible_to_user(event: Dict[str, Any], user_id: str | None = None) -> bool:
+    user = get_user(user_id)
+    if not user:
+        return True
+    if event.get("actorUserId") == user.get("id"):
+        return True
+    if user.get("id") in set(event.get("targetUserIds") or []):
+        return True
+    if user.get("roleId") in set(event.get("targetRoleIds") or []):
+        task = find_task(event.get("taskId"))
+        return True if not task else task_visible_to_viewer(task, user_id)
+    return False
+
+
+def list_task_events_for_user(viewer_id: str | None = None, limit: int = 30) -> List[Dict[str, Any]]:
+    return [deepcopy(event) for event in TASK_EVENTS if event_visible_to_user(event, viewer_id)][:limit]
+
+
+def get_task_counters_for_user(viewer_id: str | None = None) -> Dict[str, Any]:
+    visible = list_tasks(active_only=True, viewer_id=viewer_id)
+    events = list_task_events_for_user(viewer_id, limit=30)
+    return {
+        "visibleActive": len(visible),
+        "waitingAccept": len([task for task in visible if task.get("status") in {"待接收", "待确认"}]),
+        "processing": len([task for task in visible if task.get("status") == "处理中"]),
+        "submitted": len([task for task in visible if task.get("status") in {"已提交", "待复核"}]),
+        "reviewing": len([task for task in visible if task.get("status") == "待复核"]),
+        "returned": len([task for task in visible if task.get("workflowStatus") == "已退回"]),
+        "waitingRecap": len([task for task in visible if task.get("status") == "已完成" and task.get("recapTarget") in {"日报", "周报", "月报"}]),
+        "recentEvents": len(events),
+        "latestEvent": events[0] if events else None,
+    }
+
+
 def available_actions_for_viewer(task: Dict[str, Any], viewer_id: str | None = None) -> List[str]:
     user = get_user(viewer_id)
     if not user:
-        return ["report", "assign", "submit", "review", "pin", "move", "source"]
+        return ["report", "assign", "accept", "submit", "review", "write_recap", "pin", "move", "source"]
     role_id = user.get("roleId")
+    status = task.get("status")
     if role_id == "owner":
-        return ["report", "source"] if task.get("taskLayer") == "operator_execution" else ["report", "source", "review"]
+        actions = ["report", "source"]
+        if task.get("taskLayer") in {"owner_decision", "review_audit", "cycle_draft"}:
+            actions.append("review")
+        return actions
     if role_id == "manager":
         actions = ["report", "source", "pin", "move"]
         if task.get("taskLayer") in {"manager_dispatch", "operator_execution", "finance_check"}:
-            actions.insert(1, "assign")
+            actions.append("assign")
+        if status in {"已提交", "待复核"}:
             actions.append("review")
+        if status in {"已完成", "已通过", "已归档"}:
+            actions.append("write_recap")
         return actions
     if role_id == "operator":
         actions = ["report", "source"]
         if task.get("assigneeId") == user.get("id") or user_store_overlap(task, user):
-            actions.insert(1, "submit")
+            if status in {"待接收", "待确认", "已派发"}:
+                actions.append("accept")
+            if status in {"处理中", "已退回"} or task.get("workflowStatus") == "已退回":
+                actions.append("submit")
         return actions
     if role_id == "finance":
         actions = ["report", "source"]
         if task.get("assigneeId") == user.get("id") or task.get("riskDomain") in FINANCE_DOMAINS:
-            actions.append("submit")
+            if status in {"待接收", "待确认", "已派发"}:
+                actions.append("accept")
+            if status in {"处理中", "已退回"} or task.get("workflowStatus") == "已退回":
+                actions.append("submit")
         return actions
     return ["report", "source"]
 
@@ -375,6 +510,7 @@ def project_task_for_viewer(task: Dict[str, Any], viewer_id: str | None = None) 
         if user.get("roleId") == "observer":
             item["reason"] = "该任务存在经营风险，已进入处理流程。"
             item["judgmentTags"] = ["已脱敏", "只读摘要"]
+    item["recentEvents"] = [event for event in TASK_EVENTS if event.get("taskId") == item.get("id")][:5]
     return item
 
 
@@ -393,7 +529,7 @@ def list_logs() -> List[Dict[str, Any]]:
     return deepcopy(LOGS)
 
 
-def find_task(task_id: str) -> Dict[str, Any] | None:
+def find_task(task_id: str | None) -> Dict[str, Any] | None:
     return next((item for item in TASKS if item.get("id") == task_id), None)
 
 
@@ -450,14 +586,80 @@ def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
     return deepcopy(log)
 
 
+def transition_task(task_id: str, action: str, actor_user_id: str | None = None, payload: Dict[str, Any] | None = None) -> Dict[str, Any] | None:
+    payload = payload or {}
+    task = find_task(task_id)
+    if not task:
+        return None
+    from_status = task.get("status")
+    from_workflow = task.get("workflowStatus")
+    actor = get_user(actor_user_id) if actor_user_id else None
+    event_type = action
+    log_type = EVENT_LABELS.get(action, "任务流转")
+    log_action = log_type
+    log_result = "任务状态已同步给相关账号。"
+
+    if action == "manager_assigned":
+        assignee = get_user(payload.get("assignee_id") or payload.get("assigneeId")) if (payload.get("assignee_id") or payload.get("assigneeId")) else operator_for_store(task.get("storeIds") or [], task.get("riskDomain"))
+        reviewer = get_user(payload.get("reviewer_id") or payload.get("reviewerId")) if (payload.get("reviewer_id") or payload.get("reviewerId")) else default_reviewer()
+        if not assignee or not reviewer:
+            return None
+        task.update({"status": "待接收", "workflowStatus": "已派发", "taskLayer": "operator_execution", "assigneeId": assignee["id"], "reviewerId": reviewer["id"], "assignedById": actor_user_id, "assignmentNote": payload.get("note") or "总管已派发任务。", "assignedAt": now_iso(), "visibleRoleIds": ["manager", "operator"]})
+        log_action = f"任务已派发给 {assignee['name']}"
+        log_result = "运营账号待接收，总管账号同步看到已派发状态。"
+    elif action == "operator_accepted":
+        task.update({"status": "处理中", "workflowStatus": "处理中", "acceptedById": actor_user_id or task.get("assigneeId"), "acceptedByName": user_display(actor_user_id or task.get("assigneeId"), "运营账号"), "acceptedAt": now_iso()})
+        log_action = "运营已接收任务"
+        log_result = "运营账号进入处理中；总管账号同步看到已接收 / 处理中。"
+    elif action == "operator_submitted":
+        submitter_id = actor_user_id or task.get("assigneeId")
+        task.update({"status": "待复核", "workflowStatus": "已提交", "submittedById": submitter_id, "submittedByName": user_display(submitter_id, "运营账号"), "submissionNote": payload.get("note") or "运营已完成处理，等待店群总管复核。", "submittedAt": now_iso()})
+        log_action = "运营已提交处理结果"
+        log_result = "运营账号显示已提交；总管账号待复核数量同步增加。"
+    elif action == "manager_returned":
+        task.update({"status": "已退回", "workflowStatus": "已退回", "reviewedById": actor_user_id or task.get("reviewerId"), "reviewedByName": user_display(actor_user_id or task.get("reviewerId"), "店群总管"), "reviewNote": payload.get("note") or "复核退回，需要运营补充处理。", "reviewedAt": now_iso()})
+        log_action = "店群总管退回复查"
+        log_result = "运营账号同步看到已退回；总管账号等待重新提交。"
+    elif action == "manager_approved":
+        reviewer_id = actor_user_id or task.get("reviewerId")
+        task.update({"status": "已完成", "workflowStatus": "已归档", "candidateStatus": "completed_archived", "reviewedById": reviewer_id, "reviewedByName": user_display(reviewer_id, "店群总管"), "reviewNote": payload.get("note") or "复核通过，任务归档。", "reviewedAt": now_iso(), "completedAt": now_iso()})
+        log_action = "店群总管复核通过"
+        log_result = "运营账号同步完成；总管账号归档；可写入日报 / 周报 / 月报。"
+    elif action == "task_completed":
+        task.update({"status": "已完成", "workflowStatus": "已归档", "completedAt": now_iso(), "candidateStatus": "completed_archived"})
+        log_action = "任务已完成并归档来源候选"
+        log_result = "待办移除该任务，来源模块释放循环位。"
+    elif action == "task_written_to_recap":
+        task.update({"status": "已写入复盘", "workflowStatus": "已写入复盘", "recapTarget": payload.get("recapTarget") or task.get("recapTarget") or "日报", "recapWrittenAt": now_iso(), "recapWrittenById": actor_user_id, "visibleRoleIds": list(dict.fromkeys([*(task.get("visibleRoleIds") or []), "owner", "manager"])), "candidateStatus": "completed_archived"})
+        log_action = f"任务已写入{task.get('recapTarget')}"
+        log_result = "老板复盘审计入口可见周期结果；总管和运营保留归档记录。"
+    else:
+        return None
+
+    normalized = normalize_task(task)
+    task.clear()
+    task.update(normalized)
+    task["updatedAt"] = now_iso()
+    message = payload.get("message") or log_result
+    event = create_task_event(task, event_type, actor_user_id=actor_user_id or "system", from_status=from_status, from_workflow=from_workflow, message=message)
+    create_log({"type": log_type, "task": task, "status": task.get("status"), "action": log_action, "result": log_result, "operator": actor.get("name") if actor else task.get("assigneeName")})
+    result = deepcopy(task)
+    result["event"] = event
+    result["syncSummary"] = {"targetRoleIds": event.get("targetRoleIds", []), "targetUserIds": event.get("targetUserIds", []), "message": event.get("message")}
+    return result
+
+
 def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     task = normalize_task(payload)
     duplicate = find_open_task_by_key(task["dedupeKey"])
     if duplicate:
+        from_status = duplicate.get("status")
+        from_workflow = duplicate.get("workflowStatus")
         duplicate["judgmentTags"] = list(dict.fromkeys([*(duplicate.get("judgmentTags") or []), *(task.get("judgmentTags") or [])]))[:8]
         duplicate["sourceTrail"] = list(dict.fromkeys([*(duplicate.get("sourceTrail") or []), task.get("sourceModule")]))
         duplicate["updatedAt"] = now_iso()
         duplicate["mergeCount"] = duplicate.get("mergeCount", 0) + 1
+        create_task_event(duplicate, "task_merged", actor_user_id="system", from_status=from_status, from_workflow=from_workflow, message="重复预警已合并，相关账号看到同一任务更新。")
         create_log({"type": "任务合并", "task": duplicate, "status": "已合并", "action": f"{task.get('sourceModule')} 重复加入，已合并到现有任务", "reason": f"去重键：{duplicate['dedupeKey']}", "result": "未创建重复任务。"})
         result = deepcopy(duplicate)
         result["dedupeHit"] = True
@@ -471,6 +673,7 @@ def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
         create_log({"type": "任务归档拦截", "task": completed, "status": "已归档", "action": f"{task.get('sourceModule')} 尝试重复进入任务池", "reason": f"去重键已完成归档：{completed['dedupeKey']}", "result": "未重新创建任务；等待新一轮信号进入候选池。"})
         return result
     TASKS.append(task)
+    event = create_task_event(task, "task_created", actor_user_id="system", message="任务已按角色、店铺和账号权限生成可见视图。")
     if task.get("taskLayer") == "operator_execution":
         result_text = "模块预警已根据店铺归属进入对应运营待办，同时同步给店群总管可见。"
     elif task.get("taskLayer") == "manager_dispatch":
@@ -480,6 +683,7 @@ def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     create_log({"type": "任务创建", "task": task, "status": "已加入任务池", "action": f"{task.get('sourceModule')} 创建任务：{task.get('taskType') or task.get('task') or task.get('title')}", "result": result_text})
     result = deepcopy(task)
     result["dedupeHit"] = False
+    result["event"] = event
     return result
 
 
@@ -487,71 +691,85 @@ def update_task(task_id: str, patch: Dict[str, Any], log_type: str = "任务更�
     task = find_task(task_id)
     if not task:
         return None
+    from_status = task.get("status")
+    from_workflow = task.get("workflowStatus")
     task.update(patch)
     normalized = normalize_task(task)
     task.clear()
     task.update(normalized)
     task["updatedAt"] = now_iso()
+    event = create_task_event(task, "task_updated", actor_user_id="system", from_status=from_status, from_workflow=from_workflow, message=result)
     create_log({"type": log_type, "task": task, "status": task.get("status"), "action": action, "result": result})
-    return deepcopy(task)
+    output = deepcopy(task)
+    output["event"] = event
+    return output
 
 
-def split_task_for_operator(task_id: str, operator_id: str | None = None, note: str = "") -> Dict[str, Any] | None:
+def split_task_for_operator(task_id: str, operator_id: str | None = None, note: str = "", actor_user_id: str | None = None) -> Dict[str, Any] | None:
     task = find_task(task_id)
     if not task:
         return None
+    from_status = task.get("status")
+    from_workflow = task.get("workflowStatus")
     operator = get_user(operator_id) if operator_id else operator_for_store(task.get("storeIds") or [], task.get("riskDomain"))
     if not operator:
         return None
-    child = normalize_task({**task, "id": make_id("A"), "parentTaskId": task_id, "taskLayer": "operator_execution", "status": "待确认", "workflowStatus": "已派发", "assigneeId": operator["id"], "reviewerId": default_reviewer()["id"], "assignedById": default_reviewer()["id"], "assignmentNote": note or "由店群总管拆分而来。", "visibleRoleIds": ["manager", "operator"], "manualOrder": int(datetime.now().timestamp() * 1000), "dedupeKey": None})
+    manager = get_user(actor_user_id) if actor_user_id else default_reviewer()
+    child = normalize_task({**task, "id": make_id("A"), "parentTaskId": task_id, "childTaskIds": [], "taskLayer": "operator_execution", "status": "待接收", "workflowStatus": "已派发", "assigneeId": operator["id"], "reviewerId": manager["id"], "assignedById": manager["id"], "assignmentNote": note or "由店群总管拆分而来。", "visibleRoleIds": ["manager", "operator"], "manualOrder": int(datetime.now().timestamp() * 1000), "dedupeKey": None})
     TASKS.append(child)
     task.setdefault("childTaskIds", []).append(child["id"])
     task["status"] = "已拆分"
     task["workflowStatus"] = "待派发"
     task["updatedAt"] = now_iso()
+    parent_event = create_task_event(task, "manager_split", actor_user_id=manager["id"], from_status=from_status, from_workflow=from_workflow, message="父任务已拆分，子任务进入运营待接收。")
+    child_event = create_task_event(child, "manager_assigned", actor_user_id=manager["id"], message=f"{manager['name']} 已拆分子任务给 {operator['name']}，等待接收。")
     create_log({"type": "任务拆分", "task": child, "status": child.get("status"), "action": f"{task.get('title')} 已拆分给 {operator['name']}", "result": "子任务进入运营待办，总管保留父任务复核视图。"})
-    return deepcopy(child)
+    result = deepcopy(child)
+    result["event"] = child_event
+    result["parentEvent"] = parent_event
+    return result
 
 
 def assign_task(task_id: str, assignee_id: str | None = None, reviewer_id: str | None = None, operator_id: str | None = None, note: str = "") -> Dict[str, Any] | None:
-    task = find_task(task_id)
-    if not task:
-        return None
-    assignee = get_user(assignee_id) if assignee_id else operator_for_store(task.get("storeIds") or [], task.get("riskDomain"))
-    reviewer = get_user(reviewer_id) if reviewer_id else default_reviewer()
-    operator = get_user(operator_id) if operator_id else default_reviewer()
-    if not assignee or not reviewer:
-        return None
-    return update_task(task_id, {"status": "处理中", "workflowStatus": "已派发", "taskLayer": "operator_execution", "assigneeId": assignee["id"], "reviewerId": reviewer["id"], "assignedById": operator.get("id") if operator else None, "assignmentNote": note, "assignedAt": now_iso(), "visibleRoleIds": ["manager", "operator"]}, "任务派发", f"任务已派发给 {assignee['name']}", "运营账号只看到自己负责店铺 / 自己承接的任务；处理后提交给店群总管复核。")
+    payload = {"assigneeId": assignee_id, "reviewerId": reviewer_id, "note": note}
+    return transition_task(task_id, "manager_assigned", actor_user_id=operator_id or default_reviewer()["id"], payload=payload)
+
+
+def accept_task(task_id: str, note: str = "", actor_user_id: str | None = None) -> Dict[str, Any] | None:
+    return transition_task(task_id, "operator_accepted", actor_user_id=actor_user_id, payload={"note": note})
 
 
 def submit_task(task_id: str, note: str = "", submitter_id: str | None = None) -> Dict[str, Any] | None:
-    task = find_task(task_id)
-    if not task:
-        return None
-    submitter_id = submitter_id or task.get("assigneeId") or operator_for_store(task.get("storeIds") or [], task.get("riskDomain"))["id"]
-    return update_task(task_id, {"status": "待复核", "workflowStatus": "已提交", "submittedById": submitter_id, "submittedByName": user_display(submitter_id, "运营账号"), "submissionNote": note or "运营已完成处理，等待店群总管复核。", "submittedAt": now_iso()}, "任务提交", "运营已提交处理结果", "任务进入总管复核队列，完成前不会归档来源候选。")
+    return transition_task(task_id, "operator_submitted", actor_user_id=submitter_id, payload={"note": note})
 
 
 def review_task(task_id: str, decision: str = "approve", note: str = "", reviewer_id: str | None = None) -> Dict[str, Any] | None:
-    task = find_task(task_id)
-    if not task:
-        return None
-    reviewer_id = reviewer_id or task.get("reviewerId") or default_reviewer()["id"]
-    if decision in {"approve", "approved", "pass", "通过"}:
-        return update_task(task_id, {"status": "已完成", "workflowStatus": "已归档", "candidateStatus": "completed_archived", "reviewedById": reviewer_id, "reviewedByName": user_display(reviewer_id, "店群总管"), "reviewNote": note or "复核通过，任务归档。", "reviewedAt": now_iso(), "completedAt": now_iso()}, "任务复核", "店群总管复核通过", "待办移除该任务，来源模块释放循环位，日志保留复盘记录。")
-    if decision in {"return", "returned", "reject", "退回"}:
-        return update_task(task_id, {"status": "处理中", "workflowStatus": "已退回", "reviewedById": reviewer_id, "reviewedByName": user_display(reviewer_id, "店群总管"), "reviewNote": note or "复核退回，需要运营补充处理。", "reviewedAt": now_iso()}, "任务退回", "店群总管退回复查", "任务回到运营处理状态，不释放来源模块循环位。")
-    return None
+    action = "manager_approved" if decision in {"approve", "approved", "pass", "通过"} else "manager_returned" if decision in {"return", "returned", "reject", "退回"} else ""
+    return transition_task(task_id, action, actor_user_id=reviewer_id, payload={"note": note}) if action else None
+
+
+def write_task_to_recap(task_id: str, recap_target: str = "日报", note: str = "", actor_user_id: str | None = None) -> Dict[str, Any] | None:
+    return transition_task(task_id, "task_written_to_recap", actor_user_id=actor_user_id, payload={"recapTarget": recap_target, "note": note})
 
 
 def complete_task(task_id: str) -> Dict[str, Any] | None:
-    return update_task(task_id, {"status": "已完成", "workflowStatus": "已归档", "completedAt": now_iso(), "candidateStatus": "completed_archived"}, "任务完成", "任务已完成并归档来源候选", "待办移除该任务，来源模块释放循环位，日志保留复盘记录。")
+    return transition_task(task_id, "task_completed", actor_user_id="system")
 
 
 def pin_task(task_id: str) -> Dict[str, Any] | None:
-    min_order = min([task.get("manualOrder", 9999) for task in TASKS] or [0])
-    return update_task(task_id, {"manualOrder": min_order - 1}, "任务置顶", "任务已置顶", "首页和待办同步排序。")
+    task = find_task(task_id)
+    if not task:
+        return None
+    from_status = task.get("status")
+    from_workflow = task.get("workflowStatus")
+    min_order = min([item.get("manualOrder", 9999) for item in TASKS] or [0])
+    task["manualOrder"] = min_order - 1
+    task["updatedAt"] = now_iso()
+    event = create_task_event(task, "task_pinned", actor_user_id="system", from_status=from_status, from_workflow=from_workflow, message="任务已置顶，相关账号排序同步更新。")
+    create_log({"type": "任务置顶", "task": task, "status": task.get("status"), "action": "任务已置顶", "result": "首页和待办同步排序。"})
+    result = deepcopy(task)
+    result["event"] = event
+    return result
 
 
 def reorder_task(task_id: str, direction: str) -> Dict[str, Any] | None:
@@ -570,13 +788,18 @@ def reorder_task(task_id: str, direction: str) -> Dict[str, Any] | None:
     target_ref["manualOrder"] = current_order
     current_ref["updatedAt"] = now_iso()
     target_ref["updatedAt"] = now_iso()
+    event = create_task_event(current_ref, "task_reordered", actor_user_id="system", message="任务顺序已调整，相关账号排序同步更新。")
     create_log({"type": "任务排序", "task": current_ref, "status": current_ref.get("status"), "action": "任务顺序已调整", "result": "首页和待办同步排序。"})
-    return deepcopy(current_ref)
+    result = deepcopy(current_ref)
+    result["event"] = event
+    return result
 
 
 def reset_tasks(viewer_id: str | None = None) -> Dict[str, Any]:
-    global TASKS, LOGS
+    global TASKS, LOGS, TASK_EVENTS
     TASKS = seed_tasks()
     LOGS = seed_logs()
+    TASK_EVENTS = seed_events(TASKS)
     create_log({"type": "演示重置", "status": "已重置", "action": "服务端任务池已恢复默认演示数据", "result": "任务已重新按老板 / 总管 / 运营 / 财务 / 只读权限分发。"})
-    return {"tasks": list_tasks(viewer_id=viewer_id), "logs": list_logs()}
+    create_task_event({"id": "SYSTEM", "status": "已重置", "workflowStatus": "已重置", "visibleRoleIds": ["owner", "manager", "operator", "finance", "observer"], "visibleUserIds": []}, "demo_reset", actor_user_id="system", message="演示任务池已重置，所有账号刷新后看到各自权限内状态。")
+    return {"tasks": list_tasks(viewer_id=viewer_id), "activeTasks": list_tasks(active_only=True, viewer_id=viewer_id), "logs": list_logs(), "events": list_task_events_for_user(viewer_id), "counters": get_task_counters_for_user(viewer_id)}
