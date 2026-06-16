@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v1.2.0 - 2026-06-16
+
+### Product Decision
+- V1.2.0 upgrades the frontend from patch-style module observers to a unified route lifecycle coordinator.
+- The product goal is stable fast module switching before adding accounts, permissions, realtime updates, or real platform connectors.
+- Product truth: route transitions must be centrally scheduled; module scripts should not independently compete to render after every DOM mutation.
+
+### Changed
+- Added `web_demo/route-lifecycle.js` as the route lifecycle coordinator.
+- `route-lifecycle.js` captures `hashchange` listeners and runs them through one scheduled route queue.
+- Legacy hotfix `MutationObserver` callbacks are converted into route-after-render callbacks so they no longer fire on every DOM rewrite.
+- `index.html` now loads `route-lifecycle.js` between `task-store.js` and `app-v2.js`.
+- Frontend assets now use `?v=1.2.0`; API and health versions are aligned.
+
+### Product Boundary
+- This is a lifecycle governance layer over the current frontend modules.
+- It stabilizes fast navigation and reduces observer loops, but it does not yet rewrite every page as a clean component module.
+- The next deeper refactor should gradually move each hotfix page into explicit `render / mount / unmount` modules registered in the route registry.
+
 ## v1.1.2 - 2026-06-16
 
 ### Product Decision
