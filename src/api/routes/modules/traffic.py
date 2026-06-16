@@ -7,23 +7,16 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 
 from src.api.routes.modules.common import find_or_404
-from src.services.module_data_service import TRAFFIC, clone
-from src.services.module_task_service import create_task
+from src.services.module_data_service import TRAFFIC
+from src.services.module_task_service import attach_task_state, create_task
 
 router = APIRouter()
 
 
-@router.get("/traffic")
-def traffic() -> List[Dict[str, Any]]:
-    return clone(TRAFFIC)
-
-
-@router.post("/traffic/{traffic_id}/tasks")
-def traffic_task(traffic_id: str) -> Dict[str, Any]:
-    item = find_or_404(TRAFFIC, traffic_id, "traffic")
+def traffic_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
     text = f"{item['status']} {item['backflow']} {item['nextStep']}"
     risk_domain = "售后" if any(word in text for word in ["售后", "退款", "材质", "尺寸", "安装", "客服"]) else "库存" if any(word in text for word in ["库存", "补货", "承接"]) else "流量"
-    return create_task({
+    return {
         "entityType": "商品",
         "entityId": item["productId"],
         "riskDomain": risk_domain,
@@ -47,4 +40,15 @@ def traffic_task(traffic_id: str) -> Dict[str, Any]:
         "task": item["nextStep"],
         "reason": f"{item['channel']} {item['source']}：ROI {item['roi']}，退款率 {item['refundRate']}，库存 {item['inventory']}。",
         "judgmentTags": [f"ROI {item['roi']}", f"退款率 {item['refundRate']}", item["status"]],
-    })
+    }
+
+
+@router.get("/traffic")
+def traffic() -> List[Dict[str, Any]]:
+    return [attach_task_state(item, traffic_task_payload(item)) for item in TRAFFIC]
+
+
+@router.post("/traffic/{traffic_id}/tasks")
+def traffic_task(traffic_id: str) -> Dict[str, Any]:
+    item = find_or_404(TRAFFIC, traffic_id, "traffic")
+    return create_task(traffic_task_payload(item))
