@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v2.4.2 - 2026-06-16
+
+### Product Decision
+- V2.4.2 restores the operator-side operation modules.
+- Product truth: 运营账号不是纯待办执行人，而是被分配店铺权限的店铺经营者。
+- 运营能看经营单元、报表、商品、竞品、上新、流量、待办、日志和账号，但数据口径限定在“我负责的店铺”。
+
+### Changed
+- Operator navigation now shows: 总览、经营单元、报表、商品、竞品、上新、流量、待办、日志、账号.
+- Operator dashboard changed into `我的店铺经营总览`.
+- Added assigned-store cards and module entry cards for operator accounts.
+- Added `web_demo/operator-dashboard.css`.
+- Operator account role copy now clarifies assigned-store scope instead of task-only scope.
+- Frontend assets now use `?v=2.4.2`; API and health versions are aligned.
+
+### Product Boundary
+- This remains mock scoped-store data.
+- Real version should connect ERP / CRM / shop authorization APIs, store-level permission filtering, report-level filtering, product ownership, traffic ownership, and operator-specific task/log APIs.
+
 ## v2.4.1 - 2026-06-16
 
 ### Product Decision
