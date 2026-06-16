@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "1.5.1"
+API_VERSION = "1.5.2"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -22,6 +22,7 @@ def health() -> Dict[str, Any]:
         "task_authority": "server_memory_mock",
         "task_identity_authority": "backend",
         "route_structure": "split_module_files",
+        "task_focus_navigation": True,
         "safety": {
             "real_erp_connected": False,
             "real_crm_connected": False,
