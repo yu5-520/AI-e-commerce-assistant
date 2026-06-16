@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v1.6.0 - 2026-06-16
+
+### Product Decision
+- V1.6.0 adds an independent detail report page instead of an inline drawer.
+- Product truth: tasks need decision context, not just execution buttons. A task report explains why the warning exists, what evidence supports it, and how operators should handle it.
+
+### Changed
+- Added `src/services/task_report_service.py` as the report-generation boundary and future Agent insertion point.
+- Added task report APIs:
+  - `GET /api/modules/task-reports/tasks/{task_id}`
+  - `GET /api/modules/task-reports/candidates/{module}/{entity_id}`
+- Added `web_demo/modules/task-report/page.js` as an independent detail page.
+- 待办 cards now include `详情报告`.
+- 商品、竞品、上新、流量、报表 now include `查看预警` before task creation and `任务报告` after the task enters 待办.
+- Existing report content includes warning summary, evidence, AI assessment, suggested actions, operation checklist, needed data, human decision points, next step, and Agent boundary.
+- Frontend assets now use `?v=1.6.0`; API and health versions are aligned.
+
+### Product Boundary
+- This is still template-based report generation from current Mock ERP / CRM data.
+- Agent is not yet connected; the report service is the reserved insertion point.
+- Agent should enrich reports and checklist suggestions, not directly complete tasks or mutate ERP / CRM / shop data.
+
 ## v1.5.3 - 2026-06-16
 
 ### Product Decision
@@ -19,49 +41,10 @@
 - Completion archive is based on the current dedupe key; a future new signal should use a new cycle id / source event to re-enter the source module queue.
 - Completed tasks remain visible through 日志, not through 待办 or source modules.
 
-## v1.5.2 - 2026-06-16
-
-### Product Decision
-- V1.5.2 unifies the behavior of `已在任务清单` buttons across 商品、竞品、上新、流量、报表.
-- Product truth: if a task already exists, the module should navigate to the exact active task in 待办 instead of trying to create or merge the same task again.
-
-### Changed
-- Added router state support so a module can navigate to `business-actions` with a target `focusTaskId`.
-- Added shared task navigation helpers in `web_demo/core/task-actions.js`.
-- Product, competitor, listing, traffic, and report modules now render existing-task buttons as `已在任务清单`.
-- Clicking `已在任务清单` now jumps to the matching task card in 待办 and briefly highlights it.
-- Competitor, listing, and report backend module responses now include task-state identity fields, matching product and traffic behavior.
-- Todo cards now expose task ids through `data-task-card` for focused navigation.
-- Frontend assets now use `?v=1.5.2`; API and health versions are aligned.
-
-### Product Boundary
-- This does not add database persistence.
-- Completed tasks still disappear from 待办 and remain in 日志.
-- Existing-task navigation only works for active tasks; completed tasks correctly restore the module button to `加入任务清单`.
-
-## v1.5.1 - 2026-06-16
-
-### Product Decision
-- V1.5.1 removes the remaining task-identity duplication and closes the dashboard service boundary.
-- Product truth: backend owns task identity, active-task state, and dashboard service composition; frontend only hydrates and displays.
-- 待办只展示未完成任务；完成后从执行队列消失，只保留日志复盘。
-
-### Changed
-- Added `src/services/dashboard_service.py` as the dashboard module service boundary.
-- Dashboard route now calls `dashboard_service.get_dashboard_summary()` instead of directly calling old business view helpers.
-- Added backend task-state helpers in `module_task_service.py` for open-task lookup and task-state annotation.
-- Product and traffic list responses now include `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask` from the backend.
-- Todo execution queue now renders `listActiveTasks()` so completed tasks immediately leave 待办.
-- API badge tooltip now exposes recent fallback failures so server chain breaks are easier to find.
-- Frontend assets now use `?v=1.5.1`; API and health versions are aligned.
-
-### Product Boundary
-- Server task/log state is still in-memory mock persistence.
-- `business_view_service.py` remains available for dashboard workflow summary while the deeper workflow service is migrated later.
-- Database persistence, account roles, and multi-user consistency remain later work.
-
 ## Earlier History
 
+- v1.5.2: Existing-task buttons jump to the matching task card inside 待办.
+- v1.5.1: Backend owns task identity and active-task status.
 - v1.5.0: Backend module-file split.
 - v1.4.1: Closed the module API chain and moved task/log authority to backend mock services.
 - v1.4.0: Backend aligned with modular frontend and removed active `/api/business/*` routes.
