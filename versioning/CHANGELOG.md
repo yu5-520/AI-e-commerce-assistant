@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.4.1 - 2026-06-16
+
+### Changed
+- Optimized the store-group manager `今日处理顺序` and task-list layout.
+- Restored the schedule-style dispatch row: rank number, time / priority block, main task area, source block, judgment block, and right-side action buttons.
+- Kept the V2.3.9 task actions: 查看详情、拆分 / 派发、进入复核.
+- Made sorting controls lighter so they do not visually overpower the task queue.
+- Frontend assets were bumped to `?v=2.4.1`.
+- FastAPI app version and health version are aligned to `2.4.1`.
+
+### Product Engineering Rule
+- 店群总管需要的是调度队列，不是普通卡片列表。
+- 任务动作要保留，但视觉骨架必须先服务“处理顺序”。
+
 ## v2.4.0 - 2026-06-16
 
 ### Added
@@ -69,7 +83,7 @@
 
 ## v2.1.0 - 2026-06-16
 
-- Added global mock account switching and role-based task visibility.
+- Added global account switching and role-based task visibility.
 
 ## v2.0.0 - 2026-06-16
 
