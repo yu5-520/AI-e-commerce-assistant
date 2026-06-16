@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v2.4.2
+Current Version: v2.5.0
 
 ## Version History
 
+- v2.5.0: Rebuilt the task system into a role-scoped task flow with store permissions, visible roles/users/stores, owner decision tasks, manager dispatch tasks, operator execution tasks, warning-to-operator todo routing, and manager split endpoint.
 - v2.4.2: Restored operator-side store operation modules and added a scoped operator dashboard for assigned stores, reports, products, competitors, listings, traffic, tasks, logs, and account settings.
 - v2.4.1: Optimized the store-group manager task queue layout by restoring the schedule-style dispatch row with rank, time / priority, main task, source, judgment tags, and action buttons.
 - v2.4.0: Rebuilt the owner `总览` from an execution task list into a business overview page with operating metrics, owner module entry cards, and decision attention items.
@@ -11,12 +12,12 @@ Current Version: v2.4.2
 - v2.3.8: Reworked the manager role into a store-group execution management workflow: 店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表.
 - v2.3.7: Simplified `账号` into a basic account center for profile, login security, phone / email / third-party binding, platform authorization status, notification settings, local cache, and logout actions.
 - v2.3.6: Changed `复盘审计` from wide tables into expandable retrospective cards, audit detail cards, and next-cycle task draft cards with Agent judgment placeholders.
-- v2.3.5: Rebuilt owner `复核审计` into `复盘审计`, receiving daily / weekly / monthly retrospectives, auditing missed targets and execution failures, and forming next-cycle task drafts.
+- v2.3.5: Rebuilt owner `复核审计` into `复盘审计`, receiving daily / weekly / monthly retrospectives, auditing missed targets and forming next-cycle task drafts.
 - v2.3.4: Rebuilt owner `组织效率` into an organization governance console with position relationship network, account role control, store authorization, and permission template control.
 - v2.3.3: Rebuilt owner `利润预算` into `供投财务`, combining supply, traffic, and finance views.
-- v2.3.2: Owner-side task command was repositioned into `人员总览`, showing employee realtime state, task load, completed count, return count, timeout count, average handling time, and workload.
-- v2.3.1: Fixed `店群总览` layout and upgraded it into a realtime operations board with sync status, trend chips, platform live cards, and a horizontal store table.
-- v2.3.0: Removed redundant owner `经营驾驶舱`; changed `风险中心` into `店群总览` around platform / store / product / order / sales / profit / comments / inventory summaries.
+- v2.3.2: Owner-side task command was repositioned into `人员总览`.
+- v2.3.1: Fixed `店群总览` layout and upgraded it into a realtime operations board.
+- v2.3.0: Removed redundant owner `经营驾驶舱`; changed `风险中心` into `店群总览`.
 - v2.2.0: Refactored owner navigation from first-line operation modules into executive modules and added the role permission console.
 - v2.1.0: Added global mock account switching, role-based task visibility, permission-based todo actions, and role-specific insight depth.
 - v2.0.0: Added `/api/accounts`, account roles, permissions, and the dispatch / submit / review collaboration flow.
