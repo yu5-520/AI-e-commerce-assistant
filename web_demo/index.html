@@ -4,16 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI 经营参谋</title>
-    <link rel="stylesheet" href="/web_demo/styles.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/dashboard.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/dashboard-linked.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/report-center.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/product-center.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/competitor-center.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/listing-center.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/traffic-center.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/todo-center.css?v=1.2.0" />
-    <link rel="stylesheet" href="/web_demo/log-center.css?v=1.2.0" />
+    <link rel="stylesheet" href="/web_demo/styles.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/dashboard.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/dashboard-linked.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/report-center.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/product-center.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/competitor-center.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/listing-center.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/traffic-center.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/todo-center.css?v=1.3.0" />
+    <link rel="stylesheet" href="/web_demo/log-center.css?v=1.3.0" />
   </head>
   <body>
     <div class="app-shell">
@@ -44,7 +44,7 @@
           </div>
           <div class="topbar-actions">
             <button id="refreshBtn">刷新</button>
-            <span id="apiModeBadge" class="mode-badge">连接中</span>
+            <span id="apiModeBadge" class="mode-badge">模块化</span>
           </div>
         </header>
 
@@ -52,18 +52,20 @@
       </div>
     </div>
 
-    <script src="/web_demo/task-store.js?v=1.2.0"></script>
-    <script src="/web_demo/route-lifecycle.js?v=1.2.0"></script>
-    <script src="/web_demo/app-v2.js?v=1.2.0"></script>
-    <script src="/web_demo/dashboard-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/operating-unit-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/data-report-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/product-manager-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/competitor-manager-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/listing-manager-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/traffic-manager-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/todo-manager-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/log-manager-hotfix.js?v=1.2.0"></script>
-    <script src="/web_demo/module-task-bridge.js?v=1.2.0"></script>
+    <script src="/web_demo/core/mock-data.js?v=1.3.0"></script>
+    <script src="/web_demo/stores/task-store.js?v=1.3.0"></script>
+    <script src="/web_demo/core/shell.js?v=1.3.0"></script>
+    <script src="/web_demo/core/router.js?v=1.3.0"></script>
+    <script src="/web_demo/core/task-actions.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/dashboard/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/operating-unit/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/report/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/product/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/competitor/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/listing/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/traffic/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/todo/page.js?v=1.3.0"></script>
+    <script src="/web_demo/modules/log/page.js?v=1.3.0"></script>
+    <script src="/web_demo/bootstrap.js?v=1.3.0"></script>
   </body>
 </html>
