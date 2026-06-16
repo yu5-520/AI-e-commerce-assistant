@@ -1,22 +1,26 @@
 # Product Changelog
 
-## v2.3.5 - 2026-06-16
+## v2.3.6 - 2026-06-16
 
 ### Product Decision
-- V2.3.5 changes owner-side `复核审计` into `复盘审计`.
-- Product truth: 老板不常因为单个店铺短期波动直接下任务，老板通常通过日报、周报、月报复盘和审计结论确定下周 / 下月任务。
-- `复盘审计`不是单条任务日志，而是周期复盘接收、运行失误审查和下周期任务生成入口。
+- V2.3.6 changes `复盘审计` from table-style rows into summary-first expandable cards.
+- Product truth: 日报、周报、月报、审计问题和任务草案都需要展开详情层，后续才能承接 Agent 的信息检索、证据判断和任务生成依据。
+- 老板第一眼看摘要，需要判断时再展开，不应该被宽表格和长文本挤压。
 
 ### Changed
-- Owner navigation label changed from `复核审计` to `复盘审计`.
-- Added retrospective intake: 日报、周报、月报、专项复盘.
-- Added audit issue list: 周报未达标、ROI 不达标、退款率上升、复核延迟.
-- Added next-cycle task drafts: 下周任务、下月任务、责任主管、拆分方向、优先级、下发状态.
-- Frontend assets now use `?v=2.3.5`; API and health versions are aligned.
+- 周期复盘接收改为可展开卡片：每条复盘可展开目标、实际、达成率、复盘要点和 Agent 预留判断。
+- 审计问题清单改为可展开卡片：每条问题可展开审计证据和 Agent 判断项。
+- 下周期任务草案改为可展开卡片：每条任务可展开目标、拆分方向和后续按钮入口。
+- Added `web_demo/review-audit.css` for expandable retrospective layout.
+- Frontend assets now use `?v=2.3.6`; API and health versions are aligned.
 
 ### Product Boundary
 - This remains mock retrospective data.
-- Real version should connect daily / weekly / monthly report submissions, task timeout records, KPI target rules, and task-generation approvals.
+- Real version should connect daily / weekly / monthly report submissions, task timeout records, KPI target rules, Agent evidence retrieval, and task-generation approvals.
+
+## v2.3.5 - 2026-06-16
+
+- Owner-side `复核审计` changed into `复盘审计`.
 
 ## v2.3.4 - 2026-06-16
 
