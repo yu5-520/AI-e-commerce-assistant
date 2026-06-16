@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.0.0 - 2026-06-16
+
+### Added
+- Added `src/services/account_service.py` as the v2 Mock account, role, permission, store-group, and store-scope contract.
+- Added `src/api/routes/accounts.py` and mounted `/api/accounts` in `src/api/main.py`.
+- Added the front-end `账号` navigation item and `web_demo/modules/account/page.js`.
+- Added v2 task collaboration endpoints under `/api/modules/todo`:
+  - `POST /api/modules/todo/{task_id}/assign`
+  - `POST /api/modules/todo/{task_id}/submit`
+  - `POST /api/modules/todo/{task_id}/review`
+- Added account-aware task fields: assignee, reviewer, assigner, workflow status, submission note, review note, and workflow timestamps.
+- Prepared SQLite schema for v2 account and collaboration persistence: accounts, roles, role permissions, store groups, stores, memberships, assignments, submissions, and reviews.
+
+### Changed
+- Cleaned the active architecture around `/api/modules/*` and `/api/accounts` instead of stale product docs pointing at old API contracts.
+- FastAPI app version and health version are aligned to `2.0.0`.
+- Frontend assets were bumped to `?v=2.0.0`.
+- `scripts/smoke_test_api.py` now validates current modular APIs, `/api/accounts`, task reports, and the dispatch / submit / review flow.
+- `scripts/check_version_governance.py` now requires `/api/modules` and `/api/accounts` in the active version logs.
+- README and product docs now describe the v2 collaboration trunk instead of the earlier single-user task demo.
+
+### Product Engineering Rule
+- V2.0 changes the product from a single-user operating dashboard into a light enterprise collaboration skeleton.
+- Reports still explain and recommend; tasks now carry ownership and review responsibility.
+- Account roles define visibility and task flow, but this version still does not connect real SSO, real tenant billing, or real shop execution.
+
 ## v1.6.1 - 2026-06-16
 
 ### Added
