@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.5.3
+Current Version: v1.6.0
 
 ## Version History
 
@@ -23,6 +23,7 @@ Current Version: v1.5.3
 - v1.5.1: Removed remaining task-identity duplication. Product task identity and active-task status now come from the backend; the frontend task store no longer infers risk/action domains. Dashboard now routes through `dashboard_service`, and the API badge exposes fallback failure details.
 - v1.5.2: Unified existing-task button behavior across product, competitor, listing, traffic, and report modules. Existing task buttons now jump to the matching task card in 待办, and backend task-state annotations were added for competitor, listing, and report modules.
 - v1.5.3: Added source-candidate lifecycle archiving. Completed tasks now archive their source candidate, source modules hide completed candidates by default, and the frontend refreshes module data after task lifecycle changes so completed work frees the next cycle slot.
+- v1.6.0: Added independent task detail report pages. 待办 tasks now have `详情报告`; source modules have `查看预警` / `任务报告`; backend exposes task and candidate report APIs as the future Agent report generation boundary.
 
 ## Version Rules
 
