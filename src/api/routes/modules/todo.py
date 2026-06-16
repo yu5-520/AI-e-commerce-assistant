@@ -35,7 +35,8 @@ def todo(
 
 
 @router.post("/todo/{task_id}/assign")
-def assign_todo(task_id: str, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+def assign_todo(task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
     task = assign_task(
         task_id,
         assignee_id=body.get("assignee_id") or body.get("assigneeId"),
@@ -49,7 +50,8 @@ def assign_todo(task_id: str, body: Dict[str, Any] = Body(default_factory=dict))
 
 
 @router.post("/todo/{task_id}/submit")
-def submit_todo(task_id: str, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+def submit_todo(task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
     task = submit_task(
         task_id,
         note=body.get("note") or "",
@@ -61,7 +63,8 @@ def submit_todo(task_id: str, body: Dict[str, Any] = Body(default_factory=dict))
 
 
 @router.post("/todo/{task_id}/review")
-def review_todo(task_id: str, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+def review_todo(task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
     task = review_task(
         task_id,
         decision=body.get("decision") or "approve",
