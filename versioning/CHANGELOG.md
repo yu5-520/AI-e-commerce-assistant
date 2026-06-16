@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.3.1 - 2026-06-16
+
+### Added
+- Added a realtime sync status strip to `店群总览`, including ERP time, platform sync states, delay marker, and active task count.
+- Added platform live cards with order, sales, profit, comment, progress, and sync status indicators.
+- Added a horizontal store operation table for store, platform, product count, active products, orders, sales, profit, comments, bad comments, refund rate, inventory amount, pending tasks, and state.
+- Added trend chips for order, sales, profit, and refund-related metrics.
+
+### Changed
+- Fixed the store detail layout issue where long card text squeezed store names into vertical text.
+- Replaced long sentence cards with a data-table board so owners can compare stores horizontally.
+- Frontend assets were bumped to `?v=2.3.1`.
+- FastAPI app version and health version are aligned to `2.3.1`.
+
+### Product Engineering Rule
+- `店群总览` should look and behave like a realtime operations board.
+- It should show live business facts first; exception analysis and risk tasks should drill down from field states rather than dominate the first screen.
+
 ## v2.3.0 - 2026-06-16
 
 ### Added
@@ -78,9 +96,3 @@
 - v1.5.3: Added source-candidate lifecycle archiving.
 - v1.5.2: Existing-task buttons jump to the matching task card inside 待办.
 - v1.5.1: Backend owns task identity and active-task status.
-- v1.5.0: Split backend module routes into separate files.
-- v1.4.1: Closed the module API chain and moved task/log authority to backend mock services.
-- v1.4.0: Added modular backend API routes and removed active `/api/business/*` product path.
-- v1.3.0: Added modular frontend route registry and removed legacy hotfix scripts.
-- v1.2.0: Added unified front-end route lifecycle coordinator.
-- v1.1.2: Fixed module-switch crash caused by global task bridge MutationObserver loop.
