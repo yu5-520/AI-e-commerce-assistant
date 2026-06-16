@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.4.0
+Current Version: v1.4.1
 
 ## Version History
 
@@ -12,12 +12,13 @@ Current Version: v1.4.0
 - v1.0.22: Report page was repositioned as `日志`, recording task completion, AI judgment, data import/export, and user actions.
 - v1.0.23: Dashboard task board used a unified cross-module task pool for homepage summaries.
 - v1.0.24: Dashboard task board was simplified into a command-board scheduling view with short judgment tags.
-- v1.1.0: Added a unified front-end task store and dynamic module-driven task flow. 商品、竞品、上新、流量 and 报表 can now create shared tasks; dashboard and 待办 read the same task pool; task actions create operation logs; refresh preserves the demo task state through localStorage.
-- v1.1.1: Added task identity and dedupe keys. Manual module actions now check `entityType + entityId + riskDomain + actionType`; same-product same-problem tasks are merged or routed to existing 待办 instead of duplicated, while different problem domains can still create separate tasks.
-- v1.1.2: Fixed the module task bridge render loop. The bridge observer is now throttled with `requestAnimationFrame`, button state updates are idempotent, and repeated text updates no longer trigger continuous DOM mutation loops when switching modules.
-- v1.2.0: Added a unified front-end route lifecycle coordinator. Hash route listeners are centrally scheduled, legacy MutationObserver-based hotfix callbacks are converted into route-after-render callbacks, and rapid module switching is batched through one lifecycle queue.
-- v1.3.0: Rebuilt the frontend into a modular route registry. The old `app-v2.js`, route lifecycle shim, hotfix page scripts, root task store, and task bridge scripts were removed from the active product entry. The new entry is `core/router.js + core/shell.js + stores/task-store.js + core/task-actions.js + modules/*/page.js + bootstrap.js`.
+- v1.1.0: Added a unified front-end task store and dynamic module-driven task flow.
+- v1.1.1: Added task identity and dedupe keys for same-product same-problem task merging.
+- v1.1.2: Fixed the module task bridge render loop and repeated DOM mutation loops when switching modules.
+- v1.2.0: Added a unified front-end route lifecycle coordinator.
+- v1.3.0: Rebuilt the frontend into a modular route registry and removed legacy hotfix scripts from the active product entry.
 - v1.4.0: Added modular backend interfaces under `/api/modules/*`, added the frontend `core/api-client.js`, prefetches module data before router start, and removed the old `/api/business/*` router from the active backend entry.
+- v1.4.1: Closed the module API chain. Backend mock data moved into `module_data_service`, task/log authority moved into `module_task_service`, frontend full mock data was reduced to minimal fallback, task actions now call backend module endpoints, and todo/log pages now hydrate from server task state.
 
 ## Version Rules
 
