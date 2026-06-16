@@ -1,5 +1,26 @@
 # Product Changelog
 
+## v1.4.1 - 2026-06-16
+
+### Product Decision
+- V1.4.1 closes the broken chain found after v1.4.0: module data, task creation, todo, and log state should come from backend module services, not browser-only state.
+- Product truth: frontend localStorage is now a hydrated cache; server-side mock services are the current task/log authority.
+
+### Changed
+- Added `src/services/module_data_service.py` as the single backend source for current module Mock data.
+- Added `src/services/module_task_service.py` as the server-side mock task/log service.
+- Reduced `web_demo/core/mock-data.js` to a minimal fallback shell to avoid maintaining the same Mock ERP / CRM data twice.
+- `web_demo/core/api-client.js` now supports task creation, todo completion, pinning, reordering, reset, task refresh, and log refresh through `/api/modules/*`.
+- Product, competitor, listing, traffic, and report module task buttons now call backend module endpoints before refreshing local task state.
+- Todo page actions now call backend todo endpoints before refreshing task/log state.
+- Header badge now shows `服务端接口` or `本地兜底` so API fallback no longer silently hides chain failures.
+- Frontend assets now use `?v=1.4.1`; API and health versions are aligned.
+
+### Product Boundary
+- This is still in-memory server-side mock persistence, not a production database.
+- Server restart will reset demo task/log state.
+- Real account roles, permissions, multi-user consistency, and ERP / CRM connectors remain later work.
+
 ## v1.4.0 - 2026-06-16
 
 ### Product Decision
