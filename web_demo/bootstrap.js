@@ -1,6 +1,7 @@
 (async function () {
   const pages = [
     window.DashboardPage,
+    window.AccountPage,
     window.OperatingUnitPage,
     window.ReportPage,
     window.ProductPage,
