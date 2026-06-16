@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.2.0 - 2026-06-16
+
+### Added
+- Added `web_demo/route-lifecycle.js` as the unified front-end route lifecycle coordinator.
+- Hash route listeners are now centrally registered and scheduled instead of each script owning an independent route listener.
+- Legacy `MutationObserver` hotfix callbacks are converted into route-after-render callbacks through the lifecycle coordinator.
+- Added route lifecycle hooks: `beforeRoute`, `afterRoute`, `runAfterRender`, and `schedule`.
+
+### Changed
+- `web_demo/index.html` now loads `route-lifecycle.js` after `task-store.js` and before `app-v2.js` / page modules.
+- Frontend assets were bumped to `?v=1.2.0`.
+- FastAPI app version and health version are aligned to `1.2.0`.
+
+### Product Engineering Rule
+- The router is the only place that should coordinate page transitions.
+- Module scripts may still expose render and bind functions, but route changes must pass through the lifecycle queue.
+- Observer-based hotfixes are now lifecycle-scheduled to prevent fast module switching from creating DOM rewrite loops.
+- This version is an architecture-governance step before later account, permission, realtime, and API connector work.
+
 ## v1.1.2 - 2026-06-16
 
 ### Fixed
