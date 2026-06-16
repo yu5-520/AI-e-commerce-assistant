@@ -1,5 +1,5 @@
 (function () {
-  const ACCOUNT_KEY = "ai_ecommerce_v241_current_user_id";
+  const ACCOUNT_KEY = "ai_ecommerce_v242_current_user_id";
   const status = { source: "unknown", failures: [] };
   let account = null;
 
