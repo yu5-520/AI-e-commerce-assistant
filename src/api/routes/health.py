@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "2.3.2"
+API_VERSION = "2.3.3"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,32 +17,11 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "realtime_store_people_overview_role_console_workflow",
+        "mode": "store_people_supply_finance_overview",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
-        "task_authority": "server_memory_mock",
-        "task_identity_authority": "backend",
-        "account_system": "v2_mock_rbac_switchable",
-        "account_switch_header": "X-Mock-User-Id",
         "store_overview": True,
         "people_overview": True,
-        "realtime_store_board": True,
-        "store_overview_table": True,
-        "task_command_repositioned": "owner_people_overview_manager_todo_workflow",
-        "executive_cockpit_removed": True,
+        "supply_finance": True,
         "role_console": True,
-        "insight_depth": "role_based",
-        "task_assignment_flow": "task_pool_assigned_submitted_reviewed_archived",
-        "task_report_page": True,
-        "candidate_report_cta": True,
-        "candidate_lifecycle": "pending_candidate_active_task_completed_archived",
-        "route_structure": "split_module_files",
-        "task_focus_navigation": True,
-        "safety": {
-            "real_erp_connected": False,
-            "real_crm_connected": False,
-            "real_shop_backend_connected": False,
-            "real_sso_connected": False,
-            "auto_high_risk_execution": False,
-        },
     }
