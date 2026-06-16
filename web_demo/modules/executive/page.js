@@ -7,15 +7,23 @@
     { id: "S003", platform: "抖音小店", name: "家居好物号", products: 64, activeProducts: 39, todayOrders: 152, orderTrend: "+5.1%", sales: 29800, salesTrend: "+7.7%", profit: 4800, profitTrend: "-3.8%", comments: 10560, badComments: 33, refundRate: "6.1%", stockAmount: 98000, pendingTasks: 1, syncDelay: 12, syncStatus: "延迟", status: "关注" },
   ];
 
+  const PEOPLE_STATUS = [
+    { id: "U002", name: "店群总管", role: "店群总管", state: "待派发", stateLevel: "warning", currentTasks: 3, todayDone: 0, pendingAssign: 3, pendingReview: 0, returned: 0, timeout: 0, avgMinutes: 12, workload: 72, lastAction: "6 分钟前查看任务池" },
+    { id: "U003", name: "运营 A", role: "运营", state: "处理中", stateLevel: "good", currentTasks: 2, todayDone: 4, pendingAssign: 0, pendingReview: 1, returned: 1, timeout: 0, avgMinutes: 18, workload: 64, lastAction: "3 分钟前提交处理结果" },
+    { id: "U004", name: "运营 B", role: "运营", state: "空闲", stateLevel: "watch", currentTasks: 0, todayDone: 2, pendingAssign: 0, pendingReview: 0, returned: 0, timeout: 0, avgMinutes: 21, workload: 28, lastAction: "28 分钟前完成任务" },
+    { id: "U005", name: "数据财务", role: "数据 / 财务", state: "在线", stateLevel: "good", currentTasks: 1, todayDone: 3, pendingAssign: 0, pendingReview: 0, returned: 0, timeout: 0, avgMinutes: 15, workload: 45, lastAction: "9 分钟前补充财务口径" },
+  ];
+
   function tasks() { return window.AppTaskStore?.listActiveTasks?.() || []; }
   function logs() { return window.AppTaskStore?.listLogs?.() || []; }
   function sum(key) { return STORE_OVERVIEW.reduce((total, item) => total + Number(item[key] || 0), 0); }
+  function peopleSum(key) { return PEOPLE_STATUS.reduce((total, item) => total + Number(item[key] || 0), 0); }
   function money(value) { return `¥${Number(value || 0).toLocaleString("zh-CN")}`; }
   function trendClass(value) { return String(value || "").startsWith("-") ? "down" : "up"; }
-  function syncClass(value) { return value === "正常" ? "good" : value === "延迟" ? "warning" : "watch"; }
+  function syncClass(value) { return value === "正常" || value === "在线" ? "good" : value === "延迟" || value === "待派发" ? "warning" : "watch"; }
   function currentTime() { return new Date().toLocaleTimeString("zh-CN", { hour12: false }); }
   function metricGrid(items) { return `<section class="kpi-grid report-metrics realtime-metrics">${items.map(([a, b, c, t]) => `<article class="card realtime-metric"><h3>${s(a)}</h3><strong>${s(b)}</strong><small>${s(c)}</small>${t ? `<em class="trend ${trendClass(t)}">${s(t)}</em>` : ""}</article>`).join("")}</section>`; }
-  function hero(label, title, summary, sideTitle, sideValue) { return `<section class="report-hero realtime-hero"><div><p class="eyebrow">${s(label)}</p><h2>${s(title)}</h2><p>${s(summary)}</p></div><div class="report-hero-side"><span>${s(sideTitle)}</span><strong>${s(sideValue)}</strong><small>实时经营盘面</small></div></section>`; }
+  function hero(label, title, summary, sideTitle, sideValue) { return `<section class="report-hero realtime-hero"><div><p class="eyebrow">${s(label)}</p><h2>${s(title)}</h2><p>${s(summary)}</p></div><div class="report-hero-side"><span>${s(sideTitle)}</span><strong>${s(sideValue)}</strong><small>老板统筹层</small></div></section>`; }
 
   function realtimeBar() {
     const delayed = STORE_OVERVIEW.filter((item) => item.syncStatus === "延迟").length;
@@ -42,6 +50,15 @@
     return `<section class="page-section realtime-section"><div class="section-header"><h3>店铺经营明细</h3><span class="status-badge">TABLE</span></div><div class="store-table"><div class="store-table-row head"><span>店铺</span><span>平台</span><span>商品</span><span>动销</span><span>订单</span><span>销售额</span><span>利润</span><span>评论</span><span>差评</span><span>退款率</span><span>库存金额</span><span>待办</span><span>状态</span></div>${rows}</div></section>`;
   }
 
+  function peopleLiveCards() {
+    return `<section class="page-section realtime-section"><div class="section-header"><h3>员工实时状态</h3><span class="status-badge">LIVE</span></div><div class="platform-grid">${PEOPLE_STATUS.map((person) => `<article class="platform-card"><div class="platform-head"><div><span class="status-dot ${person.stateLevel}"></span><strong>${s(person.name)}</strong></div><span>${s(person.role)} · ${s(person.state)}</span></div><div class="platform-numbers"><div><small>当前任务</small><b>${person.currentTasks}</b></div><div><small>今日完成</small><b>${person.todayDone}</b></div><div><small>退回</small><b>${person.returned}</b></div><div><small>平均处理</small><b>${person.avgMinutes} 分</b></div></div><div class="platform-progress"><span style="width:${Math.min(100, person.workload)}%"></span></div><footer>负荷 ${person.workload}% · ${s(person.lastAction)}</footer></article>`).join("")}</div></section>`;
+  }
+
+  function peopleTable() {
+    const rows = PEOPLE_STATUS.map((person) => `<div class="store-table-row people-row"><strong>${s(person.name)}</strong><span><i class="status-dot ${person.stateLevel}"></i>${s(person.role)}</span><span>${s(person.state)}</span><span>${person.currentTasks}</span><span>${person.todayDone}</span><span>${person.pendingAssign}</span><span>${person.pendingReview}</span><span>${person.returned}</span><span>${person.timeout}</span><span>${person.avgMinutes} 分</span><span><b class="state-pill ${person.workload >= 70 ? "warning" : "good"}">${person.workload}%</b></span><span>${s(person.lastAction)}</span></div>`).join("");
+    return `<section class="page-section realtime-section"><div class="section-header"><h3>人员任务映射</h3><span class="status-badge">TABLE</span></div><div class="store-table"><div class="store-table-row people-row head"><span>人员</span><span>角色</span><span>状态</span><span>当前任务</span><span>今日完成</span><span>待派发</span><span>待复核</span><span>退回</span><span>超时</span><span>平均处理</span><span>负荷</span><span>最近动作</span></div>${rows}</div></section>`;
+  }
+
   const StoreOverviewPage = {
     route: "store-overview",
     title: "店群总览",
@@ -54,10 +71,10 @@
 
   const TaskCommandPage = {
     route: "task-command",
-    title: "任务指挥",
+    title: "人员总览",
     render() {
       const active = tasks();
-      return `${hero("TASK COMMAND", "任务指挥", "老板在这里看任务是否被派发、处理、提交、复核和归档。具体执行仍交给总管和运营。", "待闭环", active.length)}${metricGrid([["未派发", active.filter((item) => !item.assigneeId).length, "需要下发"], ["处理中", active.filter((item) => item.status === "处理中").length, "运营执行"], ["待复核", active.filter((item) => item.status === "待复核").length, "总管复核"], ["高优先级", active.filter((item) => item.priority === "高").length, "优先看"]])}`;
+      return `${hero("PEOPLE OVERVIEW", "人员总览", "老板看的是任务压在谁身上、谁忙、谁空闲、谁被退回、谁可能成为闭环卡点。具体派发和执行仍交给总管和运营。", "在线人员", PEOPLE_STATUS.length)}${metricGrid([["在线人员", PEOPLE_STATUS.length, "总管 / 运营 / 财务"], ["忙碌人员", PEOPLE_STATUS.filter((item) => item.state === "处理中" || item.workload >= 60).length, "需要关注负荷"], ["空闲人员", PEOPLE_STATUS.filter((item) => item.state === "空闲").length, "可承接任务"], ["待派发任务", peopleSum("pendingAssign") || active.filter((item) => !item.assigneeId).length, "总管处理"], ["今日完成", peopleSum("todayDone"), "团队产出"], ["退回次数", peopleSum("returned"), "质量观察"], ["超时任务", peopleSum("timeout"), "时效风险"], ["平均处理", "16 分", "团队均值"]])}${peopleLiveCards()}${peopleTable()}`;
     },
   };
 
@@ -85,7 +102,6 @@
     route: "review-audit",
     title: "复核审计",
     render() {
-      const logItems = logs().slice(0, 8).map((item) => ({ title: item.type || item.title, text: `${item.status || "已记录"} · ${item.action || item.result || "已进入日志"}`, badge: item.source || "日志" }));
       return `${hero("REVIEW AUDIT", "复核审计", "保留任务派发、提交、复核和归档痕迹，用来回看责任链和经营判断。", "日志", logs().length)}${metricGrid([["日志记录", logs().length, "可追溯"], ["任务归档", logs().filter((item) => String(item.status).includes("完成") || String(item.status).includes("归档")).length, "闭环"], ["派发记录", logs().filter((item) => String(item.type).includes("派发")).length, "责任链"], ["复核记录", logs().filter((item) => String(item.type).includes("复核")).length, "管理审计"]])}`;
     },
   };
