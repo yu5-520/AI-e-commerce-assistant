@@ -1,13 +1,12 @@
 """Server-side task and log service for modular product routes.
 
 This service is the v2 collaboration boundary for the mock product runtime. It
-keeps the existing source-candidate lifecycle, and adds an account-aware task
-flow:
+keeps the source-candidate lifecycle, and adds an account-aware task flow:
 
     candidate -> task pool -> assigned -> submitted -> reviewed -> archived
 
-Persistence is still in-memory for the runtime task list, but the data contract
-now carries assignee, reviewer, workflow status, and audit-friendly timestamps.
+The task list is still in-memory for the runtime demo, but every task now
+carries ownership, reviewer, workflow status, and role-based action hints.
 """
 
 from __future__ import annotations
@@ -36,7 +35,18 @@ def make_id(prefix: str) -> str:
 
 
 def infer_domain(task: Dict[str, Any]) -> str:
-    text = " ".join(str(item) for item in [task.get("riskDomain"), task.get("taskType"), task.get("taskSignal"), task.get("task"), task.get("reason"), *(task.get("judgmentTags") or [])] if item)
+    text = " ".join(
+        str(item)
+        for item in [
+            task.get("riskDomain"),
+            task.get("taskType"),
+            task.get("taskSignal"),
+            task.get("task"),
+            task.get("reason"),
+            *(task.get("judgmentTags") or []),
+        ]
+        if item
+    )
     if any(word in text for word in ["售后", "退款", "尺寸", "材质", "安装", "客服"]):
         return "售后"
     if any(word in text for word in ["库存", "补货", "承接"]):
@@ -138,13 +148,64 @@ def sort_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(tasks, key=lambda task: (PRIORITY_RANK.get(task.get("priority"), 9), task.get("manualOrder", 9999), task.get("createdAt", "")))
 
 
-def list_tasks(active_only: bool = False, assignee_id: str | None = None, review_scope: bool = False) -> List[Dict[str, Any]]:
+def available_actions_for_viewer(task: Dict[str, Any], viewer_id: str | None = None) -> List[str]:
+    user = get_user(viewer_id)
+    if not user:
+        return ["report", "assign", "submit", "review", "pin", "move", "source"]
+    role_id = user.get("roleId")
+    if role_id == "owner":
+        return ["report", "assign", "review", "pin", "move", "source"]
+    if role_id == "manager":
+        return ["report", "assign", "review", "pin", "move", "source"]
+    if role_id == "operator":
+        actions = ["report", "source"]
+        if task.get("assigneeId") == user.get("id"):
+            actions.insert(1, "submit")
+        return actions
+    return ["report", "source"]
+
+
+def task_visible_to_viewer(task: Dict[str, Any], viewer_id: str | None = None) -> bool:
+    user = get_user(viewer_id)
+    if not user:
+        return True
+    role_id = user.get("roleId")
+    if role_id in {"owner", "manager"}:
+        return True
+    if role_id == "operator":
+        return task.get("assigneeId") == user.get("id")
+    if role_id == "finance":
+        return task.get("riskDomain") in {"报表", "价格", "流量"} or task.get("sourceRoute") in {"data-check", "business-traffic"}
+    if role_id == "observer":
+        return task.get("status") not in {"处理中"}
+    return False
+
+
+def project_task_for_viewer(task: Dict[str, Any], viewer_id: str | None = None) -> Dict[str, Any]:
+    item = deepcopy(task)
+    user = get_user(viewer_id)
+    item["availableActions"] = available_actions_for_viewer(item, viewer_id)
+    if user:
+        item["viewerRoleId"] = user.get("roleId")
+        item["viewerRoleName"] = user.get("roleName")
+        item["viewerInsightDepth"] = user.get("insightDepth")
+        if user.get("roleId") == "observer":
+            item["reason"] = "该任务存在经营风险，已进入处理流程。"
+            item["judgmentTags"] = ["已脱敏", "只读摘要"]
+        if user.get("roleId") == "operator" and item.get("assigneeId") != user.get("id"):
+            item["reason"] = "该任务不属于当前运营账号。"
+    return item
+
+
+def list_tasks(active_only: bool = False, assignee_id: str | None = None, review_scope: bool = False, viewer_id: str | None = None) -> List[Dict[str, Any]]:
     tasks = [task for task in TASKS if not active_only or task.get("status") not in DONE_STATUS]
     if assignee_id:
         tasks = [task for task in tasks if task.get("assigneeId") == assignee_id]
     if review_scope:
         tasks = [task for task in tasks if task.get("status") == "待复核"]
-    return deepcopy(sort_tasks(tasks))
+    if viewer_id:
+        tasks = [task for task in tasks if task_visible_to_viewer(task, viewer_id)]
+    return [project_task_for_viewer(task, viewer_id) for task in sort_tasks(tasks)]
 
 
 def list_logs() -> List[Dict[str, Any]]:
@@ -400,9 +461,9 @@ def reorder_task(task_id: str, direction: str) -> Dict[str, Any] | None:
     return deepcopy(current_ref)
 
 
-def reset_tasks() -> Dict[str, Any]:
+def reset_tasks(viewer_id: str | None = None) -> Dict[str, Any]:
     global TASKS, LOGS
     TASKS = seed_tasks()
     LOGS = seed_logs()
     create_log({"type": "演示重置", "status": "已重置", "action": "服务端任务池已恢复默认演示数据", "result": "首页、待办、日志已同步刷新。"})
-    return {"tasks": list_tasks(), "logs": list_logs()}
+    return {"tasks": list_tasks(viewer_id=viewer_id), "logs": list_logs()}
