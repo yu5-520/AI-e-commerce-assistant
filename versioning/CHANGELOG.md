@@ -5,12 +5,15 @@
 ### Added
 - Added `src/services/dashboard_service.py` as the dashboard module service boundary.
 - Added backend task-state helpers in `module_task_service.py`: `find_open_task_by_key`, `task_state_for_payload`, and `attach_task_state`.
-- Product module responses now include backend-generated `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask`.
+- Product and traffic module responses now include backend-generated `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask`.
 - API badge tooltip now exposes recent fallback failure paths and messages.
 
 ### Changed
 - `src/api/routes/modules/dashboard.py` now calls `dashboard_service.get_dashboard_summary()` instead of directly depending on `business_view_service`.
 - `src/api/routes/modules/product.py` now uses one backend `product_task_payload()` for both product task creation and product list task-state annotation.
+- `src/api/routes/modules/traffic.py` now uses one backend `traffic_task_payload()` for both traffic task creation and traffic list task-state annotation.
+- `web_demo/modules/traffic/page.js` now shows `已在任务清单` when the hydrated task store contains the active backend task.
+- `web_demo/modules/todo/page.js` now renders only active tasks in the execution queue; completed tasks disappear from 待办 and remain available through 日志.
 - `web_demo/stores/task-store.js` no longer infers risk domain or action type. It now accepts backend task identity as the source of truth.
 - `web_demo/core/task-actions.js` now reads product identity from backend-returned task state instead of recalculating it from product fields.
 - `web_demo/core/api-client.js` now preserves fallback failure details through `failureSummary()`.
@@ -21,6 +24,7 @@
 - Backend owns task identity and active-task status.
 - Frontend task store is a hydrated cache and should not independently infer business risk/action rules.
 - Dashboard should depend on `dashboard_service` as its module service boundary.
+- 待办只展示未完成任务；完成后的任务只保留日志复盘，不继续占用执行队列。
 
 ## v1.5.0 - 2026-06-16
 
@@ -48,33 +52,9 @@
 - `__init__.py` should remain a router aggregator, not a business logic file.
 - Route files should call services and return module data; they should not own long-lived business data constants or task state.
 
-## v1.4.1 - 2026-06-16
-
-### Added
-- Added `src/services/module_data_service.py` as the backend source of truth for current Mock ERP / CRM module data.
-- Added `src/services/module_task_service.py` as the server-side mock task/log authority.
-- Added server-side task actions for create, merge, complete, pin, reorder, reset, and log creation.
-- Added frontend API methods for module task creation, todo completion, pinning, reordering, reset, and task/log refresh.
-
-### Changed
-- `src/api/routes/modules/__init__.py` now imports module data from `module_data_service` instead of keeping large duplicated constants inside the route file.
-- `GET /api/modules/todo` now returns service-side task state instead of old approval/action-confirmation data.
-- `GET /api/modules/log` now returns service-side operation logs.
-- Product, competitor, listing, traffic, and report task actions now create tasks on the backend module endpoints first, then hydrate the frontend task store.
-- Todo page actions now call backend task endpoints first, then refresh frontend state from `/api/modules/todo` and `/api/modules/log`.
-- Frontend `mock-data.js` was reduced to a minimal fallback shell so module demo data is no longer maintained twice.
-- Frontend badge now shows whether the UI is using `服务端接口` or `本地兜底`.
-- Frontend assets were bumped to `?v=1.4.1`.
-- FastAPI app version and health version are aligned to `1.4.1`.
-
-### Product Engineering Rule
-- Backend module data is now the current source of truth for module lists.
-- Backend task/log service is now the current source of truth for task and log state.
-- Frontend localStorage remains a hydrated cache, not the product authority.
-- This is still mock server memory, not database persistence; account roles and multi-user consistency still require a later persistence layer.
-
 ## Earlier History
 
+- v1.4.1: Closed the module API chain and moved task/log authority to backend mock services.
 - v1.4.0: Added modular backend API routes and removed active `/api/business/*` product path.
 - v1.3.0: Added modular frontend route registry and removed legacy hotfix scripts.
 - v1.2.0: Added unified front-end route lifecycle coordinator.
