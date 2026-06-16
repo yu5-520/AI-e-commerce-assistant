@@ -1,8 +1,8 @@
 """Mock account, role, and permission service for the v2 collaboration layer.
 
-This service is a product contract, not a real login system. The frontend can
-switch mock accounts through `X-Mock-User-Id` so every module can render from a
-specific role view before SSO, tenants, and production auth are connected.
+This is a product contract, not a real login system. The frontend switches mock
+accounts through `X-Mock-User-Id` so every module can render a specific role view
+before SSO, tenant isolation, and production auth are connected.
 """
 
 from __future__ import annotations
@@ -18,15 +18,42 @@ PERMISSIONS: List[Dict[str, str]] = [
     {"id": "view_own_tasks", "name": "查看自己的任务"},
     {"id": "view_finance", "name": "查看数据 / 财务"},
     {"id": "view_org_risk", "name": "查看组织风险"},
+    {"id": "view_command", "name": "查看任务指挥"},
     {"id": "dispatch_tasks", "name": "下发任务"},
     {"id": "assign_tasks", "name": "拆分派发"},
     {"id": "handle_tasks", "name": "处理任务"},
     {"id": "submit_tasks", "name": "提交处理结果"},
     {"id": "review_tasks", "name": "复核任务"},
+    {"id": "manage_roles", "name": "管理角色权限"},
     {"id": "view_only", "name": "只读观察"},
 ]
 
 PERMISSION_NAME_MAP = {item["id"]: item["name"] for item in PERMISSIONS}
+
+EXECUTIVE_MODULES = [
+    "dashboard",
+    "executive-cockpit",
+    "risk-center",
+    "task-command",
+    "profit-budget",
+    "org-efficiency",
+    "review-audit",
+    "accounts",
+    "role-console",
+]
+
+OPERATION_MODULES = [
+    "dashboard",
+    "operating-unit",
+    "data-check",
+    "business-products",
+    "business-competitors",
+    "business-listing",
+    "business-traffic",
+    "business-actions",
+    "business-report",
+    "accounts",
+]
 
 ROLES: List[Dict[str, Any]] = [
     {
@@ -35,19 +62,13 @@ ROLES: List[Dict[str, Any]] = [
         "level": 1,
         "scope": "全部店群",
         "insightDepth": "owner_strategy",
-        "insightName": "老板战略视角",
-        "description": "看全部店群、完整报告、组织瓶颈、利润风险和任务闭环，可以把任务下发给店群总管。",
-        "permissions": ["view_all_stores", "view_finance", "view_org_risk", "dispatch_tasks", "review_tasks", "view_only"],
-        "visibleModules": ["dashboard", "accounts", "operating-unit", "data-check", "business-products", "business-competitors", "business-listing", "business-traffic", "business-actions", "business-report"],
-        "allowedActions": ["查看全部报告", "下发任务", "查看组织风险", "查看财务摘要", "查看复核结果"],
-        "hiddenFields": [],
-        "managementInsights": [
-            "哪个店群拖累利润",
-            "哪些任务反复返工",
-            "广告预算是否在放大亏损商品",
-            "售后问题是否升级成组织流程问题",
-            "总管复核是否及时闭环",
-        ],
+        "insightName": "老板统筹视角",
+        "description": "看经营结果、利润预算、组织效率、任务闭环和审计，不进入一线运营细模块。",
+        "permissions": ["view_all_stores", "view_finance", "view_org_risk", "view_command", "dispatch_tasks", "review_tasks", "manage_roles", "view_only"],
+        "visibleModules": EXECUTIVE_MODULES,
+        "allowedActions": ["查看经营驾驶舱", "查看风险中心", "下发任务", "查看利润预算", "管理角色权限"],
+        "hiddenFields": ["一线商品操作台", "一线上新操作台", "一线流量操作台"],
+        "managementInsights": ["利润拖累", "风险聚合", "任务闭环", "预算承接", "组织效率", "复核审计"],
     },
     {
         "id": "manager",
@@ -56,18 +77,12 @@ ROLES: List[Dict[str, Any]] = [
         "scope": "负责店群",
         "insightDepth": "team_management",
         "insightName": "店群管理视角",
-        "description": "接收老板下发任务，拆分给运营，跟踪处理进度，复核运营提交结果。",
-        "permissions": ["view_managed_stores", "view_finance", "assign_tasks", "review_tasks", "view_only"],
-        "visibleModules": ["dashboard", "accounts", "operating-unit", "data-check", "business-products", "business-competitors", "business-listing", "business-traffic", "business-actions", "business-report"],
+        "description": "负责把经营信号拆成任务，派发运营并复核结果。",
+        "permissions": ["view_managed_stores", "view_finance", "assign_tasks", "review_tasks", "manage_roles", "view_only"],
+        "visibleModules": OPERATION_MODULES + ["role-console"],
         "allowedActions": ["拆分任务", "派发运营", "调整优先级", "复核通过", "退回补充"],
-        "hiddenFields": ["跨店群组织风险", "老板级利润归因"],
-        "managementInsights": [
-            "哪个运营任务积压",
-            "哪个商品反复出现同类预警",
-            "任务是不是派错人",
-            "运营提交是否缺少证据",
-            "店群流程是否需要调整",
-        ],
+        "hiddenFields": ["全公司预算决策", "跨店群组织判断"],
+        "managementInsights": ["店群任务积压", "运营处理质量", "重复预警", "复核效率", "流程卡点"],
     },
     {
         "id": "operator",
@@ -76,17 +91,12 @@ ROLES: List[Dict[str, Any]] = [
         "scope": "自己的任务",
         "insightDepth": "execution_checklist",
         "insightName": "执行处理视角",
-        "description": "只看到分配给自己的任务、处理建议、检查清单和提交入口。",
+        "description": "只看到自己的任务、报告、检查清单和提交入口。",
         "permissions": ["view_own_tasks", "handle_tasks", "submit_tasks", "view_only"],
-        "visibleModules": ["dashboard", "accounts", "business-actions", "business-report"],
+        "visibleModules": ["dashboard", "business-actions", "business-report", "accounts"],
         "allowedActions": ["查看任务报告", "提交处理结果", "补充说明", "重新提交"],
-        "hiddenFields": ["全部店群", "其他运营任务", "人员绩效", "财务利润", "组织瓶颈"],
-        "managementInsights": [
-            "为什么这个任务被派给我",
-            "需要检查哪些字段",
-            "处理后要提交什么证据",
-            "被退回时需要补充什么",
-        ],
+        "hiddenFields": ["全部店群", "其他运营任务", "财务利润", "组织判断"],
+        "managementInsights": ["任务原因", "检查字段", "提交证据", "退回补充"],
     },
     {
         "id": "finance",
@@ -95,17 +105,12 @@ ROLES: List[Dict[str, Any]] = [
         "scope": "报表与财务数据",
         "insightDepth": "finance_risk",
         "insightName": "财务经营视角",
-        "description": "查看报表、利润、ROI、退款成本和库存资金风险，不直接处理运营任务。",
+        "description": "查看利润、预算、ROI、退款成本和库存资金风险，不处理运营动作。",
         "permissions": ["view_finance", "view_only"],
-        "visibleModules": ["dashboard", "accounts", "data-check", "business-traffic", "business-report"],
+        "visibleModules": ["dashboard", "profit-budget", "risk-center", "data-check", "business-report", "accounts"],
         "allowedActions": ["查看财务报告", "标记数据异常", "补充财务说明"],
-        "hiddenFields": ["任务派发按钮", "运营复核按钮", "人员管理评价"],
-        "managementInsights": [
-            "哪个商品看起来卖得好但实际亏钱",
-            "退款成本是否吞掉利润",
-            "广告 ROI 是否被虚高成交掩盖",
-            "库存占用是否影响现金流",
-        ],
+        "hiddenFields": ["任务派发按钮", "运营复核按钮", "角色管理"],
+        "managementInsights": ["利润承接", "退款成本", "ROI 可信度", "库存资金"],
     },
     {
         "id": "observer",
@@ -114,16 +119,12 @@ ROLES: List[Dict[str, Any]] = [
         "scope": "被授权范围",
         "insightDepth": "summary_only",
         "insightName": "只读摘要视角",
-        "description": "只能查看总览、部分报告和日志摘要，不能创建、派发、提交或复核任务。",
+        "description": "只能查看摘要、进度和日志结果，不能操作任务。",
         "permissions": ["view_only"],
-        "visibleModules": ["dashboard", "accounts", "business-report"],
+        "visibleModules": ["dashboard", "review-audit", "business-report", "accounts"],
         "allowedActions": ["查看摘要", "查看日志"],
-        "hiddenFields": ["财务细节", "人员绩效", "任务责任链", "全部操作按钮"],
-        "managementInsights": [
-            "当前是否有风险",
-            "任务是否已经进入流程",
-            "处理结果是否已经归档",
-        ],
+        "hiddenFields": ["财务细节", "任务责任链", "全部操作按钮"],
+        "managementInsights": ["风险状态", "处理进度", "归档结果"],
     },
 ]
 
@@ -145,6 +146,8 @@ USERS: List[Dict[str, Any]] = [
     {"id": "U005", "name": "数据财务", "roleId": "finance", "storeGroupIds": ["G001"], "storeIds": ["S001", "S002", "S003"], "status": "启用"},
     {"id": "U006", "name": "观察者", "roleId": "observer", "storeGroupIds": ["G001"], "storeIds": ["S001", "S002", "S003"], "status": "启用"},
 ]
+
+ROLE_CHANGE_LOGS: List[Dict[str, Any]] = []
 
 
 def clone(value: Any) -> Any:
@@ -203,6 +206,10 @@ def list_stores() -> List[Dict[str, Any]]:
     return clone(STORES)
 
 
+def list_role_change_logs() -> List[Dict[str, Any]]:
+    return clone(ROLE_CHANGE_LOGS)
+
+
 def get_user(user_id: str | None) -> Dict[str, Any] | None:
     if not user_id:
         return None
@@ -256,32 +263,63 @@ def role_view_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
     role_id = user.get("roleId")
     pages = {
         "owner": {
-            "headline": "老板视角",
-            "summary": "看全部店群、利润风险、任务闭环和组织瓶颈。",
-            "sections": ["全部账号", "店群授权", "组织任务链路", "人员处理效率", "权限边界"],
+            "headline": "老板统筹台",
+            "summary": "不进入商品、竞品、上新、流量的一线操作台，只看经营结果、风险、预算、组织和审计。",
+            "sections": ["经营驾驶舱", "风险中心", "任务指挥", "利润预算", "组织效率", "复核审计"],
         },
         "manager": {
-            "headline": "店群总管视角",
-            "summary": "看自己负责的店群、待拆分任务、运营处理状态和复核队列。",
-            "sections": ["我的店群", "我管理的运营", "待派发任务", "待复核任务", "退回记录"],
+            "headline": "店群总管工作台",
+            "summary": "看负责店群的一线经营模块，拆分任务、派发运营并复核结果。",
+            "sections": ["店群经营", "商品", "竞品", "上新", "流量", "待办", "复核"],
         },
         "operator": {
-            "headline": "运营执行视角",
-            "summary": "只看自己的任务、任务报告、检查清单、提交入口和退回原因。",
-            "sections": ["我的权限", "我的任务范围", "可提交内容", "不可访问说明"],
+            "headline": "运营执行台",
+            "summary": "只看自己的任务、任务报告、提交入口和退回原因。",
+            "sections": ["我的任务", "任务报告", "处理记录"],
         },
         "finance": {
-            "headline": "数据 / 财务视角",
-            "summary": "看报表、利润、退款成本、ROI、库存资金和数据异常，不处理运营任务。",
-            "sections": ["数据权限", "财务口径", "异常报表", "不可操作说明"],
+            "headline": "数据 / 财务台",
+            "summary": "看利润、预算、ROI、退款成本、库存资金和数据异常，不处理运营动作。",
+            "sections": ["利润预算", "风险中心", "报表异常", "日志"],
         },
         "observer": {
-            "headline": "只读观察视角",
-            "summary": "只看被授权摘要、部分报告和日志结果，不参与任务流转。",
-            "sections": ["可查看页面", "只读范围", "不可操作说明"],
+            "headline": "只读观察台",
+            "summary": "只看摘要、进度和归档日志，不参与任务流转。",
+            "sections": ["总览", "复核审计", "日志摘要"],
         },
     }
     return pages.get(role_id, pages["observer"])
+
+
+def update_user_role(user_id: str, role_id: str, operator_id: str | None = None) -> Dict[str, Any] | None:
+    user = next((item for item in USERS if item["id"] == user_id), None)
+    role = role_by_id(role_id)
+    if not user or not role:
+        return None
+    old_role = user.get("roleId")
+    user["roleId"] = role_id
+    ROLE_CHANGE_LOGS.insert(0, {"type": "角色变更", "userId": user_id, "oldRoleId": old_role, "newRoleId": role_id, "operatorId": operator_id or DEFAULT_USER_ID})
+    return get_user(user_id)
+
+
+def update_user_stores(user_id: str, store_ids: List[str], operator_id: str | None = None) -> Dict[str, Any] | None:
+    user = next((item for item in USERS if item["id"] == user_id), None)
+    valid = {store["id"] for store in STORES}
+    if not user:
+        return None
+    user["storeIds"] = [store_id for store_id in store_ids if store_id in valid]
+    ROLE_CHANGE_LOGS.insert(0, {"type": "店铺授权", "userId": user_id, "storeIds": user["storeIds"], "operatorId": operator_id or DEFAULT_USER_ID})
+    return get_user(user_id)
+
+
+def update_role_permissions(role_id: str, permissions: List[str], operator_id: str | None = None) -> Dict[str, Any] | None:
+    role = role_by_id(role_id)
+    valid = {permission["id"] for permission in PERMISSIONS}
+    if not role:
+        return None
+    role["permissions"] = [permission for permission in permissions if permission in valid]
+    ROLE_CHANGE_LOGS.insert(0, {"type": "权限模板", "roleId": role_id, "permissions": role["permissions"], "operatorId": operator_id or DEFAULT_USER_ID})
+    return enrich_role(role)
 
 
 def account_summary(user_id: str | None = None) -> Dict[str, Any]:
@@ -294,18 +332,7 @@ def account_summary(user_id: str | None = None) -> Dict[str, Any]:
         "users": list_users(),
         "storeGroups": list_store_groups(),
         "stores": list_stores(),
-        "taskFlow": [
-            "老板查看店群总览和完整预警报告",
-            "老板下发任务给店群总管",
-            "店群总管拆分任务给运营",
-            "运营处理后提交结果",
-            "店群总管复核，通过后归档到日志",
-        ],
-        "boundary": {
-            "authMode": "mock_account_context_header",
-            "switchHeader": "X-Mock-User-Id",
-            "realSsoConnected": False,
-            "realEnterpriseTenantConnected": False,
-            "permissionEnforcement": "mock_backend_scope_and_ui_actions",
-        },
+        "roleChangeLogs": list_role_change_logs(),
+        "taskFlow": ["经营信号进入统筹模块", "老板在任务指挥中下发", "总管拆分给运营", "运营处理后提交", "总管复核后归档"],
+        "boundary": {"authMode": "mock_account_context_header", "switchHeader": "X-Mock-User-Id", "realSsoConnected": False, "realEnterpriseTenantConnected": False, "permissionEnforcement": "mock_backend_scope_and_ui_actions"},
     }
