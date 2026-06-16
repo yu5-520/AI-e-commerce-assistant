@@ -11,6 +11,7 @@
     window.ManagerTasksPage,
     window.ManagerDispatchPage,
     window.ManagerReviewPage,
+    window.ManagerTaskDetailPage,
     window.ManagerModulesPage,
     window.ManagerRetrospectivePage,
     window.ManagerReportsPage,
