@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.5.2
+Current Version: v1.5.3
 
 ## Version History
 
@@ -22,6 +22,7 @@ Current Version: v1.5.2
 - v1.5.0: Split the backend module router into separate route files for dashboard, operating unit, product, competitor, listing, traffic, report, todo, and log. `src/api/routes/modules/__init__.py` now only aggregates routers under `/api/modules/*`.
 - v1.5.1: Removed remaining task-identity duplication. Product task identity and active-task status now come from the backend; the frontend task store no longer infers risk/action domains. Dashboard now routes through `dashboard_service`, and the API badge exposes fallback failure details.
 - v1.5.2: Unified existing-task button behavior across product, competitor, listing, traffic, and report modules. Existing task buttons now jump to the matching task card in 待办, and backend task-state annotations were added for competitor, listing, and report modules.
+- v1.5.3: Added source-candidate lifecycle archiving. Completed tasks now archive their source candidate, source modules hide completed candidates by default, and the frontend refreshes module data after task lifecycle changes so completed work frees the next cycle slot.
 
 ## Version Rules
 
