@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.2 - 2026-06-16
+
+### Fixed
+- Fixed the module-switch crash caused by `web_demo/module-task-bridge.js` repeatedly mutating button text inside a global `MutationObserver` loop.
+- The task bridge observer is now throttled through `requestAnimationFrame`.
+- Button text, class, and title updates are now idempotent, so repeated binding checks do not continuously rewrite DOM nodes.
+- Frontend assets were bumped to `?v=1.1.2` to avoid cached bridge scripts.
+- FastAPI app version and health version are aligned to `1.1.2`.
+
+### Product Engineering Rule
+- Module bridge scripts may observe route DOM changes, but they must not rewrite the same DOM nodes on every observer callback.
+- Observer-based hotfix scripts should be throttled and idempotent, otherwise switching modules can create render loops.
+
 ## v1.1.1 - 2026-06-16
 
 ### Added
@@ -43,25 +56,9 @@
 - 首页 is the command board; 待办 is the full task pool; 日志 is the trace record.
 - AI and module actions only create advice/tasks/logs in this version. They do not change real shop data, ad budgets, refunds, pricing, or ERP records.
 
-## v1.0.24 - 2026-06-15
-
-### Changed
-- Simplified the homepage `任务清单` into a command-board style scheduling and navigation view.
-- Reworked `web_demo/dashboard-hotfix.js` so homepage task data now uses short task types, product short names, source modules, time buckets, and judgment tags instead of long handling explanations.
-- Reworked `web_demo/dashboard-linked.css` so task rows are compact scheduling rows instead of large detail cards.
-- Added a `时间系统` strip that groups active tasks by deadline buckets such as `今天 18:00 前`, `今天内`, `明天前`, and `本周内`.
-- Homepage cards now emphasize `排序号 / 优先级 / 截止时间 / 来源 / 判断标签 / 导航按钮`.
-- Reduced homepage actions to navigation-first controls: `进入待办`, `查看来源`, `商品`, and a weaker `完成` action.
-- `web_demo/index.html` now appends `?v=1.0.24` to assets.
-- Aligned the FastAPI app version and health version with the repository version: `1.0.24`.
-
-### Product Engineering Rule
-- 首页 is a command board, not an execution page.
-- Long reasons and detailed handling text belong in 待办, not on the 首页.
-- 首页 should highlight task order, navigation, time, and judgment signals.
-
 ## Earlier History
 
+- v1.0.24: Dashboard task board was simplified into a command-board scheduling view with short judgment tags.
 - v1.0.23: Dashboard task board linked the homepage to a cross-module task pool.
 - v1.0.22: Report page became 日志 / operation log center.
 - v1.0.21: Actions page became 待办任务 / task center.
