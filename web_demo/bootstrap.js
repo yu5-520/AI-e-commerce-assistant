@@ -8,6 +8,12 @@
     window.ReviewAuditPage,
     window.AccountPage,
     window.RoleConsolePage,
+    window.ManagerTasksPage,
+    window.ManagerDispatchPage,
+    window.ManagerReviewPage,
+    window.ManagerModulesPage,
+    window.ManagerRetrospectivePage,
+    window.ManagerReportsPage,
     window.OperatingUnitPage,
     window.ReportPage,
     window.ProductPage,
@@ -19,7 +25,7 @@
     window.TaskReportPage,
   ];
 
-  pages.forEach((page) => AppRouter.register(page));
+  pages.filter(Boolean).forEach((page) => AppRouter.register(page));
 
   function applyNavigationScope(account) {
     const visible = new Set(account?.currentUser?.visibleModules || []);
@@ -45,7 +51,7 @@
       renderAccountSwitcher(nextAccount);
       const active = location.hash.replace("#", "") || "dashboard";
       const allowed = new Set(nextAccount?.currentUser?.visibleModules || []);
-      if (allowed.size && !allowed.has(active)) AppRouter.navigate("accounts");
+      if (allowed.size && !allowed.has(active)) AppRouter.navigate("dashboard");
       else AppRouter.schedule("account-switch");
       select.disabled = false;
     };
