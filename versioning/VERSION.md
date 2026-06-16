@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.3.0
+Current Version: v1.4.0
 
 ## Version History
 
@@ -17,6 +17,7 @@ Current Version: v1.3.0
 - v1.1.2: Fixed the module task bridge render loop. The bridge observer is now throttled with `requestAnimationFrame`, button state updates are idempotent, and repeated text updates no longer trigger continuous DOM mutation loops when switching modules.
 - v1.2.0: Added a unified front-end route lifecycle coordinator. Hash route listeners are centrally scheduled, legacy MutationObserver-based hotfix callbacks are converted into route-after-render callbacks, and rapid module switching is batched through one lifecycle queue.
 - v1.3.0: Rebuilt the frontend into a modular route registry. The old `app-v2.js`, route lifecycle shim, hotfix page scripts, root task store, and task bridge scripts were removed from the active product entry. The new entry is `core/router.js + core/shell.js + stores/task-store.js + core/task-actions.js + modules/*/page.js + bootstrap.js`.
+- v1.4.0: Added modular backend interfaces under `/api/modules/*`, added the frontend `core/api-client.js`, prefetches module data before router start, and removed the old `/api/business/*` router from the active backend entry.
 
 ## Version Rules
 
