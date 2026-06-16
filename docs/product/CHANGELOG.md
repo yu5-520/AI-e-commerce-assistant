@@ -1,5 +1,29 @@
 # Product Changelog
 
+## v2.5.1 - 2026-06-16
+
+### Product Decision
+- V2.5.1 adds cross-account task lifecycle sync.
+- Product truth: 任务不是每个账号各自一份，而是一条主记录、多账号视图、多生命周期事件。
+- 运营接收、提交、总管退回、总管通过、写入复盘等动作，必须同步改变相关账号的任务状态、待办数量、日志记录和复盘入口。
+- MVP 先保证刷新后的数据一致性；后续再接轮询、SSE、WebSocket 或消息通知。
+
+### Changed
+- Added lifecycle event stream: `TASK_EVENTS`.
+- Added unified `transition_task()` path for task lifecycle actions.
+- Added operator `接收任务` stage before processing.
+- Operator submission now changes manager view to `待复核` and creates an `operator_submitted` event.
+- Manager approval / return creates lifecycle events and updates operator view.
+- Writing a task to recap creates a `task_written_to_recap` event and makes recap handoff visible to owner / manager scopes.
+- Added per-user counters: 待接收、处理中、已提交、待复核、已退回、待写复盘、生命周期事件.
+- Added `/todo/events`, `/todo/counters`, `/todo/{task_id}/accept`, `/todo/{task_id}/recap` endpoints.
+- Todo page now shows a lifecycle event feed and cross-account counters.
+- Frontend assets now use `?v=2.5.1`; API and health versions are aligned.
+
+### Product Boundary
+- This remains in-memory mock event sync.
+- Real version should move events, counters, notifications, and lifecycle transitions into persistent tables and then connect polling / SSE / WebSocket.
+
 ## v2.5.0 - 2026-06-16
 
 ### Product Decision
@@ -25,22 +49,7 @@
 
 ## v2.4.2 - 2026-06-16
 
-### Product Decision
-- V2.4.2 restores the operator-side operation modules.
-- Product truth: 运营账号不是纯待办执行人，而是被分配店铺权限的店铺经营者。
-- 运营能看经营单元、报表、商品、竞品、上新、流量、待办、日志和账号，但数据口径限定在“我负责的店铺”。
-
-### Changed
-- Operator navigation now shows: 总览、经营单元、报表、商品、竞品、上新、流量、待办、日志、账号.
-- Operator dashboard changed into `我的店铺经营总览`.
-- Added assigned-store cards and module entry cards for operator accounts.
-- Added `web_demo/operator-dashboard.css`.
-- Operator account role copy now clarifies assigned-store scope instead of task-only scope.
-- Frontend assets now use `?v=2.4.2`; API and health versions are aligned.
-
-### Product Boundary
-- This remains mock scoped-store data.
-- Real version should connect ERP / CRM / shop authorization APIs, store-level permission filtering, report-level filtering, product ownership, traffic ownership, and operator-specific task/log APIs.
+- Restored operator-side operation modules and scoped operator store dashboard.
 
 ## v2.4.1 - 2026-06-16
 
@@ -50,62 +59,15 @@
 
 - Changed 老板账号 `总览` from task list into business overview.
 
-## v2.3.9 - 2026-06-16
-
-- 店群总管 upgraded from a static execution board into an actionable task dispatch workbench.
-
-## v2.3.8 - 2026-06-16
-
-- 店群总管 side changed into execution management workflow.
-
-## v2.3.7 - 2026-06-16
-
-- `账号` changed into a basic account center.
-
-## v2.3.6 - 2026-06-16
-
-- `复盘审计` changed from table-style rows into summary-first expandable cards.
-
-## v2.3.5 - 2026-06-16
-
-- Owner-side `复核审计` changed into `复盘审计`.
-
-## v2.3.4 - 2026-06-16
-
-- Owner-side `组织效率` changed into organization governance console.
-
-## v2.3.3 - 2026-06-16
-
-- Owner-side `利润预算` changed into `供投财务`.
-
-## v2.3.2 - 2026-06-16
-
-- Owner-side `任务指挥` changed into `人员总览`.
-
-## v2.3.1 - 2026-06-16
-
-- `店群总览` was upgraded into a realtime business operations board.
-
-## v2.3.0 - 2026-06-16
-
-- Removed owner `经营驾驶舱` and repositioned `风险中心` into `店群总览`.
-
-## v2.2.0 - 2026-06-16
-
-- Separated owner decision navigation from first-line operation navigation.
-
-## v2.1.0 - 2026-06-16
-
-- Added global account switching and role-based task/report views.
-
-## v2.0.0 - 2026-06-16
-
-- Added account roles, permissions, and dispatch / submit / review collaboration flow.
-
 ## Earlier History
 
-- v1.6.1: Candidate report pages include `加入任务清单`.
-- v1.6.0: Added independent detail reports.
-- v1.5.3: Completed tasks archive their source candidates.
-- v1.5.2: Existing-task buttons jump to the matching task card inside 待办.
-- v1.5.1: Backend owns task identity and active-task status.
+- v2.3.9: 店群总管 upgraded from a static execution board into an actionable task dispatch workbench.
+- v2.3.8: 店群总管 side changed into execution management workflow.
+- v2.3.7: `账号` changed into a basic account center.
+- v2.3.6: `复盘审计` changed from table-style rows into summary-first expandable cards.
+- v2.3.5: Owner-side `复核审计` changed into `复盘审计`.
+- v2.3.4: Owner-side `组织效率` changed into organization governance console.
+- v2.3.3: Owner-side `利润预算` changed into `供投财务`.
+- v2.3.2: Owner-side `任务指挥` changed into `人员总览`.
+- v2.3.1: `店群总览` was upgraded into a realtime business operations board.
+- v2.3.0: Removed owner `经营驾驶舱` and repositioned `风险中心` into `店群总览`.
