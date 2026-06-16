@@ -1,24 +1,27 @@
 # Changelog
 
-## v2.3.4 - 2026-06-16
+## v2.3.5 - 2026-06-16
 
 ### Added
-- Rebuilt owner-facing `组织效率` into an organization governance console.
-- Added position relationship network: 老板 → 店群总管 → 运营 / 财务 / 观察者.
-- Added organization KPI metrics: employee count, manager count, operator count, finance count, read-only count, permission exception count, unassigned account count, and permission change count.
-- Added account role control, store authorization control, and role permission template control inside `组织效率`.
-- Added `web_demo/org-efficiency.css` for organization map and permission governance layout.
+- Rebuilt owner-facing `复核审计` into `复盘审计`.
+- Added daily / weekly / monthly / special retrospective intake data.
+- Added audit issue list for missed weekly targets, low ROI, rising refund rate, and review delay.
+- Added next-cycle task draft list for next week / next month task planning.
 
 ### Changed
-- `账号` page now only shows current identity, scope, visible modules, and permission summary; its management button routes to `组织效率`.
-- Legacy `role-console` remains as a compatibility route, but daily role / store / permission governance is now under `组织效率`.
-- Frontend assets were bumped to `?v=2.3.4`.
-- FastAPI app version and health version are aligned to `2.3.4`.
+- Owner navigation label changed from `复核审计` to `复盘审计`.
+- The page no longer focuses on single task logs; it focuses on cycle retrospectives, operating failure review, and next-cycle task planning.
+- Frontend assets were bumped to `?v=2.3.5`.
+- FastAPI app version and health version are aligned to `2.3.5`.
 
 ### Product Engineering Rule
-- `人员总览` shows realtime employee state.
-- `组织效率` shows organization structure, reporting chain, account permissions, store ownership, and permission governance.
-- `账号` answers “我是谁”; `组织效率` answers “组织怎么运转”.
+- Boss accounts usually do not dispatch tasks because of one store's short-term fluctuation.
+- Boss tasks should come mainly from daily / weekly / monthly retrospectives and audit findings.
+- `复盘审计` turns past reports into next-cycle tasks.
+
+## v2.3.4 - 2026-06-16
+
+- Rebuilt owner-facing `组织效率` into an organization governance console.
 
 ## v2.3.3 - 2026-06-16
 
