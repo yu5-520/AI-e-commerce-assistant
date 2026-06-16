@@ -1,5 +1,27 @@
 (function () {
+  const ACCOUNT_KEY = "ai_ecommerce_v210_current_user_id";
   const status = { source: "unknown", failures: [] };
+  let account = null;
+
+  function getCurrentUserId() {
+    return localStorage.getItem(ACCOUNT_KEY) || "U001";
+  }
+
+  function setCurrentUserId(userId) {
+    localStorage.setItem(ACCOUNT_KEY, userId || "U001");
+  }
+
+  function currentUser() {
+    return account?.currentUser || null;
+  }
+
+  function currentPermissions() {
+    return currentUser()?.permissions || [];
+  }
+
+  function can(permission) {
+    return currentPermissions().includes(permission);
+  }
 
   function failureSummary() {
     if (!status.failures.length) return "所有模块接口请求正常。";
@@ -10,7 +32,11 @@
     try {
       const response = await fetch(path, {
         method: options.method || "GET",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-Mock-User-Id": getCurrentUserId(),
+        },
         body: options.body ? JSON.stringify(options.body) : undefined,
       });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -24,13 +50,30 @@
     }
   }
 
+  async function loadAccount() {
+    account = await request("/api/accounts", account);
+    return account;
+  }
+
   const api = {
     status,
     failureSummary,
+    getCurrentUserId,
+    setCurrentUserId,
+    currentUser,
+    currentPermissions,
+    can,
     dashboard: () => request("/api/modules/dashboard", null),
     operatingUnit: () => request("/api/modules/operating-unit", null),
-    accounts: () => request("/api/accounts", null),
+    accounts: loadAccount,
     me: () => request("/api/accounts/me", null),
+    switchAccount: async (userId) => {
+      setCurrentUserId(userId);
+      const switched = await request("/api/accounts/switch", null, { method: "POST", body: { userId } });
+      account = switched?.account || (await loadAccount());
+      window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } }));
+      return account;
+    },
     product: () => request("/api/modules/product", window.AppMockData.products),
     competitor: () => request("/api/modules/competitor", window.AppMockData.competitors),
     listing: () => request("/api/modules/listing", window.AppMockData.listings),
@@ -41,7 +84,7 @@
       if (params.scope) query.set("scope", params.scope);
       if (params.assigneeId) query.set("assignee_id", params.assigneeId);
       const suffix = query.toString() ? `?${query.toString()}` : "";
-      return request(`/api/modules/todo${suffix}`, { tasks: window.AppTaskStore?.listTasks?.() || [], activeTasks: window.AppTaskStore?.listActiveTasks?.() || [] });
+      return request(`/api/modules/todo${suffix}`, { tasks: window.AppTaskStore?.listTasks?.() || [], activeTasks: window.AppTaskStore?.listActiveTasks?.() || [], viewer: currentUser() });
     },
     log: () => request("/api/modules/log", window.AppTaskStore?.listLogs?.() || []),
     taskReport: (id) => request(`/api/modules/task-reports/tasks/${encodeURIComponent(id)}`, null),
@@ -85,6 +128,7 @@
       return { todo, logs };
     },
     async prefetch() {
+      await loadAccount();
       const [products, competitors, listings, traffic, report, todo, logs] = await Promise.all([
         api.product(),
         api.competitor(),
