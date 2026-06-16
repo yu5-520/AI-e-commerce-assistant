@@ -1,23 +1,25 @@
 # Changelog
 
-## v2.3.5 - 2026-06-16
+## v2.3.6 - 2026-06-16
 
 ### Added
-- Rebuilt owner-facing `复核审计` into `复盘审计`.
-- Added daily / weekly / monthly / special retrospective intake data.
-- Added audit issue list for missed weekly targets, low ROI, rising refund rate, and review delay.
-- Added next-cycle task draft list for next week / next month task planning.
+- Added expandable retrospective cards for daily / weekly / monthly / special reports.
+- Added expandable audit detail cards with evidence and Agent judgment placeholders.
+- Added expandable next-cycle task draft cards with goal, split direction, and future action buttons.
+- Added `web_demo/review-audit.css` for detail-card layout and mobile-safe wrapping.
 
 ### Changed
-- Owner navigation label changed from `复核审计` to `复盘审计`.
-- The page no longer focuses on single task logs; it focuses on cycle retrospectives, operating failure review, and next-cycle task planning.
-- Frontend assets were bumped to `?v=2.3.5`.
-- FastAPI app version and health version are aligned to `2.3.5`.
+- Replaced wide retrospective audit tables with summary-first expandable panels to avoid compressed / garbled layout on iPad and smaller screens.
+- Frontend assets were bumped to `?v=2.3.6`.
+- FastAPI app version and health version are aligned to `2.3.6`.
 
 ### Product Engineering Rule
-- Boss accounts usually do not dispatch tasks because of one store's short-term fluctuation.
-- Boss tasks should come mainly from daily / weekly / monthly retrospectives and audit findings.
-- `复盘审计` turns past reports into next-cycle tasks.
+- `复盘审计` should not be a wide table page.
+- The owner should scan summaries first, then expand details when Agent evidence, audit reasoning, or task-generation basis is needed.
+
+## v2.3.5 - 2026-06-16
+
+- Rebuilt owner-facing `复核审计` into `复盘审计`.
 
 ## v2.3.4 - 2026-06-16
 
