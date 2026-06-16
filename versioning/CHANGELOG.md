@@ -1,23 +1,28 @@
 # Changelog
 
-## v2.3.3 - 2026-06-16
+## v2.3.4 - 2026-06-16
 
 ### Added
-- Added owner-facing `供投财务` content under the existing `profit-budget` route for compatibility.
-- Added supply overview data: suppliers, category, cost change, delivery cycle, inventory amount, safety inventory, and state.
-- Added traffic overview data: ad spend, ROAS, CPC, conversion, paid orders, natural orders, and state.
-- Added finance summary data: sales, gross profit, ad cost, refund cost, logistics cost, platform fee, inventory capital, and net profit.
-- Added `web_demo/supply-finance.css` for the supply / traffic / finance table layout.
+- Rebuilt owner-facing `组织效率` into an organization governance console.
+- Added position relationship network: 老板 → 店群总管 → 运营 / 财务 / 观察者.
+- Added organization KPI metrics: employee count, manager count, operator count, finance count, read-only count, permission exception count, unassigned account count, and permission change count.
+- Added account role control, store authorization control, and role permission template control inside `组织效率`.
+- Added `web_demo/org-efficiency.css` for organization map and permission governance layout.
 
 ### Changed
-- Owner navigation label changed from `利润预算` to `供投财务`.
-- The owner page now explains profit through goods, traffic, and money instead of showing only financial result cards.
-- Frontend assets were bumped to `?v=2.3.3`.
-- FastAPI app version and health version are aligned to `2.3.3`.
+- `账号` page now only shows current identity, scope, visible modules, and permission summary; its management button routes to `组织效率`.
+- Legacy `role-console` remains as a compatibility route, but daily role / store / permission governance is now under `组织效率`.
+- Frontend assets were bumped to `?v=2.3.4`.
+- FastAPI app version and health version are aligned to `2.3.4`.
 
 ### Product Engineering Rule
-- Boss accounts should inspect goods, traffic, and finance together.
-- Profit is a result; supply stability, traffic spend, refund cost, logistics cost, platform fee, and inventory capital explain why the result changes.
+- `人员总览` shows realtime employee state.
+- `组织效率` shows organization structure, reporting chain, account permissions, store ownership, and permission governance.
+- `账号` answers “我是谁”; `组织效率` answers “组织怎么运转”.
+
+## v2.3.3 - 2026-06-16
+
+- Rebuilt owner `利润预算` into `供投财务`, combining supply, traffic, and finance views.
 
 ## v2.3.2 - 2026-06-16
 
