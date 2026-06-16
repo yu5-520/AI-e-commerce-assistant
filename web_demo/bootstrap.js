@@ -16,7 +16,12 @@
   if (window.AppApi?.prefetch) {
     await window.AppApi.prefetch();
     const badge = document.getElementById("apiModeBadge");
-    if (badge) badge.textContent = window.AppApi.status.source === "server" ? "服务端接口" : "本地兜底";
+    if (badge) {
+      const usingServer = window.AppApi.status.source === "server";
+      badge.textContent = usingServer ? "服务端接口" : "本地兜底";
+      badge.title = window.AppApi.failureSummary?.() || "接口状态未知";
+      badge.classList.toggle("warning", !usingServer);
+    }
   }
 
   AppRouter.start();
