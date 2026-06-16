@@ -9,6 +9,7 @@
     window.TrafficPage,
     window.TodoPage,
     window.LogPage,
+    window.TaskReportPage,
   ];
 
   pages.forEach((page) => AppRouter.register(page));
