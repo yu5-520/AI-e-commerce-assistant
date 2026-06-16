@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.5.0 - 2026-06-16
+
+### Added
+- Added split backend route files under `src/api/routes/modules/`:
+  - `dashboard.py`
+  - `operating_unit.py`
+  - `product.py`
+  - `competitor.py`
+  - `listing.py`
+  - `traffic.py`
+  - `report.py`
+  - `todo.py`
+  - `log.py`
+  - `common.py`
+
+### Changed
+- `src/api/routes/modules/__init__.py` is now an aggregator only. It creates the shared `/api/modules` router and includes each module router.
+- Dashboard, operating unit, product, competitor, listing, traffic, report, todo, and log APIs now each live in their own route file.
+- Frontend assets were bumped to `?v=1.5.0`.
+- FastAPI app version and health version are aligned to `1.5.0`.
+
+### Product Engineering Rule
+- New backend module endpoints should be added inside their own file under `src/api/routes/modules/`.
+- `__init__.py` should remain a router aggregator, not a business logic file.
+- Route files should call services and return module data; they should not own long-lived business data constants or task state.
+
 ## v1.4.1 - 2026-06-16
 
 ### Added
@@ -29,17 +55,7 @@
 
 ### Added
 - Added modular backend API routes under `src/api/routes/modules/__init__.py`.
-- Added module endpoints aligned to the frontend route registry:
-  - `GET /api/modules/dashboard`
-  - `GET /api/modules/operating-unit`
-  - `GET /api/modules/product`
-  - `GET /api/modules/competitor`
-  - `GET /api/modules/listing`
-  - `GET /api/modules/traffic`
-  - `GET /api/modules/report`
-  - `GET /api/modules/report/{report_id}`
-  - `GET /api/modules/todo`
-  - `GET /api/modules/log`
+- Added module endpoints aligned to the frontend route registry.
 - Added module action endpoints for product, competitor, listing, traffic, report, and todo task completion.
 - Added `web_demo/core/api-client.js` to centralize frontend requests to `/api/modules/*`.
 
