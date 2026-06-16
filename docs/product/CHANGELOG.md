@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v1.5.3 - 2026-06-16
+
+### Product Decision
+- V1.5.3 changes completed-task behavior from `completed -> can be added again` to `completed -> archived from source modules`.
+- Product truth: source modules are current-cycle queues. Once a task is completed, it frees the source module position and belongs only in 日志 until a new signal / new cycle enters.
+
+### Changed
+- Added source-candidate lifecycle state in `module_task_service.py`: `pending_candidate`, `active_task`, and `completed_archived`.
+- Product, competitor, listing, traffic, and report APIs now hide completed candidates from their source module lists.
+- Completing a task now marks the source candidate as `completed_archived` and writes a log entry that the source module slot has been released.
+- Direct attempts to re-create an already completed candidate are intercepted and logged instead of creating a duplicate task.
+- `web_demo/core/api-client.js` now refreshes source module data after task/log state changes, so completed work disappears from related modules after 待办 completion.
+- Frontend assets now use `?v=1.5.3`; API and health versions are aligned.
+
+### Product Boundary
+- This is still in-memory server-side mock persistence.
+- Completion archive is based on the current dedupe key; a future new signal should use a new cycle id / source event to re-enter the source module queue.
+- Completed tasks remain visible through 日志, not through 待办 or source modules.
+
 ## v1.5.2 - 2026-06-16
 
 ### Product Decision
@@ -32,10 +51,6 @@
 - Dashboard route now calls `dashboard_service.get_dashboard_summary()` instead of directly calling old business view helpers.
 - Added backend task-state helpers in `module_task_service.py` for open-task lookup and task-state annotation.
 - Product and traffic list responses now include `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask` from the backend.
-- Product task creation and product list task-state annotation now share the same backend `product_task_payload()` rule.
-- Traffic task creation and traffic list task-state annotation now share the same backend `traffic_task_payload()` rule.
-- Frontend `task-store.js` no longer infers risk domain or action type; it accepts backend identity fields as source of truth.
-- Frontend product and traffic button state now read backend-provided task identity rather than recalculating from page fields.
 - Todo execution queue now renders `listActiveTasks()` so completed tasks immediately leave 待办.
 - API badge tooltip now exposes recent fallback failures so server chain breaks are easier to find.
 - Frontend assets now use `?v=1.5.1`; API and health versions are aligned.
@@ -45,34 +60,9 @@
 - `business_view_service.py` remains available for dashboard workflow summary while the deeper workflow service is migrated later.
 - Database persistence, account roles, and multi-user consistency remain later work.
 
-## v1.5.0 - 2026-06-16
-
-### Product Decision
-- V1.5.0 completes the backend module-file split promised after v1.4.1.
-- Product truth: each backend module should be maintainable independently, while `src/api/routes/modules/__init__.py` only aggregates routers.
-
-### Changed
-- Split the monolithic modular route file into separate backend module files:
-  - `dashboard.py`
-  - `operating_unit.py`
-  - `product.py`
-  - `competitor.py`
-  - `listing.py`
-  - `traffic.py`
-  - `report.py`
-  - `todo.py`
-  - `log.py`
-  - `common.py`
-- `src/api/routes/modules/__init__.py` now only creates the `/api/modules` router and includes each module router.
-- Frontend assets now use `?v=1.5.0`; API and health versions are aligned.
-
-### Product Boundary
-- This is a backend maintainability refactor, not a new data feature.
-- API paths remain the same, so the frontend still calls `/api/modules/*`.
-- Mock data and task/log authority remain in `module_data_service.py` and `module_task_service.py` until database persistence is added.
-
 ## Earlier History
 
+- v1.5.0: Backend module-file split.
 - v1.4.1: Closed the module API chain and moved task/log authority to backend mock services.
 - v1.4.0: Backend aligned with modular frontend and removed active `/api/business/*` routes.
 - v1.3.0: Frontend changed from hotfix-script stacking into a modular route-registry structure.
