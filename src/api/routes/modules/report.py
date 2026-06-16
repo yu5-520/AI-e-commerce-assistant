@@ -46,8 +46,11 @@ def annotated_report_groups() -> List[Dict[str, Any]]:
     for group in REPORT_GROUPS:
         next_group = {**group, "reports": []}
         for item in group["reports"]:
-            next_group["reports"].append(attach_task_state(item, report_task_payload(item)))
-        groups.append(next_group)
+            annotated = attach_task_state(item, report_task_payload(item))
+            if not annotated.get("candidateArchived"):
+                next_group["reports"].append(annotated)
+        if next_group["reports"]:
+            groups.append(next_group)
     return groups
 
 
