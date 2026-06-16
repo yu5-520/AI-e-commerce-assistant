@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "2.4.0"
+API_VERSION = "2.4.1"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "owner_business_overview_manager_task_action_loop",
+        "mode": "owner_business_overview_manager_dispatch_queue_layout",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "owner_business_overview": True,
@@ -32,6 +32,7 @@ def health() -> Dict[str, Any]:
         "basic_account_center": True,
         "manager_execution_dashboard": True,
         "manager_task_sorting": True,
+        "manager_dispatch_queue_layout": True,
         "manager_task_detail": True,
         "manager_split_action": True,
         "manager_dispatch_action": True,
