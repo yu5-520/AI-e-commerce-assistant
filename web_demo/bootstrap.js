@@ -15,6 +15,14 @@
 
   pages.forEach((page) => AppRouter.register(page));
 
+  function applyNavigationScope(account) {
+    const visible = new Set(account?.currentUser?.visibleModules || []);
+    document.querySelectorAll(".nav a[data-route]").forEach((link) => {
+      const allowed = !visible.size || visible.has(link.dataset.route);
+      link.hidden = !allowed;
+    });
+  }
+
   function renderAccountSwitcher(account) {
     const select = document.getElementById("accountSwitcher");
     if (!select || !account?.users) return;
@@ -22,12 +30,17 @@
     select.innerHTML = account.users
       .map((user) => `<option value="${AppShell.escape(user.id)}" ${user.id === currentId ? "selected" : ""}>${AppShell.escape(user.name)} · ${AppShell.escape(user.roleName)}</option>`)
       .join("");
+    applyNavigationScope(account);
     select.onchange = async () => {
       select.disabled = true;
       await AppApi.switchAccount(select.value);
       await AppApi.prefetch();
-      renderAccountSwitcher(await AppApi.accounts());
-      AppRouter.schedule("account-switch");
+      const nextAccount = await AppApi.accounts();
+      renderAccountSwitcher(nextAccount);
+      const active = location.hash.replace("#", "") || "dashboard";
+      const allowed = new Set(nextAccount?.currentUser?.visibleModules || []);
+      if (allowed.size && !allowed.has(active)) AppRouter.navigate("accounts");
+      else AppRouter.schedule("account-switch");
       select.disabled = false;
     };
   }
