@@ -6,32 +6,33 @@ Current runtime chain:
     / serves web_demo/index.html
     ↓
     modular frontend: core/router.js registers modules/*/page.js
+    ↓
+    /api/modules/* maps one backend module to one frontend module
 
-The app keeps only the current product-facing API surface plus health,
-data-import, approval, and system maintenance routes. Legacy demo/debug route
-families are intentionally not mounted to avoid old templates being pulled back
-into the main product flow.
+The app mounts only the current modular product API plus health, data-import,
+approval, and system maintenance routes. The old `/api/business/*` compatibility
+router is intentionally removed from the active product path.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import approvals, business, data_import, health, system
+from src.api.routes import approvals, data_import, health, modules, system
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="1.3.0",
-    description="Product API for ERP-based ecommerce operating unit advice.",
+    version="1.4.0",
+    description="Modular product API for ERP-based ecommerce operating unit advice.",
 )
 
 app.add_middleware(
@@ -48,17 +49,17 @@ if WEB_DEMO_DIR.exists():
 
 @app.get("/", response_model=None)
 def index() -> Any:
-    """Serve the current product homepage when available."""
+    """Serve the current modular product homepage when available."""
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running. Visit /api/business/today or /docs."}
+    return {"message": "AI ERP Operating Advisor API is running. Visit /api/modules/dashboard or /docs."}
 
 
-# Current product API used by the modular frontend.
-app.include_router(business.router)
+# Current modular product API used by the frontend route registry.
+app.include_router(modules.router)
 
-# Supporting routes still used by the product shell and deployment checks.
+# Supporting routes still used by product operations and deployment checks.
 app.include_router(health.router)
 app.include_router(data_import.router)
 app.include_router(approvals.router)
