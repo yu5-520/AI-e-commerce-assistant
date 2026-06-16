@@ -1,6 +1,6 @@
 (function () {
-  const TASK_KEY = "ai_ecommerce_v141_tasks";
-  const LOG_KEY = "ai_ecommerce_v141_logs";
+  const TASK_KEY = "ai_ecommerce_v151_tasks";
+  const LOG_KEY = "ai_ecommerce_v151_logs";
   const doneStatus = new Set(["已完成", "已拒绝", "已确认"]);
   const priorityRank = { 高: 1, 中: 2, 低: 3 };
 
@@ -17,33 +17,9 @@
     localStorage.setItem(key, JSON.stringify(value));
   }
 
-  function inferDomain(task = {}) {
-    const text = [task.riskDomain, task.taskType, task.taskSignal, task.task, task.reason, ...(task.judgmentTags || [])].join(" ");
-    if (/售后|退款|尺寸|材质|安装|客服/.test(text)) return "售后";
-    if (/库存|补货|承接/.test(text)) return "库存";
-    if (/流量|ROI|推广|投放|点击|转化/.test(text)) return "流量";
-    if (/上新|主图|标题|SKU|详情页|测试版本/.test(text)) return "上新";
-    if (/价格|利润|券|活动价/.test(text)) return "价格";
-    if (/报表|导入|同步|数据/.test(text)) return "报表";
-    return "通用";
-  }
-
-  function inferAction(task = {}) {
-    const text = [task.actionType, task.taskType, task.taskSignal, task.task].join(" ");
-    if (/复盘/.test(text)) return "复盘";
-    if (/测试|版本|上新/.test(text)) return "测试";
-    if (/导入|同步/.test(text)) return "导入";
-    if (/观察/.test(text)) return "观察";
-    if (/确认/.test(text)) return "确认";
-    return "复查";
-  }
-
   function buildDedupeKey(task = {}) {
-    const entityType = task.entityType || (String(task.productId || "").startsWith("R") ? "报表" : "商品");
-    const entityId = task.entityId || task.productId || task.sourceEvent || task.id || "unknown";
-    const riskDomain = task.riskDomain || inferDomain(task);
-    const actionType = task.actionType || inferAction(task);
-    return `${entityType}:${entityId}:${riskDomain}:${actionType}`;
+    if (typeof task === "string") return task;
+    return task.dedupeKey || task.suggestedTaskKey || [task.entityType, task.entityId || task.productId || task.id, task.riskDomain, task.actionType].filter(Boolean).join(":");
   }
 
   function normalize(task = {}) {
@@ -59,14 +35,14 @@
       sourceModule: task.sourceModule || task.source || "系统",
       sourceRoute: task.sourceRoute || "dashboard",
       productRoute: task.productRoute || task.sourceRoute || "business-products",
-      todoRoute: "business-actions",
-      logRoute: "business-report",
-      entityType: task.entityType || (String(task.productId || "").startsWith("R") ? "报表" : "商品"),
+      todoRoute: task.todoRoute || "business-actions",
+      logRoute: task.logRoute || "business-report",
+      entityType: task.entityType || "任务",
       entityId: task.entityId || task.productId || task.id,
-      riskDomain: task.riskDomain || inferDomain(task),
-      actionType: task.actionType || inferAction(task),
-      judgmentTags: [],
-      sourceTrail: [],
+      riskDomain: task.riskDomain || "通用",
+      actionType: task.actionType || "复查",
+      judgmentTags: task.judgmentTags || [],
+      sourceTrail: task.sourceTrail || [],
       createdAt: task.createdAt || new Date().toISOString(),
       updatedAt: task.updatedAt || task.createdAt || new Date().toISOString(),
       manualOrder: Number.isFinite(task.manualOrder) ? task.manualOrder : Date.now(),
@@ -75,7 +51,7 @@
     item.title = item.title || item.productTitle || item.task || item.taskType || "经营任务";
     item.productTitle = item.productTitle || item.title;
     item.productShort = item.productShort || item.shortName || item.productId || "任务";
-    item.dedupeKey = item.dedupeKey || buildDedupeKey(item);
+    item.dedupeKey = buildDedupeKey(item) || item.id;
     return item;
   }
 
@@ -118,8 +94,8 @@
   function createTask(input = {}) {
     const task = normalize(input);
     const tasks = getTasks();
-    const index = tasks.findIndex((item) => item.dedupeKey === task.dedupeKey && !doneStatus.has(item.status));
-    if (index >= 0) tasks[index] = normalize({ ...tasks[index], ...task, dedupeHit: task.dedupeHit ?? true });
+    const index = tasks.findIndex((item) => item.id === task.id || (item.dedupeKey && item.dedupeKey === task.dedupeKey && !doneStatus.has(item.status)));
+    if (index >= 0) tasks[index] = normalize({ ...tasks[index], ...task });
     else tasks.push(task);
     setTasks(tasks);
     notify();
@@ -181,8 +157,8 @@
     pinTask,
     reorderTask,
     findOpenTask(input) {
-      const key = typeof input === "string" ? input : buildDedupeKey(input || {});
-      return getTasks().find((task) => task.dedupeKey === key && !doneStatus.has(task.status));
+      const key = buildDedupeKey(input || {});
+      return getTasks().find((task) => (task.id === input?.activeTaskId || task.dedupeKey === key) && !doneStatus.has(task.status));
     },
     buildDedupeKey,
     createLog(log) {
