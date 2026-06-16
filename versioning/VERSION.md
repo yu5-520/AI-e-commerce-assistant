@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v2.4.0
+Current Version: v2.4.1
 
 ## Version History
 
+- v2.4.1: Optimized the store-group manager task queue layout by restoring the schedule-style dispatch row with rank, time / priority, main task, source, judgment tags, and action buttons.
 - v2.4.0: Rebuilt the owner `总览` from an execution task list into a business overview page with operating metrics, owner module entry cards, and decision attention items.
 - v2.3.9: Added manager task sorting, task detail pages, split actions, dispatch actions, and Agent judgment placeholders for the store-group manager workflow.
 - v2.3.8: Reworked the manager role into a store-group execution management workflow: 店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表.
