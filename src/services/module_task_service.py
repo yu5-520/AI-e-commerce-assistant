@@ -1,0 +1,218 @@
+"""Server-side task and log service for modular product routes.
+
+This is still in-memory mock persistence, but it moves task/log authority away
+from browser-only localStorage so frontend modules can call backend actions and
+then hydrate from `/api/modules/todo` + `/api/modules/log`.
+"""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import datetime
+from typing import Any, Dict, List
+from uuid import uuid4
+
+PRIORITY_RANK = {"高": 1, "中": 2, "低": 3}
+DONE_STATUS = {"已完成", "已拒绝", "已确认"}
+
+
+def now_time() -> str:
+    return datetime.now().strftime("%H:%M")
+
+
+def make_id(prefix: str) -> str:
+    return f"{prefix}{uuid4().hex[:10]}".upper()
+
+
+def infer_domain(task: Dict[str, Any]) -> str:
+    text = " ".join(str(item) for item in [task.get("riskDomain"), task.get("taskType"), task.get("taskSignal"), task.get("task"), task.get("reason"), *(task.get("judgmentTags") or [])] if item)
+    if any(word in text for word in ["售后", "退款", "尺寸", "材质", "安装", "客服"]):
+        return "售后"
+    if any(word in text for word in ["库存", "补货", "承接"]):
+        return "库存"
+    if any(word in text for word in ["流量", "ROI", "推广", "投放", "点击", "转化"]):
+        return "流量"
+    if any(word in text for word in ["上新", "主图", "标题", "SKU", "详情页", "测试版本"]):
+        return "上新"
+    if any(word in text for word in ["价格", "利润", "券", "活动价"]):
+        return "价格"
+    if any(word in text for word in ["报表", "导入", "同步", "数据"]):
+        return "报表"
+    return "通用"
+
+
+def infer_action(task: Dict[str, Any]) -> str:
+    text = " ".join(str(item) for item in [task.get("actionType"), task.get("taskType"), task.get("taskSignal"), task.get("task")] if item)
+    if "复盘" in text:
+        return "复盘"
+    if any(word in text for word in ["测试", "版本", "上新"]):
+        return "测试"
+    if any(word in text for word in ["导入", "同步"]):
+        return "导入"
+    if "观察" in text:
+        return "观察"
+    if "确认" in text:
+        return "确认"
+    return "复查"
+
+
+def build_dedupe_key(task: Dict[str, Any]) -> str:
+    entity_type = task.get("entityType") or ("报表" if str(task.get("productId", "")).startswith("R") else "商品")
+    entity_id = task.get("entityId") or task.get("productId") or task.get("sourceEvent") or task.get("id") or "unknown"
+    risk_domain = task.get("riskDomain") or infer_domain(task)
+    action_type = task.get("actionType") or infer_action(task)
+    return f"{entity_type}:{entity_id}:{risk_domain}:{action_type}"
+
+
+def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
+    item = deepcopy(task)
+    item.setdefault("id", make_id("A"))
+    item.setdefault("status", "待确认")
+    item.setdefault("priority", "中")
+    item.setdefault("priorityLevel", "danger" if item["priority"] == "高" else "good" if item["priority"] == "低" else "warning")
+    item.setdefault("deadline", "本周内")
+    item.setdefault("timeBucket", item.get("deadline", "本周内"))
+    item.setdefault("source", item.get("sourceModule") or "系统")
+    item.setdefault("sourceModule", item.get("source") or "系统")
+    item.setdefault("sourceRoute", "dashboard")
+    item.setdefault("productRoute", item.get("sourceRoute") or "business-products")
+    item.setdefault("todoRoute", "business-actions")
+    item.setdefault("logRoute", "business-report")
+    item.setdefault("entityType", "报表" if str(item.get("productId", "")).startswith("R") else "商品")
+    item.setdefault("entityId", item.get("productId") or item.get("id"))
+    item.setdefault("riskDomain", infer_domain(item))
+    item.setdefault("actionType", infer_action(item))
+    item.setdefault("judgmentTags", [])
+    item.setdefault("sourceTrail", [])
+    item.setdefault("createdAt", datetime.now().isoformat())
+    item.setdefault("updatedAt", item["createdAt"])
+    item.setdefault("manualOrder", int(datetime.now().timestamp() * 1000))
+    item.setdefault("title", item.get("productTitle") or item.get("task") or item.get("taskType") or "经营任务")
+    item.setdefault("productTitle", item.get("title"))
+    item.setdefault("productShort", item.get("shortName") or item.get("productId") or "任务")
+    item["dedupeKey"] = item.get("dedupeKey") or build_dedupe_key(item)
+    item["sourceTrail"] = list(dict.fromkeys([*(item.get("sourceTrail") or []), item.get("sourceModule")]))
+    return item
+
+
+def seed_tasks() -> List[Dict[str, Any]]:
+    return [
+        normalize_task({"id": "A001", "priority": "高", "priorityLevel": "danger", "deadline": "今天 18:00 前", "source": "流量触发", "sourceModule": "流量测试台", "sourceRoute": "business-traffic", "productId": "P002", "entityType": "商品", "entityId": "P002", "riskDomain": "售后", "actionType": "复查", "imageLabel": "架", "taskType": "售后优先", "taskSignal": "先查售后", "productShort": "厨房置物架", "productTitle": "厨房置物架免打孔收纳架壁挂多层家用置物架", "platform": "拼多多", "store": "家居百货店", "judgmentTags": ["ROI 低", "退款率高", "尺寸咨询高"], "task": "先查售后，不继续放大推广预算", "reason": "搜索推广 ROI 1.1，退款率 6.8%，安装和尺寸咨询偏高。", "manualOrder": 1}),
+        normalize_task({"id": "A002", "priority": "高", "priorityLevel": "danger", "deadline": "今天内", "source": "商品触发", "sourceModule": "商品经营列表", "sourceRoute": "business-products", "productId": "P003", "entityType": "商品", "entityId": "P003", "riskDomain": "售后", "actionType": "复查", "imageLabel": "垫", "taskType": "商品复查", "taskSignal": "暂停投放", "productShort": "护腰坐垫", "productTitle": "护腰坐垫久坐办公室靠垫人体工学支撑款", "platform": "抖音小店", "store": "家居好物号", "judgmentTags": ["ROI 低", "退款异常", "售后敏感"], "task": "暂停投放并复查材质、支撑感和客服承诺", "reason": "售后敏感未解决，推荐流量 ROI 0.9，退款率 8.4%。", "manualOrder": 2}),
+        normalize_task({"id": "A003", "priority": "中", "priorityLevel": "warning", "deadline": "明天前", "source": "商品触发", "sourceModule": "商品经营列表", "sourceRoute": "business-products", "productId": "P004", "entityType": "商品", "entityId": "P004", "riskDomain": "库存", "actionType": "复查", "imageLabel": "盒", "taskType": "库存承接", "taskSignal": "确认补货周期", "productShort": "收纳盒", "productTitle": "透明收纳盒衣柜整理箱家用大容量防尘款", "platform": "淘宝", "store": "家居生活主店", "judgmentTags": ["库存低", "活动流量"], "task": "确认补货周期，再决定是否继续活动流量", "reason": "库存 46，接近安全线。", "manualOrder": 3}),
+    ]
+
+
+def seed_logs() -> List[Dict[str, Any]]:
+    return [
+        {"id": "G001", "time": "16:08", "type": "任务进入池", "source": "流量触发", "status": "已加入任务池", "level": "danger", "imageLabel": "架", "title": "厨房置物架免打孔收纳架壁挂多层家用置物架", "platform": "拼多多", "store": "家居百货店", "productId": "P002", "action": "搜索推广测试进入统一任务池", "reason": "ROI 1.1，退款率 6.8%。", "result": "进入售后归因，暂不继续放大推广预算。", "route": "business-traffic", "taskRoute": "business-actions", "createdAt": datetime.now().isoformat()}
+    ]
+
+
+TASKS: List[Dict[str, Any]] = seed_tasks()
+LOGS: List[Dict[str, Any]] = seed_logs()
+
+
+def sort_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(tasks, key=lambda task: (PRIORITY_RANK.get(task.get("priority"), 9), task.get("manualOrder", 9999), task.get("createdAt", "")))
+
+
+def list_tasks(active_only: bool = False) -> List[Dict[str, Any]]:
+    tasks = [task for task in TASKS if not active_only or task.get("status") not in DONE_STATUS]
+    return deepcopy(sort_tasks(tasks))
+
+
+def list_logs() -> List[Dict[str, Any]]:
+    return deepcopy(LOGS)
+
+
+def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
+    task = payload.get("task") or {}
+    log = {
+        "id": payload.get("id") or make_id("G"),
+        "time": payload.get("time") or now_time(),
+        "type": payload.get("type") or "任务记录",
+        "source": payload.get("source") or task.get("source") or task.get("sourceModule") or "系统",
+        "status": payload.get("status") or task.get("status") or "已记录",
+        "level": payload.get("level") or task.get("priorityLevel") or "good",
+        "imageLabel": payload.get("imageLabel") or task.get("imageLabel") or "记",
+        "title": payload.get("title") or task.get("title") or task.get("productTitle") or "任务记录",
+        "platform": payload.get("platform") or task.get("platform") or "经营单元",
+        "store": payload.get("store") or task.get("store") or "任务池",
+        "productId": payload.get("productId") or task.get("productId") or task.get("id") or "TASK",
+        "action": payload.get("action") or "任务池动作",
+        "reason": payload.get("reason") or task.get("reason") or "来自统一任务池。",
+        "result": payload.get("result") or "已写入日志。",
+        "route": payload.get("route") or task.get("sourceRoute") or "dashboard",
+        "taskRoute": payload.get("taskRoute") or "business-actions",
+        "createdAt": datetime.now().isoformat(),
+    }
+    LOGS.insert(0, log)
+    del LOGS[200:]
+    return deepcopy(log)
+
+
+def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
+    task = normalize_task(payload)
+    duplicate = next((item for item in TASKS if item.get("dedupeKey") == task["dedupeKey"] and item.get("status") not in DONE_STATUS), None)
+    if duplicate:
+        duplicate["judgmentTags"] = list(dict.fromkeys([*(duplicate.get("judgmentTags") or []), *(task.get("judgmentTags") or [])]))[:8]
+        duplicate["sourceTrail"] = list(dict.fromkeys([*(duplicate.get("sourceTrail") or []), task.get("sourceModule")]))
+        duplicate["updatedAt"] = datetime.now().isoformat()
+        duplicate["mergeCount"] = duplicate.get("mergeCount", 0) + 1
+        create_log({"type": "任务合并", "task": duplicate, "status": "已合并", "action": f"{task.get('sourceModule')} 重复加入，已合并到现有任务", "reason": f"去重键：{duplicate['dedupeKey']}", "result": "未创建重复任务。"})
+        result = deepcopy(duplicate)
+        result["dedupeHit"] = True
+        return result
+    TASKS.append(task)
+    create_log({"type": "任务创建", "task": task, "status": "已加入任务池", "action": f"{task.get('sourceModule')} 创建任务：{task.get('taskType') or task.get('task') or task.get('title')}", "result": "已同步到首页、待办和日志。"})
+    result = deepcopy(task)
+    result["dedupeHit"] = False
+    return result
+
+
+def update_task(task_id: str, patch: Dict[str, Any], log_type: str = "任务更新", action: str = "任务已更新", result: str = "任务状态已同步。") -> Dict[str, Any] | None:
+    task = next((item for item in TASKS if item.get("id") == task_id), None)
+    if not task:
+        return None
+    task.update(patch)
+    task["updatedAt"] = datetime.now().isoformat()
+    create_log({"type": log_type, "task": task, "status": task.get("status"), "action": action, "result": result})
+    return deepcopy(task)
+
+
+def complete_task(task_id: str) -> Dict[str, Any] | None:
+    return update_task(task_id, {"status": "已完成", "completedAt": datetime.now().isoformat()}, "任务完成", "任务已完成", "首页移除该任务，日志保留处理记录。")
+
+
+def pin_task(task_id: str) -> Dict[str, Any] | None:
+    min_order = min([task.get("manualOrder", 9999) for task in TASKS] or [0])
+    return update_task(task_id, {"manualOrder": min_order - 1}, "任务置顶", "任务已置顶", "首页和待办同步排序。")
+
+
+def reorder_task(task_id: str, direction: str) -> Dict[str, Any] | None:
+    active = sort_tasks([task for task in TASKS if task.get("status") not in DONE_STATUS])
+    index = next((i for i, task in enumerate(active) if task.get("id") == task_id), -1)
+    target_index = index - 1 if direction == "up" else index + 1
+    if index < 0 or target_index < 0 or target_index >= len(active):
+        return None
+    current = active[index]
+    target = active[target_index]
+    current_order = current.get("manualOrder", index + 1)
+    target_order = target.get("manualOrder", target_index + 1)
+    current_ref = next(task for task in TASKS if task.get("id") == current.get("id"))
+    target_ref = next(task for task in TASKS if task.get("id") == target.get("id"))
+    current_ref["manualOrder"] = target_order
+    target_ref["manualOrder"] = current_order
+    current_ref["updatedAt"] = datetime.now().isoformat()
+    target_ref["updatedAt"] = datetime.now().isoformat()
+    create_log({"type": "任务排序", "task": current_ref, "status": current_ref.get("status"), "action": "任务顺序已调整", "result": "首页和待办同步排序。"})
+    return deepcopy(current_ref)
+
+
+def reset_tasks() -> Dict[str, Any]:
+    global TASKS, LOGS
+    TASKS = seed_tasks()
+    LOGS = seed_logs()
+    create_log({"type": "演示重置", "status": "已重置", "action": "服务端任务池已恢复默认演示数据", "result": "首页、待办、日志已同步刷新。"})
+    return {"tasks": list_tasks(), "logs": list_logs()}
