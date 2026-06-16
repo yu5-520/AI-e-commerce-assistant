@@ -15,6 +15,7 @@ from src.services.module_task_service import (
     reorder_task,
     reset_tasks,
     review_task,
+    split_task_for_operator,
     submit_task,
 )
 
@@ -45,7 +46,23 @@ def todo(
         "activeTasks": list_tasks(active_only=True, assignee_id=mine_assignee, review_scope=review_scope, viewer_id=viewer_id),
         "scope": scope,
         "viewer": current_user(viewer_id),
+        "rule": "任务按当前账号的角色、店铺权限、负责人、复核人和可见角色过滤。",
     }
+
+
+@router.post("/todo/{task_id}/split")
+def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
+    body = body or {}
+    task = split_task_for_operator(
+        task_id,
+        operator_id=body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId"),
+        note=body.get("note") or "",
+    )
+    if not task:
+        raise HTTPException(status_code=400, detail="cannot split task")
+    return task
 
 
 @router.post("/todo/{task_id}/assign")
