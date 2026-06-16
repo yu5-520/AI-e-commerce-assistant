@@ -3,14 +3,16 @@
   let current = null;
   let scheduled = false;
   let renderToken = 0;
+  let pendingState = {};
 
   function routeFromHash() { return location.hash.replace("#", "") || "dashboard"; }
 
-  function createContext(route, token) {
+  function createContext(route, token, state = {}) {
     const cleanup = [];
     return {
       route,
       token,
+      state,
       isCurrent: () => token === renderToken && routeFromHash() === route,
       on(selector, type, handler, options) {
         document.querySelectorAll(selector).forEach((node) => {
@@ -38,26 +40,29 @@
     const route = routes.has(routeFromHash()) ? routeFromHash() : "dashboard";
     const page = routes.get(route) || routes.get("dashboard");
     const token = ++renderToken;
+    const state = pendingState || {};
+    pendingState = {};
     if (current?.page?.unmount) { try { current.page.unmount(current.ctx); } catch (error) { console.error("[router] unmount error", error); } }
     current?.ctx?.cleanup?.();
     current = null;
     AppShell.setActive(route);
     AppShell.setTitle(page.title || "总览");
-    const ctx = createContext(route, token);
+    const ctx = createContext(route, token, state);
     current = { route, page, ctx };
     try {
       const html = await page.render(ctx);
       if (!ctx.isCurrent()) return;
       AppShell.setView(html || "");
       if (page.mount) page.mount(ctx);
-      window.dispatchEvent(new CustomEvent("app-route-mounted", { detail: { route, reason, token } }));
+      window.dispatchEvent(new CustomEvent("app-route-mounted", { detail: { route, reason, token, state } }));
     } catch (error) {
       console.error("[router] render error", error);
       if (ctx.isCurrent()) AppShell.setView(`<section class="page-section"><h3>页面加载失败</h3><p>${AppShell.escape(error.message || error)}</p></section>`);
     }
   }
 
-  function schedule(reason = "route") {
+  function schedule(reason = "route", state = null) {
+    if (state) pendingState = { ...pendingState, ...state };
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(() => renderNow(reason));
@@ -68,9 +73,10 @@
     routes.set(page.route, page);
   }
 
-  function navigate(route) {
+  function navigate(route, state = null) {
     if (!route) return;
-    if (routeFromHash() === route) schedule("same-route");
+    if (state) pendingState = { ...pendingState, ...state };
+    if (routeFromHash() === route) schedule("same-route", state);
     else location.hash = route;
   }
 
