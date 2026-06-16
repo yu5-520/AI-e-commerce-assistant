@@ -1,24 +1,26 @@
 # Changelog
 
-## v2.3.7 - 2026-06-16
+## v2.3.8 - 2026-06-16
 
 ### Added
-- Added a basic `账号中心` page for profile, account id, current login identity, phone, email, and account status.
-- Added security settings cards for password, phone binding, email binding, two-factor verification, and login devices.
-- Added binding / authorization cards for WeChat, Enterprise WeChat, Taobao, Pinduoduo, Douyin Shop, and ERP data authorization status.
-- Added notification settings for daily report, weekly report, task, and audit reminders.
-- Added `web_demo/account-center.css` for account-center layout.
+- Added manager-specific execution pages: `店群任务`, `任务派发`, `运营复核`, `经营模块`, `复盘提交`, and `数据报表`.
+- Added `web_demo/modules/manager/page.js` for the store-group manager workflow.
+- Added `web_demo/manager-console.css` for manager execution boards, cards, workload panels, and report tables.
+- Added manager-specific dashboard view for 店群执行总览.
 
 ### Changed
-- `账号` no longer acts as a role / permission management page.
-- Role, store, and permission governance stays in `组织效率`.
-- Legacy `role-console` remains only as a compatibility route pointing users back to `组织效率`.
-- Frontend assets were bumped to `?v=2.3.7`.
-- FastAPI app version and health version are aligned to `2.3.7`.
+- 店群总管 navigation no longer exposes 商品 / 竞品 / 上新 / 流量 as scattered first-line tabs.
+- Manager role now uses a store-group execution management flow: receive boss tasks, split tasks, dispatch operators, review results, submit retrospectives, and use data reports as evidence.
+- Frontend assets were bumped to `?v=2.3.8`.
+- FastAPI app version and health version are aligned to `2.3.8`.
 
 ### Product Engineering Rule
-- `账号` answers login, security, binding, notification, and local account operations.
-- `组织效率` answers position relationship, role permissions, store authorization, and organizational governance.
+- 老板端负责看经营、人员、供投、组织和复盘审计，并定下周期任务。
+- 店群总管端负责承接老板任务，拆成运营动作，派发员工，复核结果，再提交日报、周报、月报复盘。
+
+## v2.3.7 - 2026-06-16
+
+- `账号` was simplified into a basic account center.
 
 ## v2.3.6 - 2026-06-16
 
