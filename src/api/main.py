@@ -1,20 +1,4 @@
-"""FastAPI entrypoint for the AI ERP operating advisor v2.
-
-Current runtime chain:
-    src.api.main:app
-    ↓
-    / serves web_demo/index.html
-    ↓
-    modular frontend: core/router.js registers modules/*/page.js
-    ↓
-    /api/modules/* maps backend operating modules to frontend modules
-    ↓
-    /api/accounts exposes the v2 account, role, permission, and store-scope layer
-
-The app mounts only the current modular product API plus account, health,
-data-import, approval, and system maintenance routes. The old `/api/business/*`
-compatibility router is intentionally removed from the active product path.
-"""
+"""FastAPI entrypoint."""
 
 from __future__ import annotations
 
@@ -33,8 +17,8 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="2.3.2",
-    description="Modular product API with realtime store and people overview, role console, and collaboration workflow.",
+    version="2.3.3",
+    description="Modular product API with owner overview.",
 )
 
 app.add_middleware(
@@ -51,11 +35,10 @@ if WEB_DEMO_DIR.exists():
 
 @app.get("/", response_model=None)
 def index() -> Any:
-    """Serve the current modular product homepage when available."""
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running. Visit /api/modules/dashboard or /docs."}
+    return {"message": "AI ERP Operating Advisor API is running."}
 
 
 app.include_router(modules.router)
