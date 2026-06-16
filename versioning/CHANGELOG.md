@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.5.0 - 2026-06-16
+
+### Added
+- Rebuilt `src/services/module_task_service.py` around a role-scoped task flow model.
+- Added task fields for `taskLayer`, `sourceType`, `ownerRole`, `parentTaskId`, `childTaskIds`, `storeIds`, `storeGroupId`, `visibleRoleIds`, `visibleUserIds`, `visibleStoreIds`, `recapTarget`, and `agentJudgment`.
+- Added warning-to-operator routing: product / competitor / listing / traffic warnings are assigned to the operator responsible for the affected store and remain visible to the store-group manager.
+- Added manager split endpoint: `POST /api/modules/todo/{task_id}/split`.
+- Added client-side fallback filtering in `web_demo/stores/task-store.js` so local mock tasks still respect role / user / store scope when the API falls back.
+
+### Changed
+- `/api/modules/todo` now returns task lists filtered by current account role, responsible store, assignee, reviewer, and visible role / user / store fields.
+- Owner no longer receives ordinary operator execution tasks through the task pool.
+- Manager receives group dispatch / review / warning tasks.
+- Operator receives assigned tasks or warning tasks within their authorized store scope.
+- Finance receives finance / report / ROI / inventory related tasks.
+- Frontend assets were bumped to `?v=2.5.0`.
+- FastAPI app version and health version are aligned to `2.5.0`.
+
+### Product Engineering Rule
+- 任务不是单个账号的待办列表，而是围绕店铺权限、角色职责和复盘链路流转的经营对象。
+- 老板看决策任务，总管看调度任务，运营看执行任务。
+- 模块预警不是进入全局待办，而是根据店铺归属和账号权限生成可见任务。
+
 ## v2.4.2 - 2026-06-16
 
 ### Added
@@ -34,34 +57,15 @@
 
 ## v2.4.0 - 2026-06-16
 
-### Added
-- Added owner-specific business overview dashboard.
-- Added owner operating metrics: sales, profit, orders, inventory capital, ad spend, refund rate, audit issues, and retrospective confirmations.
-- Added owner module entry cards for 店群总览、人员总览、供投财务、组织效率、复盘审计.
-- Added owner attention items with detail-entry buttons instead of task-completion actions.
-- Added `web_demo/owner-dashboard.css` for owner dashboard layout.
-
-### Changed
-- Owner `总览` no longer shows the execution-layer task list.
-- Task completion / 待办 actions remain for manager / operator contexts, not owner overview.
-- Frontend assets were bumped to `?v=2.4.0`.
-- FastAPI app version and health version are aligned to `2.4.0`.
-
-### Product Engineering Rule
-- 老板总览不是任务池，是全局经营首页。
-- 老板看经营摘要和决策入口；任务拆分、派发、复核属于店群总管。
+- Added owner-specific business overview dashboard and removed execution task list from owner `总览`.
 
 ## v2.3.9 - 2026-06-16
 
-- Added manager task sorting by time, priority, source, and status.
-- Added manager task detail route `manager-task-detail` with source report, impact scope, evidence, Agent judgment placeholders, and suggested split actions.
-- Added task card actions: 查看详情、拆分任务、派发运营.
-- Added mock state transitions for manager tasks: 待拆分 → 待派发 → 已派发 → 待复核 → 已归档.
+- Added manager task sorting, task detail route, task actions, and mock state transitions.
 
 ## v2.3.8 - 2026-06-16
 
-- Added manager-specific execution pages: `店群任务`, `任务派发`, `运营复核`, `经营模块`, `复盘提交`, and `数据报表`.
-- Manager role now uses a store-group execution management flow.
+- Added manager-specific execution pages and store-group execution management flow.
 
 ## v2.3.7 - 2026-06-16
 
