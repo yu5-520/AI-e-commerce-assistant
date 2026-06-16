@@ -1,22 +1,28 @@
 # Changelog
 
-## v2.3.8 - 2026-06-16
+## v2.3.9 - 2026-06-16
 
 ### Added
-- Added manager-specific execution pages: `店群任务`, `任务派发`, `运营复核`, `经营模块`, `复盘提交`, and `数据报表`.
-- Added `web_demo/modules/manager/page.js` for the store-group manager workflow.
-- Added `web_demo/manager-console.css` for manager execution boards, cards, workload panels, and report tables.
-- Added manager-specific dashboard view for 店群执行总览.
+- Added manager task sorting by time, priority, source, and status.
+- Added manager task detail route `manager-task-detail` with source report, impact scope, evidence, Agent judgment placeholders, and suggested split actions.
+- Added task card actions: 查看详情、拆分任务、派发运营.
+- Added mock state transitions for manager tasks: 待拆分 → 待派发 → 已派发 → 待复核 → 已归档.
+- Added dashboard-side manager task actions so the manager overview can jump directly to task detail or dispatch/review pages.
 
 ### Changed
-- 店群总管 navigation no longer exposes 商品 / 竞品 / 上新 / 流量 as scattered first-line tabs.
-- Manager role now uses a store-group execution management flow: receive boss tasks, split tasks, dispatch operators, review results, submit retrospectives, and use data reports as evidence.
-- Frontend assets were bumped to `?v=2.3.8`.
-- FastAPI app version and health version are aligned to `2.3.8`.
+- Manager task lists now behave like an action workbench instead of a static board.
+- Manager dispatch page now filters and sorts tasks needing split / dispatch.
+- Frontend assets were bumped to `?v=2.3.9`.
+- FastAPI app version and health version are aligned to `2.3.9`.
 
 ### Product Engineering Rule
-- 老板端负责看经营、人员、供投、组织和复盘审计，并定下周期任务。
-- 店群总管端负责承接老板任务，拆成运营动作，派发员工，复核结果，再提交日报、周报、月报复盘。
+- 店群总管不是只看任务，而是按时间、优先级、来源和状态处理任务。
+- 每个任务必须能进入详情页，后续 Agent 的信息检索、证据判断、拆分建议和复核判断都应落在详情页。
+
+## v2.3.8 - 2026-06-16
+
+- Added manager-specific execution pages: `店群任务`, `任务派发`, `运营复核`, `经营模块`, `复盘提交`, and `数据报表`.
+- Manager role now uses a store-group execution management flow.
 
 ## v2.3.7 - 2026-06-16
 
@@ -65,7 +71,6 @@
 ## Earlier History
 
 - v1.6.1: Candidate report pages include `加入任务清单` and jump to the matching 待办 task.
-- v1.6.0: Added independent task detail report pages and candidate report APIs.
+- v1.6.0: Added independent task detail reports and candidate report APIs.
 - v1.5.3: Added source-candidate lifecycle archiving.
 - v1.5.2: Existing-task buttons jump to the matching task card inside 待办.
-- v1.5.1: Backend owns task identity and active-task status.
