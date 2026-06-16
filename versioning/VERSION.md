@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.6.0
+Current Version: v1.6.1
 
 ## Version History
 
@@ -24,6 +24,7 @@ Current Version: v1.6.0
 - v1.5.2: Unified existing-task button behavior across product, competitor, listing, traffic, and report modules. Existing task buttons now jump to the matching task card in 待办, and backend task-state annotations were added for competitor, listing, and report modules.
 - v1.5.3: Added source-candidate lifecycle archiving. Completed tasks now archive their source candidate, source modules hide completed candidates by default, and the frontend refreshes module data after task lifecycle changes so completed work frees the next cycle slot.
 - v1.6.0: Added independent task detail report pages. 待办 tasks now have `详情报告`; source modules have `查看预警` / `任务报告`; backend exposes task and candidate report APIs as the future Agent report generation boundary.
+- v1.6.1: Added report-to-task conversion. Candidate report pages now include `加入任务清单`, create the matching module task from the detail page, refresh task/module state, and jump to the new task in 待办.
 
 ## Version Rules
 
