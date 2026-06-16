@@ -1,32 +1,49 @@
 (function () {
   const s = (value) => AppShell.escape(value);
 
+  const STORE_OVERVIEW = [
+    { id: "S001", platform: "淘宝", name: "家居生活主店", products: 126, activeProducts: 84, todayOrders: 236, sales: 42800, profit: 9100, comments: 18320, badComments: 42, refundRate: "3.2%", stockAmount: 186000, pendingTasks: 1, status: "关注" },
+    { id: "S002", platform: "拼多多", name: "家居百货店", products: 98, activeProducts: 67, todayOrders: 318, sales: 35600, profit: 6200, comments: 24680, badComments: 76, refundRate: "5.8%", stockAmount: 142000, pendingTasks: 1, status: "关注" },
+    { id: "S003", platform: "抖音小店", name: "家居好物号", products: 64, activeProducts: 39, todayOrders: 152, sales: 29800, profit: 4800, comments: 10560, badComments: 33, refundRate: "6.1%", stockAmount: 98000, pendingTasks: 1, status: "关注" },
+  ];
+
   function tasks() { return window.AppTaskStore?.listActiveTasks?.() || []; }
   function logs() { return window.AppTaskStore?.listLogs?.() || []; }
+  function sum(key) { return STORE_OVERVIEW.reduce((total, item) => total + Number(item[key] || 0), 0); }
+  function money(value) { return `¥${Number(value || 0).toLocaleString("zh-CN")}`; }
   function metricGrid(items) { return `<section class="kpi-grid report-metrics">${items.map(([a, b, c]) => AppShell.metricCard(a, b, c)).join("")}</section>`; }
   function cards(title, badge, items) { return `<section class="page-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${s(badge)}</span></div><div class="report-card-list">${items.map((item) => `<article class="report-card"><div class="section-header"><h3>${s(item.title)}</h3><span class="status-badge">${s(item.badge || "统筹")}</span></div><p>${s(item.text)}</p>${item.route ? `<button type="button" data-jump="${s(item.route)}">查看</button>` : ""}</article>`).join("")}</div></section>`; }
   function hero(label, title, summary, sideTitle, sideValue) { return `<section class="report-hero"><div><p class="eyebrow">${s(label)}</p><h2>${s(title)}</h2><p>${s(summary)}</p></div><div class="report-hero-side"><span>${s(sideTitle)}</span><strong>${s(sideValue)}</strong><small>老板统筹层</small></div></section>`; }
 
-  const ExecutiveCockpitPage = {
-    route: "executive-cockpit",
-    title: "经营驾驶舱",
-    render() {
-      const active = tasks();
-      const high = active.filter((item) => item.priority === "高");
-      return `${hero("EXECUTIVE COCKPIT", "经营驾驶舱", "老板只看经营结果、风险聚合、预算承接和组织闭环，不进入一线操作台。", "高风险", high.length)}${metricGrid([["待闭环任务", active.length, "跨模块汇总"], ["高优先级", high.length, "需要管理动作"], ["待复核", active.filter((item) => item.status === "待复核").length, "总管处理"], ["今日日志", logs().length, "可追溯"]])}${cards("老板统筹入口", "大局", [{title: "风险中心", text: "聚合商品、流量、库存、售后和报表异常，只看对利润和责任链有影响的风险。", route: "risk-center", badge: "风险"}, {title: "任务指挥", text: "查看任务是否被派发、是否被处理、是否复核归档。", route: "task-command", badge: "指挥"}, {title: "利润预算", text: "判断预算是否打到亏损商品上，活动是否压低毛利。", route: "profit-budget", badge: "利润"}, {title: "组织效率", text: "看总管和运营是否形成闭环，识别反复返工和卡点。", route: "org-efficiency", badge: "组织"}])}`;
-    },
-    mount(ctx) { ctx.delegate("[data-jump]", "click", (_, node) => AppRouter.navigate(node.dataset.jump)); },
-  };
+  function platformSummary() {
+    const platforms = Array.from(new Set(STORE_OVERVIEW.map((item) => item.platform)));
+    return platforms.map((platform) => {
+      const stores = STORE_OVERVIEW.filter((item) => item.platform === platform);
+      const products = stores.reduce((total, item) => total + item.products, 0);
+      const orders = stores.reduce((total, item) => total + item.todayOrders, 0);
+      const sales = stores.reduce((total, item) => total + item.sales, 0);
+      const profit = stores.reduce((total, item) => total + item.profit, 0);
+      const comments = stores.reduce((total, item) => total + item.comments, 0);
+      const tasks = stores.reduce((total, item) => total + item.pendingTasks, 0);
+      return { title: platform, badge: `${stores.length} 店`, text: `商品 ${products} · 今日订单 ${orders} · 销售额 ${money(sales)} · 利润 ${money(profit)} · 评论 ${comments.toLocaleString("zh-CN")} · 待办 ${tasks}` };
+    });
+  }
 
-  const RiskCenterPage = {
-    route: "risk-center",
-    title: "风险中心",
+  function storeRows() {
+    return STORE_OVERVIEW.map((store) => ({
+      title: store.name,
+      badge: store.platform,
+      text: `${store.status} · 商品 ${store.products} · 动销 ${store.activeProducts} · 今日订单 ${store.todayOrders} · 销售额 ${money(store.sales)} · 利润 ${money(store.profit)} · 评论 ${store.comments.toLocaleString("zh-CN")} · 差评 ${store.badComments} · 退款率 ${store.refundRate} · 库存金额 ${money(store.stockAmount)} · 待办 ${store.pendingTasks}`,
+    }));
+  }
+
+  const StoreOverviewPage = {
+    route: "store-overview",
+    title: "店群总览",
     render() {
       const active = tasks();
-      const riskItems = active.map((item) => ({ title: item.productShort || item.title, text: `${item.priority || "中"}风险 · ${item.reason || item.task || "需要确认经营影响"}`, badge: item.riskDomain || item.sourceModule, route: "task-command" }));
-      return `${hero("RISK CENTER", "风险中心", "老板看到的是跨模块风险聚合。商品、竞品、上新、流量只是证据来源，不是老板的日常操作入口。", "风险项", riskItems.length)}${metricGrid([["售后 / 商品", active.filter((item) => item.riskDomain === "售后").length, "影响承接"], ["流量预算", active.filter((item) => item.riskDomain === "流量").length, "影响投放"], ["库存承接", active.filter((item) => item.riskDomain === "库存").length, "影响履约"], ["报表异常", active.filter((item) => item.riskDomain === "报表").length, "影响判断"]])}${cards("当前需要老板关注的风险", "聚合", riskItems.length ? riskItems : [{title: "暂无聚合风险", text: "当前没有需要老板直接关注的经营风险。", badge: "正常"}])}`;
+      return `${hero("STORE GROUP OVERVIEW", "店群总览", "老板先看平台、店铺、商品、订单、销售额、利润、评论、退款、库存和待办数量。风险不是第一屏结论，而是从盘面数据里钻取出来。", "运营店铺", STORE_OVERVIEW.length)}${metricGrid([["运营平台", new Set(STORE_OVERVIEW.map((item) => item.platform)).size, "淘宝 / 拼多多 / 抖音"], ["店铺数量", STORE_OVERVIEW.length, "当前运营中"], ["在线商品", sum("products"), "全部店铺"], ["今日订单", sum("todayOrders"), "实时经营"], ["今日销售额", money(sum("sales")), "跨平台汇总"], ["今日利润", money(sum("profit")), "预估毛利"], ["评论总数", sum("comments").toLocaleString("zh-CN"), "口碑资产"], ["待处理任务", active.length, "进入指挥"]])}${cards("平台汇总", "平台", platformSummary())}${cards("店铺经营明细", "店铺", storeRows())}`;
     },
-    mount(ctx) { ctx.delegate("[data-jump]", "click", (_, node) => AppRouter.navigate(node.dataset.jump)); },
   };
 
   const TaskCommandPage = {
@@ -44,7 +61,7 @@
     render() {
       const active = tasks();
       const budgetRisks = active.filter((item) => ["流量", "价格", "售后"].includes(item.riskDomain));
-      return `${hero("PROFIT & BUDGET", "利润预算", "把流量消耗、退款成本、库存资金和毛利承接放在一起看，避免预算继续放大亏损。", "预算风险", budgetRisks.length)}${metricGrid([["预算风险", budgetRisks.length, "ROI / 退款 / 毛利"], ["高优先级", budgetRisks.filter((item) => item.priority === "高").length, "先暂停放大"], ["流量相关", active.filter((item) => item.sourceRoute === "business-traffic").length, "投放承接"], ["财务可见", "是", "财务账号可看"]])}${cards("预算判断", "利润", budgetRisks.length ? budgetRisks.map((item) => ({ title: item.productShort || item.title, text: item.reason || "需要确认 ROI 是否真实、退款是否吞掉利润、库存是否能承接。", badge: item.priority || "中" })) : [{title: "暂无预算风险", text: "当前没有聚合出的预算风险。", badge: "正常"}])}`;
+      return `${hero("PROFIT & BUDGET", "利润预算", "把流量消耗、退款成本、库存资金和毛利承接放在一起看，避免预算继续放大亏损。", "预算关注", budgetRisks.length)}${metricGrid([["销售额", money(sum("sales")), "今日汇总"], ["利润", money(sum("profit")), "预估毛利"], ["库存资金", money(sum("stockAmount")), "资金占用"], ["预算关注", budgetRisks.length, "ROI / 退款 / 毛利"]])}${cards("预算判断", "利润", budgetRisks.length ? budgetRisks.map((item) => ({ title: item.productShort || item.title, text: item.reason || "需要确认 ROI 是否真实、退款是否吞掉利润、库存是否能承接。", badge: item.priority || "中" })) : [{title: "暂无预算关注项", text: "当前没有聚合出的预算关注项。", badge: "正常"}])}`;
     },
   };
 
@@ -67,8 +84,7 @@
     },
   };
 
-  window.ExecutiveCockpitPage = ExecutiveCockpitPage;
-  window.RiskCenterPage = RiskCenterPage;
+  window.StoreOverviewPage = StoreOverviewPage;
   window.TaskCommandPage = TaskCommandPage;
   window.ProfitBudgetPage = ProfitBudgetPage;
   window.OrgEfficiencyPage = OrgEfficiencyPage;
