@@ -17,16 +17,16 @@
   }
 
   function managerRow(item, index) {
-    return `<article class="manager-task-card"><div class="manager-task-top"><span class="status-dot ${item.state === "待复核" ? "watch" : item.state === "待拆分" ? "warning" : "good"}"></span><strong>${AppShell.escape(item.title)}</strong><b>${AppShell.escape(item.priority)}</b></div><div class="manager-task-meta"><span>来源：${AppShell.escape(item.source)}</span><span>负责人：${AppShell.escape(item.assignee)}</span><span>截止：${AppShell.escape(item.due)}</span><span>${AppShell.escape(item.recap)}</span></div><p>${index + 1}. ${AppShell.escape(item.state)} · ${AppShell.escape(item.note)}</p></article>`;
+    return `<article class="manager-task-card"><div class="manager-task-top"><span class="status-dot ${item.state === "待复核" ? "watch" : item.state === "待拆分" ? "warning" : "good"}"></span><strong>${AppShell.escape(item.title)}</strong><b>${AppShell.escape(item.priority)}</b></div><div class="manager-task-meta"><span>来源：${AppShell.escape(item.source)}</span><span>负责人：${AppShell.escape(item.assignee)}</span><span>截止：${AppShell.escape(item.due)}</span><span>${AppShell.escape(item.recap)}</span></div><p>${index + 1}. ${AppShell.escape(item.state)} · ${AppShell.escape(item.note)}</p><div class="manager-action-row"><button type="button" data-manager-detail="${AppShell.escape(item.id)}">查看详情</button><button type="button" class="secondary" data-go="manager-dispatch">拆分 / 派发</button><button type="button" class="secondary" data-go="manager-review">进入复核</button></div></article>`;
   }
 
   function managerDashboard(active) {
     const rows = [
-      { source: "老板复盘审计", title: "抖音低 ROAS 商品预算收缩", assignee: "待派发", due: "下周", priority: "高", state: "待拆分", recap: "进入周报", note: "先拆给运营 A 和数据财务" },
-      { source: "系统预警", title: "拼多多退款率商品专项复查", assignee: "运营 B", due: "今天 18:00", priority: "中", state: "处理中", recap: "进入日报", note: "售后原因和差评商品待补充" },
-      { source: "经营模块", title: "厨房置物架售后优先处理", assignee: "运营 A", due: "今天 20:00", priority: "高", state: "待复核", recap: "进入日报", note: "运营已提交，等待总管确认" },
+      { id: "MT-001", source: "老板复盘审计", title: "抖音低 ROAS 商品预算收缩", assignee: "待派发", due: "下周", priority: "高", state: "待拆分", recap: "进入周报", note: "先拆给运营 A 和数据财务" },
+      { id: "MT-002", source: "系统预警", title: "拼多多退款率商品专项复查", assignee: "运营 B", due: "今天 18:00", priority: "中", state: "处理中", recap: "进入日报", note: "售后原因和差评商品待补充" },
+      { id: "MT-003", source: "经营模块", title: "厨房置物架售后优先处理", assignee: "运营 A", due: "今天 20:00", priority: "高", state: "待复核", recap: "进入日报", note: "运营已提交，等待总管确认" },
     ];
-    return `<section class="dashboard-status dashboard-linked-board"><div class="dashboard-status-main"><p class="eyebrow">MANAGER EXECUTION BOARD</p><h2>店群执行总览</h2><p class="dashboard-time">${timeLabel()}</p></div><div class="dashboard-status-side"><span>总管职责</span><strong>承接 · 拆分 · 复核 · 复盘</strong><small>老板任务 → 运营动作 → 周期复盘</small></div></section><section class="kpi-grid dashboard-metrics dashboard-linked-metrics">${managerMetrics(active).map(([label, value, desc]) => AppShell.metricCard(label, value, desc)).join("")}</section><section class="page-section manager-section"><div class="section-header"><div><h3>今日处理顺序</h3><span class="status-badge">老板任务 / 系统预警 / 经营模块</span></div><button type="button" data-go="manager-tasks">查看店群任务</button></div><div class="manager-task-list">${rows.map(managerRow).join("")}</div></section>`;
+    return `<section class="dashboard-status dashboard-linked-board"><div class="dashboard-status-main"><p class="eyebrow">MANAGER EXECUTION BOARD</p><h2>店群执行总览</h2><p class="dashboard-time">${timeLabel()}</p></div><div class="dashboard-status-side"><span>总管职责</span><strong>承接 · 拆分 · 复核 · 复盘</strong><small>老板任务 → 运营动作 → 周期复盘</small></div></section><section class="kpi-grid dashboard-metrics dashboard-linked-metrics">${managerMetrics(active).map(([label, value, desc]) => AppShell.metricCard(label, value, desc)).join("")}</section><section class="page-section manager-section"><div class="section-header"><div><h3>今日处理顺序</h3><span class="status-badge">老板任务 / 系统预警 / 经营模块</span></div><button type="button" data-go="manager-tasks">查看店群任务</button></div><div class="manager-sort-bar"><button type="button" data-go="manager-tasks">按时间排序</button><button type="button" data-go="manager-tasks">按优先级排序</button><button type="button" data-go="manager-tasks">按来源排序</button></div><div class="manager-task-list">${rows.map(managerRow).join("")}</div></section>`;
   }
 
   window.DashboardPage = {
@@ -41,6 +41,7 @@
     },
     mount(ctx) {
       ctx.delegate("[data-go]", "click", (_, node) => AppRouter.navigate(node.dataset.go));
+      ctx.delegate("[data-manager-detail]", "click", (_, node) => { localStorage.setItem("manager_selected_task_v239", node.dataset.managerDetail); AppRouter.navigate("manager-task-detail", { taskId: node.dataset.managerDetail }); });
       ctx.delegate("[data-complete]", "click", (_, node) => { AppTaskStore.completeTask(node.dataset.complete); AppRouter.schedule("task-complete"); });
       ctx.addCleanup(AppTaskStore.subscribe(() => AppRouter.schedule("task-store")));
     },
