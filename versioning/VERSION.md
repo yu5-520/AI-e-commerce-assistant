@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v2.3.2
+Current Version: v2.3.3
 
 ## Version History
 
+- v2.3.3: Rebuilt owner `利润预算` into `供投财务`, combining supply, traffic, and finance views.
 - v2.3.2: Owner-side task command was repositioned into `人员总览`, showing employee realtime state, task load, completed count, return count, timeout count, average handling time, and workload.
 - v2.3.1: Fixed `店群总览` layout and upgraded it into a realtime operations board with sync status, trend chips, platform live cards, and a horizontal store table.
 - v2.3.0: Removed redundant owner `经营驾驶舱`; changed `风险中心` into `店群总览` around platform / store / product / order / sales / profit / comments / inventory summaries.
