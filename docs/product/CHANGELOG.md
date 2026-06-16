@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v2.4.1 - 2026-06-16
+
+### Product Decision
+- V2.4.1 optimizes 店群总管 `今日处理顺序` layout.
+- Product truth: 店群总管需要的是调度队列，不是普通卡片列表；功能按钮可以多，但排版必须先服务“第几个处理、何时到期、来源是什么、判断是什么、下一步点哪里”。
+- The layout keeps task actions while restoring the stronger schedule-row visual hierarchy.
+
+### Changed
+- 店群总管首页和店群任务 / 任务派发 / 运营复核使用统一的调度队列卡片。
+- Added row structure: 序号、时间/优先级、主任务、来源、判断、操作.
+- Kept actions: 查看详情、拆分 / 派发、进入复核.
+- Sorting controls remain, but are visually lighter.
+- Frontend assets now use `?v=2.4.1`; API and health versions are aligned.
+
+### Product Boundary
+- This remains mock local task state.
+- Real version should connect sorting rules, SLA deadline rules, split records, assignment APIs, and Agent task-detail judgment.
+
 ## v2.4.0 - 2026-06-16
 
 ### Product Decision
