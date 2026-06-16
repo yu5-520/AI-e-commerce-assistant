@@ -1,5 +1,21 @@
 # Product Changelog
 
+## v1.6.1 - 2026-06-16
+
+### Product Decision
+- V1.6.1 makes the independent candidate report page a task conversion page, not only a read-only explanation page.
+- Product truth: operators normally read the compact warning, open the full report, then add the task from that same report page.
+
+### Changed
+- Candidate report pages now include a bottom `加入任务清单` primary action.
+- Added `createTaskFromReport(module, entityId)` in `web_demo/core/task-actions.js` to map report context to the correct module task creation action.
+- After creating the task from a report, the UI refreshes task/module state and jumps to the new task position in 待办.
+- Frontend assets now use `?v=1.6.1`; API and health versions are aligned.
+
+### Product Boundary
+- This still uses the existing module task creation endpoints.
+- No new high-risk execution is added; creating a task still only enters 待办 and waits for human handling.
+
 ## v1.6.0 - 2026-06-16
 
 ### Product Decision
