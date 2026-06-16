@@ -2,7 +2,7 @@
   let notice = "";
   const s = (value) => AppShell.escape(value);
   function taskState(item) {
-    return item.hasActiveTask || AppTaskStore.findOpenTask({ suggestedTaskKey: item.suggestedTaskKey, activeTaskId: item.activeTaskId });
+    return AppTaskStore.findOpenTask({ suggestedTaskKey: item.suggestedTaskKey, activeTaskId: item.activeTaskId });
   }
   function row(item) {
     const existed = taskState(item);
