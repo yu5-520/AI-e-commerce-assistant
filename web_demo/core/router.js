@@ -3,6 +3,7 @@
   const aliases = new Map([
     ["risk-center", "store-overview"],
     ["executive-cockpit", "store-overview"],
+    ["people-overview", "task-command"],
   ]);
   let current = null;
   let scheduled = false;
