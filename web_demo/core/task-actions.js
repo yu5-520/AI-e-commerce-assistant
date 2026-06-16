@@ -31,6 +31,19 @@
     return true;
   }
 
+  function openTaskReport(taskOrId) {
+    const taskId = typeof taskOrId === "string" ? taskOrId : taskOrId?.id || taskOrId?.activeTaskId;
+    if (!taskId) return false;
+    AppRouter.navigate("task-report", { taskId });
+    return true;
+  }
+
+  function openCandidateReport(module, entityId) {
+    if (!module || !entityId) return false;
+    AppRouter.navigate("task-report", { module, entityId });
+    return true;
+  }
+
   function buttonLabel(item = {}) {
     return findOpenTask(item) ? "已在任务清单" : "加入任务清单";
   }
@@ -78,5 +91,5 @@
     return { task, message: notifyTask(task, card.name) };
   }
 
-  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, productIdentity, identityFromItem, findOpenTask, openTodoTask, buttonLabel, buttonClass };
+  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, productIdentity, identityFromItem, findOpenTask, openTodoTask, openTaskReport, openCandidateReport, buttonLabel, buttonClass };
 })();
