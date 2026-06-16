@@ -1,4 +1,4 @@
-"""FastAPI entrypoint for the AI ERP operating advisor MVP.
+"""FastAPI entrypoint for the AI ERP operating advisor v2.
 
 Current runtime chain:
     src.api.main:app
@@ -7,11 +7,13 @@ Current runtime chain:
     ↓
     modular frontend: core/router.js registers modules/*/page.js
     ↓
-    /api/modules/* maps one backend module to one frontend module
+    /api/modules/* maps backend operating modules to frontend modules
+    ↓
+    /api/accounts exposes the v2 account, role, permission, and store-scope layer
 
-The app mounts only the current modular product API plus health, data-import,
-approval, and system maintenance routes. The old `/api/business/*` compatibility
-router is intentionally removed from the active product path.
+The app mounts only the current modular product API plus account, health,
+data-import, approval, and system maintenance routes. The old `/api/business/*`
+compatibility router is intentionally removed from the active product path.
 """
 
 from __future__ import annotations
@@ -24,15 +26,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import approvals, data_import, health, modules, system
+from src.api.routes import accounts, approvals, data_import, health, modules, system
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="1.6.1",
-    description="Modular product API for ERP-based ecommerce operating unit advice.",
+    version="2.0.0",
+    description="Modular product API with v2 account and collaboration task workflow.",
 )
 
 app.add_middleware(
@@ -58,6 +60,9 @@ def index() -> Any:
 
 # Current modular product API used by the frontend route registry.
 app.include_router(modules.router)
+
+# V2 enterprise collaboration layer.
+app.include_router(accounts.router)
 
 # Supporting routes still used by product operations and deployment checks.
 app.include_router(health.router)
