@@ -1,25 +1,11 @@
 (function () {
   const s = (value) => AppShell.escape(value);
 
-  function tasks() {
-    return window.AppTaskStore?.listActiveTasks?.() || [];
-  }
-
-  function logs() {
-    return window.AppTaskStore?.listLogs?.() || [];
-  }
-
-  function metricGrid(items) {
-    return `<section class="kpi-grid report-metrics">${items.map(([a, b, c]) => AppShell.metricCard(a, b, c)).join("")}</section>`;
-  }
-
-  function cards(title, badge, items) {
-    return `<section class="page-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${s(badge)}</span></div><div class="report-card-list">${items.map((item) => `<article class="report-card"><div class="section-header"><h3>${s(item.title)}</h3><span class="status-badge">${s(item.badge || "统筹")}</span></div><p>${s(item.text)}</p>${item.route ? `<button type="button" data-jump="${s(item.route)}">查看</button>` : ""}</article>`).join("")}</div></section>`;
-  }
-
-  function hero(label, title, summary, sideTitle, sideValue) {
-    return `<section class="report-hero"><div><p class="eyebrow">${s(label)}</p><h2>${s(title)}</h2><p>${s(summary)}</p></div><div class="report-hero-side"><span>${s(sideTitle)}</span><strong>${s(sideValue)}</strong><small>老板统筹层</small></div></section>`;
-  }
+  function tasks() { return window.AppTaskStore?.listActiveTasks?.() || []; }
+  function logs() { return window.AppTaskStore?.listLogs?.() || []; }
+  function metricGrid(items) { return `<section class="kpi-grid report-metrics">${items.map(([a, b, c]) => AppShell.metricCard(a, b, c)).join("")}</section>`; }
+  function cards(title, badge, items) { return `<section class="page-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${s(badge)}</span></div><div class="report-card-list">${items.map((item) => `<article class="report-card"><div class="section-header"><h3>${s(item.title)}</h3><span class="status-badge">${s(item.badge || "统筹")}</span></div><p>${s(item.text)}</p>${item.route ? `<button type="button" data-jump="${s(item.route)}">查看</button>` : ""}</article>`).join("")}</div></section>`; }
+  function hero(label, title, summary, sideTitle, sideValue) { return `<section class="report-hero"><div><p class="eyebrow">${s(label)}</p><h2>${s(title)}</h2><p>${s(summary)}</p></div><div class="report-hero-side"><span>${s(sideTitle)}</span><strong>${s(sideValue)}</strong><small>老板统筹层</small></div></section>`; }
 
   const ExecutiveCockpitPage = {
     route: "executive-cockpit",
@@ -48,9 +34,8 @@
     title: "任务指挥",
     render() {
       const active = tasks();
-      return `${hero("TASK COMMAND", "任务指挥", "老板在这里看任务是否被派发、处理、提交、复核和归档。具体执行仍交给总管和运营。", "待闭环", active.length)}${metricGrid([["未派发", active.filter((item) => !item.assigneeId).length, "需要下发"], ["处理中", active.filter((item) => item.status === "处理中").length, "运营执行"], ["待复核", active.filter((item) => item.status === "待复核").length, "总管复核"], ["高优先级", active.filter((item) => item.priority === "高").length, "优先看"]])}${cards("指挥队列", "任务", active.length ? active.map((item) => ({ title: item.title || item.productTitle, text: `${item.status || "待确认"} · ${item.assigneeName || "未派发"} · ${item.reason || item.task}`, badge: item.priority || "中", route: "business-actions" })) : [{title: "暂无任务", text: "当前没有需要指挥的任务。", badge: "空"}])}`;
+      return `${hero("TASK COMMAND", "任务指挥", "老板在这里看任务是否被派发、处理、提交、复核和归档。具体执行仍交给总管和运营。", "待闭环", active.length)}${metricGrid([["未派发", active.filter((item) => !item.assigneeId).length, "需要下发"], ["处理中", active.filter((item) => item.status === "处理中").length, "运营执行"], ["待复核", active.filter((item) => item.status === "待复核").length, "总管复核"], ["高优先级", active.filter((item) => item.priority === "高").length, "优先看"]])}${cards("指挥队列", "任务", active.length ? active.map((item) => ({ title: item.title || item.productTitle, text: `${item.status || "待确认"} · ${item.assigneeName || "未派发"} · ${item.reason || item.task}`, badge: item.priority || "中" })) : [{title: "暂无任务", text: "当前没有需要指挥的任务。", badge: "空"}])}`;
     },
-    mount(ctx) { ctx.delegate("[data-jump]", "click", (_, node) => AppRouter.navigate(node.dataset.jump)); },
   };
 
   const ProfitBudgetPage = {
