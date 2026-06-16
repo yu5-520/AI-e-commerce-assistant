@@ -8,7 +8,7 @@ from fastapi import APIRouter
 
 from src.api.routes.modules.common import find_or_404
 from src.services.module_data_service import COMPETITORS
-from src.services.module_task_service import attach_task_state, create_task
+from src.services.module_task_service import create_task, visible_candidates
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ def competitor_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.get("/competitor")
 def competitor() -> List[Dict[str, Any]]:
-    return [attach_task_state(item, competitor_task_payload(item)) for item in COMPETITORS]
+    return visible_candidates(COMPETITORS, competitor_task_payload)
 
 
 @router.post("/competitor/{competitor_id}/tasks")
