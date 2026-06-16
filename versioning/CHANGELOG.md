@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.6.0 - 2026-06-16
+
+### Added
+- Added `src/services/task_report_service.py` as the report-generation boundary for task and candidate detail reports.
+- Added `src/api/routes/modules/task_report.py` with independent report APIs:
+  - `GET /api/modules/task-reports/tasks/{task_id}`
+  - `GET /api/modules/task-reports/candidates/{module}/{entity_id}`
+- Added `web_demo/modules/task-report/page.js` as the independent detail report page.
+- Added report navigation helpers in `web_demo/core/task-actions.js`.
+- Added `详情报告` button in 待办 task cards.
+- Added `查看预警` / `任务报告` buttons in 商品、竞品、上新、流量、报表 modules.
+
+### Changed
+- Existing source-module tasks can now open an independent task report page instead of only jumping to 待办.
+- Candidate reports explain why a module item is being warned before it enters 待办.
+- Task reports explain why the task exists, what evidence supports it, what the operator should check, and what should be confirmed manually.
+- Frontend assets were bumped to `?v=1.6.0`.
+- FastAPI app version and health version are aligned to `1.6.0`.
+
+### Product Engineering Rule
+- Task detail is now a first-class route, not a small inline note.
+- Agent integration should enrich report payloads before human confirmation; Agent should not directly complete tasks or mutate shop data.
+- Report snapshots should become part of the log archive when database persistence is added.
+
 ## v1.5.3 - 2026-06-16
 
 ### Added
@@ -23,53 +47,10 @@
 - Completed work belongs in 日志 only until a new signal / new cycle id creates a fresh candidate.
 - Source modules are cycle queues, not permanent archives.
 
-## v1.5.2 - 2026-06-16
-
-### Added
-- Added route state support in `web_demo/core/router.js` so module pages can navigate to 待办 with a target task id.
-- Added shared frontend helpers in `web_demo/core/task-actions.js` for existing-task lookup and task-focus navigation.
-- Competitor, listing, and report backend module responses now include backend-generated `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask`.
-
-### Changed
-- Product, competitor, listing, traffic, and report module buttons now use the same behavior:
-  - no active task: show `加入任务清单` or the module-specific create label.
-  - active task exists: show `已在任务清单`.
-  - clicking `已在任务清单`: jump to the matching task card inside 待办.
-- Todo cards now expose `data-task-card` and scroll/highlight when opened from a module.
-- Frontend assets were bumped to `?v=1.5.2`.
-- FastAPI app version and health version are aligned to `1.5.2`.
-
-### Product Engineering Rule
-- Existing-task buttons should route to the active task position instead of re-creating or re-merging the same task.
-- All task-source modules must use backend task identity and the hydrated active task store to decide button state.
-
-## v1.5.1 - 2026-06-16
-
-### Added
-- Added `src/services/dashboard_service.py` as the dashboard module service boundary.
-- Added backend task-state helpers in `module_task_service.py`: `find_open_task_by_key`, `task_state_for_payload`, and `attach_task_state`.
-- Product and traffic module responses now include backend-generated `suggestedTaskKey`, `activeTaskId`, `activeTaskStatus`, and `hasActiveTask`.
-- API badge tooltip now exposes recent fallback failure paths and messages.
-
-### Changed
-- `src/api/routes/modules/dashboard.py` now calls `dashboard_service.get_dashboard_summary()` instead of directly depending on `business_view_service`.
-- `src/api/routes/modules/product.py` now uses one backend `product_task_payload()` for both product task creation and product list task-state annotation.
-- `src/api/routes/modules/traffic.py` now uses one backend `traffic_task_payload()` for both traffic task creation and traffic list task-state annotation.
-- `web_demo/modules/todo/page.js` now renders only active tasks in the execution queue; completed tasks disappear from 待办 and remain available through 日志.
-- `web_demo/stores/task-store.js` no longer infers risk domain or action type. It now accepts backend task identity as the source of truth.
-- `web_demo/core/task-actions.js` now reads product identity from backend-returned task state instead of recalculating it from product fields.
-- `web_demo/core/api-client.js` now preserves fallback failure details through `failureSummary()`.
-- Frontend assets were bumped to `?v=1.5.1`.
-- FastAPI app version and health version are aligned to `1.5.1`.
-
-### Product Engineering Rule
-- Backend owns task identity and active-task status.
-- Frontend task store is a hydrated cache and should not independently infer business risk/action rules.
-- Dashboard should depend on `dashboard_service` as its module service boundary.
-- 待办只展示未完成任务；完成后的任务只保留日志复盘，不继续占用执行队列。
-
 ## Earlier History
 
+- v1.5.2: Existing-task buttons jump to the matching task card inside 待办.
+- v1.5.1: Backend owns task identity and active-task status.
 - v1.5.0: Split backend module routes into separate files.
 - v1.4.1: Closed the module API chain and moved task/log authority to backend mock services.
 - v1.4.0: Added modular backend API routes and removed active `/api/business/*` product path.
