@@ -23,16 +23,94 @@
     container.appendChild(button);
   }
 
+  function riskForProduct(product) {
+    if (product.afterSalesLevel !== "good") return "售后";
+    if (product.inventoryLevel === "danger") return "库存";
+    return "商品";
+  }
+
+  function actionForRisk(riskDomain) {
+    if (riskDomain === "库存") return "复查";
+    if (riskDomain === "商品") return "观察";
+    return "复查";
+  }
+
+  function productIdentity(product) {
+    const riskDomain = riskForProduct(product);
+    return {
+      entityType: "商品",
+      entityId: product.id,
+      riskDomain,
+      actionType: actionForRisk(riskDomain),
+    };
+  }
+
+  function competitorIdentity(item) {
+    return {
+      entityType: "竞品",
+      entityId: item.id,
+      riskDomain: item.status === "风险" ? "风险" : "上新",
+      actionType: item.status === "风险" ? "复查" : "测试",
+    };
+  }
+
+  function listingIdentity(item) {
+    return {
+      entityType: item.mode === "competitor" ? "竞品机会" : "商品",
+      entityId: item.id,
+      riskDomain: "上新",
+      actionType: item.testType.includes("复盘") ? "复盘" : "测试",
+    };
+  }
+
+  function trafficIdentity(item) {
+    const text = `${item.status} ${item.backflow} ${item.nextStep}`;
+    const riskDomain = /售后|退款|材质|尺寸|安装|客服/.test(text) ? "售后" : /库存|补货|承接/.test(text) ? "库存" : "流量";
+    const actionType = riskDomain === "流量" && item.statusLevel === "good" ? "观察" : "复查";
+    return {
+      entityType: "商品",
+      entityId: item.productId,
+      riskDomain,
+      actionType,
+    };
+  }
+
+  function reportIdentity(card) {
+    return {
+      entityType: "报表",
+      entityId: card.id,
+      riskDomain: "报表",
+      actionType: "导入",
+    };
+  }
+
+  function existingTask(identity) {
+    return store()?.findOpenTask?.(identity);
+  }
+
+  function routeToTodo(existing, name) {
+    if (existing) {
+      notify(`${name}已有相关待办，已跳转任务池，不重复创建。`);
+      location.hash = "business-actions";
+      return true;
+    }
+    return false;
+  }
+
   function createProductTask(productId) {
     if (typeof productManagerPayload === "undefined") return;
     const product = productManagerPayload.products.find((item) => item.id === productId);
     if (!product || !store()) return;
+    const identity = productIdentity(product);
+    const existed = existingTask(identity);
+    if (routeToTodo(existed, product.shortName)) return;
     const highRisk = product.afterSalesLevel !== "good" || product.inventoryLevel === "danger";
     const task = store().createTask({
+      ...identity,
       sourceModule: "商品经营列表",
       source: "商品触发",
       sourceRoute: "business-products",
-      sourceEvent: `product:${product.id}:review`,
+      sourceEvent: `product:${product.id}:${identity.riskDomain}:${identity.actionType}`,
       productId: product.id,
       imageLabel: product.imageLabel,
       productShort: product.shortName,
@@ -58,11 +136,15 @@
     if (typeof competitorManagerPayload === "undefined") return;
     const item = competitorManagerPayload.competitors.find((competitor) => competitor.id === competitorId);
     if (!item || !store()) return;
+    const identity = competitorIdentity(item);
+    const existed = existingTask(identity);
+    if (routeToTodo(existed, item.targetProduct)) return;
     const task = store().createTask({
+      ...identity,
       sourceModule: "竞品观察列表",
       source: "竞品触发",
       sourceRoute: "business-competitors",
-      sourceEvent: `competitor:${item.id}:opportunity`,
+      sourceEvent: `competitor:${item.id}:${identity.riskDomain}:${identity.actionType}`,
       productId: item.id,
       imageLabel: item.imageLabel,
       productShort: item.targetProduct,
@@ -88,11 +170,15 @@
     if (typeof listingManagerPayload === "undefined") return;
     const item = listingManagerPayload.experiments.find((experiment) => experiment.id === listingId);
     if (!item || !store()) return;
+    const identity = listingIdentity(item);
+    const existed = existingTask(identity);
+    if (routeToTodo(existed, item.testType)) return;
     const task = store().createTask({
+      ...identity,
       sourceModule: "上新测试台",
       source: "上新触发",
       sourceRoute: "business-listing",
-      sourceEvent: `listing:${item.id}:test`,
+      sourceEvent: `listing:${item.id}:${identity.riskDomain}:${identity.actionType}`,
       productId: item.id,
       imageLabel: item.imageLabel,
       productShort: item.sourceName,
@@ -119,11 +205,15 @@
     if (typeof trafficManagerPayload === "undefined") return;
     const item = trafficManagerPayload.tests.find((test) => test.id === trafficId);
     if (!item || !store()) return;
+    const identity = trafficIdentity(item);
+    const existed = existingTask(identity);
+    if (routeToTodo(existed, item.title.slice(0, 8))) return;
     const task = store().createTask({
+      ...identity,
       sourceModule: "流量测试台",
       source: "流量触发",
       sourceRoute: "business-traffic",
-      sourceEvent: `traffic:${item.id}:backflow`,
+      sourceEvent: `traffic:${item.id}:${identity.riskDomain}:${identity.actionType}`,
       productId: item.productId,
       imageLabel: item.imageLabel,
       productShort: item.title.slice(0, 6),
@@ -149,11 +239,15 @@
     if (typeof reportManagerPayload === "undefined") return;
     const card = reportManagerPayload.groups.flatMap((group) => group.reports).find((report) => report.id === reportId);
     if (!card || !store()) return;
+    const identity = reportIdentity(card);
+    const existed = existingTask(identity);
+    if (routeToTodo(existed, card.name)) return;
     const task = store().createTask({
+      ...identity,
       sourceModule: "ERP / CRM 报表管理",
       source: "报表触发",
       sourceRoute: "data-check",
-      sourceEvent: `report:${card.id}:import`,
+      sourceEvent: `report:${card.id}:${identity.actionType}`,
       productId: `R-${card.id}`,
       imageLabel: "表",
       productShort: card.name,
@@ -175,43 +269,72 @@
     notify(`${card.name}导入复盘任务已进入统一任务池。`);
   }
 
+  function updateButtonState(button, identity, activeLabel = "加入待办") {
+    if (!button || !store()) return;
+    const existed = existingTask(identity);
+    button.textContent = existed ? "已在待办" : activeLabel;
+    button.classList.toggle("ghost", Boolean(existed));
+    button.title = existed ? "已有同商品/同问题待办，点击跳转任务池" : "创建新的待办任务";
+  }
+
   function bindButtons() {
-    document.querySelectorAll("[data-product-report]").forEach((button) => addButton(button.parentElement, "加入待办", "data-v110-product-task", button.dataset.productReport));
-    document.querySelectorAll("[data-v110-product-task]").forEach((button) => {
-      if (button.dataset.taskBridgeBound) return;
-      button.dataset.taskBridgeBound = "1";
-      button.addEventListener("click", () => createProductTask(button.dataset.v110ProductTask));
-    });
-
-    document.querySelectorAll("[data-competitor-watch]").forEach((button) => {
-      if (button.dataset.taskBridgeBound) return;
-      button.dataset.taskBridgeBound = "1";
-      button.addEventListener("click", () => createCompetitorTask(button.dataset.competitorWatch));
-    });
-
-    document.querySelectorAll("[data-listing-task]").forEach((button) => {
-      if (button.dataset.taskBridgeBound) return;
-      button.dataset.taskBridgeBound = "1";
-      button.addEventListener("click", () => createListingTask(button.dataset.listingTask));
-    });
-
-    document.querySelectorAll("[data-traffic-task]").forEach((button) => {
-      if (button.dataset.taskBridgeBound) return;
-      button.dataset.taskBridgeBound = "1";
-      button.addEventListener("click", () => createTrafficTask(button.dataset.trafficTask));
-    });
-
-    document.querySelectorAll("[data-report-confirm-import]").forEach((button) => {
-      if (button.dataset.taskBridgeBound) return;
-      button.dataset.taskBridgeBound = "1";
-      button.addEventListener("click", () => {
-        if (typeof selectedImportFileName !== "undefined" && selectedImportFileName) createReportTask(button.dataset.reportConfirmImport);
+    if (typeof productManagerPayload !== "undefined") {
+      document.querySelectorAll("[data-product-report]").forEach((button) => addButton(button.parentElement, "加入待办", "data-v111-product-task", button.dataset.productReport));
+      document.querySelectorAll("[data-v111-product-task]").forEach((button) => {
+        const product = productManagerPayload.products.find((item) => item.id === button.dataset.v111ProductTask);
+        if (product) updateButtonState(button, productIdentity(product), "加入待办");
+        if (button.dataset.taskBridgeBound) return;
+        button.dataset.taskBridgeBound = "1";
+        button.addEventListener("click", () => createProductTask(button.dataset.v111ProductTask));
       });
-    });
+    }
+
+    if (typeof competitorManagerPayload !== "undefined") {
+      document.querySelectorAll("[data-competitor-watch]").forEach((button) => {
+        const item = competitorManagerPayload.competitors.find((competitor) => competitor.id === button.dataset.competitorWatch);
+        if (item) updateButtonState(button, competitorIdentity(item), "加入观察");
+        if (button.dataset.taskBridgeBound) return;
+        button.dataset.taskBridgeBound = "1";
+        button.addEventListener("click", () => createCompetitorTask(button.dataset.competitorWatch));
+      });
+    }
+
+    if (typeof listingManagerPayload !== "undefined") {
+      document.querySelectorAll("[data-listing-task]").forEach((button) => {
+        const item = listingManagerPayload.experiments.find((experiment) => experiment.id === button.dataset.listingTask);
+        if (item) updateButtonState(button, listingIdentity(item), "加入任务清单");
+        if (button.dataset.taskBridgeBound) return;
+        button.dataset.taskBridgeBound = "1";
+        button.addEventListener("click", () => createListingTask(button.dataset.listingTask));
+      });
+    }
+
+    if (typeof trafficManagerPayload !== "undefined") {
+      document.querySelectorAll("[data-traffic-task]").forEach((button) => {
+        const item = trafficManagerPayload.tests.find((test) => test.id === button.dataset.trafficTask);
+        if (item) updateButtonState(button, trafficIdentity(item), "加入任务清单");
+        if (button.dataset.taskBridgeBound) return;
+        button.dataset.taskBridgeBound = "1";
+        button.addEventListener("click", () => createTrafficTask(button.dataset.trafficTask));
+      });
+    }
+
+    if (typeof reportManagerPayload !== "undefined") {
+      document.querySelectorAll("[data-report-confirm-import]").forEach((button) => {
+        const card = reportManagerPayload.groups.flatMap((group) => group.reports).find((report) => report.id === button.dataset.reportConfirmImport);
+        if (card) updateButtonState(button, reportIdentity(card), "确认导入");
+        if (button.dataset.taskBridgeBound) return;
+        button.dataset.taskBridgeBound = "1";
+        button.addEventListener("click", () => {
+          if (typeof selectedImportFileName !== "undefined" && selectedImportFileName) createReportTask(button.dataset.reportConfirmImport);
+        });
+      });
+    }
   }
 
   const observer = new MutationObserver(() => bindButtons());
   observer.observe(document.body, { childList: true, subtree: true });
+  window.addEventListener("operation-task-store-change", () => setTimeout(bindButtons, 0));
   window.addEventListener("hashchange", () => setTimeout(bindButtons, 0));
   window.addEventListener("load", () => setTimeout(bindButtons, 0));
   setTimeout(bindButtons, 0);
