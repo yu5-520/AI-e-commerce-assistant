@@ -13,8 +13,11 @@
   }
 
   function productIdentity(product) {
-    const riskDomain = product.afterSalesLevel !== "good" ? "售后" : product.inventoryLevel === "danger" ? "库存" : "商品";
-    return { entityType: "商品", entityId: product.id, riskDomain, actionType: riskDomain === "商品" ? "观察" : "复查" };
+    return {
+      dedupeKey: product.suggestedTaskKey || product.dedupeKey,
+      suggestedTaskKey: product.suggestedTaskKey || product.dedupeKey,
+      activeTaskId: product.activeTaskId,
+    };
   }
 
   async function createProductTask(productId) {
