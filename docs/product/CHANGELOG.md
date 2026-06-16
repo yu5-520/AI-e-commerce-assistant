@@ -1,5 +1,28 @@
 # Product Changelog
 
+## v2.5.0 - 2026-06-16
+
+### Product Decision
+- V2.5.0 rebuilds the task system from a single-account todo list into a role-permission-driven task flow.
+- Product truth: 任务不是单个账号的待办列表，而是围绕店铺权限、角色职责和复盘链路流转的经营对象。
+- 老板看决策任务，总管看调度任务，运营看执行任务。
+- 商品、竞品、上新、流量等模块预警不进入全局待办，而是根据店铺归属和账号权限生成可见任务。
+
+### Changed
+- Task payloads now include role and permission fields: `taskLayer`, `sourceType`, `ownerRole`, `parentTaskId`, `childTaskIds`, `storeIds`, `storeGroupId`, `visibleRoleIds`, `visibleUserIds`, `visibleStoreIds`, `recapTarget`, `agentJudgment`.
+- Product / competitor / listing / traffic warnings are routed to the operator responsible for the affected store and remain visible to the store-group manager.
+- Owner account no longer receives ordinary operator execution tasks in the task pool.
+- Manager account sees group dispatch, split, review, warning, and retrospective tasks.
+- Operator account sees assigned tasks and warning tasks inside its authorized store scope.
+- Finance account sees finance / report / ROI / inventory related tasks.
+- Added `POST /api/modules/todo/{task_id}/split` for manager split flow.
+- Client fallback task store also respects role / user / store scope.
+- Frontend assets now use `?v=2.5.0`; API and health versions are aligned.
+
+### Product Boundary
+- This remains in-memory mock task routing.
+- Real version should move the same rules into database-backed task tables, store permission tables, task-source records, child-task records, assignment records, review records, and Agent evidence snapshots.
+
 ## v2.4.2 - 2026-06-16
 
 ### Product Decision
@@ -21,39 +44,11 @@
 
 ## v2.4.1 - 2026-06-16
 
-### Product Decision
-- V2.4.1 optimizes 店群总管 `今日处理顺序` layout.
-- Product truth: 店群总管需要的是调度队列，不是普通卡片列表；功能按钮可以多，但排版必须先服务“第几个处理、何时到期、来源是什么、判断是什么、下一步点哪里”。
-- The layout keeps task actions while restoring the stronger schedule-row visual hierarchy.
-
-### Changed
-- 店群总管首页和店群任务 / 任务派发 / 运营复核使用统一的调度队列卡片。
-- Added row structure: 序号、时间/优先级、主任务、来源、判断、操作.
-- Kept actions: 查看详情、拆分 / 派发、进入复核.
-- Sorting controls remain, but are visually lighter.
-- Frontend assets now use `?v=2.4.1`; API and health versions are aligned.
-
-### Product Boundary
-- This remains mock local task state.
-- Real version should connect sorting rules, SLA deadline rules, split records, assignment APIs, and Agent task-detail judgment.
+- Optimized 店群总管 `今日处理顺序` into schedule-row dispatch queue layout.
 
 ## v2.4.0 - 2026-06-16
 
-### Product Decision
-- V2.4.0 changes 老板账号 `总览` from task list into business overview.
-- Product truth: 老板总览不是任务池，是全局经营首页；老板看经营摘要和决策入口，任务拆分、派发和复核属于店群总管。
-- 老板关注事项只进入对应模块查看详情，不做“完成任务”。
-
-### Changed
-- Owner dashboard now shows operating metrics: 今日销售额、今日利润、今日订单、库存资金、广告消耗、退款率、待审计问题、待确认复盘.
-- Added owner module entry cards: 店群总览、人员总览、供投财务、组织效率、复盘审计.
-- Added owner attention items: 周报目标未达标、抖音 ROAS 偏低、拼多多退款率上升、总管复核节奏偏慢.
-- Added `web_demo/owner-dashboard.css`.
-- Frontend assets now use `?v=2.4.0`; API and health versions are aligned.
-
-### Product Boundary
-- This remains mock overview data.
-- Real version should connect store metrics, people workload, supply / ad / finance metrics, organization exceptions, and retrospective audit records.
+- Changed 老板账号 `总览` from task list into business overview.
 
 ## v2.3.9 - 2026-06-16
 
