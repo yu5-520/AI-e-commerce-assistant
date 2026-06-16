@@ -1,23 +1,26 @@
 # Product Changelog
 
-## v2.3.4 - 2026-06-16
+## v2.3.5 - 2026-06-16
 
 ### Product Decision
-- V2.3.4 changes owner-side `组织效率` from task-flow metrics into an organization governance console.
-- Product truth: `人员总览`看人现在忙不忙；`组织效率`看组织结构、汇报链路、账号权限、店铺归属和权限治理。
-- 账号页只回答“我是谁”，组织效率回答“组织怎么运转”。
+- V2.3.5 changes owner-side `复核审计` into `复盘审计`.
+- Product truth: 老板不常因为单个店铺短期波动直接下任务，老板通常通过日报、周报、月报复盘和审计结论确定下周 / 下月任务。
+- `复盘审计`不是单条任务日志，而是周期复盘接收、运行失误审查和下周期任务生成入口。
 
 ### Changed
-- Added position relationship network: 老板 → 店群总管 → 运营 / 财务 / 观察者.
-- Moved role / account permission governance into `组织效率`.
-- Added account role control, store authorization control, and role permission template control.
-- Account page management button now routes to `组织效率` instead of the legacy role console.
-- Added organization governance style file: `web_demo/org-efficiency.css`.
-- Frontend assets now use `?v=2.3.4`; API and health versions are aligned.
+- Owner navigation label changed from `复核审计` to `复盘审计`.
+- Added retrospective intake: 日报、周报、月报、专项复盘.
+- Added audit issue list: 周报未达标、ROI 不达标、退款率上升、复核延迟.
+- Added next-cycle task drafts: 下周任务、下月任务、责任主管、拆分方向、优先级、下发状态.
+- Frontend assets now use `?v=2.3.5`; API and health versions are aligned.
 
 ### Product Boundary
-- This remains mock account governance.
-- Real version should add persistent org tree, manager assignment, tenant isolation, RBAC audit logs, and approval flow for high-permission changes.
+- This remains mock retrospective data.
+- Real version should connect daily / weekly / monthly report submissions, task timeout records, KPI target rules, and task-generation approvals.
+
+## v2.3.4 - 2026-06-16
+
+- Owner-side `组织效率` changed into organization governance console.
 
 ## v2.3.3 - 2026-06-16
 
