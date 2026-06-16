@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.1.0 - 2026-06-16
+
+### Added
+- Added global mock account switching through `X-Mock-User-Id` and the topbar account selector.
+- Added role-based account context in `src/services/account_service.py`: data scope, visible modules, allowed actions, hidden fields, and insight depth.
+- Added productized permission labels so the UI shows Chinese permission names instead of raw engineering ids.
+- Added role-aware task filtering and action hints in `src/services/module_task_service.py`.
+- Added role-based report insight depth in `src/services/task_report_service.py`.
+
+### Changed
+- Frontend assets were bumped to `?v=2.1.0`.
+- FastAPI app version and health version are aligned to `2.1.0`.
+- 账号 page now changes content according to the selected role.
+- 待办 page now shows different task ranges and buttons for 老板、店群总管、运营、数据 / 财务、只读观察.
+- Task reports now translate the same warning into different role views: strategy, team management, execution checklist, finance risk, or summary only.
+
+### Product Engineering Rule
+- Role switching is still a mock view simulation, not real login.
+- Higher roles can see deeper management context and broader actions.
+- Lower or lateral roles get narrower task scopes and fewer buttons.
+- Sensitive fields should be hidden by role view before real enterprise auth is connected.
+
 ## v2.0.0 - 2026-06-16
 
 ### Added
