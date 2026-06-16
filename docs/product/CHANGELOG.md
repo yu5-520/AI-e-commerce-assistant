@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v2.1.0 - 2026-06-16
+
+### Product Decision
+- V2.1.0 turns the account system from a static role list into a role-view simulation.
+- Product truth: the same system should show different task ranges, buttons, and report explanations when switching between 老板、店群总管、运营、数据 / 财务、只读观察.
+- Higher roles get broader scope and deeper management context; execution roles get narrower task scope and clearer checklists.
+
+### Changed
+- Added a global account switcher in the topbar.
+- 账号 page now changes by current role, including visible modules, allowed actions, hidden fields, and insight depth.
+- 权限 cards now show productized Chinese permission labels instead of raw permission ids.
+- 待办 now filters visible tasks by current account and hides unavailable action buttons.
+- 详情报告 now adds a role-specific interpretation block.
+- Frontend assets now use `?v=2.1.0`; API and health versions are aligned.
+
+### Product Boundary
+- This is still mock role switching, not real login.
+- The frontend stores the selected mock user locally and sends it with `X-Mock-User-Id`.
+- Production enterprise auth, tenant isolation, and audit storage still need a later version.
+
 ## v2.0.0 - 2026-06-16
 
 ### Product Decision
