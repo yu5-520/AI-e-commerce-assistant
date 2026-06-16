@@ -1,5 +1,31 @@
 # Product Changelog
 
+## v1.5.0 - 2026-06-16
+
+### Product Decision
+- V1.5.0 completes the backend module-file split promised after v1.4.1.
+- Product truth: each backend module should be maintainable independently, while `src/api/routes/modules/__init__.py` only aggregates routers.
+
+### Changed
+- Split the monolithic modular route file into separate backend module files:
+  - `dashboard.py`
+  - `operating_unit.py`
+  - `product.py`
+  - `competitor.py`
+  - `listing.py`
+  - `traffic.py`
+  - `report.py`
+  - `todo.py`
+  - `log.py`
+  - `common.py`
+- `src/api/routes/modules/__init__.py` now only creates the `/api/modules` router and includes each module router.
+- Frontend assets now use `?v=1.5.0`; API and health versions are aligned.
+
+### Product Boundary
+- This is a backend maintainability refactor, not a new data feature.
+- API paths remain the same, so the frontend still calls `/api/modules/*`.
+- Mock data and task/log authority remain in `module_data_service.py` and `module_task_service.py` until database persistence is added.
+
 ## v1.4.1 - 2026-06-16
 
 ### Product Decision
@@ -47,32 +73,9 @@
 - The modular endpoints still return Mock ERP / CRM product data and task payloads.
 - Real server-side task persistence, account roles, permissions, and ERP / CRM connectors remain later work.
 
-## v1.3.0 - 2026-06-16
-
-### Product Decision
-- V1.3.0 turns the frontend from hotfix-script stacking into a modular route-registry structure.
-- The product goal is that future changes touch one module at a time instead of disturbing other pages.
-- Product truth: shared state lives in stores, shared routing/shell logic lives in core, and business pages live under modules.
-
-### Changed
-- Added `web_demo/core/` for shell, router, task actions, and mock data registry.
-- Added `web_demo/stores/task-store.js` as the current task-state source.
-- Added `web_demo/modules/*/page.js` for dashboard, operating unit, report, product, competitor, listing, traffic, todo, and log.
-- Added `web_demo/bootstrap.js` as the single module registration entry.
-- `index.html` now loads the modular entry chain only and uses `?v=1.3.0`.
-- Task generation is no longer done by a global task bridge scanning the DOM; each module binds its own task actions through the router context.
-
-### Removed
-- Removed the old root task store, legacy app router, temporary lifecycle shim, page hotfix scripts, and global task bridge from the active frontend path.
-- Deleted scripts include `app-v2.js`, `route-lifecycle.js`, `*-hotfix.js`, root `task-store.js`, and `module-task-bridge.js`.
-
-### Product Boundary
-- This is an architecture refactor, not a new feature expansion.
-- The frontend still uses mock/localStorage state until server persistence and real account permissions are added.
-- Future updates should add or change one module at a time under `web_demo/modules/`.
-
 ## Earlier History
 
+- v1.3.0: Frontend changed from hotfix-script stacking into a modular route-registry structure.
 - v1.2.0: Added unified front-end route lifecycle coordinator.
 - v1.1.2: Fixed fast module-switch crash introduced by observer-based task bridge binding.
 - v1.1.1: Added dedupe identity to task-store tasks.
