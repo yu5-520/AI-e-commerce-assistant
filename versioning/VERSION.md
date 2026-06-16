@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v1.4.1
+Current Version: v1.5.0
 
 ## Version History
 
@@ -19,6 +19,7 @@ Current Version: v1.4.1
 - v1.3.0: Rebuilt the frontend into a modular route registry and removed legacy hotfix scripts from the active product entry.
 - v1.4.0: Added modular backend interfaces under `/api/modules/*`, added the frontend `core/api-client.js`, prefetches module data before router start, and removed the old `/api/business/*` router from the active backend entry.
 - v1.4.1: Closed the module API chain. Backend mock data moved into `module_data_service`, task/log authority moved into `module_task_service`, frontend full mock data was reduced to minimal fallback, task actions now call backend module endpoints, and todo/log pages now hydrate from server task state.
+- v1.5.0: Split the backend module router into separate route files for dashboard, operating unit, product, competitor, listing, traffic, report, todo, and log. `src/api/routes/modules/__init__.py` now only aggregates routers under `/api/modules/*`.
 
 ## Version Rules
 
