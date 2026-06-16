@@ -1,4 +1,4 @@
-(function () {
+(async function () {
   const pages = [
     window.DashboardPage,
     window.OperatingUnitPage,
@@ -12,5 +12,12 @@
   ];
 
   pages.forEach((page) => AppRouter.register(page));
+
+  if (window.AppApi?.prefetch) {
+    await window.AppApi.prefetch();
+    const badge = document.getElementById("apiModeBadge");
+    if (badge) badge.textContent = "模块接口";
+  }
+
   AppRouter.start();
 })();
