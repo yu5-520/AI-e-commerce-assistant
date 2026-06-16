@@ -1,6 +1,6 @@
 # Version
 
-Current Version: v2.1.0
+Current Version: v2.2.0
 
 ## Version History
 
@@ -27,6 +27,7 @@ Current Version: v2.1.0
 - v1.6.1: Added report-to-task conversion. Candidate report pages now include `加入任务清单`, create the matching module task from the detail page, refresh task/module state, and jump to the new task in 待办.
 - v2.0.0: Cleaned the architecture around the modular `/api/modules/*` trunk, added the `/api/accounts` role-permission layer, added the 账号 page, and upgraded the task pool into a dispatch / submit / review collaboration flow.
 - v2.1.0: Added global mock account switching, role-based task visibility, permission-based todo actions, productized permission labels, and role-specific insight depth for account pages and task reports.
+- v2.2.0: Refactored owner navigation from first-line operation modules into executive modules, slimmed account page, and added a role permission console for mock role, store-scope, and permission changes.
 
 ## Version Rules
 
