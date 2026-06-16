@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v2.3.3
+Current Version: v2.3.4
 
 ## Version History
 
+- v2.3.4: Rebuilt owner `组织效率` into an organization governance console with position relationship network, account role control, store authorization, and permission template control.
 - v2.3.3: Rebuilt owner `利润预算` into `供投财务`, combining supply, traffic, and finance views.
 - v2.3.2: Owner-side task command was repositioned into `人员总览`, showing employee realtime state, task load, completed count, return count, timeout count, average handling time, and workload.
 - v2.3.1: Fixed `店群总览` layout and upgraded it into a realtime operations board with sync status, trend chips, platform live cards, and a horizontal store table.
