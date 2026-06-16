@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.6.1 - 2026-06-16
+
+### Added
+- Added `createTaskFromReport(module, entityId)` in `web_demo/core/task-actions.js`.
+- Candidate report pages now show a primary `加入任务清单` button at the bottom.
+
+### Changed
+- Candidate report pages now support the normal operating flow: `查看预警 -> 阅读完整报告 -> 加入任务清单 -> 跳转待办任务位置`.
+- `web_demo/modules/task-report/page.js` now creates the correct module task from the report context and jumps to the new active task in 待办.
+- Frontend assets were bumped to `?v=1.6.1`.
+- FastAPI app version and health version are aligned to `1.6.1`.
+
+### Product Engineering Rule
+- A candidate report is not only a read-only explanation page. It is also a task conversion page.
+- Operators should not need to return to the source module after reading the full report just to add the same candidate to 待办.
+
 ## v1.6.0 - 2026-06-16
 
 ### Added
