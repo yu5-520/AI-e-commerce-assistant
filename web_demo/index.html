@@ -4,21 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI 经营参谋</title>
-    <link rel="stylesheet" href="/web_demo/styles.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/dashboard.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/dashboard-linked.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/report-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/product-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/competitor-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/listing-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/traffic-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/todo-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/log-center.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/people-overview.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/supply-finance.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/org-efficiency.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/review-audit.css?v=2.3.7" />
-    <link rel="stylesheet" href="/web_demo/account-center.css?v=2.3.7" />
+    <link rel="stylesheet" href="/web_demo/styles.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/dashboard.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/dashboard-linked.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/report-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/product-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/competitor-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/listing-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/traffic-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/todo-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/log-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/people-overview.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/supply-finance.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/org-efficiency.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/review-audit.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/account-center.css?v=2.3.8" />
+    <link rel="stylesheet" href="/web_demo/manager-console.css?v=2.3.8" />
   </head>
   <body>
     <div class="app-shell">
@@ -31,6 +32,12 @@
           <a href="#profit-budget" data-route="profit-budget">供投财务</a>
           <a href="#org-efficiency" data-route="org-efficiency">组织效率</a>
           <a href="#review-audit" data-route="review-audit">复盘审计</a>
+          <a href="#manager-tasks" data-route="manager-tasks">店群任务</a>
+          <a href="#manager-dispatch" data-route="manager-dispatch">任务派发</a>
+          <a href="#manager-review" data-route="manager-review">运营复核</a>
+          <a href="#manager-modules" data-route="manager-modules">经营模块</a>
+          <a href="#manager-retrospective" data-route="manager-retrospective">复盘提交</a>
+          <a href="#manager-reports" data-route="manager-reports">数据报表</a>
           <a href="#operating-unit" data-route="operating-unit">经营单元</a>
           <a href="#data-check" data-route="data-check">报表</a>
           <a href="#business-products" data-route="business-products">商品</a>
@@ -53,24 +60,25 @@
         <main id="appView" class="view"></main>
       </div>
     </div>
-    <script src="/web_demo/core/mock-data.js?v=2.3.7"></script>
-    <script src="/web_demo/core/api-client.js?v=2.3.7"></script>
-    <script src="/web_demo/stores/task-store.js?v=2.3.7"></script>
-    <script src="/web_demo/core/shell.js?v=2.3.7"></script>
-    <script src="/web_demo/core/router.js?v=2.3.7"></script>
-    <script src="/web_demo/core/task-actions.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/dashboard/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/executive/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/account/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/operating-unit/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/report/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/product/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/competitor/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/listing/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/traffic/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/todo/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/log/page.js?v=2.3.7"></script>
-    <script src="/web_demo/modules/task-report/page.js?v=2.3.7"></script>
-    <script src="/web_demo/bootstrap.js?v=2.3.7"></script>
+    <script src="/web_demo/core/mock-data.js?v=2.3.8"></script>
+    <script src="/web_demo/core/api-client.js?v=2.3.8"></script>
+    <script src="/web_demo/stores/task-store.js?v=2.3.8"></script>
+    <script src="/web_demo/core/shell.js?v=2.3.8"></script>
+    <script src="/web_demo/core/router.js?v=2.3.8"></script>
+    <script src="/web_demo/core/task-actions.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/dashboard/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/executive/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/manager/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/account/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/operating-unit/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/report/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/product/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/competitor/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/listing/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/traffic/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/todo/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/log/page.js?v=2.3.8"></script>
+    <script src="/web_demo/modules/task-report/page.js?v=2.3.8"></script>
+    <script src="/web_demo/bootstrap.js?v=2.3.8"></script>
   </body>
 </html>
