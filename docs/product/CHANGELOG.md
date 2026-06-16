@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v2.0.0 - 2026-06-16
+
+### Product Decision
+- V2.0.0 moves the product from a single-user operating dashboard into a light enterprise collaboration skeleton.
+- Product truth: 老板不是直接处理每个任务；老板看总览和完整报告后，下发给店群总管，总管拆分给运营，运营提交后再由总管复核。
+- The active trunk is now `/api/modules/*` for business modules plus `/api/accounts` for account, role, permission, and store-scope context.
+
+### Changed
+- Added `账号` page for role permissions, account list, store scope, and task-flow explanation.
+- Added five v2 roles: 老板账号、店群总管账号、运营账号、数据 / 财务账号、只读观察账号.
+- Added task assignment, submit, and review actions to 待办.
+- 待办 cards now show assignee, reviewer, assigner, and workflow status.
+- Task flow now supports: `候选预警 -> 任务池 -> 派发 -> 处理中 -> 提交复核 -> 通过 / 退回 -> 归档`.
+- Product docs were cleaned so README、MVP 范围、模块边界 and smoke tests point to the current v2 trunk.
+- Frontend assets now use `?v=2.0.0`; API and health versions are aligned.
+
+### Product Boundary
+- This is still Mock account context, not real login or enterprise SSO.
+- This does not connect real ERP / CRM / shop backend data.
+- This does not execute real price, inventory, ad, listing, customer, or refund actions.
+- Agent remains a report-enrichment boundary, not an execution owner.
+
 ## v1.6.1 - 2026-06-16
 
 ### Product Decision
