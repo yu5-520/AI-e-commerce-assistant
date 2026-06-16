@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.4.2 - 2026-06-16
+
+### Added
+- Added operator-specific scoped store operation dashboard.
+- Added `web_demo/operator-dashboard.css` for operator store cards and operation module entry cards.
+- Added operator dashboard sections for assigned stores, authorized operation modules, and own pending tasks.
+
+### Changed
+- Restored operator-side navigation to: 总览、经营单元、报表、商品、竞品、上新、流量、待办、日志、账号.
+- Operator role is no longer treated as a pure task-only executor.
+- Operator modules are framed around assigned store permissions rather than company-wide visibility.
+- Frontend assets were bumped to `?v=2.4.2`.
+- FastAPI app version and health version are aligned to `2.4.2`.
+
+### Product Engineering Rule
+- 运营账号不是去掉经营模块，而是把经营模块限定在“我负责的店铺范围内”。
+- 老板看全部经营结果；店群总管看店群执行调度；运营看被分配店铺的经营、报表、商品、竞品、上新、流量、待办和日志。
+
 ## v2.4.1 - 2026-06-16
 
 ### Changed
