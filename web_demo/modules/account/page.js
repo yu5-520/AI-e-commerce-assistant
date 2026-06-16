@@ -1,60 +1,82 @@
 (function () {
   const s = (value) => AppShell.escape(value);
-  let payload = null;
 
   function chips(items = []) {
     return `<div class="permission-chip-row">${items.map((item) => `<span>${s(item)}</span>`).join("")}</div>`;
   }
 
-  function roleCard(role) {
-    return `<article class="card"><div class="section-header"><h3>${s(role.name)}</h3><span class="status-badge">L${s(role.level)}</span></div><div class="role-note">范围：${s(role.scope)}</div><div class="role-note">${s(role.insightName || role.insightDepth)}</div>${chips(role.permissionNames || [])}</article>`;
+  function compactUser(user) {
+    return `<article class="report-card"><div class="section-header"><h3>${s(user.name)}</h3><span class="status-badge">${s(user.roleName)}</span></div><p>${s(user.scope)} · ${s((user.storeIds || []).join(" / "))}</p></article>`;
   }
 
-  function userRow(user) {
-    return `<article class="report-card"><div class="section-header"><h3>${s(user.name)}</h3><span class="status-badge">${s(user.roleName)}</span></div><p>${s(user.scope)} · ${s((user.storeIds || []).join(" / "))}</p><small>${s((user.permissionNames || []).join("、"))}</small></article>`;
+  function rolePermissionCard(role, permissions) {
+    const selected = new Set(role.permissions || []);
+    return `<article class="report-card"><div class="section-header"><h3>${s(role.name)}</h3><span class="status-badge">L${s(role.level)}</span></div><div class="permission-chip-row">${permissions.map((permission) => `<button type="button" class="secondary" data-permission="${s(role.id)}:${s(permission.id)}" aria-pressed="${selected.has(permission.id)}">${selected.has(permission.id) ? "✓ " : ""}${s(permission.name)}</button>`).join("")}</div></article>`;
   }
 
-  function storeRow(store) {
-    return `<article class="report-card"><strong>${s(store.name)}</strong><p>${s(store.platform)} · ${s(store.id)}</p></article>`;
-  }
-
-  function sectionList(title, items = [], badge = "视角") {
-    return `<section class="page-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${s(badge)}</span></div><div class="report-card-list">${items.map((item, index) => `<article class="report-card"><strong>${index + 1}. ${s(item)}</strong></article>`).join("")}</div></section>`;
-  }
-
-  function roleSpecificSections(account) {
-    const user = account.currentUser || {};
-    const view = account.currentRoleView || {};
-    const users = account.users || [];
-    const stores = account.stores || [];
-    if (user.roleId === "owner") {
-      return `${sectionList("老板能看到的深层经营信息", user.managementInsights || [], user.insightName)}<section class="page-section"><div class="section-header"><h3>全部协作账号</h3><span class="status-badge">${users.length} 个账号</span></div><div class="report-card-list">${users.map(userRow).join("")}</div></section><section class="page-section"><div class="section-header"><h3>店群授权</h3><span class="status-badge">全部店群</span></div><div class="report-card-list">${stores.map(storeRow).join("")}</div></section>${sectionList("老板页面模块", view.sections || [])}`;
-    }
-    if (user.roleId === "manager") {
-      const managedUsers = users.filter((item) => ["operator", "finance"].includes(item.roleId));
-      return `${sectionList("店群总管能看到的管理信息", user.managementInsights || [], user.insightName)}<section class="page-section"><div class="section-header"><h3>我管理的账号</h3><span class="status-badge">${managedUsers.length} 个账号</span></div><div class="report-card-list">${managedUsers.map(userRow).join("")}</div></section>${sectionList("总管页面模块", view.sections || [])}`;
-    }
-    if (user.roleId === "operator") {
-      return `${sectionList("运营只看到的执行信息", user.managementInsights || [], user.insightName)}${sectionList("可操作动作", user.allowedActions || [], "执行权限")}${sectionList("不可访问内容", user.hiddenFields || [], "已隐藏")}`;
-    }
-    if (user.roleId === "finance") {
-      return `${sectionList("数据 / 财务能看到的经营信息", user.managementInsights || [], user.insightName)}${sectionList("可操作动作", user.allowedActions || [], "财务权限")}${sectionList("不可操作内容", user.hiddenFields || [], "已隐藏")}`;
-    }
-    return `${sectionList("只读账号能看到的摘要", user.managementInsights || [], user.insightName)}${sectionList("可查看范围", view.sections || [], "只读")}${sectionList("不可访问内容", user.hiddenFields || [], "已隐藏")}`;
+  function userControlCard(user, roles, stores) {
+    return `<article class="report-card"><div class="section-header"><h3>${s(user.name)}</h3><span class="status-badge">${s(user.roleName)}</span></div><div class="permission-chip-row">${roles.map((role) => `<button type="button" class="secondary" data-role-change="${s(user.id)}:${s(role.id)}">${s(role.name)}</button>`).join("")}</div><div class="permission-chip-row">${stores.map((store) => `<button type="button" class="secondary" data-store-toggle="${s(user.id)}:${s(store.id)}">${(user.storeIds || []).includes(store.id) ? "✓ " : ""}${s(store.name)}</button>`).join("")}</div></article>`;
   }
 
   window.AccountPage = {
     route: "accounts",
     title: "账号权限",
     async render() {
-      payload = await AppApi.accounts();
-      if (!payload) return `<section class="page-section"><h3>账号系统加载失败</h3><p>请确认 /api/accounts 已挂载。</p></section>`;
+      const payload = await AppApi.accounts();
+      if (!payload) return `<section class="page-section"><h3>账号系统加载失败</h3></section>`;
       const current = payload.currentUser || {};
       const view = payload.currentRoleView || {};
+      return `<section class="report-hero"><div><p class="eyebrow">ACCOUNT · V2.2</p><h2>${s(view.headline || "账号中心")}</h2><p>${s(view.summary || "账号页只展示当前身份、范围和权限入口；具体经营统筹进入对应功能模块。")}</p></div><div class="report-hero-side"><span>当前身份</span><strong>${s(current.roleName)}</strong><small>${s(current.name)}</small></div></section><section class="kpi-grid report-metrics">${[["当前角色", current.roleName, current.insightName], ["数据范围", current.scope, "按角色授权"], ["可见模块", (current.visibleModules || []).length, "动态导航"], ["操作权限", (current.allowedActions || []).length, "按钮级控制"]].map(([a,b,c]) => AppShell.metricCard(a,b,c)).join("")}</section><section class="page-section"><div class="section-header"><h3>我的权限摘要</h3><button type="button" data-role-console>角色权限管理</button></div>${chips(current.permissionNames || [])}<div class="info-list"><div><span>可操作</span><strong>${s((current.allowedActions || []).join(" / "))}</strong></div><div><span>不可访问</span><strong>${s((current.hiddenFields || []).join(" / ") || "无")}</strong></div></div></section><section class="page-section"><div class="section-header"><h3>我的功能入口</h3><span class="status-badge">${s(current.insightName)}</span></div><div class="report-card-list">${(view.sections || []).map((item) => `<article class="report-card"><strong>${s(item)}</strong></article>`).join("")}</div></section>`;
+    },
+    mount(ctx) {
+      ctx.delegate("[data-role-console]", "click", () => AppRouter.navigate("role-console"));
+    },
+  };
+
+  window.RoleConsolePage = {
+    route: "role-console",
+    title: "角色权限控制台",
+    async render() {
+      const payload = await AppApi.accounts();
+      if (!payload) return `<section class="page-section"><h3>控制台加载失败</h3></section>`;
+      const user = payload.currentUser || {};
+      if (!AppApi.can("manage_roles")) {
+        return `<section class="report-hero"><div><p class="eyebrow">ROLE CONSOLE</p><h2>无权限访问</h2><p>当前账号只能查看自己的权限摘要，不能调整角色、店铺范围或权限模板。</p></div><div class="report-hero-side"><span>当前身份</span><strong>${s(user.roleName)}</strong><small>${s(user.name)}</small></div></section>`;
+      }
       const roles = payload.roles || [];
       const users = payload.users || [];
       const stores = payload.stores || [];
-      return `<section class="report-hero"><div><p class="eyebrow">ACCOUNT SYSTEM · V2.1</p><h2>${s(view.headline || "企业协同账号系统")}</h2><p>${s(view.summary || "不同账号看到不同范围、按钮和经营深度。")}</p></div><div class="report-hero-side"><span>当前身份</span><strong>${s(current.roleName || "老板账号")}</strong><small>${s(current.name || "老板")}</small></div></section><section class="kpi-grid report-metrics">${[["账号角色", roles.length, "角色已分层"], ["协作账号", users.length, "可切换视角"], ["店铺范围", stores.length, current.scope || "按店群授权"], ["洞察深度", current.insightName || "已建模", current.insightDepth || "role"]].map(([a,b,c]) => AppShell.metricCard(a,b,c)).join("")}</section><section class="page-section"><div class="section-header"><h3>当前账号权限</h3><span class="status-badge">${s(current.roleName)}</span></div><div class="info-list"><div><span>数据范围</span><strong>${s(current.scope)}</strong></div><div><span>洞察深度</span><strong>${s(current.insightName)}</strong></div><div><span>可见模块</span><strong>${s((current.visibleModules || []).length)} 个</strong></div><div><span>操作权限</span><strong>${s((current.allowedActions || []).length)} 项</strong></div></div>${chips(current.permissionNames || [])}</section><section class="page-section"><div class="section-header"><h3>角色权限</h3><span class="status-badge">RBAC</span></div><div class="kpi-grid">${roles.map(roleCard).join("")}</div></section>${roleSpecificSections(payload)}`;
+      const permissions = payload.permissions || [];
+      const logs = payload.roleChangeLogs || [];
+      return `<section class="report-hero"><div><p class="eyebrow">ROLE CONSOLE · MOCK</p><h2>角色权限控制台</h2><p>这里控制角色模板、账号升降级和店铺授权。当前为内存 Mock，真实企业版再接 SSO、租户、审计和持久化。</p></div><div class="report-hero-side"><span>管理者</span><strong>${s(user.roleName)}</strong><small>${s(user.name)}</small></div></section><section class="page-section"><div class="section-header"><h3>账号升降级 / 店铺授权</h3><span class="status-badge">${users.length} 个账号</span></div><div class="report-card-list">${users.map((item) => userControlCard(item, roles, stores)).join("")}</div></section><section class="page-section"><div class="section-header"><h3>角色权限模板</h3><span class="status-badge">可切换</span></div><div class="report-card-list">${roles.map((role) => rolePermissionCard(role, permissions)).join("")}</div></section><section class="page-section"><div class="section-header"><h3>变更记录</h3><span class="status-badge">${logs.length} 条</span></div><div class="report-card-list">${logs.length ? logs.map((item) => `<article class="report-card"><strong>${s(item.type)}</strong><p>${s(JSON.stringify(item))}</p></article>`).join("") : `<article class="report-card"><strong>暂无变更</strong><p>调整角色、店铺或权限后会记录在这里。</p></article>`}</div></section>`;
+    },
+    mount(ctx) {
+      ctx.delegate("[data-role-change]", "click", async (_, node) => {
+        const [userId, roleId] = node.dataset.roleChange.split(":");
+        await AppApi.updateUserRole(userId, roleId);
+        await AppApi.prefetch();
+        AppRouter.schedule("role-change");
+      });
+      ctx.delegate("[data-store-toggle]", "click", async (_, node) => {
+        const [userId, storeId] = node.dataset.storeToggle.split(":");
+        const account = await AppApi.accounts();
+        const user = (account.users || []).find((item) => item.id === userId);
+        const current = new Set(user?.storeIds || []);
+        current.has(storeId) ? current.delete(storeId) : current.add(storeId);
+        await AppApi.updateUserStores(userId, Array.from(current));
+        await AppApi.prefetch();
+        AppRouter.schedule("store-toggle");
+      });
+      ctx.delegate("[data-permission]", "click", async (_, node) => {
+        const [roleId, permissionId] = node.dataset.permission.split(":");
+        const account = await AppApi.accounts();
+        const role = (account.roles || []).find((item) => item.id === roleId);
+        const current = new Set(role?.permissions || []);
+        current.has(permissionId) ? current.delete(permissionId) : current.add(permissionId);
+        await AppApi.updateRolePermissions(roleId, Array.from(current));
+        await AppApi.prefetch();
+        AppRouter.schedule("permission-toggle");
+      });
     },
   };
 })();
