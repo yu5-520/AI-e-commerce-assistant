@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v2.3.1 - 2026-06-16
+
+### Product Decision
+- V2.3.1 fixes `店群总览` from a card-text page into a realtime business operations board.
+- Product truth: 老板不是读长句子，而是横向扫平台、店铺、订单、销售额、利润、评论、退款率、库存金额和待办状态。
+- 实时科技感来自同步状态、趋势变化、状态灯和横向对比，不是把风险商品提前摆到第一屏。
+
+### Changed
+- 店铺经营明细从大卡片长句改成横向数据表，修复店铺名称竖排问题。
+- Added realtime sync strip: ERP time, platform sync state, delay marker, and task count.
+- Added platform live cards with status dot, order, sales, profit, comments, progress bar, and sync footer.
+- Added trend chips for order, sales, profit, and refund/operation indicators.
+- Frontend assets now use `?v=2.3.1`; API and health versions are aligned.
+
+### Product Boundary
+- This remains mock realtime data.
+- Real version should connect ERP / CRM / platform APIs and update these fields from actual sync jobs.
+
 ## v2.3.0 - 2026-06-16
 
 ### Product Decision
