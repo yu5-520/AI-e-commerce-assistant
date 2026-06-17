@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.1.4 - 2026-06-17
+
+### Added
+- Added backend `/api/data/versions/{data_version}/detail` for one data-version detail payload.
+- Added `web_demo/modules/report/report-runtime.js` as the normalized report runtime file.
+- Added `web_demo/modules/manager/manager-modules.js` as the normalized manager module hub runtime file.
+
+### Changed
+- `data_version_service.py` now reports service version `3.1.4` instead of the stale rollback version.
+- Data-version detail no longer depends on the browser stitching `/api/data/import-records` and `/api/data/alerts?limit=200`.
+- `bootstrap.js` no longer dynamically loads page modules already loaded by `index.html`, reducing duplicate frontend loading.
+- `index.html` now loads normalized report / manager runtime filenames and bumps all static assets to `?v=3.1.4`.
+- Removed unused versioned report and manager runtime files.
+- FastAPI app version and health version are aligned to `3.1.4`.
+
+### Product Engineering Rule
+- Version numbers belong in cache query strings and version files, not long-lived module filenames. Detail pages should read one backend payload rather than assembling business facts from multiple frontend list calls.
+
 ## v3.1.3 - 2026-06-17
 
 ### Added
@@ -68,47 +86,3 @@
 ### Changed
 - Inventory and service are no longer temporary report-page entries from the manager module hub.
 - Inventory tasks now use `riskDomain=库存`, source route `inventory-center`, and inherit store scope.
-- Service tasks now use `riskDomain=售后`, source route `service-center`, and inherit store scope.
-- Frontend assets were bumped to `?v=3.1.0`.
-- FastAPI app version and health version are aligned to `3.1.0`.
-
-### Product Engineering Rule
-- Inventory and service are first-class operation centers, not report-file placeholders. Report imports can trigger their alerts, but day-to-day handling should happen in their own module pages.
-
-## v3.0.9 - 2026-06-17
-
-### Added
-- Added `src/services/task_recap_service.py` for daily / weekly retrospective candidates.
-- Added `/api/modules/recap-candidates` to expose recap candidate summary and candidate list.
-- Added automatic recap candidate creation after manager evidence approval.
-- Added recap candidate loading in `web_demo/core/api-client.js`.
-- Added recap candidate board on the log page.
-
-### Changed
-- Approved task evidence now creates a `复盘候选` log record.
-- Log page now separates recap candidates from raw task logs.
-- Recap candidates include problem source, trigger data, handling action, handling result, evidence summary, review comment, operator, reviewer, store scope, and next suggestion.
-- Frontend assets were bumped to `?v=3.0.9`.
-- FastAPI app version and health version are aligned to `3.0.9`.
-
-### Product Engineering Rule
-- Task completion should automatically become management memory. Once evidence is reviewed and approved, the system should produce a recap candidate instead of relying on manual copying into daily / weekly reports.
-
-## v3.0.8 - 2026-06-17
-
-### Added
-- Added `src/services/task_evidence_service.py` for structured task evidence submission and manager evidence review.
-- Added `/api/modules/todo/{task_id}/evidence`, `/api/modules/todo/{task_id}/submit-evidence`, and `/api/modules/todo/{task_id}/review-evidence`.
-- Added `web_demo/task-evidence.css` for task handling forms and manager review panels.
-- Added task evidence client actions in `web_demo/core/api-client.js`.
-
-### Changed
-- Todo page now shows domain-specific handling forms for库存、售后、流量、价格、报表任务.
-- Operators submit handling action, result, summary, domain fields, evidence links, follow-up flag, and recap flag before review.
-- Managers review submitted evidence and can approve or return with comments.
-- Evidence submission and review now write task records and logs before lifecycle transition.
-- Frontend assets were bumped to `?v=3.0.8`.
-- FastAPI app version and health version are aligned to `3.0.8`.
-
-### Product Engineering Rule
-- Tasks should not be completed by a bare click. Operators submit evidence, managers review evidence, and the evidence record becomes audit material for logs and retrospectives.
