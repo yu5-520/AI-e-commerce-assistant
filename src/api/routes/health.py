@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.0"
+API_VERSION = "3.0.1"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_report_driven_alert_runtime",
+        "mode": "v3_report_upload_auto_alert_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -52,6 +52,7 @@ def health() -> Dict[str, Any]:
         "v3_report_alert_event": True,
         "v3_alert_to_task_bridge": True,
         "v3_global_data_refresh": True,
+        "v3_file_first_report_upload": True,
         "v3_mock_report_import": True,
         "v3_upload_payload_import": True,
         "task_events_endpoint": "/api/modules/todo/events",
