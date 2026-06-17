@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.1.4 - 2026-06-17
+
+### Product Decision
+- V3.1.4 stops adding new features and repairs the current frontend / backend breakpoints.
+- Product truth: once a feature starts depending on multiple frontend list calls, versioned file names, and duplicate loaders, the product becomes harder to operate and debug.
+- Data-version detail should be a backend business payload. Frontend should display it, not reassemble it from unrelated lists.
+
+### Changed
+- Added backend data-version detail payload under `/api/data/versions/{data_version}/detail`.
+- Report detail page now reads one detail payload containing the record, alerts, linked tasks, rollback, summary, and permissions.
+- Data-version service version is aligned to `3.1.4`.
+- Replaced `report-v311.js` with `report-runtime.js` and `manager-modules-v305.js` with `manager-modules.js`.
+- Removed duplicate bootstrap dynamic loading; `index.html` is now the page module loading authority.
+- Deleted unused old report and manager versioned runtime files.
+- Frontend assets now use `?v=3.1.4`; API and health versions are aligned.
+
+### Product Boundary
+- Operation center and organization override files still carry old filename suffixes because they need a separate safe rename pass. They remain referenced and functional, but are now isolated as the remaining cleanup items.
+
 ## v3.1.3 - 2026-06-17
 
 ### Product Decision
@@ -73,41 +92,3 @@
 
 ### Product Boundary
 - Current V3.1.0 data still derives from mock product and report-alert data. Production should connect inventory and service centers to ERP / CRM adapters, full row-level evidence, and persistent task records.
-
-## v3.0.9 - 2026-06-17
-
-### Product Decision
-- V3.0.9 turns reviewed task handling evidence into management memory.
-- Product truth: 任务完成不是终点；证据复核通过后，系统应自动沉淀为日报 / 周报复盘候选。
-- This pushes the system from task execution into management review and cycle learning.
-
-### Changed
-- Added recap candidate runtime under `/api/modules/recap-candidates`.
-- Manager evidence approval now automatically creates a recap candidate.
-- Approved evidence also writes a `复盘候选` log record.
-- Log page now shows a recap candidate board above raw task logs.
-- Recap candidates show problem source, trigger data, handling action, handling result, evidence summary, review comment, responsible operator, reviewer, store scope, and next suggestion.
-- Frontend assets now use `?v=3.0.9`; API and health versions are aligned.
-
-### Product Boundary
-- This is still an in-memory MVP recap queue. Production should persist daily / weekly / monthly recap drafts, support manager editing, owner approval, immutable audit logs, and export / notification workflows.
-
-## v3.0.8 - 2026-06-17
-
-### Product Decision
-- V3.0.8 turns tasks from status buttons into evidence-based handling records.
-- Product truth: 运营不能只是点完成；运营提交处理证据，总管复核证据，通过后任务才归档。
-- This makes the task loop auditable before writing logs, retrospectives, and later Agent reports.
-
-### Changed
-- Added structured task evidence submission under `/api/modules/todo/{task_id}/submit-evidence`.
-- Added manager evidence review under `/api/modules/todo/{task_id}/review-evidence`.
-- Todo page now shows handling forms for库存、售后、流量、价格、报表任务.
-- Evidence records include action, result, summary, domain fields, evidence links, follow-up flag, and recap flag.
-- Manager review records include decision, comment, reviewer, and reviewed time.
-- Evidence submission and review now write task logs and lifecycle transitions.
-- Added task evidence UI styling.
-- Frontend assets now use `?v=3.0.8`; API and health versions are aligned.
-
-### Product Boundary
-- This is still an in-memory MVP evidence workflow. Production should persist evidence files, add file upload / OSS storage, audit masking, role-based attachment access, and immutable review records.
