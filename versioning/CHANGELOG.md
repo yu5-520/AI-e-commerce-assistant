@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.0.2 - 2026-06-17
+
+### Added
+- Added report schema preview service: `src/services/report_schema_service.py`.
+- Added field alias mapping for product, inventory, refund, order, customer, price, cost, and stock fields.
+- Added endpoints: `/api/data/templates`, `/api/data/preview`, and `/api/data/import/confirm`.
+- Added a confirm-before-alert import flow to the report page.
+- Added preview table styling through `web_demo/report-preview.css`.
+
+### Changed
+- Report upload is now a three-step flow: upload file, preview fields, confirm import.
+- CSV rows are previewed before alert generation; missing fields show product-facing guidance instead of silently failing.
+- Confirm import normalizes mapped fields before reusing the existing alert and task bridge.
+- Frontend assets were bumped to `?v=3.0.2`.
+- FastAPI app version and health version are aligned to `3.0.2`.
+
+### Product Engineering Rule
+- Normal upload should never directly create tasks before the system has shown field recognition and preview rows.
+- Active entries remain `/api/modules/*`, `/api/accounts`, and `/api/data/*`; V3.0.2 adds report trust checks before warnings.
+
 ## v3.0.1 - 2026-06-17
 
 ### Changed
