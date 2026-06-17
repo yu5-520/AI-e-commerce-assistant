@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v3.1.3 - 2026-06-17
+
+### Product Decision
+- V3.1.3 cleans the report page hierarchy so operators see the report workflow first and data-version management last.
+- Product truth: 导入记录是审计与回滚工具，不是报表页主流程。首页只展示摘要，详情页承载完整版本信息和回滚策略。
+- Operator accounts can view version records and details, but rollback remains a management-level action.
+
+### Changed
+- Import records are moved to the bottom of the report page.
+- Import records are compacted into list rows instead of large cards.
+- Added a data-version detail route for full version information, alert impact, linked tasks, rollback records, and rollback controls.
+- Rollback task strategy moved from the record list into the detail page.
+- Rollback buttons are hidden from operator accounts and backend rollback is restricted to owner / manager / finance roles.
+- Frontend assets now use `?v=3.1.3`; API and health versions are aligned.
+
+### Product Boundary
+- Current detail page uses existing snapshot, alert, and rollback data. Production should add immutable audit pages, permission logs, and owner approval for high-impact rollback.
+
 ## v3.1.2 - 2026-06-17
 
 ### Product Decision
