@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "2.5.1"
+API_VERSION = "3.0.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "cross_account_task_lifecycle_sync",
+        "mode": "v3_report_driven_alert_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "owner_business_overview": True,
@@ -38,6 +38,13 @@ def health() -> Dict[str, Any]:
         "operator_submit_sync_to_manager": True,
         "manager_review_sync_to_operator": True,
         "recap_handoff_to_owner": True,
+        "v3_data_snapshot": True,
+        "v3_metric_snapshot": True,
+        "v3_report_alert_event": True,
+        "v3_alert_to_task_bridge": True,
+        "v3_global_data_refresh": True,
+        "v3_mock_report_import": True,
+        "v3_upload_payload_import": True,
         "task_events_endpoint": "/api/modules/todo/events",
         "task_counters_endpoint": "/api/modules/todo/counters",
         "operator_accept_endpoint": "/api/modules/todo/{task_id}/accept",
@@ -46,4 +53,9 @@ def health() -> Dict[str, Any]:
         "operator_submit_endpoint": "/api/modules/todo/{task_id}/submit",
         "manager_review_endpoint": "/api/modules/todo/{task_id}/review",
         "recap_endpoint": "/api/modules/todo/{task_id}/recap",
+        "v3_report_import_endpoint": "/api/data/import/report",
+        "v3_mock_alert_endpoint": "/api/data/import/mock-alerts",
+        "v3_alerts_endpoint": "/api/data/alerts",
+        "v3_versions_endpoint": "/api/data/versions",
+        "v3_summary_endpoint": "/api/data/v3-summary",
     }
