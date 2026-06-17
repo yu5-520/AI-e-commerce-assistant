@@ -1,4 +1,17 @@
 (async function () {
+  const MANAGER_NAV = [
+    "dashboard",
+    "manager-tasks",
+    "manager-dispatch",
+    "manager-review",
+    "manager-modules",
+    "manager-retrospective",
+    "manager-reports",
+    "operating-unit",
+    "business-report",
+    "accounts",
+  ];
+
   function loadStyle(href) {
     return new Promise((resolve) => {
       if ([...document.styleSheets].some((sheet) => sheet.href && sheet.href.includes(href.split("?")[0]))) return resolve();
@@ -22,8 +35,16 @@
     });
   }
 
-  await loadStyle("/web_demo/minimal-ui.css?v=3.0.4");
-  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.0.4");
+  function visibleModulesFor(account) {
+    const role = account?.currentUser?.roleId;
+    if (role === "manager") return MANAGER_NAV;
+    return account?.currentUser?.visibleModules || [];
+  }
+
+  await loadStyle("/web_demo/minimal-ui.css?v=3.0.5");
+  await loadStyle("/web_demo/manager-module-hub.css?v=3.0.5");
+  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.0.5");
+  await loadScript("/web_demo/modules/manager/manager-modules-v305.js?v=3.0.5");
 
   const pages = [
     window.DashboardPage,
@@ -55,7 +76,7 @@
   pages.filter(Boolean).forEach((page) => AppRouter.register(page));
 
   function applyNavigationScope(account) {
-    const visible = new Set(account?.currentUser?.visibleModules || []);
+    const visible = new Set(visibleModulesFor(account));
     document.querySelectorAll(".nav a[data-route]").forEach((link) => {
       const allowed = !visible.size || visible.has(link.dataset.route);
       link.hidden = !allowed;
@@ -77,7 +98,7 @@
       const nextAccount = await AppApi.accounts();
       renderAccountSwitcher(nextAccount);
       const active = location.hash.replace("#", "") || "dashboard";
-      const allowed = new Set(nextAccount?.currentUser?.visibleModules || []);
+      const allowed = new Set(visibleModulesFor(nextAccount));
       if (allowed.size && !allowed.has(active)) AppRouter.navigate("dashboard");
       else AppRouter.schedule("account-switch");
       select.disabled = false;
