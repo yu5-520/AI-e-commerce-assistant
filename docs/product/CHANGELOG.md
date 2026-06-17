@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.0.3 - 2026-06-17
+
+### Product Decision
+- V3.0.3 splits operating-unit visibility from store responsibility permissions.
+- Product truth: 总管能看到经营单元内全部店铺和商品数据；运营能进入共同经营单元，但只能看到自己负责店铺内的商品、报表、预警、待办和日志。
+- Report upload UI should not be squeezed into the hero card; upload is a primary operation panel below the page headline.
+
+### Changed
+- Added store responsibility assignments: store -> operating unit -> primary operator -> reviewer.
+- Added owner-side “店铺运营责任分配” panel in 组织效率.
+- Added store-scoped payloads for 经营单元, 商品, 上新, and 流量 modules.
+- Operator A now owns 家居生活主店 / 家居百货店; Operator B owns 家居好物号 / 家清收纳店.
+- Report upload moved into a separate horizontal panel; the hero area now only explains the current import flow.
+- Frontend assets now use `?v=3.0.3`; API and health versions are aligned.
+
+### Product Boundary
+- 经营单元 is shared business context; store responsibility is the operator data boundary.
+- Store-scoped filtering now covers core operation modules, but report row-level filtering and persisted task tables still need later hardening.
+
 ## v3.0.2 - 2026-06-17
 
 ### Product Decision
@@ -58,71 +77,3 @@
 ### Product Boundary
 - V3.0 uses explainable rules first, not Agent autonomous execution.
 - Agent can later enrich reports and checklists, but cannot directly change price, inventory, ad budget, product publishing, or customer contact.
-- Tasks still reuse the V2.5.1 lifecycle system; report warnings must not create a parallel todo system.
-
-## v2.5.1 - 2026-06-16
-
-### Product Decision
-- V2.5.1 adds cross-account task lifecycle sync.
-- Product truth: tasks are one main record with multiple account views and lifecycle events, not separate copies for each account.
-- Operator accept, submit, manager return, manager approve, and recap actions must update related account task status, counters, logs, and recap entry.
-- MVP first guarantees data consistency after refresh; polling, SSE, WebSocket, or notifications can come later.
-
-### Changed
-- Added lifecycle event stream: `TASK_EVENTS`.
-- Added unified `transition_task()` path for task lifecycle actions.
-- Added operator `接收任务` stage before processing.
-- Operator submission now changes manager view to `待复核` and creates an `operator_submitted` event.
-- Manager approval / return creates lifecycle events and updates operator view.
-- Writing a task to recap creates a `task_written_to_recap` event and makes recap handoff visible to owner / manager scopes.
-- Added per-user counters: waiting accept, processing, submitted, reviewing, returned, recap pending, and lifecycle events.
-- Added `/todo/events`, `/todo/counters`, `/todo/{task_id}/accept`, `/todo/{task_id}/recap` endpoints.
-- Todo page now shows a lifecycle event feed and cross-account counters.
-- Frontend assets now use `?v=2.5.1`; API and health versions are aligned.
-
-### Product Boundary
-- This remains in-memory mock event sync.
-- Real version should move events, counters, notifications, and lifecycle transitions into persistent tables and then connect polling / SSE / WebSocket.
-
-## v2.5.0 - 2026-06-16
-
-### Product Decision
-- V2.5.0 rebuilds the task system from a single-account todo list into a role-permission-driven task flow.
-- Product truth: tasks are business objects around store permissions, role responsibility, and recap handoff.
-- Owner sees decision tasks, manager sees dispatch tasks, operator sees execution tasks.
-- Product / competitor / listing / traffic warnings are routed by store ownership and account permissions.
-
-### Changed
-- Task payloads now include role and permission fields: `taskLayer`, `sourceType`, `ownerRole`, `parentTaskId`, `childTaskIds`, `storeIds`, `storeGroupId`, `visibleRoleIds`, `visibleUserIds`, `visibleStoreIds`, `recapTarget`, `agentJudgment`.
-- Product / competitor / listing / traffic warnings are routed to the operator responsible for the affected store and remain visible to the store-group manager.
-- Owner account no longer receives ordinary operator execution tasks in the task pool.
-- Manager account sees group dispatch, split, review, warning, and retrospective tasks.
-- Operator account sees assigned tasks and warning tasks inside its authorized store scope.
-- Finance account sees finance / report / ROI / inventory related tasks.
-- Added `POST /api/modules/todo/{task_id}/split` for manager split flow.
-- Client fallback task store also respects role / user / store scope.
-- Frontend assets now use `?v=2.5.0`; API and health versions are aligned.
-
-### Product Boundary
-- This remains in-memory mock task routing.
-- Real version should move the same rules into database-backed task tables, store permission tables, task-source records, child-task records, assignment records, review records, and Agent evidence snapshots.
-
-## v2.4.2 - 2026-06-16
-
-- Restored operator-side operation modules and scoped operator store dashboard.
-
-## v2.4.1 - 2026-06-16
-
-- Optimized store-group manager processing order layout.
-
-## v2.4.0 - 2026-06-16
-
-- Changed owner dashboard from task list into business overview.
-
-## Earlier History
-
-- v2.3.9: Manager upgraded from a static execution board into an actionable task dispatch workbench.
-- v2.3.8: Manager side changed into execution management workflow.
-- v2.3.7: `账号` changed into a basic account center.
-- v2.3.6: `复盘审计` changed from table-style rows into summary-first expandable cards.
-- v2.3.5: Owner-side review audit changed into recap audit.
