@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.0.4 - 2026-06-17
+
+### Added
+- Added `web_demo/minimal-ui.css` to remove explanatory grey microcopy and keep product screens cleaner.
+- Added pending store migration records in `account_service`.
+- Added `/api/accounts/store-migrations` for pending store-owner migrations.
+- Added owner-side migration confirmation UI through `web_demo/modules/executive/org-responsibility-v304.js`.
+- Added delayed store responsibility change behavior: store owner changes are recorded as pending migrations and take effect on the next day.
+
+### Changed
+- Organization page no longer applies store owner changes immediately.
+- Store owner changes now require a management confirmation value and create a migration record with effective date, old operator, new operator, reviewer, and impact scope.
+- Pending migration is displayed on the affected store while current store visibility remains unchanged until effective date.
+- Bootstrap dynamically loads the minimal UI cleanup layer and the V3.0.4 organization responsibility override.
+- FastAPI app version and health version are aligned to `3.0.4`.
+
+### Product Engineering Rule
+- UI should not explain every module with grey microcopy; cards should keep titles, numbers, state, and actions.
+- Store ownership change is a data migration, not a simple toggle. It affects products, reports, warnings, open tasks, logs, and recaps, so it should be confirmed and delayed.
+
 ## v3.0.3 - 2026-06-17
 
 ### Added
