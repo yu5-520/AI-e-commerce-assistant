@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.0.9 - 2026-06-17
+
+### Added
+- Added `src/services/task_recap_service.py` for daily / weekly retrospective candidates.
+- Added `/api/modules/recap-candidates` to expose recap candidate summary and candidate list.
+- Added automatic recap candidate creation after manager evidence approval.
+- Added recap candidate loading in `web_demo/core/api-client.js`.
+- Added recap candidate board on the log page.
+
+### Changed
+- Approved task evidence now creates a `复盘候选` log record.
+- Log page now separates recap candidates from raw task logs.
+- Recap candidates include problem source, trigger data, handling action, handling result, evidence summary, review comment, operator, reviewer, store scope, and next suggestion.
+- Frontend assets were bumped to `?v=3.0.9`.
+- FastAPI app version and health version are aligned to `3.0.9`.
+
+### Product Engineering Rule
+- Task completion should automatically become management memory. Once evidence is reviewed and approved, the system should produce a recap candidate instead of relying on manual copying into daily / weekly reports.
+
 ## v3.0.8 - 2026-06-17
 
 ### Added
