@@ -47,7 +47,8 @@
 .log-search input,
 .log-export,
 .log-actions button,
-.log-detail-actions button {
+.log-detail-actions button,
+.log-toolbar button {
   border: 0;
   border-radius: 999px;
   background: #f3f4f6;
@@ -62,7 +63,8 @@
 .log-filter-menu.open > button,
 .log-filter-options button.selected,
 .log-actions button:first-child,
-.log-detail-actions button:first-child {
+.log-detail-actions button:first-child,
+.log-toolbar button:first-child {
   background: #080b12;
   color: #ffffff;
 }
@@ -132,9 +134,66 @@
   margin-bottom: 12px;
 }
 
-.log-card-list {
+.log-card-list,
+.recap-candidate-grid {
   display: grid;
   gap: 12px;
+}
+
+.recap-candidate-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recap-candidate-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
+}
+
+.recap-candidate-card header,
+.recap-candidate-card .recap-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recap-candidate-card header div {
+  min-width: 0;
+}
+
+.recap-candidate-card strong {
+  display: block;
+  color: #080b12;
+  font-size: 17px;
+  font-weight: 950;
+  line-height: 1.45;
+}
+
+.recap-candidate-card header span,
+.recap-candidate-card footer,
+.recap-candidate-card .recap-meta span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.recap-candidate-card p {
+  display: block !important;
+  margin: 0;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.7;
+}
+
+.recap-candidate-card .recap-meta {
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .log-row {
@@ -329,7 +388,8 @@
 
 @media (max-width: 1040px) {
   .log-toolbar,
-  .log-detail-hero {
+  .log-detail-hero,
+  .recap-candidate-grid {
     grid-template-columns: 1fr;
   }
 
