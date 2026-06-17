@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v3.0.2
+Current Version: v3.0.3
 
 ## Version History
 
+- v3.0.3: Split operating-unit visibility from store responsibility permissions, added store assignments, scoped operating-unit/product/listing/traffic data by viewer store permissions, redesigned organization responsibility controls, and moved report upload into a separate layout panel.
 - v3.0.2: Added report schema preview, field alias mapping, `/api/data/templates`, `/api/data/preview`, `/api/data/import/confirm`, frontend three-step import flow, preview table, and confirm-before-alert behavior.
 - v3.0.1: Reworked the report page into a file-first upload flow, moved mock alert generation into a backup demo action, added client-side CSV parsing, improved report upload layout, and truncated long data versions in cards.
 - v3.0.0: Added report-driven data snapshots, metric snapshots, alert events, alert-to-task bridge, V3 data summary API, one-click mock report alert import, and frontend alert sync for dashboard/report/product/traffic modules.
