@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.0.1 - 2026-06-17
+
+### Changed
+- Reworked the report page from demo-trigger-first into file-upload-first.
+- Changed the main report card action from `一键生成预警` to `上传报表`.
+- Moved mock alert generation into a low-priority backup action: `备用：使用示例数据试跑`.
+- Added client-side CSV parsing so a selected CSV report is converted into rows and sent to `/api/data/import/report`.
+- Upload completion now automatically refreshes task state, module data, and V3 summary.
+- Long data versions are truncated in metrics and alert cards to avoid layout overflow.
+- Report upload card layout was rebuilt to reduce the visual weight of the backup demo action.
+- Frontend assets were bumped to `?v=3.0.1`.
+- FastAPI app version and health version are aligned to `3.0.1`.
+
+### Product Engineering Rule
+- Normal user action is `上传报表`; generating warnings is a system action after upload.
+- The example-data trigger remains only as a demo / fallback path, not the primary product flow.
+
 ## v3.0.0 - 2026-06-17
 
 ### Added
