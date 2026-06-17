@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v3.1.0
+Current Version: v3.1.1
 
 ## Version History
 
+- v3.1.1: Added report import-record management, data-version soft rollback, rollback audit records, report-page rollback cards, and rollback health flags.
 - v3.1.0: Added standalone inventory and customer-service centers, store-scoped inventory / service task routes, manager operation-module entries, and operation-center UI pages.
 - v3.0.9: Added automatic recap candidates after manager evidence approval, recap candidate service and endpoint, log-page recap candidate board, and automatic复盘候选 logs for daily / weekly review.
 - v3.0.8: Added structured task evidence submission, manager evidence review, evidence records, review records, task evidence endpoints, and the Todo handling form so tasks are submitted with audit material instead of completed by a bare click.
