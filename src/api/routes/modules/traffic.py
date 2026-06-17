@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from src.api.routes.modules.common import find_or_404
 from src.services.module_data_service import TRAFFIC
 from src.services.module_task_service import create_task, visible_candidates
+from src.services.report_alert_service import attach_alert_state
 
 router = APIRouter()
 
@@ -46,9 +47,13 @@ def traffic_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def with_alert_state(item: Dict[str, Any]) -> Dict[str, Any]:
+    return attach_alert_state(item, "商品", item["productId"])
+
+
 @router.get("/traffic")
 def traffic() -> List[Dict[str, Any]]:
-    return visible_candidates(TRAFFIC, traffic_task_payload)
+    return [with_alert_state(item) for item in visible_candidates(TRAFFIC, traffic_task_payload)]
 
 
 @router.post("/traffic/{traffic_id}/tasks")
