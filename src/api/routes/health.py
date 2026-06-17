@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.1.2"
+API_VERSION = "3.1.3"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v312_rollback_task_strategy_runtime",
+        "mode": "v313_report_layout_detail_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -29,6 +29,12 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "report_import_records_position": "bottom",
+        "report_import_records_compact": True,
+        "data_version_detail_route": "data-version-detail",
+        "data_version_detail_alerts": True,
+        "rollback_permission_roles": ["owner", "manager", "finance"],
+        "operator_rollback_hidden": True,
         "import_records_endpoint": "/api/data/import-records",
         "data_version_rollback_endpoint": "/api/data/versions/{data_version}/rollback",
         "data_version_soft_rollback": True,
@@ -39,8 +45,7 @@ def health() -> Dict[str, Any]:
         "rollback_task_strategy_archive": True,
         "rollback_task_strategy_keep": True,
         "rollback_task_strategy_default": "review",
-        "report_page_import_records": True,
-        "report_page_rollback_task_strategy_select": True,
+        "report_page_rollback_task_strategy_select": "detail_page",
         "inventory_center_endpoint": "/api/modules/inventory",
         "inventory_task_endpoint": "/api/modules/inventory/{product_id}/tasks",
         "customer_service_center_endpoint": "/api/modules/aftersales",
