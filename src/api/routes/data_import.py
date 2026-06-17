@@ -21,6 +21,11 @@ from src.services.report_alert_service import (
     list_data_versions,
     run_v3_mock_imports,
 )
+from src.services.report_schema_service import (
+    confirm_report_import,
+    get_report_templates,
+    preview_report_dataset,
+)
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 
@@ -47,6 +52,45 @@ def import_mock() -> Dict[str, Any]:
 def imports() -> List[Dict[str, Any]]:
     """List recent import records."""
     return list_import_records()
+
+
+@router.get("/templates")
+def report_templates() -> Dict[str, Any]:
+    """V3.0.2: return report field templates and alias hints."""
+    return get_report_templates()
+
+
+@router.post("/preview")
+def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+    """V3.0.2: preview field mapping before creating alerts or tasks."""
+    dataset_name = body.get("dataset_name") or body.get("datasetName")
+    if not dataset_name:
+        raise HTTPException(status_code=400, detail="dataset_name is required")
+    try:
+        return preview_report_dataset(
+            str(dataset_name),
+            rows=body.get("rows"),
+            field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/import/confirm")
+def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+    """V3.0.2: confirm a previewed report import, then trigger alerts/tasks."""
+    dataset_name = body.get("dataset_name") or body.get("datasetName")
+    if not dataset_name:
+        raise HTTPException(status_code=400, detail="dataset_name is required")
+    try:
+        return confirm_report_import(
+            str(dataset_name),
+            rows=body.get("rows"),
+            field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
+            auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/report")
@@ -93,7 +137,7 @@ def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str
 def latest_version() -> Dict[str, Any]:
     """V3: return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "3.0.0", "message": "No V3 data snapshot has been imported yet."}
+    return latest or {"version": "3.0.2", "message": "No V3 data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
