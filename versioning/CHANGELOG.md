@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.0.5 - 2026-06-17
+
+### Added
+- Added `web_demo/modules/manager/manager-modules-v305.js` as a manager operation-module hub override.
+- Added `web_demo/manager-module-hub.css` for clickable module cards.
+- Added a manager-only navigation allowlist in `web_demo/bootstrap.js`.
+
+### Changed
+- Manager sidebar is now compacted to the management workflow: dashboard, group tasks, dispatch, review, operation modules, retrospectives, data reports, operating unit, logs, and account.
+- Product, competitor, listing, traffic, todo, and report operation pages are no longer shown as separate manager sidebar entries.
+- Manager operation-module cards now click through to the corresponding detailed module pages.
+- Sales-after and inventory cards currently enter the report page as their data source.
+- Minimal UI cleanup now also hides manager-page explanatory microcopy.
+- Frontend assets were bumped to `?v=3.0.5`.
+- FastAPI app version and health version are aligned to `3.0.5`.
+
+### Product Engineering Rule
+- Manager sidebar should represent management workflow, not every business module.
+- Business modules live inside the operation-module hub and are opened from there when the manager needs to inspect causes or dispatch work.
+
 ## v3.0.4 - 2026-06-17
 
 ### Added
