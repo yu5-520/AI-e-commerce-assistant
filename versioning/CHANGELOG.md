@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.1.0 - 2026-06-17
+
+### Added
+- Added standalone inventory center API: `/api/modules/inventory` and `/api/modules/inventory/{product_id}/tasks`.
+- Added standalone customer-service center API: `/api/modules/aftersales` and `/api/modules/aftersales/{product_id}/tasks`.
+- Added `web_demo/modules/operation-centers-v310.js` for inventory and service center pages.
+- Added `web_demo/operation-centers.css` for independent operation-center cards and rules.
+- Added manager operation-module card routing to `inventory-center` and `service-center`.
+
+### Changed
+- Inventory and service are no longer temporary report-page entries from the manager module hub.
+- Inventory tasks now use `riskDomain=库存`, source route `inventory-center`, and inherit store scope.
+- Service tasks now use `riskDomain=售后`, source route `service-center`, and inherit store scope.
+- Frontend assets were bumped to `?v=3.1.0`.
+- FastAPI app version and health version are aligned to `3.1.0`.
+
+### Product Engineering Rule
+- Inventory and service are first-class operation centers, not report-file placeholders. Report imports can trigger their alerts, but day-to-day handling should happen in their own module pages.
+
 ## v3.0.9 - 2026-06-17
 
 ### Added
@@ -157,62 +176,3 @@
 ### Product Engineering Rule
 - Normal upload should never directly create tasks before the system has shown field recognition and preview rows.
 - Active entries remain `/api/modules/*`, `/api/accounts`, and `/api/data/*`; V3.0.2 adds report trust checks before warnings.
-
-## v3.0.1 - 2026-06-17
-
-### Changed
-- Reworked the report page from demo-trigger-first into file-upload-first.
-- Changed the main report card action from `一键生成预警` to `上传报表`.
-- Moved mock alert generation into a low-priority backup action: `备用：使用示例数据试跑`.
-- Added client-side CSV parsing so a selected CSV report is converted into rows and sent to `/api/data/import/report`.
-- Upload completion now automatically refreshes task state, module data, and V3 summary.
-- Long data versions are truncated in metrics and alert cards to avoid layout overflow.
-- Report upload card layout was rebuilt to reduce the visual weight of the backup demo action.
-- Frontend assets were bumped to `?v=3.0.1`.
-- FastAPI app version and health version are aligned to `3.0.1`.
-
-### Product Engineering Rule
-- Normal user action is `上传报表`; generating warnings is a system action after upload.
-- The example-data trigger remains only as a demo / fallback path, not the primary product flow.
-- Active entries remain `/api/modules/*`, `/api/accounts`, and `/api/data/*`; V3.0.1 changes report-page workflow, not route ownership.
-
-## v3.0.0 - 2026-06-17
-
-### Added
-- Added V3 report-driven data refresh runtime: report import → data snapshot → alert event → task bridge → global module sync.
-- Added `src/services/report_alert_service.py` for V3 SQLite tables, data versions, metric snapshots, alert events, alert-to-task payloads, and dashboard summary.
-- Added V3 data endpoints: `/api/data/import/report`, `/api/data/import/mock-alerts`, `/api/data/versions`, `/api/data/versions/latest`, `/api/data/alerts`, `/api/data/alerts/entity/{entity_type}/{entity_id}`, and `/api/data/v3-summary`.
-- Added one-click frontend action in the report page to generate mock report alerts and refresh modules/tasks.
-- Added alert state sync to product and traffic modules so report-triggered alerts are visible outside the report page.
-- Added V3 documentation at `docs/V3.0_REPORT_ALERT_RUNTIME.md`.
-
-### Changed
-- FastAPI app version and health version are aligned to `3.0.0`.
-- Dashboard payload now includes `v3` and `data_refresh` summary fields.
-- Report module now returns V3 summary and recent active alerts.
-- Frontend assets were bumped to `?v=3.0.0`.
-- README and version rules now describe the V3 data-version and alert-event architecture.
-
-### Product Engineering Rule
-- V3.0 does not connect Taobao / Pinduoduo / Douyin APIs directly yet; the safe MVP path is report import first.
-- Data changes must become traceable versions before they generate warnings.
-- Warnings must become task events through the existing task lifecycle, not a parallel todo system.
-- The system can create tasks and reports, but it must not automatically change price, inventory, ad budget, product publishing, or customer messages.
-
-## v2.5.1 - 2026-06-16
-
-### Added
-- Added cross-account task lifecycle sync on top of the V2.5.0 role-scoped task flow.
-- Added `TASK_EVENTS` in `src/services/module_task_service.py` as an in-memory task event stream.
-- Added lifecycle events for task creation, split, assignment, operator acceptance, operator submission, manager return, manager approval, completion, recap handoff, pinning, and reorder.
-- Added `transition_task()` so task actions update state, create an event, write a log, and return sync context in one path.
-- Added per-user task counters for waiting accept, processing, submitted, reviewing, returned, recap pending, and recent events.
-- Added endpoints: `/api/modules/todo/events`, `/api/modules/todo/counters`, `/api/modules/todo/{task_id}/accept`, and `/api/modules/todo/{task_id}/recap`.
-- Added client fallback lifecycle event support in `web_demo/stores/task-store.js`.
-- Added lifecycle event feed and cross-account counters in the Todo page.
-
-### Changed
-- Operator tasks now support an explicit `接收任务` stage before processing.
-- Operator submission now creates an `operator_submitted` event and moves manager view to `待复核`.
-- Manager approval / return now creates corresponding lifecycle events that update operator view.
-- Writing a task to recap creates a lifecycle event and makes recap handoff visible to owner / manager scopes.
