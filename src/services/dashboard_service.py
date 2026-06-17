@@ -17,7 +17,7 @@ from src.services.report_alert_service import get_v3_dashboard_summary
 
 def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
     payload = get_today_advice(write_outputs=True, record_logs=True)
-    active_tasks = list_tasks(user_id=user_id, active_only=True)[:5]
+    active_tasks = list_tasks(viewer_id=user_id, active_only=True)[:5]
     v3_summary = get_v3_dashboard_summary(user_id)
     payload["tasks"] = active_tasks
     payload["api_entry"] = "/api/modules/dashboard"
