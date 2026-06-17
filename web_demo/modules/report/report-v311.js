@@ -1,0 +1,90 @@
+(function () {
+  let detailId = null;
+  let notice = "";
+  let selectedDataset = "inventory";
+  let selectedFileName = "";
+  let pendingRows = [];
+  let previewResult = null;
+  let importRecords = null;
+  const s = (value) => AppShell.escape(value);
+  const datasetOptions = [["inventory", "库存报表"], ["refunds", "退款报表"], ["orders", "订单报表"], ["products", "商品报表"], ["customers", "客户报表"]];
+
+  function userHeader() { return AppApi?.getCurrentUserId?.() || "U001"; }
+  function v3() { return AppMockData.v3 || { activeAlertCount: 0, highPriorityAlertCount: 0, taskLinkedAlertCount: 0, latestAlerts: [] }; }
+  function shortVersion(value) { const text = String(value || "未导入"); return text.length > 24 ? `${text.slice(0, 24)}...` : text; }
+  function rowDate(value) { return String(value || "").replace("T", " ").slice(0, 19); }
+
+  async function requestJson(path, fallback, options = {}) {
+    try {
+      const response = await fetch(path, { method: options.method || "GET", headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mock-User-Id": userHeader() }, body: options.body ? JSON.stringify(options.body) : undefined });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.warn(`[report-v311] fallback for ${path}`, error);
+      return fallback;
+    }
+  }
+
+  async function loadImportRecords() {
+    importRecords = await requestJson("/api/data/import-records", { records: [], rollbacks: [], total: 0, activeCount: 0, rolledBackCount: 0 });
+    return importRecords;
+  }
+
+  function parseCsv(text) { const rows = []; let row = []; let cell = ""; let quoted = false; const source = String(text || "").replace(/^\uFEFF/, ""); for (let index = 0; index < source.length; index += 1) { const char = source[index]; const next = source[index + 1]; if (char === '"' && quoted && next === '"') { cell += '"'; index += 1; continue; } if (char === '"') { quoted = !quoted; continue; } if (char === "," && !quoted) { row.push(cell.trim()); cell = ""; continue; } if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && next === "\n") index += 1; row.push(cell.trim()); if (row.some((item) => item !== "")) rows.push(row); row = []; cell = ""; continue; } cell += char; } row.push(cell.trim()); if (row.some((item) => item !== "")) rows.push(row); if (rows.length < 2) return []; const headers = rows[0].map((item) => item.trim()); return rows.slice(1).map((values) => Object.fromEntries(headers.map((key, index) => [key, values[index] ?? ""]))).filter((item) => Object.values(item).some((value) => String(value || "").trim())); }
+
+  function taskButton(report) { const task = AppTaskActions.findOpenTask(report); return task ? `<button type="button" data-open-task="${s(task.id)}" class="ghost">已在任务清单</button><button type="button" data-task-report="${s(task.id)}">任务报告</button>` : `<button type="button" data-candidate-report="report:${s(report.id)}">查看预警</button><button type="button" data-task="${s(report.id)}">导入复盘</button>`; }
+  function alertBadge(report) { const count = report.dataRefreshState?.activeAlertCount || 0; return count ? `<span class="status-badge danger">${s(count)} 个预警</span>` : `<span class="status-badge">待导入</span>`; }
+  function card(report) { return `<article class="report-card"><div><h3>${s(report.name)}</h3><p>${s(report.desc)}</p><div class="report-meta"><span>${s(report.source)}</span><span>${s(report.status)}</span><span>${s(report.count)}</span>${alertBadge(report)}</div></div><div class="report-actions"><button type="button" data-detail="${s(report.id)}">查看报表</button>${taskButton(report)}</div></article>`; }
+  function detail(report) { const sourceCard = AppMockData.reportGroups.flatMap((group) => group.reports).find((item) => item.id === detailId) || { id: detailId }; return `<section class="report-detail-hero"><div><p class="eyebrow">${s(report.source)} REPORT</p><h2>${s(report.title)}</h2></div><div class="report-actions"><button type="button" data-back>返回报表管理</button>${taskButton(sourceCard)}</div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid report-metrics">${report.summary.map(([label, value]) => `<article class="card report-metric-card"><h3>${s(label)}</h3><strong>${s(value)}</strong></article>`).join("")}</section><section class="page-section report-table-section"><div class="section-header"><h3>报表明细</h3><span class="status-badge">接口数据</span></div>${AppShell.table(report.columns, report.rows)}</section>`; }
+
+  function uploadPanel() { const status = previewResult ? (previewResult.status === "ready" ? "字段已识别" : previewResult.status === "needs_attention" ? "字段需确认" : "字段缺失") : "等待上传"; return `<section class="page-section report-upload-panel"><div class="section-header"><div><h3>上传新报表</h3></div><span class="status-badge">${s(status)}</span></div><div class="report-upload-row"><label class="report-upload-field"><span>报表类型</span><select data-report-type>${datasetOptions.map(([value, label]) => `<option value="${s(value)}" ${value === selectedDataset ? "selected" : ""}>${s(label)}</option>`).join("")}</select></label><button type="button" data-upload-report>选择文件并预检</button><button type="button" class="ghost" data-v3-demo>备用：使用示例数据试跑</button><input id="reportFileInput" type="file" accept=".csv,text/csv" data-report-file hidden /></div><small class="report-upload-tip">${s(selectedFileName || "支持 CSV。预检通过后再确认导入。")}</small></section>`; }
+  function v3Metrics() { const data = v3(); const records = importRecords || {}; return [["新增预警", data.activeAlertCount || 0, "报表触发"], ["高风险", data.highPriorityAlertCount || 0, "优先处理"], ["导入版本", records.total ?? 0, "可回滚"], ["回滚版本", records.rolledBackCount ?? 0, "保留审计"]].map(([a,b,c]) => AppShell.metricCard(a,b,c)).join(""); }
+  function previewTable(rows) { const list = rows || []; const headers = Array.from(new Set(list.flatMap((row) => Object.keys(row || {})))).slice(0, 8); if (!headers.length) return ""; return `<div class="report-preview-table"><table><thead><tr>${headers.map((header) => `<th>${s(header)}</th>`).join("")}</tr></thead><tbody>${list.map((row) => `<tr>${headers.map((header) => `<td>${s(row?.[header] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`; }
+  function previewPanel() { if (!previewResult) return ""; const fields = previewResult.recognizedFields || []; const issues = previewResult.issues || []; const level = previewResult.status === "ready" ? "good" : previewResult.status === "needs_attention" ? "warning" : "danger"; return `<section class="page-section report-preview-panel"><div class="section-header"><div><h3>导入预检</h3><p>${s(previewResult.message || "字段检查完成")}</p></div><span class="status-badge ${s(level)}">${s(previewResult.label)} · ${s(previewResult.rowCount)} 行</span></div><div class="report-preview-grid"><article><h4>已识别字段</h4><div class="report-meta">${fields.length ? fields.map((item) => `<span>${s(item.label)} ← ${s(item.sourceField)}</span>`).join("") : `<span>暂无字段识别</span>`}</div></article><article><h4>导入影响</h4><p>${s(previewResult.alertHint || "确认字段后生成预警。")}</p>${issues.length ? `<ul>${issues.map((item) => `<li class="${s(item.severity)}">${s(item.message)}</li>`).join("")}</ul>` : `<p>关键字段完整，可以确认导入。</p>`}</article></div><div class="section-header compact"><h3>前 5 行预览</h3><div class="report-actions"><button type="button" class="ghost" data-cancel-preview>重新选择</button><button type="button" data-confirm-import ${previewResult.canImport ? "" : "disabled"}>确认导入并生成预警</button></div></div>${previewTable(previewResult.previewRows || [])}</section>`; }
+
+  function alertActions(alert) { return `<button type="button" data-alert-report="${s(alert.alertId)}">证据报告</button>${alert.taskId ? `<button type="button" class="ghost" data-open-task="${s(alert.taskId)}">查看待办</button>` : ""}`; }
+  function latestAlertsBlock() { const alerts = v3().latestAlerts || []; if (!alerts.length) return ""; return `<section class="page-section report-section"><div class="section-header"><h3>最新预警</h3><span class="status-badge">${s(alerts.length)} 条</span></div><div class="report-card-list">${alerts.map((alert) => `<article class="report-card"><div><h3>${s(alert.alertType)}</h3><p>${s(alert.entityId)} · ${s(alert.riskDomain)} · ${s(alert.priority)}</p><div class="report-meta"><span>${s(alert.sourceDataset)}</span><span title="${s(alert.dataVersion)}">${s(shortVersion(alert.dataVersion))}</span><span>${s(alert.storeName || alert.storeId || "未绑定店铺")}</span><span>${s(alert.status)}</span></div></div><div class="report-actions">${alertActions(alert)}</div></article>`).join("")}</div></section>`; }
+
+  function importRecordCard(record) {
+    const rolled = record.versionStatus === "rolled_back";
+    return `<article class="import-record-card ${rolled ? "rolled" : ""}"><header><div><strong>${s(record.datasetName || "report")}</strong><span title="${s(record.dataVersion)}">${s(shortVersion(record.dataVersion))}</span></div><span class="status-badge ${rolled ? "warning" : "good"}">${rolled ? "已回滚" : "生效中"}</span></header><div class="import-record-meta"><span>行数 ${s(record.rowCount || 0)}</span><span>预警 ${s(record.alertCount || 0)}</span><span>活跃 ${s(record.activeAlertCount || 0)}</span><span>任务 ${s(record.taskCount || 0)}</span></div><p>${s(rowDate(record.createdAt))}${rolled && record.rollback ? ` · ${s(record.rollback.reason || "已回滚")}` : ""}</p><div class="report-actions"><button type="button" data-copy-version="${s(record.dataVersion)}">复制版本</button>${record.canRollback ? `<button type="button" class="danger" data-rollback-version="${s(record.dataVersion)}">回滚版本</button>` : ""}</div></article>`;
+  }
+
+  function importRecordsBlock() {
+    const records = importRecords?.records || [];
+    return `<section class="page-section report-section report-import-records"><div class="section-header"><div><h3>导入记录</h3></div><div class="report-actions"><button type="button" class="ghost" data-refresh-records>刷新记录</button></div></div><div class="import-record-grid">${records.length ? records.map(importRecordCard).join("") : `<div class="log-empty">暂无导入记录。上传报表或试跑示例数据后会出现版本记录。</div>`}</div></section>`;
+  }
+
+  async function previewSelectedFile(file) { if (!file) { notice = "请选择要导入的 CSV 报表。"; AppRouter.schedule("report-upload-empty"); return; } selectedFileName = file.name; previewResult = null; pendingRows = []; notice = `正在预检${file.name}。`; AppRouter.schedule("report-preview-start"); const text = await file.text(); const rows = parseCsv(text); if (!rows.length) { notice = "文件没有读取到有效数据。"; AppRouter.schedule("report-upload-invalid"); return; } pendingRows = rows; previewResult = await AppApi.previewReportRows(selectedDataset, rows); notice = previewResult?.message || "字段预检完成，请确认后导入。"; AppRouter.schedule("report-preview-done"); }
+  async function confirmImport() { if (!previewResult || !pendingRows.length) { notice = "请先上传报表并完成字段预检。"; AppRouter.schedule("report-confirm-empty"); return; } notice = "正在确认导入并生成预警..."; AppRouter.schedule("report-confirm-start"); const result = await AppApi.confirmReportImport(selectedDataset, pendingRows, previewResult.fieldMapping || {}); await AppApi.refreshAfterDataImport(); await loadImportRecords(); notice = `导入完成：${result?.datasetName || selectedDataset} 生成 ${result?.alertCount || 0} 条预警，${result?.createdTaskCount || 0} 条已进入待办。`; previewResult = null; pendingRows = []; AppRouter.schedule("report-confirm-done"); }
+  async function rollbackVersion(dataVersion) { const reason = window.prompt("请输入回滚原因", "上传错表，回滚该数据版本产生的预警。") || "上传错表，回滚该数据版本产生的预警。"; notice = "正在回滚数据版本..."; AppRouter.schedule("rollback-start"); const result = await requestJson(`/api/data/versions/${encodeURIComponent(dataVersion)}/rollback`, null, { method: "POST", body: { reason } }); await AppApi.refreshAfterDataImport(); await loadImportRecords(); const rollback = result?.rollback; notice = rollback ? `已回滚 ${shortVersion(dataVersion)}：${rollback.affectedAlertCount || 0} 条预警已移出看板。` : "回滚请求已提交。"; AppRouter.schedule("rollback-done"); }
+
+  window.ReportPage = {
+    route: "data-check",
+    title: "报表",
+    async render() {
+      if (!importRecords) await loadImportRecords();
+      if (detailId && AppMockData.reportDetails[detailId]) return detail(AppMockData.reportDetails[detailId]);
+      return `<section class="report-hero report-hero-clean"><div><p class="eyebrow">REPORT CENTER · V3.1.1</p><h2>ERP / CRM 报表管理</h2></div><div class="report-hero-side"><span>当前流程</span><strong>预检后导入</strong><small>错误版本可回滚</small></div></section>${uploadPanel()}${notice ? AppShell.notice("操作结果", notice) : ""}${previewPanel()}<section class="kpi-grid report-metrics">${v3Metrics()}</section>${importRecordsBlock()}${latestAlertsBlock()}${AppMockData.reportGroups.map((group) => `<section class="page-section report-section"><div class="section-header"><h3>${s(group.title)}</h3><span class="status-badge">可查看</span></div><div class="report-card-list">${group.reports.map(card).join("")}</div></section>`).join("")}`;
+    },
+    mount(ctx) {
+      ctx.delegate("[data-report-type]", "change", (_, node) => { selectedDataset = node.value || "inventory"; previewResult = null; pendingRows = []; });
+      ctx.delegate("[data-upload-report]", "click", () => document.getElementById("reportFileInput")?.click());
+      ctx.delegate("[data-report-file]", "change", async (_, node) => { await previewSelectedFile(node.files?.[0]); node.value = ""; });
+      ctx.delegate("[data-confirm-import]", "click", () => confirmImport());
+      ctx.delegate("[data-cancel-preview]", "click", () => { previewResult = null; pendingRows = []; selectedFileName = ""; notice = "已取消本次导入预检。"; AppRouter.schedule("report-preview-cancel"); });
+      ctx.delegate("[data-v3-demo]", "click", async () => { notice = "正在使用示例报表试跑预警链路..."; AppRouter.schedule("v3-demo-start"); const result = await AppApi.importMockAlerts(); await AppApi.refreshAfterDataImport(); await loadImportRecords(); notice = result?.alertCount || result?.createdTaskCount ? `示例数据已生成 ${result.alertCount || 0} 条预警，${result.createdTaskCount || 0} 条进入待办。` : "示例报表已检查，暂无新增预警。"; AppRouter.schedule("v3-demo-done"); });
+      ctx.delegate("[data-refresh-records]", "click", async () => { await loadImportRecords(); notice = "导入记录已刷新。"; AppRouter.schedule("record-refresh"); });
+      ctx.delegate("[data-copy-version]", "click", async (_, node) => { await navigator.clipboard?.writeText(node.dataset.copyVersion || ""); notice = "数据版本号已复制。"; AppRouter.schedule("copy-version"); });
+      ctx.delegate("[data-rollback-version]", "click", (_, node) => rollbackVersion(node.dataset.rollbackVersion));
+      ctx.delegate("[data-detail]", "click", (_, node) => { detailId = node.dataset.detail; notice = ""; AppRouter.schedule("report-detail"); });
+      ctx.delegate("[data-back]", "click", () => { detailId = null; notice = ""; AppRouter.schedule("report-back"); });
+      ctx.delegate("[data-alert-report]", "click", (_, node) => AppTaskActions.openAlertReport(node.dataset.alertReport));
+      ctx.delegate("[data-open-task]", "click", (_, node) => AppTaskActions.openTodoTask(node.dataset.openTask));
+      ctx.delegate("[data-task-report]", "click", (_, node) => AppTaskActions.openTaskReport(node.dataset.taskReport));
+      ctx.delegate("[data-candidate-report]", "click", (_, node) => { const [module, id] = node.dataset.candidateReport.split(":"); AppTaskActions.openCandidateReport(module, id); });
+      ctx.delegate("[data-task]", "click", async (_, node) => { notice = "任务提交中..."; AppRouter.schedule("report-task-start"); const result = await AppTaskActions.createReportTask(node.dataset.task); notice = result?.message || "报表任务已处理。"; AppRouter.schedule("report-task"); });
+      ctx.addCleanup(AppTaskStore.subscribe(() => AppRouter.schedule("task-store")));
+    },
+  };
+})();
