@@ -15,14 +15,14 @@ from src.services.module_task_service import list_tasks
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 
-def get_dashboard_summary() -> Dict[str, Any]:
+def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
     payload = get_today_advice(write_outputs=True, record_logs=True)
-    active_tasks = list_tasks(active_only=True)[:5]
-    v3_summary = get_v3_dashboard_summary()
+    active_tasks = list_tasks(user_id=user_id, active_only=True)[:5]
+    v3_summary = get_v3_dashboard_summary(user_id)
     payload["tasks"] = active_tasks
     payload["api_entry"] = "/api/modules/dashboard"
     payload["service"] = "dashboard_service"
-    payload["version"] = "3.0.0"
+    payload["version"] = "3.0.6"
     payload["v3"] = v3_summary
     payload["data_refresh"] = {
         "title": "准实时数据更新",
@@ -31,10 +31,11 @@ def get_dashboard_summary() -> Dict[str, Any]:
         "activeAlertCount": v3_summary.get("activeAlertCount", 0),
         "highPriorityAlertCount": v3_summary.get("highPriorityAlertCount", 0),
         "taskLinkedAlertCount": v3_summary.get("taskLinkedAlertCount", 0),
-        "message": "导入新报表后，首页、商品页、流量页、待办和日志会按预警事件同步刷新。",
+        "storeScoped": v3_summary.get("storeScoped", False),
+        "message": "导入新报表后，首页、商品页、流量页、待办和日志会按当前账号店铺权限同步刷新。",
     }
     payload["cards"] = [
-        {"title": "新增预警", "value": v3_summary.get("activeAlertCount", 0), "desc": "来自最新报表"},
+        {"title": "新增预警", "value": v3_summary.get("activeAlertCount", 0), "desc": "当前范围"},
         {"title": "高风险", "value": v3_summary.get("highPriorityAlertCount", 0), "desc": "优先处理"},
         {"title": "已进待办", "value": v3_summary.get("taskLinkedAlertCount", 0), "desc": "任务同步"},
         {"title": "活跃任务", "value": len(active_tasks), "desc": "当前可处理"},
