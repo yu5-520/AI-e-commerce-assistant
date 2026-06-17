@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.0.7 - 2026-06-17
+
+### Product Decision
+- V3.0.7 turns report warnings into explainable evidence reports.
+- Product truth: every warning must explain why it triggered, which report version and rows support it, which store owns it, who should handle it, and what remains a human decision.
+- This makes the report-warning loop more trustworthy before adding more automation or real platform APIs.
+
+### Changed
+- Added alert evidence reports under `/api/modules/task-reports/alerts/{alert_id}`.
+- Report page latest warnings now include a `证据报告` action.
+- Detail report page now supports alert reports, not just task reports and candidate reports.
+- Alert reports show source trace, trigger rule, responsibility, raw matching report rows, evidence chain, suggested actions, and human confirmation points.
+- Added alert-report UI styling.
+- Frontend assets now use `?v=3.0.7`; API and health versions are aligned.
+
+### Product Boundary
+- Raw report-row matching currently uses the imported snapshot sample rows and entity ID / store ID matching.
+- Production should persist full normalized row evidence and support row-level audit, masking, and rollback.
+
 ## v3.0.6 - 2026-06-17
 
 ### Product Decision
