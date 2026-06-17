@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.0.2 - 2026-06-17
+
+### Product Decision
+- V3.0.2 adds report field precheck before warning generation.
+- Product truth: upload does not mean import; users should see field recognition, missing fields, and preview rows before creating warnings or tasks.
+- The normal flow is: choose report type -> upload CSV -> preview field mapping -> confirm import -> generate warnings -> sync tasks and modules.
+
+### Changed
+- Added schema templates and alias matching for inventory, refunds, orders, products, and customers.
+- Added `/api/data/templates`, `/api/data/preview`, and `/api/data/import/confirm`.
+- Report page now shows recognized fields, missing fields, import impact, and the first five rows before confirmation.
+- Confirm import reuses the existing V3 alert-to-task bridge after mapped fields are normalized.
+- Frontend assets now use `?v=3.0.2`; API and health versions are aligned.
+
+### Product Boundary
+- Current precheck supports CSV rows and common Chinese / English field aliases.
+- XLSX parsing, manual field remapping UI, rollback, and real ERP / CRM API sync should be later steps.
+- Main product APIs remain `/api/modules/*`, `/api/accounts`, and `/api/data/*`.
+
 ## v3.0.1 - 2026-06-17
 
 ### Product Decision
