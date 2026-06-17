@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v3.0.8 - 2026-06-17
+
+### Product Decision
+- V3.0.8 turns tasks from status buttons into evidence-based handling records.
+- Product truth: 运营不能只是点完成；运营提交处理证据，总管复核证据，通过后任务才归档。
+- This makes the task loop auditable before writing logs, retrospectives, and later Agent reports.
+
+### Changed
+- Added structured task evidence submission under `/api/modules/todo/{task_id}/submit-evidence`.
+- Added manager evidence review under `/api/modules/todo/{task_id}/review-evidence`.
+- Todo page now shows handling forms for库存、售后、流量、价格、报表任务.
+- Evidence records include action, result, summary, domain fields, evidence links, follow-up flag, and recap flag.
+- Manager review records include decision, comment, reviewer, and reviewed time.
+- Evidence submission and review now write task logs and lifecycle transitions.
+- Added task evidence UI styling.
+- Frontend assets now use `?v=3.0.8`; API and health versions are aligned.
+
+### Product Boundary
+- This is still an in-memory MVP evidence workflow. Production should persist evidence files, add file upload / OSS storage, audit masking, role-based attachment access, and immutable review records.
+
 ## v3.0.7 - 2026-06-17
 
 ### Product Decision
