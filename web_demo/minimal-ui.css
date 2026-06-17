@@ -1,0 +1,190 @@
+/* V3.0.4 minimal UI: remove explanatory grey microcopy from product screens. */
+.view .eyebrow,
+.view .card-desc,
+.view .section-header p,
+.view .report-hero p,
+.view .report-detail-hero p,
+.view .unit-hero p,
+.view .product-toolbar p,
+.view .traffic-toolbar p,
+.view .listing-toolbar p,
+.view .report-upload-tip,
+.view .org-scope-note,
+.view .unit-scope-note,
+.view .chain-card p,
+.view .chain-card footer,
+.view .org-node small,
+.view .org-control-card small,
+.view .review-card small,
+.view .product-title-block small,
+.view .product-title-block span,
+.view .traffic-title-block small,
+.view .traffic-title-block span,
+.view .report-hero-side span,
+.view .report-hero-side small,
+.view .unit-hero-side span,
+.view .unit-hero-side small,
+.view .kpi-grid small,
+.view .report-metric-card h3 + span,
+.view .realtime-metric small {
+  display: none !important;
+}
+
+.view .report-hero,
+.view .unit-hero,
+.view .realtime-hero,
+.view .product-toolbar,
+.view .traffic-toolbar {
+  padding: 28px 30px;
+}
+
+.view .report-hero h2,
+.view .unit-hero h2,
+.view .realtime-hero h2 {
+  letter-spacing: -0.075em;
+}
+
+.view .card,
+.view .page-section,
+.view .report-card,
+.view .product-row,
+.view .traffic-row,
+.view .org-control-card,
+.view .org-node {
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.045);
+}
+
+.view .status-badge {
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.view .report-hero-side,
+.view .unit-hero-side {
+  align-content: center;
+  justify-items: start;
+}
+
+.view .report-hero-side strong,
+.view .unit-hero-side strong {
+  font-size: 28px;
+}
+
+.permission-muted,
+.permission-result {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.migration-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.migration-form label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 950;
+  color: #111827;
+}
+
+.migration-form select,
+.migration-form input {
+  min-height: 44px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 0 12px;
+  background: #fff;
+  font-weight: 900;
+}
+
+.migration-form button {
+  border: 0;
+  border-radius: 999px;
+  background: #080b12;
+  color: #fff;
+  min-height: 44px;
+  padding: 0 18px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.impact-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.impact-grid span,
+.pending-migration b,
+.pending-migration span,
+.pending-migration em {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: #f3f4f6;
+  color: #111827;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.pending-migration {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pending-migration b {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.migration-list {
+  display: grid;
+  gap: 10px;
+}
+
+.migration-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.migration-row strong,
+.migration-row span,
+.migration-row em,
+.migration-row b {
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+  color: #111827;
+}
+
+.migration-row.empty {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 980px) {
+  .migration-form,
+  .migration-row {
+    grid-template-columns: 1fr;
+  }
+}
