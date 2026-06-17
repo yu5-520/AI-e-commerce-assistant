@@ -22,6 +22,7 @@ from src.services.module_task_service import (
     submit_task,
     write_task_to_recap,
 )
+from src.services.task_evidence_service import get_task_evidence, review_task_evidence, submit_task_evidence
 
 router = APIRouter()
 
@@ -66,6 +67,14 @@ def todo_events(request: Request) -> Dict[str, Any]:
 def todo_counters(request: Request) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     return {"counters": get_task_counters_for_user(viewer_id), "viewer": current_user(viewer_id)}
+
+
+@router.get("/todo/{task_id}/evidence")
+def todo_evidence(request: Request, task_id: str) -> Dict[str, Any]:
+    evidence = get_task_evidence(task_id, viewer_id=request_user_id(request))
+    if not evidence:
+        raise HTTPException(status_code=404, detail="task evidence not found")
+    return evidence
 
 
 @router.post("/todo/{task_id}/split")
@@ -127,6 +136,16 @@ def submit_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     return task
 
 
+@router.post("/todo/{task_id}/submit-evidence")
+def submit_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"submit_tasks", "handle_tasks", "assign_tasks", "dispatch_tasks"})
+    task = submit_task_evidence(task_id, body or {}, submitter_id=viewer_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="cannot submit task evidence")
+    return task
+
+
 @router.post("/todo/{task_id}/review")
 def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
@@ -140,6 +159,16 @@ def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     )
     if not task:
         raise HTTPException(status_code=400, detail="cannot review task")
+    return task
+
+
+@router.post("/todo/{task_id}/review-evidence")
+def review_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"review_tasks"})
+    task = review_task_evidence(task_id, body or {}, reviewer_id=viewer_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="cannot review task evidence")
     return task
 
 
