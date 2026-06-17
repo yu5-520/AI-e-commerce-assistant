@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v3.0.4 - 2026-06-17
+
+### Product Decision
+- V3.0.4 moves the product toward a cleaner, higher-end interface by removing grey explanatory microcopy from UI modules.
+- Store owner changes are treated as store-permission migrations, not instant toggles.
+- Owner changes to store responsibility must be confirmed, recorded, and scheduled to take effect the next day because products, reports, warnings, open tasks, logs, and recaps may need to migrate.
+
+### Changed
+- Added a minimal UI layer that hides explanatory grey copy and keeps cards focused on title, number, state, and action.
+- Added pending store migration records with old operator, new operator, effective date, reviewer, impact scope, and status.
+- Organization page now uses a migration confirmation panel instead of direct owner-switch buttons.
+- Store responsibility changes now remain pending until the next day; current operator data visibility does not change immediately.
+- Pending migrations are displayed on affected store cards.
+- API and health versions are aligned to `3.0.4`.
+
+### Product Boundary
+- This is still an in-memory MVP migration queue. Real production should persist migrations, require real account verification, send notifications to affected operators, and define how open tasks are migrated or retained.
+
 ## v3.0.3 - 2026-06-17
 
 ### Product Decision
