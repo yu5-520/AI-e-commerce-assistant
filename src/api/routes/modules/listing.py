@@ -4,13 +4,23 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from src.api.routes.modules.common import find_or_404
+from src.services.account_service import current_user, user_id_from_headers, visible_store_ids_for_user
 from src.services.module_data_service import LISTINGS
 from src.services.module_task_service import create_task, visible_candidates
 
 router = APIRouter()
+
+
+def scoped_items(items: List[Dict[str, Any]], request: Request) -> List[Dict[str, Any]]:
+    user_id = user_id_from_headers(request.headers)
+    user = current_user(user_id)
+    if user.get("roleId") in {"owner", "manager", "finance"}:
+        return items
+    allowed = set(visible_store_ids_for_user(user_id))
+    return [item for item in items if item.get("storeId") in allowed]
 
 
 def listing_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -23,6 +33,8 @@ def listing_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
         "source": "上新触发",
         "sourceRoute": "business-listing",
         "productId": item["id"],
+        "storeIds": [item.get("storeId")] if item.get("storeId") else [],
+        "visibleStoreIds": [item.get("storeId")] if item.get("storeId") else [],
         "imageLabel": item["imageLabel"],
         "productShort": item["sourceName"],
         "productTitle": item["title"],
@@ -41,8 +53,8 @@ def listing_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/listing")
-def listing() -> List[Dict[str, Any]]:
-    return visible_candidates(LISTINGS, listing_task_payload)
+def listing(request: Request) -> List[Dict[str, Any]]:
+    return visible_candidates(scoped_items(LISTINGS, request), listing_task_payload)
 
 
 @router.post("/listing/{listing_id}/tasks")
