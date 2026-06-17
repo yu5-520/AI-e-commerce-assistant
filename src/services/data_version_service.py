@@ -1,8 +1,8 @@
-"""V3.1.2 data version rollback and linked-task strategy service.
+"""V3.1.4 data version rollback, linked-task strategy, and detail service.
 
-Report imports create data versions. If a user uploads the wrong report, the
-system should soft-rollback alerts, record who did it, and decide how linked
-business tasks should be handled instead of leaving them ambiguous.
+Report imports create data versions. Wrong report uploads can be soft-rolled back,
+linked tasks can be handled by a clear strategy, and detail pages can read a
+single backend payload instead of stitching partial lists in the browser.
 """
 
 from __future__ import annotations
@@ -14,9 +14,10 @@ from uuid import uuid4
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services.account_service import user_display
 from src.services.module_task_service import DONE_STATUS, find_task, update_task
-from src.services.report_alert_service import ACTIVE_ALERT_STATUSES, ensure_v3_tables, now_iso
+from src.services.report_alert_service import ACTIVE_ALERT_STATUSES, ensure_v3_tables, list_alert_events, now_iso
 
-ROLLBACK_VERSION = "3.1.2"
+DATA_VERSION_SERVICE_VERSION = "3.1.4"
+ROLLBACK_VERSION = DATA_VERSION_SERVICE_VERSION
 ROLLBACK_STATUSES = {"rolled_back", "rollback_pending"}
 TASK_STRATEGIES = {"review", "archive", "keep"}
 
@@ -132,7 +133,7 @@ def list_import_records(limit: int = 50) -> Dict[str, Any]:
             "canRollback": status != "rolled_back" and summary["activeAlertCount"] > 0,
         })
     return {
-        "version": ROLLBACK_VERSION,
+        "version": DATA_VERSION_SERVICE_VERSION,
         "total": len(records),
         "activeCount": len([item for item in records if item.get("versionStatus") == "active"]),
         "rolledBackCount": len([item for item in records if item.get("versionStatus") == "rolled_back"]),
@@ -177,18 +178,47 @@ def apply_task_strategy(task_ids: List[str], *, strategy: str, data_version: str
         if not task:
             handled.append({"taskId": task_id, "status": "not_found", "strategy": strategy})
             continue
+        before_status = task.get("status")
         patch = _task_patch_for_strategy(task, strategy, data_version, reason, created_at)
         updated = update_task(task_id, patch, log_type="数据版本回滚", action=f"关联任务按{strategy}策略处理", result=f"来源数据版本 {data_version} 已回滚：{reason}")
         handled.append({
             "taskId": task_id,
             "title": task.get("title"),
-            "fromStatus": task.get("status"),
+            "fromStatus": before_status,
             "toStatus": updated.get("status") if updated else task.get("status"),
             "workflowStatus": updated.get("workflowStatus") if updated else task.get("workflowStatus"),
             "strategy": strategy,
             "operatorId": operator_id,
         })
     return handled
+
+
+def get_data_version_detail(data_version: str, *, user_id: str | None = None) -> Dict[str, Any]:
+    records_payload = list_import_records(limit=200)
+    record = next((item for item in records_payload["records"] if item.get("dataVersion") == data_version), None)
+    if not record:
+        raise ValueError(f"data version not found: {data_version}")
+    alerts = [item for item in list_alert_events(limit=1000, active_only=False, user_id=user_id) if item.get("dataVersion") == data_version]
+    task_ids = list(dict.fromkeys([item.get("taskId") for item in alerts if item.get("taskId")]))
+    tasks = []
+    for task_id in task_ids:
+        task = find_task(task_id)
+        if task:
+            tasks.append(deepcopy(task))
+    rollback = record.get("rollback")
+    return {
+        "version": DATA_VERSION_SERVICE_VERSION,
+        "record": record,
+        "alerts": alerts,
+        "tasks": tasks,
+        "rollback": rollback,
+        "summary": {
+            "alertCount": len(alerts),
+            "activeAlertCount": len([item for item in alerts if item.get("status") in ACTIVE_ALERT_STATUSES]),
+            "taskCount": len(tasks),
+            "rolledBack": record.get("versionStatus") == "rolled_back",
+        },
+    }
 
 
 def rollback_data_version(data_version: str, *, operator_id: str | None = None, reason: str | None = None, task_strategy: str = "review") -> Dict[str, Any]:
@@ -221,7 +251,7 @@ def rollback_data_version(data_version: str, *, operator_id: str | None = None, 
             )
         rollback = {
             "rollbackId": make_id("ROLLBACK"),
-            "version": ROLLBACK_VERSION,
+            "version": DATA_VERSION_SERVICE_VERSION,
             "dataVersion": data_version,
             "snapshotId": snap["snapshot_id"],
             "datasetName": snap["dataset_name"],
@@ -251,4 +281,4 @@ def rollback_data_version(data_version: str, *, operator_id: str | None = None, 
             ),
         )
         conn.commit()
-    return {"version": ROLLBACK_VERSION, "rollback": rollback, "records": list_import_records(limit=50)["records"]}
+    return {"version": DATA_VERSION_SERVICE_VERSION, "rollback": rollback, "records": list_import_records(limit=50)["records"]}
