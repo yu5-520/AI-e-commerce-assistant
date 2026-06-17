@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v3.0.7
+Current Version: v3.0.8
 
 ## Version History
 
+- v3.0.8: Added structured task evidence submission, manager evidence review, evidence records, review records, task evidence endpoints, and the Todo handling form so tasks are submitted with audit material instead of completed by a bare click.
 - v3.0.7: Added alert evidence detail reports with source trace, trigger rule, store responsibility, raw report rows, evidence chain, and frontend entry from latest report alerts.
 - v3.0.6: Hardened report data ownership by binding imported report rows, alert events, dashboard summary, report module alerts, and generated warning tasks to store scope; added store_id / store_name field aliases and account-scoped alert APIs.
 - v3.0.5: Compacted manager navigation, nested product / competitor / listing / traffic / report operation pages under the manager operation-module hub, added clickable manager module cards, and extended minimal UI cleanup to manager pages.
@@ -38,8 +39,3 @@ Current Version: v3.0.7
 - Patch: copy, prompt, template, or wording changes.
 - Minor: new module, new mode, new interface, or new runtime config.
 - Major: breaking workflow, API contract, schema, or folder migration changes.
-
-## Logging Rule
-
-- Any architecture-level cleanup, route removal, folder migration, or deployment-entry change must update both `versioning/CHANGELOG.md` and this file.
-- Product-specific decisions should also update the matching log under `docs/product/`.
