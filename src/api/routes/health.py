@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.3"
+API_VERSION = "3.0.4"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_operating_unit_store_scope_runtime",
+        "mode": "v3_minimal_ui_permission_migration_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -29,20 +29,21 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
-        "owner_business_overview": True,
+        "minimal_ui_microcopy_removed": True,
+        "owner_store_migration_confirm": True,
+        "store_permission_next_day_effective": True,
+        "pending_store_migrations": True,
+        "store_migration_endpoint": "/api/accounts/store-assignments/{store_id}",
+        "store_migrations_endpoint": "/api/accounts/store-migrations",
         "manager_operating_unit_full_scope": True,
         "operator_operating_unit_store_slice": True,
         "store_responsibility_assignment": True,
-        "store_assignment_endpoint": "/api/accounts/store-assignments/{store_id}",
         "operating_unit_viewer_scope": True,
         "product_store_permission_filtering": True,
         "traffic_store_permission_filtering": True,
         "listing_store_permission_filtering": True,
         "role_scoped_task_flow": True,
         "task_store_permission_filtering": True,
-        "task_visible_roles": True,
-        "task_visible_users": True,
-        "task_visible_stores": True,
         "warning_to_operator_todo": True,
         "cross_account_lifecycle_sync": True,
         "v3_data_snapshot": True,
