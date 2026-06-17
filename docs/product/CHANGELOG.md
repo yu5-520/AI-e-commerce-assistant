@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v3.0.6 - 2026-06-17
+
+### Product Decision
+- V3.0.6 hardens the core report loop by binding report rows, alerts, tasks, dashboard counts, and report-page warnings to store ownership.
+- Product truth: 报表导入不是全局裸数据；每条报表数据都应尽量绑定店铺，预警和任务再继承店铺责任权限。
+- 总管看经营单元内全量报表预警；运营只看自己负责店铺切片内的报表预警和任务。
+
+### Changed
+- Report schema preview now recognizes `store_id` and `store_name` aliases.
+- Report alerts now carry `storeId`, `storeName`, and `visibleStoreIds`.
+- Report-triggered warning tasks now inherit store scope and route toward the responsible store operator when applicable.
+- `/api/data/alerts`, `/api/data/alerts/entity/*`, `/api/data/v3-summary`, `/api/modules/report`, and `/api/modules/dashboard` now scope report alert summaries by current account.
+- Frontend assets now use `?v=3.0.6`; API and health versions are aligned.
+
+### Product Boundary
+- Store scope now resolves from report fields first, then falls back to product ownership in mock product data.
+- Real production should require store identifiers from ERP / CRM imports and persist store-scoped snapshots for audit and rollback.
+
 ## v3.0.5 - 2026-06-17
 
 ### Product Decision
