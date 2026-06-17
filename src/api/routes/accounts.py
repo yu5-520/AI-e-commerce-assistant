@@ -10,6 +10,7 @@ from src.services.account_service import (
     account_summary,
     current_user,
     get_user,
+    list_pending_store_migrations,
     list_permissions,
     list_role_change_logs,
     list_roles,
@@ -18,8 +19,8 @@ from src.services.account_service import (
     list_stores,
     list_users,
     resolve_user_id,
+    schedule_store_assignment_migration,
     update_role_permissions,
-    update_store_assignment,
     update_user_role,
     update_user_stores,
     user_has_permission,
@@ -94,18 +95,27 @@ def store_assignments() -> List[Dict[str, Any]]:
     return list_store_assignments()
 
 
+@router.get("/store-migrations")
+def store_migrations() -> List[Dict[str, Any]]:
+    return list_pending_store_migrations()
+
+
 @router.post("/store-assignments/{store_id}")
 def change_store_assignment(request: Request, store_id: str, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     operator_id = require_role_manager(request)
-    assignment = update_store_assignment(
-        store_id,
-        body.get("primary_operator_id") or body.get("primaryOperatorId"),
-        reviewer_id=body.get("reviewer_id") or body.get("reviewerId"),
-        operator_id=operator_id,
-    )
-    if not assignment:
-        raise HTTPException(status_code=400, detail="cannot update store assignment")
-    return {"assignment": assignment, "account": account_summary(operator_id)}
+    try:
+        migration = schedule_store_assignment_migration(
+            store_id,
+            body.get("primary_operator_id") or body.get("primaryOperatorId"),
+            reviewer_id=body.get("reviewer_id") or body.get("reviewerId"),
+            password=body.get("password") or body.get("managementPassword"),
+            operator_id=operator_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if not migration:
+        raise HTTPException(status_code=400, detail="cannot schedule store assignment migration")
+    return {"migration": migration, "account": account_summary(operator_id)}
 
 
 @router.get("/roles")
