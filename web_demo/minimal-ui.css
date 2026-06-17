@@ -1,4 +1,4 @@
-/* V3.0.4 minimal UI: remove explanatory grey microcopy from product screens. */
+/* V3.0.5 minimal UI: remove explanatory grey microcopy from product screens. */
 .view .eyebrow,
 .view .card-desc,
 .view .section-header p,
@@ -8,6 +8,16 @@
 .view .product-toolbar p,
 .view .traffic-toolbar p,
 .view .listing-toolbar p,
+.view .manager-hero p,
+.view .manager-hero .eyebrow,
+.view .manager-hero-side span,
+.view .manager-hero-side small,
+.view .manager-card p,
+.view .manager-card small,
+.view .manager-schedule-main small,
+.view .manager-schedule-source span,
+.view .manager-schedule-source small,
+.view .manager-schedule-judgment span,
 .view .report-upload-tip,
 .view .org-scope-note,
 .view .unit-scope-note,
@@ -33,6 +43,7 @@
 .view .report-hero,
 .view .unit-hero,
 .view .realtime-hero,
+.view .manager-hero,
 .view .product-toolbar,
 .view .traffic-toolbar {
   padding: 28px 30px;
@@ -40,7 +51,8 @@
 
 .view .report-hero h2,
 .view .unit-hero h2,
-.view .realtime-hero h2 {
+.view .realtime-hero h2,
+.view .manager-hero h2 {
   letter-spacing: -0.075em;
 }
 
@@ -49,6 +61,8 @@
 .view .report-card,
 .view .product-row,
 .view .traffic-row,
+.view .manager-card,
+.view .manager-schedule-row,
 .view .org-control-card,
 .view .org-node {
   border-color: rgba(15, 23, 42, 0.08);
@@ -61,13 +75,15 @@
 }
 
 .view .report-hero-side,
-.view .unit-hero-side {
+.view .unit-hero-side,
+.view .manager-hero-side {
   align-content: center;
   justify-items: start;
 }
 
 .view .report-hero-side strong,
-.view .unit-hero-side strong {
+.view .unit-hero-side strong,
+.view .manager-hero-side strong {
   font-size: 28px;
 }
 
