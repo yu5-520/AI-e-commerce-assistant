@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.0.0 - 2026-06-17
+
+### Added
+- Added V3 report-driven data refresh runtime: report import → data snapshot → alert event → task bridge → global module sync.
+- Added `src/services/report_alert_service.py` for V3 SQLite tables, data versions, metric snapshots, alert events, alert-to-task payloads, and dashboard summary.
+- Added V3 data endpoints: `/api/data/import/report`, `/api/data/import/mock-alerts`, `/api/data/versions`, `/api/data/versions/latest`, `/api/data/alerts`, `/api/data/alerts/entity/{entity_type}/{entity_id}`, and `/api/data/v3-summary`.
+- Added one-click frontend action in the report page to generate mock report alerts and refresh modules/tasks.
+- Added alert state sync to product and traffic modules so report-triggered alerts are visible outside the report page.
+- Added V3 documentation at `docs/V3.0_REPORT_ALERT_RUNTIME.md`.
+
+### Changed
+- FastAPI app version and health version are aligned to `3.0.0`.
+- Dashboard payload now includes `v3` and `data_refresh` summary fields.
+- Report module now returns V3 summary and recent active alerts.
+- Frontend assets were bumped to `?v=3.0.0`.
+- README and version rules now describe the V3 data-version and alert-event architecture.
+
+### Product Engineering Rule
+- V3.0 does not connect Taobao / Pinduoduo / Douyin APIs directly yet; the safe MVP path is report import first.
+- Data changes must become traceable versions before they generate warnings.
+- Warnings must become task events through the existing task lifecycle, not a parallel todo system.
+- The system can create tasks and reports, but it must not automatically change price, inventory, ad budget, product publishing, or customer messages.
+
 ## v2.5.1 - 2026-06-16
 
 ### Added
