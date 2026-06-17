@@ -1,8 +1,8 @@
-"""V3.0.8 task handling evidence service.
+"""V3.0.9 task handling evidence service.
 
 Tasks should not be completed by a bare click. Operators submit structured
-handling evidence, managers review that evidence, and the evidence record
-becomes the audit material for logs and retrospectives.
+handling evidence, managers review that evidence, and approved evidence creates
+log / retrospective candidates for daily and weekly review.
 """
 
 from __future__ import annotations
@@ -20,8 +20,9 @@ from src.services.module_task_service import (
     submit_task,
     task_visible_to_viewer,
 )
+from src.services.task_recap_service import add_recap_candidate
 
-EVIDENCE_VERSION = "3.0.8"
+EVIDENCE_VERSION = "3.0.9"
 
 DOMAIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "库存": {
@@ -175,8 +176,15 @@ def review_task_evidence(task_id: str, body: Dict[str, Any] | None = None, revie
         "reviewNote": comment,
     })
     result_task = review_task(task_id, decision="approve" if approved else "return", note=comment, reviewer_id=reviewer_id)
+    if approved:
+        recap = add_recap_candidate(task, evidence=task.get("latestEvidenceRecord"), review=review)
+        task["recapCandidateId"] = recap.get("id")
+        task["recapCandidateStatus"] = recap.get("status")
+        create_log({"type": "复盘候选", "task": task, "status": "候选", "action": f"自动进入{recap.get('recapTarget')}", "result": recap.get("evidenceSummary") or "处理结果已沉淀为复盘候选。", "operator": review["reviewerName"]})
     if result_task:
         result_task["latestEvidenceReview"] = review
         result_task["evidenceReviews"] = reviews[:10]
+        result_task["recapCandidateId"] = task.get("recapCandidateId")
+        result_task["recapCandidateStatus"] = task.get("recapCandidateStatus")
     create_log({"type": "处理证据复核", "task": task, "status": "已完成" if approved else "已退回", "action": f"证据复核{review['decision']}", "result": comment, "operator": review["reviewerName"]})
     return result_task
