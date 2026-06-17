@@ -1,4 +1,30 @@
 (async function () {
+  function loadStyle(href) {
+    return new Promise((resolve) => {
+      if ([...document.styleSheets].some((sheet) => sheet.href && sheet.href.includes(href.split("?")[0]))) return resolve();
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.onload = resolve;
+      link.onerror = resolve;
+      document.head.appendChild(link);
+    });
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve) => {
+      if (document.querySelector(`script[src^="${src.split("?")[0]}"]`)) return resolve();
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = resolve;
+      document.body.appendChild(script);
+    });
+  }
+
+  await loadStyle("/web_demo/minimal-ui.css?v=3.0.4");
+  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.0.4");
+
   const pages = [
     window.DashboardPage,
     window.StoreOverviewPage,
