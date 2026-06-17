@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.7"
+API_VERSION = "3.0.8"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_alert_evidence_report_runtime",
+        "mode": "v3_task_evidence_workflow_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -29,6 +29,14 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "task_evidence_endpoint": "/api/modules/todo/{task_id}/evidence",
+        "task_submit_evidence_endpoint": "/api/modules/todo/{task_id}/submit-evidence",
+        "task_review_evidence_endpoint": "/api/modules/todo/{task_id}/review-evidence",
+        "operator_structured_evidence_form": True,
+        "manager_evidence_review": True,
+        "task_evidence_records": True,
+        "task_evidence_review_records": True,
+        "task_evidence_log_sink": True,
         "alert_evidence_report_endpoint": "/api/modules/task-reports/alerts/{alert_id}",
         "alert_report_source_trace": True,
         "alert_report_trigger_rule": True,
@@ -78,8 +86,8 @@ def health() -> Dict[str, Any]:
         "operator_accept_endpoint": "/api/modules/todo/{task_id}/accept",
         "manager_split_endpoint": "/api/modules/todo/{task_id}/split",
         "manager_assign_endpoint": "/api/modules/todo/{task_id}/assign",
-        "operator_submit_endpoint": "/api/modules/todo/{task_id}/submit",
-        "manager_review_endpoint": "/api/modules/todo/{task_id}/review",
+        "operator_submit_endpoint": "/api/modules/todo/{task_id}/submit-evidence",
+        "manager_review_endpoint": "/api/modules/todo/{task_id}/review-evidence",
         "v3_templates_endpoint": "/api/data/templates",
         "v3_preview_endpoint": "/api/data/preview",
         "v3_confirm_import_endpoint": "/api/data/import/confirm",
