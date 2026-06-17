@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.1"
+API_VERSION = "3.0.2"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_report_upload_auto_alert_runtime",
+        "mode": "v3_report_schema_preview_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -53,6 +53,9 @@ def health() -> Dict[str, Any]:
         "v3_alert_to_task_bridge": True,
         "v3_global_data_refresh": True,
         "v3_file_first_report_upload": True,
+        "v3_report_schema_preview": True,
+        "v3_field_alias_mapping": True,
+        "v3_confirm_before_alert": True,
         "v3_mock_report_import": True,
         "v3_upload_payload_import": True,
         "task_events_endpoint": "/api/modules/todo/events",
@@ -63,6 +66,9 @@ def health() -> Dict[str, Any]:
         "operator_submit_endpoint": "/api/modules/todo/{task_id}/submit",
         "manager_review_endpoint": "/api/modules/todo/{task_id}/review",
         "recap_endpoint": "/api/modules/todo/{task_id}/recap",
+        "v3_templates_endpoint": "/api/data/templates",
+        "v3_preview_endpoint": "/api/data/preview",
+        "v3_confirm_import_endpoint": "/api/data/import/confirm",
         "v3_report_import_endpoint": "/api/data/import/report",
         "v3_mock_alert_endpoint": "/api/data/import/mock-alerts",
         "v3_alerts_endpoint": "/api/data/alerts",
