@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v3.0.9
+Current Version: v3.1.0
 
 ## Version History
 
+- v3.1.0: Added standalone inventory and customer-service centers, store-scoped inventory / service task routes, manager operation-module entries, and operation-center UI pages.
 - v3.0.9: Added automatic recap candidates after manager evidence approval, recap candidate service and endpoint, log-page recap candidate board, and automatic复盘候选 logs for daily / weekly review.
 - v3.0.8: Added structured task evidence submission, manager evidence review, evidence records, review records, task evidence endpoints, and the Todo handling form so tasks are submitted with audit material instead of completed by a bare click.
 - v3.0.7: Added alert evidence detail reports with source trace, trigger rule, store responsibility, raw report rows, evidence chain, and frontend entry from latest report alerts.
@@ -23,17 +24,6 @@ Current Version: v3.0.9
 - v2.3.8: Reworked the manager role into a store-group execution management workflow: 店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表.
 - v2.3.7: Simplified `账号` into a basic account center for profile, login security, phone / email / third-party binding, platform authorization status, notification settings, local cache, and logout actions.
 - v2.3.6: Changed `复盘审计` from wide tables into expandable retrospective cards, audit detail cards, and next-cycle task draft cards with Agent judgment placeholders.
-- v2.3.5: Rebuilt owner `复核审计` into `复盘审计`, receiving daily / weekly / monthly retrospectives, auditing missed targets and forming next-cycle task drafts.
-- v2.3.4: Rebuilt owner `组织效率` into an organization governance console with position relationship network, account role control, store authorization, and permission template control.
-- v2.3.3: Rebuilt owner `利润预算` into `供投财务`, combining supply, traffic, and finance views.
-- v2.3.2: Owner-side task command was repositioned into `人员总览`.
-- v2.3.1: Fixed `店群总览` layout and upgraded it into a realtime operations board.
-- v2.3.0: Removed redundant owner `经营驾驶舱`; changed `风险中心` into `店群总览`.
-- v2.2.0: Refactored owner navigation from first-line operation modules into executive modules and added the role permission console.
-- v2.1.0: Added global mock account switching, role-based task visibility, permission-based todo actions, and role-specific insight depth.
-- v2.0.0: Added `/api/accounts`, account roles, permissions, and the dispatch / submit / review collaboration flow.
-- v1.0.0-v1.6.1: Product trunk cleanup, modular backend/frontend, task lifecycle, detail reports, and report-to-task conversion.
-- v0.1.0-v0.9.2: Early workflow, RAG, frontend, generation, and Agent governance iterations.
 
 ## Version Rules
 
