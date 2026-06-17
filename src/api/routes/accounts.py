@@ -1,4 +1,4 @@
-"""Account, role, and permission routes for the v2 collaboration layer."""
+"""Account, role, store responsibility, and permission routes."""
 
 from __future__ import annotations
 
@@ -11,13 +11,15 @@ from src.services.account_service import (
     current_user,
     get_user,
     list_permissions,
-    list_roles,
     list_role_change_logs,
+    list_roles,
+    list_store_assignments,
     list_store_groups,
     list_stores,
     list_users,
     resolve_user_id,
     update_role_permissions,
+    update_store_assignment,
     update_user_role,
     update_user_stores,
     user_has_permission,
@@ -85,6 +87,25 @@ def change_user_stores(request: Request, user_id: str, body: Dict[str, Any] = Bo
     if not user:
         raise HTTPException(status_code=400, detail="cannot update user stores")
     return {"user": user, "account": account_summary(operator_id)}
+
+
+@router.get("/store-assignments")
+def store_assignments() -> List[Dict[str, Any]]:
+    return list_store_assignments()
+
+
+@router.post("/store-assignments/{store_id}")
+def change_store_assignment(request: Request, store_id: str, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+    operator_id = require_role_manager(request)
+    assignment = update_store_assignment(
+        store_id,
+        body.get("primary_operator_id") or body.get("primaryOperatorId"),
+        reviewer_id=body.get("reviewer_id") or body.get("reviewerId"),
+        operator_id=operator_id,
+    )
+    if not assignment:
+        raise HTTPException(status_code=400, detail="cannot update store assignment")
+    return {"assignment": assignment, "account": account_summary(operator_id)}
 
 
 @router.get("/roles")
