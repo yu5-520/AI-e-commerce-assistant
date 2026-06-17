@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.1.1 - 2026-06-17
+
+### Product Decision
+- V3.1.1 solves the operational problem of uploading the wrong report.
+- Product truth: 上传报表是数据版本动作，不是不可逆动作。错误版本应该可以回滚，但必须留下审计记录。
+- This makes the report runtime safer before connecting real ERP / CRM adapters.
+
+### Changed
+- Added import-record management under `/api/data/import-records`.
+- Added data-version rollback under `/api/data/versions/{data_version}/rollback`.
+- Report page now shows import records, active alerts, generated tasks, rollback state, and rollback history.
+- Rolling back a version soft-removes that version's active alerts from dashboards and report warning lists.
+- Linked tasks and historical evidence are kept for audit instead of being deleted.
+- Added rollback UI styling and dynamic bootstrap loading.
+- Frontend assets can be refreshed with `?v=3.1.1`; API and health versions are aligned.
+
+### Product Boundary
+- Current rollback is soft rollback for alert events. Production should also support task cancellation rules, attachment retention, owner approval for rollback, and irreversible audit logs.
+
 ## v3.1.0 - 2026-06-17
 
 ### Product Decision
