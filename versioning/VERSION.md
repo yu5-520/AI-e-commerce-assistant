@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v3.0.0
+Current Version: v3.0.1
 
 ## Version History
 
+- v3.0.1: Reworked the report page into a file-first upload flow, moved mock alert generation into a backup demo action, added client-side CSV parsing, improved report upload layout, and truncated long data versions in cards.
 - v3.0.0: Added report-driven data snapshots, metric snapshots, alert events, alert-to-task bridge, V3 data summary API, one-click mock report alert import, and frontend alert sync for dashboard/report/product/traffic modules.
 - v2.5.1: Added cross-account task lifecycle sync with task events, per-user counters, operator accept action, manager review sync, and recap handoff.
 - v2.5.0: Rebuilt the task system into a role-scoped task flow with store permissions, visible roles/users/stores, owner decision tasks, manager dispatch tasks, operator execution tasks, warning-to-operator todo routing, and manager split endpoint.
