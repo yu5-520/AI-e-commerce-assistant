@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 
+from src.services.account_service import user_id_from_headers
 from src.services.data_import_service import (
     import_mock_data,
     list_import_records,
@@ -28,6 +29,10 @@ from src.services.report_schema_service import (
 )
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
+
+
+def request_user_id(request: Request) -> str:
+    return user_id_from_headers(request.headers)
 
 
 @router.get("/sources")
@@ -56,13 +61,13 @@ def imports() -> List[Dict[str, Any]]:
 
 @router.get("/templates")
 def report_templates() -> Dict[str, Any]:
-    """V3.0.2: return report field templates and alias hints."""
+    """Return report field templates and alias hints."""
     return get_report_templates()
 
 
 @router.post("/preview")
 def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """V3.0.2: preview field mapping before creating alerts or tasks."""
+    """Preview field mapping before creating alerts or tasks."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -78,7 +83,7 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
 
 @router.post("/import/confirm")
 def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """V3.0.2: confirm a previewed report import, then trigger alerts/tasks."""
+    """Confirm a previewed report import, then trigger scoped alerts/tasks."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -95,15 +100,7 @@ def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
 
 @router.post("/import/report")
 def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """V3: import one report payload, create a data version, then trigger alerts.
-
-    Expected body:
-    {
-      "dataset_name": "inventory" | "refunds" | "orders" | "products" | "customers",
-      "rows": [{...}],              # optional; when omitted, reads examples/*.csv
-      "auto_create_tasks": true     # default true
-    }
-    """
+    """Import one report payload, create a data version, then trigger scoped alerts."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -119,7 +116,7 @@ def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str
 
 @router.post("/import/mock-alerts")
 def import_mock_alerts(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """V3: run report-driven alert generation from current examples/*.csv files."""
+    """Run report-driven alert generation from current examples/*.csv files."""
     dataset_names = body.get("dataset_names") or body.get("datasetNames")
     try:
         return run_v3_mock_imports(dataset_names=dataset_names)
@@ -129,33 +126,34 @@ def import_mock_alerts(body: Dict[str, Any] = Body(default_factory=dict)) -> Dic
 
 @router.get("/versions")
 def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
-    """V3: list recent data snapshots created by report imports."""
+    """List recent data snapshots created by report imports."""
     return list_data_versions(limit=limit)
 
 
 @router.get("/versions/latest")
 def latest_version() -> Dict[str, Any]:
-    """V3: return the latest data version used by global warning refresh."""
+    """Return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "3.0.2", "message": "No V3 data snapshot has been imported yet."}
+    return latest or {"version": "3.0.6", "message": "No V3 data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
 def alerts(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     active_only: bool = Query(default=False),
 ) -> List[Dict[str, Any]]:
-    """V3: list report-triggered alert events."""
-    return list_alert_events(limit=limit, active_only=active_only)
+    """List report-triggered alert events scoped by current account store access."""
+    return list_alert_events(limit=limit, active_only=active_only, user_id=request_user_id(request))
 
 
 @router.get("/alerts/entity/{entity_type}/{entity_id}")
-def entity_alerts(entity_type: str, entity_id: str) -> List[Dict[str, Any]]:
-    """V3: list alert events for one product/customer/entity."""
-    return list_alerts_for_entity(entity_type, entity_id)
+def entity_alerts(request: Request, entity_type: str, entity_id: str) -> List[Dict[str, Any]]:
+    """List alert events for one product/customer/entity scoped by current account."""
+    return list_alerts_for_entity(entity_type, entity_id, user_id=request_user_id(request))
 
 
 @router.get("/v3-summary")
-def v3_summary() -> Dict[str, Any]:
-    """V3: global data-version and alert summary for homepage sync."""
-    return get_v3_dashboard_summary()
+def v3_summary(request: Request) -> Dict[str, Any]:
+    """Global data-version and alert summary scoped by current account."""
+    return get_v3_dashboard_summary(request_user_id(request))
