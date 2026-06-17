@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.8"
+API_VERSION = "3.0.9"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_task_evidence_workflow_runtime",
+        "mode": "v3_recap_candidate_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -29,6 +29,11 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "recap_candidates_endpoint": "/api/modules/recap-candidates",
+        "task_approval_to_recap_candidate": True,
+        "recap_candidate_log_sink": True,
+        "log_page_recap_candidates": True,
+        "daily_weekly_recap_candidates": True,
         "task_evidence_endpoint": "/api/modules/todo/{task_id}/evidence",
         "task_submit_evidence_endpoint": "/api/modules/todo/{task_id}/submit-evidence",
         "task_review_evidence_endpoint": "/api/modules/todo/{task_id}/review-evidence",
