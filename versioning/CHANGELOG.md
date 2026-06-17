@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.0.6 - 2026-06-17
+
+### Added
+- Added store-scoped report alert ownership in `src/services/report_alert_service.py`.
+- Added `store_id` support to persisted alert events and created an index for store-scoped alert lookup.
+- Added `store_id` / `store_name` aliases to report schema preview.
+- Added account-scoped `/api/data/alerts`, `/api/data/alerts/entity/*`, and `/api/data/v3-summary` responses.
+- Added account-scoped report module V3 summaries and recent alerts.
+- Added account-scoped dashboard data-refresh summary.
+
+### Changed
+- Report alerts now carry `storeId`, `storeName`, and `visibleStoreIds` when the row provides store fields or the product can resolve to a store.
+- Report-triggered tasks now inherit `storeIds` / `visibleStoreIds`, so operator tasks can route to the store's responsible operator instead of becoming unscoped global warnings.
+- Dashboard and report page alert counts now follow the current account's store visibility.
+- Frontend assets were bumped to `?v=3.0.6`.
+- FastAPI app version and health version are aligned to `3.0.6`.
+
+### Product Engineering Rule
+- Every imported business row should resolve to a store whenever possible.
+- Report alerts, tasks, dashboard metrics, and report-page warnings must follow the same rule: manager sees the operating-unit store set; operators see only their assigned store slice.
+
 ## v3.0.5 - 2026-06-17
 
 ### Added
