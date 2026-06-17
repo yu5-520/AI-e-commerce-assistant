@@ -1,23 +1,25 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 一个基于商家 ERP / CRM Mock 数据识别经营单元，并把商品、竞品、上新、流量、报表预警转成可派发任务的 AI 经营协同原型。V2.0 的重点不是自动替商家执行，而是把“老板看报告、总管派发、运营处理、总管复核、日志归档”的协同链路跑通。
+> 一个基于商家 ERP / CRM Mock 数据识别经营单元，并把商品、竞品、上新、流量、报表预警转成可派发任务的 AI 经营协同原型。V3.0 的重点是“导入新报表后，全局数据更新、自动触发预警、预警进入任务池”。
 
 ## 1. 当前主定位
 
 本仓库当前只保留一条主产品链路：
 
 ```text
-ERP / CRM Mock 数据
+ERP / CRM Mock 数据 / 新导入报表
 ↓
-经营单元识别
+数据校验与数据版本
 ↓
-循环频率策略
+数据快照 / 指标快照
 ↓
-商品、竞品、上新、流量、报表模块
+异常规则判断
 ↓
-候选预警 / 详情报告
+预警事件 alert_event
 ↓
-统一任务池
+预警转任务 alert_to_task_bridge
+↓
+首页、商品、流量、报表、待办、日志、详情报告同步
 ↓
 账号角色 / 权限 / 店群范围
 ↓
@@ -25,7 +27,7 @@ ERP / CRM Mock 数据
 ↓
 日志归档
 ↓
-/api/modules/* + /api/accounts
+/api/modules/* + /api/accounts + /api/data/*
 ↓
 web_demo 模块化前端
 ```
@@ -33,7 +35,7 @@ web_demo 模块化前端
 核心原则：
 
 ```text
-ERP 决定经营单元，经营单元决定类目知识，模块生成候选预警，报告解释判断依据，账号系统决定谁能看、谁能派、谁能处理、谁能复核。
+ERP 决定经营单元，报表变化决定数据版本，异常规则生成预警，任务系统决定谁能看、谁能派、谁能处理、谁能复核。
 ```
 
 系统不保留旧版 demo 入口、旧版前端模板、旧 Agent 链路和旧兼容 API。历史版本由 Git commits 保存，不放在 main 分支干扰当前产品。
@@ -54,13 +56,14 @@ src/api/routes/modules/report.py         报表模块
 src/api/routes/modules/task_report.py    详情报告模块
 src/api/routes/modules/todo.py           待办 / 派发 / 提交 / 复核模块
 src/api/routes/modules/log.py            日志模块
-src/api/routes/data_import.py            Mock 数据校验与导入记录
+src/api/routes/data_import.py            数据校验、导入记录、V3 报表触发预警
 src/api/routes/health.py                 健康检查
 src/api/routes/system.py                 系统状态与运行数据清理
 src/services/account_service.py          V2 Mock 账号、角色、权限、店群范围
 src/services/module_task_service.py      统一任务池与协同任务生命周期
 src/services/task_report_service.py      详情报告与未来 Agent 评估边界
 src/services/module_data_service.py      后端模块 Mock 数据源
+src/services/report_alert_service.py     V3 数据快照 / 预警事件 / 预警转任务
 src/repositories/                       SQLite / JSONL 记录层
 web_demo/index.html                      当前前端入口
 web_demo/core/router.js                  前端路由生命周期
@@ -77,6 +80,7 @@ versioning/VERSION.md                    当前版本与版本规则
 docs/product/CHANGELOG.md                产品更新日志
 docs/product/mvp-scope.md                当前 MVP 范围与验收标准
 docs/product/module-boundary.md          当前模块边界
+docs/V3.0_REPORT_ALERT_RUNTIME.md        V3 报表触发预警说明
 ```
 
 ## 3. 当前产品 API
@@ -95,6 +99,18 @@ GET  /api/modules/todo
 GET  /api/modules/log
 GET  /api/modules/task-reports/tasks/{task_id}
 GET  /api/modules/task-reports/candidates/{module}/{entity_id}
+```
+
+V3 数据更新与预警接口：
+
+```text
+POST /api/data/import/report
+POST /api/data/import/mock-alerts
+GET  /api/data/versions
+GET  /api/data/versions/latest
+GET  /api/data/alerts
+GET  /api/data/alerts/entity/{entity_type}/{entity_id}
+GET  /api/data/v3-summary
 ```
 
 账号与协同接口：
@@ -162,6 +178,19 @@ curl http://127.0.0.1:3000/api/modules/dashboard
 curl http://127.0.0.1:3000/api/accounts
 ```
 
+V3 最小闭环验收：
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/data/import/mock-alerts \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+
+curl http://127.0.0.1:3000/api/data/v3-summary
+curl http://127.0.0.1:3000/api/data/alerts
+curl http://127.0.0.1:3000/api/modules/product
+curl http://127.0.0.1:3000/api/modules/todo
+```
+
 本地脚本验收：
 
 ```bash
@@ -176,62 +205,4 @@ python scripts/smoke_test_api.py
 
 ```text
 公网用户 → 80/443 → Nginx → 127.0.0.1:3000 → FastAPI
-```
-
-安全组建议：
-
-```text
-80 / 443：公网访问
-22：仅限你的固定公网 IP
-3000：不要对公网开放
-```
-
-一键部署：
-
-```bash
-sudo apt-get update
-sudo apt-get install -y git
-
-git clone https://github.com/yu5-520/AI-e-commerce-assistant.git /opt/ai-ecommerce-assistant
-cd /opt/ai-ecommerce-assistant
-sudo bash scripts/deploy_server.sh
-```
-
-详细部署说明：
-
-```text
-docs/server-deploy.md
-```
-
-## 7. 当前边界
-
-```text
-不接真实店铺后台
-不接真实企业 SSO
-不保存真实客户隐私
-不自动改价
-不自动投放
-不自动报名活动
-不自动群发客户
-不自动处理退款
-只生成经营判断、动作草案、详细报告、派发任务和复核记录
-```
-
-## 8. 清理规则
-
-main 分支只保留当前产品主线。
-
-```text
-旧模板、旧 demo、旧 Agent、旧兼容接口、旧运行命令不放在当前主分支。
-需要回看历史版本时，从 Git commit 历史查找。
-```
-
-## 9. 版本记录规则
-
-```text
-结构级变更：更新 versioning/CHANGELOG.md 和 versioning/VERSION.md
-产品主链路 / 页面 / API 边界变化：更新 docs/product/CHANGELOG.md
-重大产品取舍：补充 docs/product/product-decision-log.md
-结构清理 / 删除旧链路：补充 docs/product/product-structure-cleanup-log.md
-测试脚本：必须跟随当前 API 主线同步
 ```
