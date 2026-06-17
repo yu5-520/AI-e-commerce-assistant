@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.0.5 - 2026-06-17
+
+### Product Decision
+- V3.0.5 cleans up the store-group manager workflow by nesting first-line operation modules inside `经营模块`.
+- Product truth: the manager sidebar should show management actions, while product / competitor / listing / traffic / after-sales / inventory live inside the operation-module hub.
+- Manager module cards should be actionable entry cards, not static dashboard cards.
+
+### Changed
+- Manager sidebar is compacted to: 总览、店群任务、任务派发、运营复核、经营模块、复盘提交、数据报表、经营单元、日志、账号。
+- 商品、竞品、上新、流量、待办等 first-line entries are hidden from the manager sidebar.
+- 经营模块 cards now navigate to detailed module pages.
+- 售后 and 库存 currently route into the report page as their data source.
+- Manager module cards were redesigned as clean clickable cards.
+- Minimal UI cleanup now covers manager-page microcopy.
+- Frontend assets now use `?v=3.0.5`; API and health versions are aligned.
+
+### Product Boundary
+- This is still a frontend route-layer compaction. Backend `visibleModules` can be tightened later, but the current bootstrap layer enforces the manager navigation scope.
+
 ## v3.0.4 - 2026-06-17
 
 ### Product Decision
