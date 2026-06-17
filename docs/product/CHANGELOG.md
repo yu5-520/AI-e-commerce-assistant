@@ -1,5 +1,26 @@
 # Product Changelog
 
+## v3.0.0 - 2026-06-17
+
+### Product Decision
+- V3.0.0 adds “准实时数据更新 + 报表触发预警”。
+- Product truth: 上传 / 导入新报表后，系统状态必须全局变化，而不是只新增一条报表记录。
+- 新链路为：报表导入 → 数据版本 → 数据快照 → 异常规则 → 预警事件 → 任务池 → 首页 / 商品 / 流量 / 报表 / 待办 / 日志同步。
+- 先不接淘宝、拼多多、抖音平台 API，避免平台权限、风控、接口稳定性和合规复杂度过早拖垮 MVP。
+
+### Changed
+- Added report-triggered warning runtime through `report_alert_service.py`.
+- Added V3 data import and alert endpoints under `/api/data/*`.
+- Report page now has a one-click action to import mock reports and generate alerts.
+- Product and traffic cards now expose `alertState` after report-triggered alerts are created.
+- Dashboard payload now includes V3 data refresh summary.
+- Frontend assets now use `?v=3.0.0`; API and health versions are aligned.
+
+### Product Boundary
+- V3.0 uses explainable rules first, not Agent autonomous execution.
+- Agent can later enrich reports and checklists, but cannot directly change price, inventory, ad budget, product publishing, or customer messages.
+- Tasks still reuse the V2.5.1 lifecycle system; report warnings must not create a parallel todo system.
+
 ## v2.5.1 - 2026-06-16
 
 ### Product Decision
