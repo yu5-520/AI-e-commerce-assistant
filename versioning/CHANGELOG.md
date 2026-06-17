@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.0.8 - 2026-06-17
+
+### Added
+- Added `src/services/task_evidence_service.py` for structured task evidence submission and manager evidence review.
+- Added `/api/modules/todo/{task_id}/evidence`, `/api/modules/todo/{task_id}/submit-evidence`, and `/api/modules/todo/{task_id}/review-evidence`.
+- Added `web_demo/task-evidence.css` for task handling forms and manager review panels.
+- Added task evidence client actions in `web_demo/core/api-client.js`.
+
+### Changed
+- Todo page now shows domain-specific handling forms for库存、售后、流量、价格、报表任务.
+- Operators submit handling action, result, summary, domain fields, evidence links, follow-up flag, and recap flag before review.
+- Managers review submitted evidence and can approve or return with comments.
+- Evidence submission and review now write task records and logs before lifecycle transition.
+- Frontend assets were bumped to `?v=3.0.8`.
+- FastAPI app version and health version are aligned to `3.0.8`.
+
+### Product Engineering Rule
+- Tasks should not be completed by a bare click. Operators submit evidence, managers review evidence, and the evidence record becomes audit material for logs and retrospectives.
+
 ## v3.0.7 - 2026-06-17
 
 ### Added
