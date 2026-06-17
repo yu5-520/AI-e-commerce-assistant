@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v3.1.2 - 2026-06-17
+
+### Product Decision
+- V3.1.2 completes the rollback product loop by defining what happens to tasks created by a wrong report version.
+- Product truth: 预警可以回滚，但已经生成的待办不能假装不存在。它们必须被转人工复核、归档保留审计，或明确保持当前状态。
+- This prevents silent task loss while keeping the system operable after wrong report uploads.
+
+### Changed
+- Data-version rollback now accepts a linked-task strategy.
+- Default strategy is `review`: active linked tasks become `待复核` with `数据回滚待复核` workflow status.
+- `archive` keeps audit history and removes linked active tasks from the active queue.
+- `keep` records rollback impact but preserves current task status.
+- Report page import records now include a linked-task strategy selector before rollback.
+- Rollback result now reports affected alerts and affected tasks.
+- Frontend dynamic assets now use `?v=3.1.2`; API and health versions are aligned.
+
+### Product Boundary
+- Current strategy is MVP-level task-state handling. Production should require manager / owner confirmation for high-impact rollback, task cancellation records, and immutable audit trails.
+
 ## v3.1.1 - 2026-06-17
 
 ### Product Decision
@@ -74,40 +93,3 @@
 
 ### Product Boundary
 - This is still an in-memory MVP evidence workflow. Production should persist evidence files, add file upload / OSS storage, audit masking, role-based attachment access, and immutable review records.
-
-## v3.0.7 - 2026-06-17
-
-### Product Decision
-- V3.0.7 turns report warnings into explainable evidence reports.
-- Product truth: every warning must explain why it triggered, which report version and rows support it, which store owns it, who should handle it, and what remains a human decision.
-- This makes the report-warning loop more trustworthy before adding more automation or real platform APIs.
-
-### Changed
-- Added alert evidence reports under `/api/modules/task-reports/alerts/{alert_id}`.
-- Report page latest warnings now include a `证据报告` action.
-- Detail report page now supports alert reports, not just task reports and candidate reports.
-- Alert reports show source trace, trigger rule, responsibility, raw matching report rows, evidence chain, suggested actions, and human confirmation points.
-- Added alert-report UI styling.
-- Frontend assets now use `?v=3.0.7`; API and health versions are aligned.
-
-### Product Boundary
-- Raw report-row matching currently uses the imported snapshot sample rows and entity ID / store ID matching.
-- Production should persist full normalized row evidence and support row-level audit, masking, and rollback.
-
-## v3.0.6 - 2026-06-17
-
-### Product Decision
-- V3.0.6 hardens the core report loop by binding report rows, alerts, tasks, dashboard counts, and report-page warnings to store ownership.
-- Product truth: 报表导入不是全局裸数据；每条报表数据都应尽量绑定店铺，预警和任务再继承店铺责任权限。
-- 总管看经营单元内全量报表预警；运营只看自己负责店铺切片内的报表预警和任务。
-
-### Changed
-- Report schema preview now recognizes `store_id` and `store_name` aliases.
-- Report alerts now carry `storeId`, `storeName`, and `visibleStoreIds`.
-- Report-triggered warning tasks now inherit store scope and route toward the responsible store operator when applicable.
-- `/api/data/alerts`, `/api/data/alerts/entity/*`, `/api/data/v3-summary`, `/api/modules/report`, and `/api/modules/dashboard` now scope report alert summaries by current account.
-- Frontend assets now use `?v=3.0.6`; API and health versions are aligned.
-
-### Product Boundary
-- Store scope now resolves from report fields first, then falls back to product ownership in mock product data.
-- Real production should require store identifiers from ERP / CRM imports and persist store-scoped snapshots for audit and rollback.
