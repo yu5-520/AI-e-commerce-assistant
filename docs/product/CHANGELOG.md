@@ -1,5 +1,23 @@
 # Product Changelog
 
+## v3.0.9 - 2026-06-17
+
+### Product Decision
+- V3.0.9 turns reviewed task handling evidence into management memory.
+- Product truth: 任务完成不是终点；证据复核通过后，系统应自动沉淀为日报 / 周报复盘候选。
+- This pushes the system from task execution into management review and cycle learning.
+
+### Changed
+- Added recap candidate runtime under `/api/modules/recap-candidates`.
+- Manager evidence approval now automatically creates a recap candidate.
+- Approved evidence also writes a `复盘候选` log record.
+- Log page now shows a recap candidate board above raw task logs.
+- Recap candidates show problem source, trigger data, handling action, handling result, evidence summary, review comment, responsible operator, reviewer, store scope, and next suggestion.
+- Frontend assets now use `?v=3.0.9`; API and health versions are aligned.
+
+### Product Boundary
+- This is still an in-memory MVP recap queue. Production should persist daily / weekly / monthly recap drafts, support manager editing, owner approval, immutable audit logs, and export / notification workflows.
+
 ## v3.0.8 - 2026-06-17
 
 ### Product Decision
