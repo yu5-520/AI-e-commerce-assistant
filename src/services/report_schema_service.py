@@ -1,11 +1,10 @@
-"""V3.0.2 report schema preview and field mapping service.
+"""V3.0.6 report schema preview and field mapping service.
 
-The upload flow should not jump from file selection directly into warning
-creation. This service adds a product-facing precheck layer:
-
+Upload flow:
     rows -> field mapping -> import preview -> confirm import -> alert runtime
 
-It stays dependency-free and works with the browser-side CSV upload path.
+V3.0.6 adds store ownership mapping so imported rows can bind to store-scoped
+alerts, task assignees, and operator-visible report slices.
 """
 
 from __future__ import annotations
@@ -16,11 +15,13 @@ from typing import Any, Dict, List
 
 from src.services.report_alert_service import import_report_dataset
 
-SCHEMA_VERSION = "3.0.2"
+SCHEMA_VERSION = "3.0.6"
 
 FIELD_LABELS = {
     "product_id": "商品ID",
     "customer_id": "客户ID",
+    "store_id": "店铺ID",
+    "store_name": "店铺名称",
     "available_stock": "当前库存",
     "safety_stock": "安全库存",
     "refund_amount": "退款金额",
@@ -35,46 +36,18 @@ FIELD_LABELS = {
 }
 
 REPORT_TEMPLATES: Dict[str, Dict[str, Any]] = {
-    "inventory": {
-        "label": "库存报表",
-        "identity_fields": ["product_id"],
-        "warning_fields": ["available_stock", "safety_stock"],
-        "optional_fields": ["store_id", "store_name", "sku", "warehouse"],
-        "alert_hint": "用于判断库存不足、库存承接和是否继续放量。",
-    },
-    "refunds": {
-        "label": "退款报表",
-        "identity_fields": ["product_id"],
-        "warning_fields": ["refund_amount", "refund_reason"],
-        "optional_fields": ["refund_id", "order_id", "store_id", "refund_time"],
-        "alert_hint": "用于判断退款异常、售后原因和商品承诺风险。",
-    },
-    "orders": {
-        "label": "订单报表",
-        "identity_fields": ["product_id"],
-        "warning_fields": ["quantity", "actual_paid"],
-        "optional_fields": ["order_id", "store_id", "order_time", "buyer_id"],
-        "alert_hint": "用于判断订单激增、库存承接和是否适合继续放量。",
-    },
-    "products": {
-        "label": "商品报表",
-        "identity_fields": ["product_id"],
-        "warning_fields": ["stock", "sale_price", "cost_price"],
-        "optional_fields": ["product_name", "store_id", "category", "platform"],
-        "alert_hint": "用于判断商品库存、价格、毛利和活动承接。",
-    },
-    "customers": {
-        "label": "客户报表",
-        "identity_fields": ["customer_id"],
-        "warning_fields": ["total_orders", "refund_count"],
-        "optional_fields": ["customer_name", "store_id", "last_order_time", "tag"],
-        "alert_hint": "用于判断售后敏感客户和客服处理边界。",
-    },
+    "inventory": {"label": "库存报表", "identity_fields": ["product_id"], "warning_fields": ["available_stock", "safety_stock"], "optional_fields": ["store_id", "store_name", "sku", "warehouse"], "alert_hint": "用于判断库存不足、库存承接和是否继续放量。"},
+    "refunds": {"label": "退款报表", "identity_fields": ["product_id"], "warning_fields": ["refund_amount", "refund_reason"], "optional_fields": ["store_id", "store_name", "refund_id", "order_id", "refund_time"], "alert_hint": "用于判断退款异常、售后原因和商品承诺风险。"},
+    "orders": {"label": "订单报表", "identity_fields": ["product_id"], "warning_fields": ["quantity", "actual_paid"], "optional_fields": ["store_id", "store_name", "order_id", "order_time", "buyer_id"], "alert_hint": "用于判断订单激增、库存承接和是否适合继续放量。"},
+    "products": {"label": "商品报表", "identity_fields": ["product_id"], "warning_fields": ["stock", "sale_price", "cost_price"], "optional_fields": ["store_id", "store_name", "product_name", "category", "platform"], "alert_hint": "用于判断商品库存、价格、毛利和活动承接。"},
+    "customers": {"label": "客户报表", "identity_fields": ["customer_id"], "warning_fields": ["total_orders", "refund_count"], "optional_fields": ["store_id", "store_name", "customer_name", "last_order_time", "tag"], "alert_hint": "用于判断售后敏感客户和客服处理边界。"},
 }
 
 FIELD_ALIASES: Dict[str, List[str]] = {
     "product_id": ["product_id", "商品ID", "商品id", "商品编码", "商家编码", "SKU", "sku", "sku编码", "货号", "款号", "商品编号"],
     "customer_id": ["customer_id", "客户ID", "客户id", "买家ID", "买家账号", "用户ID", "会员ID"],
+    "store_id": ["store_id", "storeId", "店铺ID", "店铺id", "店铺编号", "店铺编码", "店铺id编码"],
+    "store_name": ["store_name", "store", "店铺", "店铺名称", "店铺名", "门店", "店名"],
     "available_stock": ["available_stock", "current_stock", "stock", "库存", "可用库存", "当前库存", "现货库存", "实际库存", "可售库存"],
     "safety_stock": ["safety_stock", "安全库存", "库存安全线", "最低库存", "预警库存", "安全线"],
     "refund_amount": ["refund_amount", "退款金额", "退款额", "售后金额", "退货金额", "金额"],
@@ -91,14 +64,10 @@ FIELD_ALIASES: Dict[str, List[str]] = {
 
 def normalize_text(value: Any) -> str:
     text = str(value or "").strip().lower()
-    text = re.sub(r"[\s_\-—/\\（）()\[\]【】:*：]+", "", text)
-    return text
+    return re.sub(r"[\s_\-—/\\（）()\[\]【】:*：]+", "", text)
 
 
-NORMALIZED_ALIASES = {
-    canonical: {normalize_text(item) for item in [canonical, *aliases]}
-    for canonical, aliases in FIELD_ALIASES.items()
-}
+NORMALIZED_ALIASES = {canonical: {normalize_text(item) for item in [canonical, *aliases]} for canonical, aliases in FIELD_ALIASES.items()}
 
 
 def normalize_dataset_name(dataset_name: str | None) -> str:
@@ -113,6 +82,7 @@ def normalize_dataset_name(dataset_name: str | None) -> str:
 def get_report_templates() -> Dict[str, Any]:
     return {
         "version": SCHEMA_VERSION,
+        "ownershipRule": "建议每行报表带 store_id 或店铺名称；没有时系统会尝试按商品所属店铺补齐。",
         "datasets": [
             {
                 "datasetName": name,
@@ -181,12 +151,15 @@ def preview_report_dataset(dataset_name: str, rows: List[Dict[str, Any]] | None,
     warning_missing = [field for field in template["warning_fields"] if field not in final_mapping]
     optional_missing = [field for field in template["optional_fields"] if field not in final_mapping]
     normalized_rows = normalize_rows_with_mapping(dataset_rows, final_mapping)
+    ownership_ready = "store_id" in final_mapping or "store_name" in final_mapping
     issues: List[Dict[str, Any]] = []
     for field in identity_missing:
         issues.append({"field": field, "label": FIELD_LABELS.get(field, field), "severity": "blocked", "message": f"缺少{FIELD_LABELS.get(field, field)}，无法确认预警对象。"})
     for field in warning_missing:
         issues.append({"field": field, "label": FIELD_LABELS.get(field, field), "severity": "warning", "message": f"缺少{FIELD_LABELS.get(field, field)}，相关预警可能不会生成或不够准确。"})
-    status = "blocked" if identity_missing else "needs_attention" if warning_missing else "ready"
+    if not ownership_ready:
+        issues.append({"field": "store_id", "label": "店铺归属", "severity": "warning", "message": "未识别到店铺字段，系统会尝试按商品所属店铺补齐；真实报表建议提供 store_id。"})
+    status = "blocked" if identity_missing else "needs_attention" if warning_missing or not ownership_ready else "ready"
     return {
         "version": SCHEMA_VERSION,
         "datasetName": dataset,
@@ -194,17 +167,15 @@ def preview_report_dataset(dataset_name: str, rows: List[Dict[str, Any]] | None,
         "rowCount": len(dataset_rows),
         "headers": _headers_from_rows(dataset_rows),
         "fieldMapping": final_mapping,
-        "recognizedFields": [
-            {"field": field, "label": FIELD_LABELS.get(field, field), "sourceField": source}
-            for field, source in final_mapping.items()
-        ],
+        "recognizedFields": [{"field": field, "label": FIELD_LABELS.get(field, field), "sourceField": source} for field, source in final_mapping.items()],
         "missingIdentityFields": identity_missing,
         "missingWarningFields": warning_missing,
         "missingOptionalFields": optional_missing,
+        "ownershipReady": ownership_ready,
         "issues": issues,
         "status": status,
         "canImport": bool(dataset_rows) and not identity_missing,
-        "message": "字段已识别，可以导入。" if status == "ready" else "字段有缺失，确认影响后仍可导入。" if status == "needs_attention" else "缺少关键对象字段，暂不能导入。",
+        "message": "字段和店铺归属已识别，可以导入。" if status == "ready" else "字段或店铺归属有缺失，确认影响后仍可导入。" if status == "needs_attention" else "缺少关键对象字段，暂不能导入。",
         "alertHint": template["alert_hint"],
         "previewRows": normalized_rows[:5],
         "normalizedRows": normalized_rows,
