@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.1.1"
+API_VERSION = "3.1.2"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v311_data_version_rollback_runtime",
+        "mode": "v312_rollback_task_strategy_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -34,7 +34,13 @@ def health() -> Dict[str, Any]:
         "data_version_soft_rollback": True,
         "rollback_audit_record": True,
         "rollback_keeps_task_audit": True,
+        "rollback_task_strategy": True,
+        "rollback_task_strategy_review": True,
+        "rollback_task_strategy_archive": True,
+        "rollback_task_strategy_keep": True,
+        "rollback_task_strategy_default": "review",
         "report_page_import_records": True,
+        "report_page_rollback_task_strategy_select": True,
         "inventory_center_endpoint": "/api/modules/inventory",
         "inventory_task_endpoint": "/api/modules/inventory/{product_id}/tasks",
         "customer_service_center_endpoint": "/api/modules/aftersales",
