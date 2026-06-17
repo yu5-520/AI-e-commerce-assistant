@@ -16,6 +16,7 @@
 ### Product Engineering Rule
 - Normal user action is `上传报表`; generating warnings is a system action after upload.
 - The example-data trigger remains only as a demo / fallback path, not the primary product flow.
+- Active entries remain `/api/modules/*`, `/api/accounts`, and `/api/data/*`; V3.0.1 changes report-page workflow, not route ownership.
 
 ## v3.0.0 - 2026-06-17
 
