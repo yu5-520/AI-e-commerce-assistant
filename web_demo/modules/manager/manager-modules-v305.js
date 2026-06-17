@@ -5,8 +5,8 @@
     { module: "竞品", abnormal: 1, task: 0, owner: "运营 A", route: "business-competitors" },
     { module: "上新", abnormal: 2, task: 1, owner: "运营 A", route: "business-listing" },
     { module: "流量", abnormal: 4, task: 2, owner: "运营 A", route: "business-traffic" },
-    { module: "售后", abnormal: 3, task: 2, owner: "运营 B", route: "data-check" },
-    { module: "库存", abnormal: 2, task: 1, owner: "数据财务", route: "data-check" },
+    { module: "库存", abnormal: 2, task: 1, owner: "数据财务", route: "inventory-center" },
+    { module: "售后", abnormal: 3, task: 2, owner: "运营 B", route: "service-center" },
   ];
 
   function hero() {
