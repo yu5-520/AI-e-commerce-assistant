@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.2"
+API_VERSION = "3.0.3"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_report_schema_preview_runtime",
+        "mode": "v3_operating_unit_store_scope_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -30,23 +30,21 @@ def health() -> Dict[str, Any]:
             "marketplace_api_connected": False,
         },
         "owner_business_overview": True,
-        "manager_execution_dashboard": True,
-        "operator_store_scope": True,
+        "manager_operating_unit_full_scope": True,
+        "operator_operating_unit_store_slice": True,
+        "store_responsibility_assignment": True,
+        "store_assignment_endpoint": "/api/accounts/store-assignments/{store_id}",
+        "operating_unit_viewer_scope": True,
+        "product_store_permission_filtering": True,
+        "traffic_store_permission_filtering": True,
+        "listing_store_permission_filtering": True,
         "role_scoped_task_flow": True,
         "task_store_permission_filtering": True,
         "task_visible_roles": True,
         "task_visible_users": True,
         "task_visible_stores": True,
-        "task_parent_child_split": True,
         "warning_to_operator_todo": True,
         "cross_account_lifecycle_sync": True,
-        "task_event_stream": True,
-        "task_counters_by_user": True,
-        "task_transition_function": True,
-        "operator_accept_action": True,
-        "operator_submit_sync_to_manager": True,
-        "manager_review_sync_to_operator": True,
-        "recap_handoff_to_owner": True,
         "v3_data_snapshot": True,
         "v3_metric_snapshot": True,
         "v3_report_alert_event": True,
@@ -56,8 +54,6 @@ def health() -> Dict[str, Any]:
         "v3_report_schema_preview": True,
         "v3_field_alias_mapping": True,
         "v3_confirm_before_alert": True,
-        "v3_mock_report_import": True,
-        "v3_upload_payload_import": True,
         "task_events_endpoint": "/api/modules/todo/events",
         "task_counters_endpoint": "/api/modules/todo/counters",
         "operator_accept_endpoint": "/api/modules/todo/{task_id}/accept",
@@ -65,12 +61,9 @@ def health() -> Dict[str, Any]:
         "manager_assign_endpoint": "/api/modules/todo/{task_id}/assign",
         "operator_submit_endpoint": "/api/modules/todo/{task_id}/submit",
         "manager_review_endpoint": "/api/modules/todo/{task_id}/review",
-        "recap_endpoint": "/api/modules/todo/{task_id}/recap",
         "v3_templates_endpoint": "/api/data/templates",
         "v3_preview_endpoint": "/api/data/preview",
         "v3_confirm_import_endpoint": "/api/data/import/confirm",
-        "v3_report_import_endpoint": "/api/data/import/report",
-        "v3_mock_alert_endpoint": "/api/data/import/mock-alerts",
         "v3_alerts_endpoint": "/api/data/alerts",
         "v3_versions_endpoint": "/api/data/versions",
         "v3_summary_endpoint": "/api/data/v3-summary",
