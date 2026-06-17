@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.1.2 - 2026-06-17
+
+### Added
+- Added linked-task strategy handling to `src/services/data_version_service.py`.
+- Added `taskStrategy` support to `/api/data/versions/{data_version}/rollback`.
+- Added report-page strategy selector for rollback-linked tasks.
+- Added V3.1.2 health flags for `review`, `archive`, and `keep` rollback strategies.
+
+### Changed
+- Data-version rollback now handles linked tasks instead of only rolling back alert events.
+- Default strategy is `review`: active linked tasks move to `待复核` with `workflowStatus=数据回滚待复核`.
+- `archive` keeps audit and removes linked active tasks from the active queue.
+- `keep` only records rollback impact while preserving the current task state.
+- Rollback notice now reports both affected alert count and affected task count.
+- Bootstrap dynamically loads rollback assets with `?v=3.1.2`.
+- FastAPI app version and health version are aligned to `3.1.2`.
+
+### Product Engineering Rule
+- A data rollback must define what happens to already-generated tasks. The safest default is not silent deletion, but manager review.
+
 ## v3.1.1 - 2026-06-17
 
 ### Added
@@ -75,42 +95,3 @@
 
 ### Product Engineering Rule
 - Tasks should not be completed by a bare click. Operators submit evidence, managers review evidence, and the evidence record becomes audit material for logs and retrospectives.
-
-## v3.0.7 - 2026-06-17
-
-### Added
-- Added `src/services/alert_detail_service.py` for report-triggered alert evidence reports.
-- Added `/api/modules/task-reports/alerts/{alert_id}` to return a scoped alert detail report.
-- Added `web_demo/alert-report.css` for source trace, trigger rule, responsibility, raw report rows, and evidence-chain blocks.
-- Added frontend alert-report navigation from the report page's latest warning cards.
-
-### Changed
-- The task report page now supports `alertId` route state in addition to task and candidate reports.
-- Alert reports now show source dataset, data version, import batch, snapshot ID, trigger rule, responsible store, operator, reviewer, raw matching report rows, and processing checklist.
-- Report page warning cards now expose a `证据报告` action even when the linked task is already created.
-- Frontend assets were bumped to `?v=3.0.7`.
-- FastAPI app version and health version are aligned to `3.0.7`.
-
-### Product Engineering Rule
-- Every warning must be explainable before it becomes trusted: why it triggered, which report version produced it, which rows support it, which store owns it, who should handle it, and what human decision remains.
-
-## v3.0.6 - 2026-06-17
-
-### Added
-- Added store-scoped report alert ownership in `src/services/report_alert_service.py`.
-- Added `store_id` support to persisted alert events and created an index for store-scoped alert lookup.
-- Added `store_id` / `store_name` aliases to report schema preview.
-- Added account-scoped `/api/data/alerts`, `/api/data/alerts/entity/*`, and `/api/data/v3-summary` responses.
-- Added account-scoped report module V3 summaries and recent alerts.
-- Added account-scoped dashboard data-refresh summary.
-
-### Changed
-- Report alerts now carry `storeId`, `storeName`, and `visibleStoreIds` when the row provides store fields or the product can resolve to a store.
-- Report-triggered tasks now inherit `storeIds` / `visibleStoreIds`, so operator tasks can route to the store's responsible operator instead of becoming unscoped global warnings.
-- Dashboard and report page alert counts now follow the current account's store visibility.
-- Frontend assets were bumped to `?v=3.0.6`.
-- FastAPI app version and health version are aligned to `3.0.6`.
-
-### Product Engineering Rule
-- Every imported business row should resolve to a store whenever possible.
-- Report alerts, tasks, dashboard metrics, and report-page warnings must follow the same rule: manager sees the operating-unit store set; operators see only their assigned store slice.
