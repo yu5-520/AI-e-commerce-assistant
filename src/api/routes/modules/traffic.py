@@ -4,14 +4,24 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from src.api.routes.modules.common import find_or_404
+from src.services.account_service import current_user, user_id_from_headers, visible_store_ids_for_user
 from src.services.module_data_service import TRAFFIC
 from src.services.module_task_service import create_task, visible_candidates
 from src.services.report_alert_service import attach_alert_state
 
 router = APIRouter()
+
+
+def scoped_items(items: List[Dict[str, Any]], request: Request) -> List[Dict[str, Any]]:
+    user_id = user_id_from_headers(request.headers)
+    user = current_user(user_id)
+    if user.get("roleId") in {"owner", "manager", "finance"}:
+        return items
+    allowed = set(visible_store_ids_for_user(user_id))
+    return [item for item in items if item.get("storeId") in allowed]
 
 
 def traffic_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -29,6 +39,8 @@ def traffic_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
         "source": "流量触发",
         "sourceRoute": "business-traffic",
         "productId": item["productId"],
+        "storeIds": [item.get("storeId")] if item.get("storeId") else [],
+        "visibleStoreIds": [item.get("storeId")] if item.get("storeId") else [],
         "imageLabel": item["imageLabel"],
         "productShort": item["title"][:6],
         "productTitle": item["title"],
@@ -52,8 +64,8 @@ def with_alert_state(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/traffic")
-def traffic() -> List[Dict[str, Any]]:
-    return [with_alert_state(item) for item in visible_candidates(TRAFFIC, traffic_task_payload)]
+def traffic(request: Request) -> List[Dict[str, Any]]:
+    return [with_alert_state(item) for item in visible_candidates(scoped_items(TRAFFIC, request), traffic_task_payload)]
 
 
 @router.post("/traffic/{traffic_id}/tasks")
