@@ -1,8 +1,8 @@
-"""V3.1.1 data version rollback and import-record service.
+"""V3.1.2 data version rollback and linked-task strategy service.
 
 Report imports create data versions. If a user uploads the wrong report, the
-system should be able to soft-rollback the generated alerts from that version,
-record who did it, and keep an auditable import history.
+system should soft-rollback alerts, record who did it, and decide how linked
+business tasks should be handled instead of leaving them ambiguous.
 """
 
 from __future__ import annotations
@@ -13,10 +13,12 @@ from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services.account_service import user_display
+from src.services.module_task_service import DONE_STATUS, find_task, update_task
 from src.services.report_alert_service import ACTIVE_ALERT_STATUSES, ensure_v3_tables, now_iso
 
-ROLLBACK_VERSION = "3.1.1"
+ROLLBACK_VERSION = "3.1.2"
 ROLLBACK_STATUSES = {"rolled_back", "rollback_pending"}
+TASK_STRATEGIES = {"review", "archive", "keep"}
 
 
 def make_id(prefix: str) -> str:
@@ -139,9 +141,60 @@ def list_import_records(limit: int = 50) -> Dict[str, Any]:
     }
 
 
-def rollback_data_version(data_version: str, *, operator_id: str | None = None, reason: str | None = None) -> Dict[str, Any]:
+def _linked_task_ids(rows: List[Any]) -> List[str]:
+    ids: List[str] = []
+    for row in rows:
+        if row["task_id"]:
+            ids.append(row["task_id"])
+    return list(dict.fromkeys(ids))
+
+
+def _task_patch_for_strategy(task: Dict[str, Any], strategy: str, data_version: str, reason: str, created_at: str) -> Dict[str, Any]:
+    base = {
+        "rollbackImpact": {
+            "dataVersion": data_version,
+            "reason": reason,
+            "strategy": strategy,
+            "createdAt": created_at,
+        },
+        "reportDataVersionStatus": "rolled_back",
+        "rollbackReviewRequired": strategy == "review",
+        "judgmentTags": list(dict.fromkeys([*(task.get("judgmentTags") or []), "数据版本已回滚", data_version]))[:8],
+    }
+    if strategy == "archive":
+        return {**base, "status": "已归档", "workflowStatus": "数据回滚归档", "candidateStatus": "completed_archived", "reviewNote": "来源数据版本已回滚，任务已保留审计并从待办移除。"}
+    if strategy == "keep" or task.get("status") in DONE_STATUS:
+        return {**base, "reviewNote": "来源数据版本已回滚，当前任务状态保留。"}
+    roles = list(dict.fromkeys([*(task.get("visibleRoleIds") or []), "manager", "operator", "finance"]))
+    return {**base, "status": "待复核", "workflowStatus": "数据回滚待复核", "visibleRoleIds": roles, "reviewNote": "来源数据版本已回滚，请总管确认该任务取消、保留或转人工处理。"}
+
+
+def apply_task_strategy(task_ids: List[str], *, strategy: str, data_version: str, reason: str, operator_id: str | None, created_at: str) -> List[Dict[str, Any]]:
+    strategy = strategy if strategy in TASK_STRATEGIES else "review"
+    handled: List[Dict[str, Any]] = []
+    for task_id in task_ids:
+        task = find_task(task_id)
+        if not task:
+            handled.append({"taskId": task_id, "status": "not_found", "strategy": strategy})
+            continue
+        patch = _task_patch_for_strategy(task, strategy, data_version, reason, created_at)
+        updated = update_task(task_id, patch, log_type="数据版本回滚", action=f"关联任务按{strategy}策略处理", result=f"来源数据版本 {data_version} 已回滚：{reason}")
+        handled.append({
+            "taskId": task_id,
+            "title": task.get("title"),
+            "fromStatus": task.get("status"),
+            "toStatus": updated.get("status") if updated else task.get("status"),
+            "workflowStatus": updated.get("workflowStatus") if updated else task.get("workflowStatus"),
+            "strategy": strategy,
+            "operatorId": operator_id,
+        })
+    return handled
+
+
+def rollback_data_version(data_version: str, *, operator_id: str | None = None, reason: str | None = None, task_strategy: str = "review") -> Dict[str, Any]:
     ensure_version_tables()
     reason = reason or "上传报表有误，回滚该数据版本产生的预警。"
+    task_strategy = task_strategy if task_strategy in TASK_STRATEGIES else "review"
     operator_name = user_display(operator_id, "系统管理员")
     created_at = now_iso()
     with connect() as conn:
@@ -150,7 +203,8 @@ def rollback_data_version(data_version: str, *, operator_id: str | None = None, 
             raise ValueError(f"data version not found: {data_version}")
         rows = conn.execute("SELECT * FROM alert_events WHERE data_version = ?", (data_version,)).fetchall()
         active_rows = [row for row in rows if row["status"] in ACTIVE_ALERT_STATUSES]
-        task_count = len([row for row in active_rows if row["task_id"]])
+        task_ids = _linked_task_ids(active_rows)
+        handled_tasks = apply_task_strategy(task_ids, strategy=task_strategy, data_version=data_version, reason=reason, operator_id=operator_id, created_at=created_at)
         for row in active_rows:
             payload = loads(row["payload"])
             if payload:
@@ -160,6 +214,7 @@ def rollback_data_version(data_version: str, *, operator_id: str | None = None, 
                 payload["rollbackReason"] = reason
                 payload["rollbackOperatorId"] = operator_id
                 payload["rollbackOperatorName"] = operator_name
+                payload["taskStrategy"] = task_strategy
             conn.execute(
                 "UPDATE alert_events SET status = ?, payload = ?, updated_at = ? WHERE alert_id = ?",
                 ("rolled_back", dumps(payload), created_at, row["alert_id"]),
@@ -174,10 +229,12 @@ def rollback_data_version(data_version: str, *, operator_id: str | None = None, 
             "operatorId": operator_id,
             "operatorName": operator_name,
             "affectedAlertCount": len(active_rows),
-            "affectedTaskCount": task_count,
+            "affectedTaskCount": len(task_ids),
+            "taskStrategy": task_strategy,
+            "handledTasks": handled_tasks,
             "status": "rolled_back",
             "createdAt": created_at,
-            "impact": ["该版本活跃预警已从看板移除", "已生成任务保留审计痕迹", "后续复盘仍可查看回滚记录"],
+            "impact": ["该版本活跃预警已从看板移除", "关联待办已按策略处理", "后续复盘仍可查看回滚记录"],
         }
         conn.execute(
             """
