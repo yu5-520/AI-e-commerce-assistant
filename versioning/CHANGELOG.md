@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.0.7 - 2026-06-17
+
+### Added
+- Added `src/services/alert_detail_service.py` for report-triggered alert evidence reports.
+- Added `/api/modules/task-reports/alerts/{alert_id}` to return a scoped alert detail report.
+- Added `web_demo/alert-report.css` for source trace, trigger rule, responsibility, raw report rows, and evidence-chain blocks.
+- Added frontend alert-report navigation from the report page's latest warning cards.
+
+### Changed
+- The task report page now supports `alertId` route state in addition to task and candidate reports.
+- Alert reports now show source dataset, data version, import batch, snapshot ID, trigger rule, responsible store, operator, reviewer, raw matching report rows, and processing checklist.
+- Report page warning cards now expose a `证据报告` action even when the linked task is already created.
+- Frontend assets were bumped to `?v=3.0.7`.
+- FastAPI app version and health version are aligned to `3.0.7`.
+
+### Product Engineering Rule
+- Every warning must be explainable before it becomes trusted: why it triggered, which report version produced it, which rows support it, which store owns it, who should handle it, and what human decision remains.
+
 ## v3.0.6 - 2026-06-17
 
 ### Added
