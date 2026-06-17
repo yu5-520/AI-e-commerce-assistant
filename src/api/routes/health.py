@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.0.5"
+API_VERSION = "3.0.6"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v3_manager_module_hub_runtime",
+        "mode": "v3_store_scoped_report_alert_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -29,6 +29,14 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "report_row_store_scope": True,
+        "report_alert_store_id": True,
+        "report_alert_visible_store_ids": True,
+        "report_alerts_scoped_by_account": True,
+        "dashboard_data_refresh_scoped_by_account": True,
+        "report_module_scoped_by_account": True,
+        "report_preview_store_aliases": True,
+        "alert_task_routes_to_store_operator": True,
         "manager_navigation_compacted": True,
         "manager_business_modules_nested": True,
         "manager_module_cards_clickable": True,
