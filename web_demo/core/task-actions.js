@@ -44,6 +44,12 @@
     return true;
   }
 
+  function openAlertReport(alertId) {
+    if (!alertId) return false;
+    AppRouter.navigate("task-report", { alertId });
+    return true;
+  }
+
   async function createTaskFromReport(module, entityId) {
     const actions = {
       product: createProductTask,
@@ -99,5 +105,5 @@
     return { task, message: notifyTask(task, card.name) };
   }
 
-  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, createTaskFromReport, productIdentity, identityFromItem, findOpenTask, openTodoTask, openTaskReport, openCandidateReport, buttonLabel, buttonClass };
+  window.AppTaskActions = { createProductTask, createCompetitorTask, createListingTask, createTrafficTask, createReportTask, createTaskFromReport, productIdentity, identityFromItem, findOpenTask, openTodoTask, openTaskReport, openCandidateReport, openAlertReport, buttonLabel, buttonClass };
 })();
