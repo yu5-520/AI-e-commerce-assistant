@@ -13,6 +13,7 @@ from src.services.data_import_service import (
     list_import_sources,
     validate_all_imports,
 )
+from src.services.data_version_service import get_data_version_detail
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
 from src.services.report_alert_service import (
@@ -38,9 +39,13 @@ def request_user_id(request: Request) -> str:
     return user_id_from_headers(request.headers)
 
 
-def require_rollback_permission(user_id: str) -> None:
+def can_rollback(user_id: str) -> bool:
     user = current_user(user_id)
-    if user.get("roleId") not in ROLLBACK_ROLE_IDS:
+    return user.get("roleId") in ROLLBACK_ROLE_IDS
+
+
+def require_rollback_permission(user_id: str) -> None:
+    if not can_rollback(user_id):
         raise HTTPException(status_code=403, detail="当前账号无权回滚全局数据版本")
 
 
@@ -72,6 +77,21 @@ def imports() -> List[Dict[str, Any]]:
 def import_records(limit: int = Query(default=50, ge=1, le=200)) -> Dict[str, Any]:
     """List report data versions with alert/task impact and rollback state."""
     return list_version_import_records(limit=limit)
+
+
+@router.get("/versions/{data_version}/detail")
+def version_detail(request: Request, data_version: str) -> Dict[str, Any]:
+    """Return one data version detail with alerts, linked tasks, rollback, and permissions."""
+    user_id = request_user_id(request)
+    try:
+        detail = get_data_version_detail(data_version, user_id=user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    detail["permissions"] = {
+        "canRollback": can_rollback(user_id) and bool(detail.get("record", {}).get("canRollback")),
+        "rollbackRoleIds": sorted(ROLLBACK_ROLE_IDS),
+    }
+    return detail
 
 
 @router.post("/versions/{data_version}/rollback")
@@ -166,7 +186,7 @@ def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str
 def latest_version() -> Dict[str, Any]:
     """Return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "3.1.3", "message": "No V3 data snapshot has been imported yet."}
+    return latest or {"version": "3.1.4", "message": "No V3 data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
