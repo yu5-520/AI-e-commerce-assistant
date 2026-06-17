@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.1.3 - 2026-06-17
+
+### Added
+- Added `data-version-detail` as a standalone data-version detail route.
+- Added compact import-record rows at the bottom of the report page.
+- Added permission-based rollback controls: owner / manager / finance can rollback; operator can only view records and details.
+
+### Changed
+- Report page hierarchy now prioritizes upload, preview, latest alerts, and report cards before data-version management.
+- Import records are moved from the top/middle of the report page to the bottom.
+- Import records no longer show rollback strategy directly in the list; rollback strategy moved into the version detail page.
+- Report rollback UI assets were bumped to `?v=3.1.3`.
+- FastAPI app version and health version are aligned to `3.1.3`.
+
+### Product Engineering Rule
+- Import records are audit tools, not the primary report workflow. The report homepage should stay operational, while rollback and strategy controls live in data-version detail.
+
 ## v3.1.2 - 2026-06-17
 
 ### Added
