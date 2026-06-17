@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from src.api.routes.modules.common import find_or_404
 from src.services.module_data_service import REPORT_DETAILS, REPORT_GROUPS, all_reports, clone
 from src.services.module_task_service import attach_task_state, create_task
+from src.services.report_alert_service import get_v3_dashboard_summary, list_alert_events
 
 router = APIRouter()
 
@@ -43,12 +44,20 @@ def report_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
 
 def annotated_report_groups() -> List[Dict[str, Any]]:
     groups = []
+    v3_summary = get_v3_dashboard_summary()
     for group in REPORT_GROUPS:
         next_group = {**group, "reports": []}
         for item in group["reports"]:
             annotated = attach_task_state(item, report_task_payload(item))
-            if not annotated.get("candidateArchived"):
-                next_group["reports"].append(annotated)
+            if annotated.get("candidateArchived"):
+                continue
+            annotated["dataRefreshState"] = {
+                "latestDataVersion": v3_summary.get("latestDataVersion"),
+                "latestSnapshotAt": v3_summary.get("latestSnapshotAt"),
+                "activeAlertCount": v3_summary.get("alertByDataset", {}).get(item["id"], 0),
+                "globalAlertCount": v3_summary.get("activeAlertCount", 0),
+            }
+            next_group["reports"].append(annotated)
         if next_group["reports"]:
             groups.append(next_group)
     return groups
@@ -56,14 +65,22 @@ def annotated_report_groups() -> List[Dict[str, Any]]:
 
 @router.get("/report")
 def report() -> Dict[str, Any]:
-    return {"reportGroups": annotated_report_groups(), "reportDetails": clone(REPORT_DETAILS)}
+    return {
+        "reportGroups": annotated_report_groups(),
+        "reportDetails": clone(REPORT_DETAILS),
+        "v3": get_v3_dashboard_summary(),
+        "recentAlerts": list_alert_events(limit=10, active_only=True),
+    }
 
 
 @router.get("/report/{report_id}")
 def report_detail(report_id: str) -> Dict[str, Any]:
     if report_id not in REPORT_DETAILS:
         raise HTTPException(status_code=404, detail="report not found")
-    return clone(REPORT_DETAILS[report_id])
+    detail = clone(REPORT_DETAILS[report_id])
+    detail["v3"] = get_v3_dashboard_summary()
+    detail["relatedAlerts"] = [alert for alert in list_alert_events(limit=50) if alert.get("sourceDataset") == report_id]
+    return detail
 
 
 @router.post("/report/{report_id}/tasks")
