@@ -41,11 +41,12 @@
     return account?.currentUser?.visibleModules || [];
   }
 
-  await loadStyle("/web_demo/minimal-ui.css?v=3.0.7");
-  await loadStyle("/web_demo/manager-module-hub.css?v=3.0.7");
-  await loadStyle("/web_demo/alert-report.css?v=3.0.7");
-  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.0.7");
-  await loadScript("/web_demo/modules/manager/manager-modules-v305.js?v=3.0.7");
+  await loadStyle("/web_demo/minimal-ui.css?v=3.0.8");
+  await loadStyle("/web_demo/manager-module-hub.css?v=3.0.8");
+  await loadStyle("/web_demo/alert-report.css?v=3.0.8");
+  await loadStyle("/web_demo/task-evidence.css?v=3.0.8");
+  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.0.8");
+  await loadScript("/web_demo/modules/manager/manager-modules-v305.js?v=3.0.8");
 
   const pages = [
     window.DashboardPage,
