@@ -41,16 +41,16 @@
     return account?.currentUser?.visibleModules || [];
   }
 
-  await loadStyle("/web_demo/minimal-ui.css?v=3.1.2");
-  await loadStyle("/web_demo/manager-module-hub.css?v=3.1.2");
-  await loadStyle("/web_demo/alert-report.css?v=3.1.2");
-  await loadStyle("/web_demo/task-evidence.css?v=3.1.2");
-  await loadStyle("/web_demo/operation-centers.css?v=3.1.2");
-  await loadStyle("/web_demo/report-rollback.css?v=3.1.2");
-  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.1.2");
-  await loadScript("/web_demo/modules/manager/manager-modules-v305.js?v=3.1.2");
-  await loadScript("/web_demo/modules/operation-centers-v310.js?v=3.1.2");
-  await loadScript("/web_demo/modules/report/report-v311.js?v=3.1.2");
+  await loadStyle("/web_demo/minimal-ui.css?v=3.1.3");
+  await loadStyle("/web_demo/manager-module-hub.css?v=3.1.3");
+  await loadStyle("/web_demo/alert-report.css?v=3.1.3");
+  await loadStyle("/web_demo/task-evidence.css?v=3.1.3");
+  await loadStyle("/web_demo/operation-centers.css?v=3.1.3");
+  await loadStyle("/web_demo/report-rollback.css?v=3.1.3");
+  await loadScript("/web_demo/modules/executive/org-responsibility-v304.js?v=3.1.3");
+  await loadScript("/web_demo/modules/manager/manager-modules-v305.js?v=3.1.3");
+  await loadScript("/web_demo/modules/operation-centers-v310.js?v=3.1.3");
+  await loadScript("/web_demo/modules/report/report-v311.js?v=3.1.3");
 
   const pages = [
     window.DashboardPage,
@@ -70,6 +70,7 @@
     window.ManagerReportsPage,
     window.OperatingUnitPage,
     window.ReportPage,
+    window.DataVersionDetailPage,
     window.ProductPage,
     window.CompetitorPage,
     window.ListingPage,
