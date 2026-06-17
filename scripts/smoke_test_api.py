@@ -1,12 +1,11 @@
-"""API smoke test for the current AI ERP operating advisor v2 product surface.
+"""API smoke test for the current AI ERP operating advisor v3 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
-process. It intentionally checks only current product-critical API contracts:
-modular routes, account roles, task reports, and the v2 dispatch / submit /
-review flow.
+process. It checks modular routes, account roles, task reports, V3 report
+alerts, and the dispatch / accept / submit / review flow.
 """
 
 from __future__ import annotations
@@ -51,7 +50,8 @@ def run_smoke_test() -> None:
     assert health["ok"] is True, "health.ok should be true"
     assert health["version"] == app.version, "health.version should match FastAPI app version"
     assert health["api_entry"] == "/api/modules/*", "active API entry should be modular"
-    assert health["account_entry"] == "/api/accounts", "v2 account entry should be exposed"
+    assert health["account_entry"] == "/api/accounts", "account entry should be exposed"
+    assert health["v3_report_alert_event"] is True, "V3 report alert runtime should be exposed"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
@@ -70,19 +70,29 @@ def run_smoke_test() -> None:
     import_record = assert_status("POST", "/api/data/import/mock")
     assert_keys(import_record, ["import_id", "workflow_run_id", "status", "validation"], "import record")
 
+    v3_import = assert_post_json("/api/data/import/mock-alerts", {})
+    assert_keys(v3_import, ["version", "datasetCount", "alertCount", "createdTaskCount", "summary"], "v3 import")
+    assert v3_import["version"] == "3.0.0", "v3 import should report version 3.0.0"
+
+    v3_summary = assert_status("GET", "/api/data/v3-summary")
+    assert_keys(v3_summary, ["version", "activeAlertCount", "latestDataVersion", "globalSyncTargets"], "v3 summary")
+
+    v3_alerts = assert_status("GET", "/api/data/alerts")
+    assert isinstance(v3_alerts, list), "v3 alerts should be a list"
+
     imports = assert_status("GET", "/api/data/imports")
     assert isinstance(imports, list), "imports should be a list"
 
     accounts = assert_status("GET", "/api/accounts")
     assert_keys(accounts, ["currentUser", "roles", "permissions", "users", "stores", "taskFlow"], "accounts")
     role_names = {role["name"] for role in accounts["roles"]}
-    assert {"老板账号", "店群总管账号", "运营账号", "数据 / 财务账号", "只读观察账号"}.issubset(role_names), "v2 roles should be present"
+    assert {"老板账号", "店群总管账号", "运营账号", "数据 / 财务账号", "只读观察账号"}.issubset(role_names), "roles should be present"
 
     me = assert_status("GET", "/api/accounts/me")
     assert me["roleName"] == "老板账号", "mock current user should be owner"
 
     dashboard = assert_status("GET", "/api/modules/dashboard")
-    assert_keys(dashboard, ["tasks", "api_entry", "service"], "modules dashboard")
+    assert_keys(dashboard, ["tasks", "api_entry", "service", "v3", "data_refresh"], "modules dashboard")
     assert dashboard["api_entry"] == "/api/modules/dashboard"
 
     operating_unit = assert_status("GET", "/api/modules/operating-unit")
@@ -91,6 +101,7 @@ def run_smoke_test() -> None:
     products = assert_status("GET", "/api/modules/product")
     assert isinstance(products, list) and products, "product module should return cards"
     assert "suggestedTaskKey" in products[0], "product cards should carry backend task identity"
+    assert "alertState" in products[0], "product cards should expose V3 alert state"
 
     competitors = assert_status("GET", "/api/modules/competitor")
     assert isinstance(competitors, list), "competitor module should return list"
@@ -100,9 +111,11 @@ def run_smoke_test() -> None:
 
     traffic = assert_status("GET", "/api/modules/traffic")
     assert isinstance(traffic, list), "traffic module should return list"
+    if traffic:
+        assert "alertState" in traffic[0], "traffic cards should expose V3 alert state"
 
     report = assert_status("GET", "/api/modules/report")
-    assert_keys(report, ["reportGroups", "reportDetails"], "report module")
+    assert_keys(report, ["reportGroups", "reportDetails", "v3", "recentAlerts"], "report module")
 
     todo_reset = assert_status("POST", "/api/modules/todo/reset")
     assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
@@ -119,8 +132,14 @@ def run_smoke_test() -> None:
         f"/api/modules/todo/{task_id}/assign",
         {"assignee_id": "U003", "reviewer_id": "U002", "operator_id": "U002", "note": "smoke test assignment"},
     )
-    assert assigned["status"] == "处理中", "assigned task should enter processing status"
+    assert assigned["status"] in {"待接收", "处理中"}, "assigned task should be waiting accept or processing"
     assert assigned["assigneeId"] == "U003", "assigned task should target operator account"
+
+    accepted = assert_post_json(
+        f"/api/modules/todo/{task_id}/accept",
+        {"note": "smoke test accept"},
+    )
+    assert accepted["status"] == "处理中", "accepted task should enter processing status"
 
     submitted = assert_post_json(
         f"/api/modules/todo/{task_id}/submit",
