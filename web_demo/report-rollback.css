@@ -1,0 +1,82 @@
+.report-import-records {
+  margin-bottom: 14px;
+}
+
+.import-record-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.import-record-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
+}
+
+.import-record-card.rolled {
+  background: #fff7ed;
+}
+
+.import-record-card header,
+.import-record-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.import-record-card header div {
+  min-width: 0;
+}
+
+.import-record-card strong {
+  display: block;
+  color: #080b12;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.import-record-card header span,
+.import-record-meta span,
+.import-record-card p {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.import-record-card p {
+  display: block !important;
+  margin: 0;
+  line-height: 1.7;
+}
+
+.import-record-meta {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.import-record-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.report-actions button.danger {
+  background: #991b1b;
+  color: #ffffff;
+}
+
+@media (max-width: 1080px) {
+  .import-record-grid {
+    grid-template-columns: 1fr;
+  }
+}
