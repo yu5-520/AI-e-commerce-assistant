@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 一个基于商家 ERP / CRM Mock 数据识别经营单元，并把商品、竞品、上新、流量、报表预警转成可派发任务的 AI 经营协同原型。V3.0 的重点是“导入新报表后，全局数据更新、自动触发预警、预警进入任务池”。
+> V4：在原有 ERP / CRM 报表预警、账号权限、任务生命周期之上，新增“模块 Agent 增强层”。Agent 不放在最高控制位，而是放进商品、竞品、上新、流量、报表、待办和复盘链路中，生成分析、摘要、任务草案和人工确认点。
 
 ## 1. 当前主定位
 
@@ -19,13 +19,15 @@ ERP / CRM Mock 数据 / 新导入报表
 ↓
 预警转任务 alert_to_task_bridge
 ↓
+模块 Agent 分析 / 摘要 / 任务草案
+↓
 首页、商品、流量、报表、待办、日志、详情报告同步
 ↓
 账号角色 / 权限 / 店群范围
 ↓
 任务派发 / 运营提交 / 总管复核
 ↓
-日志归档
+日报 / 周报 / 日志归档
 ↓
 /api/modules/* + /api/accounts + /api/data/*
 ↓
@@ -35,10 +37,15 @@ web_demo 模块化前端
 核心原则：
 
 ```text
-ERP 决定经营单元，报表变化决定数据版本，异常规则生成预警，任务系统决定谁能看、谁能派、谁能处理、谁能复核。
+ERP 决定经营单元，报表变化决定数据版本，异常规则生成预警，任务系统决定谁能看、谁能派、谁能处理、谁能复核，Agent 只增强模块判断，不直接执行经营动作。
 ```
 
-系统不保留旧版 demo 入口、旧版前端模板、旧 Agent 链路和旧兼容 API。历史版本由 Git commits 保存，不放在 main 分支干扰当前产品。
+Agent 边界：
+
+```text
+Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿。
+Agent 不直接改价，不直接投放，不直接退款，不直接发布商品，不直接回写真实 ERP / CRM / 店铺数据。
+```
 
 ## 2. 当前目录职责
 
@@ -54,6 +61,7 @@ src/api/routes/modules/listing.py        上新模块
 src/api/routes/modules/traffic.py        流量模块
 src/api/routes/modules/report.py         报表模块
 src/api/routes/modules/task_report.py    详情报告模块
+src/api/routes/modules/agents.py         V4 模块 Agent API
 src/api/routes/modules/todo.py           待办 / 派发 / 提交 / 复核模块
 src/api/routes/modules/log.py            日志模块
 src/api/routes/data_import.py            数据校验、导入记录、V3 报表触发预警
@@ -61,7 +69,8 @@ src/api/routes/health.py                 健康检查
 src/api/routes/system.py                 系统状态与运行数据清理
 src/services/account_service.py          V2 Mock 账号、角色、权限、店群范围
 src/services/module_task_service.py      统一任务池与协同任务生命周期
-src/services/task_report_service.py      详情报告与未来 Agent 评估边界
+src/services/task_report_service.py      详情报告与 Agent 评估边界
+src/services/module_agent_service.py     V4 模块 Agent 建议 / 草案 / 摘要服务
 src/services/module_data_service.py      后端模块 Mock 数据源
 src/services/report_alert_service.py     V3 数据快照 / 预警事件 / 预警转任务
 src/repositories/                       SQLite / JSONL 记录层
@@ -81,9 +90,46 @@ docs/product/CHANGELOG.md                产品更新日志
 docs/product/mvp-scope.md                当前 MVP 范围与验收标准
 docs/product/module-boundary.md          当前模块边界
 docs/V3.0_REPORT_ALERT_RUNTIME.md        V3 报表触发预警说明
+docs/V4_MODULE_AGENT_RUNTIME.md          V4 模块 Agent 说明
 ```
 
-## 3. 当前产品 API
+## 3. V4 模块 Agent
+
+V4 当前内置 7 类 Agent：
+
+```text
+竞品数据收集分析 Agent
+上新标题 / 主图方案多样生成 Agent
+售后归因 Agent
+流量复盘 Agent
+报表摘要 Agent
+任务拆解 Agent
+日报 / 周报 Agent
+```
+
+它们输出统一结构：
+
+```text
+agentId
+agentName
+agentVersion
+sourceModule
+entityType
+entityId
+inputSnapshot
+riskLevel
+summary
+evidence
+suggestions
+taskDrafts
+humanDecision
+forbiddenActions
+nextStep
+```
+
+第一版是规则型 / Mock Agent-ready 层，用于跑通产品链路。后续接入 DeepSeek / OpenAI / RAG 时，只替换 Agent 服务内部的推理实现，不改变模块 API、任务池和人工确认边界。
+
+## 4. 当前产品 API
 
 前端主接口：
 
@@ -99,6 +145,15 @@ GET  /api/modules/todo
 GET  /api/modules/log
 GET  /api/modules/task-reports/tasks/{task_id}
 GET  /api/modules/task-reports/candidates/{module}/{entity_id}
+```
+
+V4 Agent 接口：
+
+```text
+GET  /api/modules/agents
+GET  /api/modules/agents/{module}/{entity_id}
+POST /api/modules/agents/{module}/{entity_id}/tasks
+GET  /api/modules/agents/cycle/{target}
 ```
 
 V3 数据更新与预警接口：
@@ -147,7 +202,7 @@ GET  /api/system/db-status
 POST /api/system/clear-runtime-data?confirm=true
 ```
 
-## 4. 账号角色
+## 5. 账号角色
 
 ```text
 老板账号：看全部店群、完整报告、任务流转、复核结果，可以下发任务。
@@ -157,7 +212,7 @@ POST /api/system/clear-runtime-data?confirm=true
 只读观察账号：只看总览、报告和日志，不创建、派发、提交或复核任务。
 ```
 
-## 5. 本地运行
+## 6. 本地运行
 
 ```bash
 cp .env.example .env
@@ -175,34 +230,6 @@ http://127.0.0.1:3000
 ```bash
 curl http://127.0.0.1:3000/api/health
 curl http://127.0.0.1:3000/api/modules/dashboard
+curl http://127.0.0.1:3000/api/modules/agents
 curl http://127.0.0.1:3000/api/accounts
-```
-
-V3 最小闭环验收：
-
-```bash
-curl -X POST http://127.0.0.1:3000/api/data/import/mock-alerts \
-  -H 'Content-Type: application/json' \
-  -d '{}'
-
-curl http://127.0.0.1:3000/api/data/v3-summary
-curl http://127.0.0.1:3000/api/data/alerts
-curl http://127.0.0.1:3000/api/modules/product
-curl http://127.0.0.1:3000/api/modules/todo
-```
-
-本地脚本验收：
-
-```bash
-python scripts/check_version_governance.py
-python scripts/smoke_test_runtime.py
-python scripts/smoke_test_api.py
-```
-
-## 6. 服务器部署
-
-服务器推荐结构：
-
-```text
-公网用户 → 80/443 → Nginx → 127.0.0.1:3000 → FastAPI
 ```
