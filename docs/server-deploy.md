@@ -1,6 +1,6 @@
 # 服务器部署说明
 
-本文档用于把当前项目接到 ECS / 云服务器上。
+本文档用于把当前项目接到 ECS / 云服务器上。部署文档只保留服务器运行和入口检查，产品边界统一看 `docs/product/module-boundary.md`。
 
 ## 1. 推荐部署结构
 
@@ -32,8 +32,6 @@ http://47.118.29.46
 
 ## 2. 服务器前置条件
 
-服务器需要：
-
 ```text
 Ubuntu / Debian 系统
 Python 3
@@ -57,7 +55,7 @@ Nginx
 
 ## 3. 一键部署
 
-在服务器上执行：
+首次部署：
 
 ```bash
 sudo apt-get update
@@ -68,11 +66,12 @@ cd /opt/ai-ecommerce-assistant
 sudo bash scripts/deploy_server.sh
 ```
 
-如果服务器已经克隆过仓库：
+已有仓库更新：
 
 ```bash
 cd /opt/ai-ecommerce-assistant
-git pull origin main
+git fetch --all
+git reset --hard origin/main
 sudo bash scripts/deploy_server.sh
 ```
 
@@ -87,13 +86,14 @@ http://47.118.29.46
 ```bash
 curl http://127.0.0.1:3000/api/health
 curl http://127.0.0.1:3000/api/modules/dashboard
+curl http://127.0.0.1:3000/api/modules/agents
+curl http://127.0.0.1:3000/api/modules/feedback-flywheel
+curl http://127.0.0.1:3000/api/modules/rag-memory
 curl http://127.0.0.1:3000/api/accounts
 curl http://47.118.29.46/api/health
 ```
 
 ## 4. 手动启动
-
-如果不使用 systemd，也可以手动启动本机服务：
 
 ```bash
 cd /opt/ai-ecommerce-assistant
@@ -131,7 +131,8 @@ sudo journalctl -u ai-operating-advisor -f
 
 ```bash
 cd /opt/ai-ecommerce-assistant
-git pull origin main
+git fetch --all
+git reset --hard origin/main
 sudo systemctl restart ai-operating-advisor
 sudo systemctl reload nginx
 ```
@@ -180,13 +181,16 @@ sudo systemctl reload nginx
 ## 9. 当前服务入口
 
 ```text
-/                                  前端首页
-/api/modules/dashboard              模块总览
-/api/modules/todo                   待办任务池
-/api/modules/task-reports/tasks/{id} 任务详情报告
-/api/accounts                       账号角色权限
-/api/health                         健康检查
-/docs                               FastAPI 接口文档
+/                                             前端首页
+/api/health                                  健康检查
+/api/modules/dashboard                       模块总览
+/api/modules/agents                          Agent 注册表
+/api/modules/feedback-flywheel               经验回流
+/api/modules/rag-memory                      RAG Memory
+/api/modules/todo                            待办任务池
+/api/modules/task-reports/tasks/{id}         任务详情报告
+/api/accounts                                账号角色权限
+/docs                                        FastAPI 接口文档
 ```
 
 ## 10. 安全检查清单
@@ -216,17 +220,3 @@ ss -lntp | grep 3000
 3000 不要对公网开放
 22 只允许你的固定公网 IP
 ```
-
-## 11. 注意事项
-
-当前仍然是 MVP / Mock 数据演示版本：
-
-```text
-不连接真实店铺后台
-不接真实企业 SSO
-不执行真实上架、改价、投放
-不触达真实客户
-不保存真实客户隐私数据
-```
-
-服务器部署只是让产品 Demo 可以在线访问，不代表已经接入真实商家系统。
