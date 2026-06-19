@@ -13,6 +13,7 @@ from src.services.module_agent_service import (
     run_cycle_agent,
     run_module_agent,
 )
+from src.services.task_agent_service import generate_task_candidates, task_playbook
 
 router = APIRouter()
 
@@ -24,6 +25,33 @@ def request_user_id(request: Request) -> str:
 @router.get("/agents")
 def agents() -> Dict[str, Any]:
     return get_agent_plan()
+
+
+@router.post("/agents/tasks/generate")
+def task_generation_agent(request: Request, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    source_module = body.get("sourceModule") or body.get("source_module") or body.get("module") or "product"
+    result = generate_task_candidates(
+        source_module=source_module,
+        entity_id=body.get("entityId") or body.get("entity_id"),
+        body=body,
+        user_id=request_user_id(request),
+    )
+    if not result.get("candidates"):
+        raise HTTPException(status_code=404, detail=result.get("message") or "task candidate not found")
+    return result
+
+
+@router.get("/agents/tasks/{task_id}/playbook")
+def task_playbook_agent(
+    request: Request,
+    task_id: str,
+    preferred_style: str | None = Query(default=None),
+) -> Dict[str, Any]:
+    result = task_playbook(task_id, user_id=request_user_id(request), preferred_style=preferred_style)
+    if not result:
+        raise HTTPException(status_code=404, detail="task playbook not found")
+    return result
 
 
 @router.get("/agents/cycle/{target}")
