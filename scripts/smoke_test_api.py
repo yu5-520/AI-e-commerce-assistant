@@ -1,11 +1,11 @@
-"""API smoke test for the current AI ERP operating advisor V4 product surface.
+"""API smoke test for the current AI ERP operating advisor V4.1 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
 process. It checks modular routes, account roles, task reports, V3 report
-alerts, V4 module agents, and the dispatch / accept / submit / review flow.
+alerts, V4 module agents, V4.1 RAG memory, and the dispatch / accept / submit / review flow.
 """
 
 from __future__ import annotations
@@ -54,6 +54,7 @@ def run_smoke_test() -> None:
     assert health["v3_report_alert_event"] is True, "V3 report alert runtime should be exposed"
     assert health["v4_module_agent_layer"] is True, "V4 module agent runtime should be exposed"
     assert health["agent_requires_human_confirmation"] is True, "Agent output must require human confirmation"
+    assert health["v410_rag_memory"] is True, "V4.1 RAG memory runtime should be exposed"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
@@ -121,7 +122,7 @@ def run_smoke_test() -> None:
 
     agents = assert_status("GET", "/api/modules/agents")
     assert_keys(agents, ["version", "agents", "boundary", "forbiddenActions"], "module agents")
-    assert agents["version"] == "4.0.0", "Agent registry should be V4"
+    assert str(agents["version"]).startswith("4."), "Agent registry should be V4"
     assert len(agents["agents"]) >= 7, "V4 should expose the seven module agents"
 
     product_agent = assert_status("GET", "/api/modules/agents/product/P001")
@@ -131,6 +132,14 @@ def run_smoke_test() -> None:
 
     cycle_agent = assert_status("GET", "/api/modules/agents/cycle/日报")
     assert_keys(cycle_agent, ["agentName", "summary", "humanDecision", "forbiddenActions"], "cycle agent")
+
+    rag_summary = assert_status("GET", "/api/modules/rag-memory")
+    assert_keys(rag_summary, ["version", "total", "approved", "pendingReview", "levels"], "RAG memory summary")
+    assert rag_summary["approved"] >= 1, "RAG memory should seed approved playbooks"
+
+    rag_search = assert_status("GET", "/api/modules/rag-memory/search?problem_type=low_roi_high_refund&category_id=home_living_goods")
+    assert_keys(rag_search, ["version", "items", "retrievalRule"], "RAG memory search")
+    assert rag_search["items"], "RAG memory should retrieve seeded low ROI playbook"
 
     todo_reset = assert_status("POST", "/api/modules/todo/reset")
     assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
@@ -145,6 +154,22 @@ def run_smoke_test() -> None:
 
     task_agent = assert_status("GET", f"/api/modules/agents/task/{task_id}?mode=breakdown")
     assert task_agent["taskDrafts"], "task breakdown agent should produce task drafts"
+
+    feedback_draft = assert_post_json(
+        f"/api/modules/rag-memory/feedback/tasks/{task_id}",
+        {
+            "operatorSubmission": "已先查售后，复查详情页承诺和客服话术。",
+            "managerReview": "通过，可沉淀为低 ROI 高退款处理案例。",
+            "beforeMetrics": {"roi": "0.9", "refundRate": "8.4%"},
+            "afterMetrics": {"roi": "1.4", "refundRate": "5.2%"},
+        },
+    )
+    assert feedback_draft["experienceCard"]["sourceTaskId"] == task_id, "feedback agent should produce an experience card"
+    assert feedback_draft["needsHumanReviewBeforeWrite"] is True, "RAG write should require human review"
+
+    case_id = feedback_draft["experienceCard"]["caseId"]
+    approved_case = assert_post_json(f"/api/modules/rag-memory/cases/{case_id}/approve", {"reason": "smoke test approval"})
+    assert approved_case["case"]["status"] == "approved", "owner / manager should approve experience card"
 
     assigned = assert_post_json(
         f"/api/modules/todo/{task_id}/assign",
