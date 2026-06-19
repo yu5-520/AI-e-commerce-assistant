@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from src.services.account_service import user_id_from_headers
+from src.services.creative_vertical_agent_service import create_creative_task, run_creative_vertical_agent
 from src.services.module_agent_service import (
     create_agent_task,
     get_agent_plan,
@@ -51,6 +52,43 @@ def task_playbook_agent(
     result = task_playbook(task_id, user_id=request_user_id(request), preferred_style=preferred_style)
     if not result:
         raise HTTPException(status_code=404, detail="task playbook not found")
+    return result
+
+
+@router.post("/agents/creative/{product_id}")
+def creative_vertical_agent(request: Request, product_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    result = run_creative_vertical_agent(product_id, body=body or {}, user_id=request_user_id(request))
+    if not result:
+        raise HTTPException(status_code=404, detail="creative vertical agent product not found")
+    return result
+
+
+@router.get("/agents/creative/{product_id}")
+def creative_vertical_agent_get(
+    request: Request,
+    product_id: str,
+    task_goal: str | None = Query(default=None),
+    platform: str | None = Query(default=None),
+    category_id: str | None = Query(default=None),
+) -> Dict[str, Any]:
+    body: Dict[str, Any] = {}
+    if task_goal:
+        body["taskGoal"] = task_goal
+    if platform:
+        body["platform"] = platform
+    if category_id:
+        body["categoryId"] = category_id
+    result = run_creative_vertical_agent(product_id, body=body, user_id=request_user_id(request))
+    if not result:
+        raise HTTPException(status_code=404, detail="creative vertical agent product not found")
+    return result
+
+
+@router.post("/agents/creative/{product_id}/tasks")
+def creative_vertical_task(request: Request, product_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    result = create_creative_task(product_id, body=body or {}, user_id=request_user_id(request))
+    if not result:
+        raise HTTPException(status_code=400, detail="cannot create task from creative vertical agent")
     return result
 
 
