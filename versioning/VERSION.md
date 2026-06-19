@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.3.0
+Current Version: v4.4.0
 
 ## Version History
 
+- v4.4.0: Added the feedback flywheel Agent with `src/services/feedback_flywheel_service.py`, `/api/modules/feedback-flywheel`, `/api/modules/feedback-flywheel/cycle/{target}`, `/api/modules/feedback-flywheel/cycle/{target}/draft`, automatic experience-card drafting on manager approval, feedback metrics, frontend client methods, V4.4 health flags, and smoke-test coverage.
 - v4.3.0: Added the vertical category creative Agent with `src/services/creative_vertical_agent_service.py`, `/api/modules/agents/creative/{product_id}`, `/api/modules/agents/creative/{product_id}/tasks`, category profiles, platform expression rules, competitor-signal transformation, title variants, main-image directions, selling-point ordering, A/B test plans, frontend client methods, V4.3 health flags, and smoke-test coverage.
 - v4.2.0: Added RAG-driven task generation and task playbook Agents with `src/services/task_agent_service.py`, `/api/modules/agents/tasks/generate`, `/api/modules/agents/tasks/{task_id}/playbook`, multi-style operating playbooks, confidence scoring, RAG references, frontend client methods, V4.2 health flags, and smoke-test coverage.
 - v4.1.0: Added the RAG-ready operation experience memory layer with structured experience cards, seed playbooks, negative cases, `/api/modules/rag-memory` endpoints, feedback-to-experience drafting, owner/manager approval and rejection, frontend API client methods, V4.1 health flags, and smoke-test coverage for memory search and feedback learning.
