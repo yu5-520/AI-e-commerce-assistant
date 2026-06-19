@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "4.0.0"
+API_VERSION = "4.1.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v4_module_agent_runtime",
+        "mode": "v410_rag_memory_flywheel",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -40,6 +40,15 @@ def health() -> Dict[str, Any]:
         "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions"],
         "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write"],
         "agent_requires_human_confirmation": True,
+        "v410_rag_memory": True,
+        "rag_memory_endpoint": "/api/modules/rag-memory",
+        "rag_memory_cases_endpoint": "/api/modules/rag-memory/cases",
+        "rag_memory_search_endpoint": "/api/modules/rag-memory/search",
+        "rag_memory_feedback_endpoint": "/api/modules/rag-memory/feedback/tasks/{task_id}",
+        "rag_memory_approve_endpoint": "/api/modules/rag-memory/cases/{case_id}/approve",
+        "rag_memory_reject_endpoint": "/api/modules/rag-memory/cases/{case_id}/reject",
+        "rag_memory_write_gate": ["manager_review", "quality_score", "metrics_change", "human_approval"],
+        "rag_memory_levels": ["L0 raw/rejected", "L1 draft", "L2 reviewed", "L3 high_quality", "L4 negative_case"],
         "frontend_agent_panel": "task-report",
         "frontend_duplicate_dynamic_loading_removed": True,
         "report_runtime_file": "/web_demo/modules/report/report-runtime.js",
