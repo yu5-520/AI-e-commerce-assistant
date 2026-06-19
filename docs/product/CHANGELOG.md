@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v4.1.0 - 2026-06-19
+
+### Product Decision
+- V4.1 开始把“运营经验飞轮”落到代码层：任务处理结果不再只停留在日志，而是先提炼为结构化经验卡。
+- Product truth: RAG 不是把日报、周报、任务日志原文塞进知识库，而是把复核过、有效果、有适用边界的处理方式沉淀成可召回经验。
+- 这让系统从“Agent 生成建议”继续升级为“任务处理 → 经验卡 → 复核入库 → 下轮召回”。
+
+### Changed
+- 新增 RAG-ready 经验库底座：`src/services/experience_memory_service.py`。
+- 新增 RAG Memory API：`/api/modules/rag-memory`、`/api/modules/rag-memory/cases`、`/api/modules/rag-memory/search`、`/api/modules/rag-memory/feedback/tasks/{task_id}`、`/api/modules/rag-memory/cases/{case_id}/approve`、`/api/modules/rag-memory/cases/{case_id}/reject`。
+- 新增种子 playbook 与失败案例，先支持标签过滤 + 质量分 + 简单关键词召回。
+- 新增任务反馈生成经验卡草案：运营提交、总管复核、前后指标变化会被整理为待复核经验卡。
+- 经验卡入库新增质量门槛：总管 / 老板复核、质量分、指标变化、适用条件与不适用条件。
+- 前端 API client 增加 RAG memory 调用方法，后续页面可以接入“回流候选 / 经验卡草案 / 复核入库”。
+- V4.1 继续复用 `/api/modules` 模块入口和 `/api/accounts` 账号权限边界。
+
+### Product Boundary
+- 当前 V4.1 还是轻量 RAG-ready 层，不接真实向量库；先跑通结构化经验卡、人工复核和可控召回。后续再接 embedding、rerank、LLM 生成和 Agent 评估面板。
+
 ## v4.0.0 - 2026-06-19
 
 ### Product Decision
