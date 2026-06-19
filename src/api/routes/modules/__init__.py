@@ -15,6 +15,7 @@ from src.api.routes.modules import aftersales
 from src.api.routes.modules import report
 from src.api.routes.modules import task_report
 from src.api.routes.modules import agents
+from src.api.routes.modules import rag_memory
 from src.api.routes.modules import todo
 from src.api.routes.modules import log
 
@@ -30,5 +31,6 @@ router.include_router(aftersales.router)
 router.include_router(report.router)
 router.include_router(task_report.router)
 router.include_router(agents.router)
+router.include_router(rag_memory.router)
 router.include_router(todo.router)
 router.include_router(log.router)
