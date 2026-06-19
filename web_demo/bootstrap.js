@@ -8,14 +8,19 @@
     "manager-retrospective",
     "manager-reports",
     "operating-unit",
+    "data-check",
+    "feedback-flywheel",
     "business-report",
     "accounts",
   ];
 
+  const FEEDBACK_ROLES = new Set(["owner", "manager"]);
+
   function visibleModulesFor(account) {
     const role = account?.currentUser?.roleId;
-    if (role === "manager") return MANAGER_NAV;
-    return account?.currentUser?.visibleModules || [];
+    const base = role === "manager" ? MANAGER_NAV : (account?.currentUser?.visibleModules || []);
+    if (FEEDBACK_ROLES.has(role)) return Array.from(new Set([...base, "feedback-flywheel"]));
+    return base;
   }
 
   const pages = [
@@ -45,6 +50,7 @@
     window.ServiceCenterPage,
     window.TodoPage,
     window.LogPage,
+    window.FeedbackFlywheelPage,
     window.TaskReportPage,
   ];
 
