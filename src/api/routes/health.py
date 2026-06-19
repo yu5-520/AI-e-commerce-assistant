@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "3.1.4"
+API_VERSION = "4.0.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v314_runtime_cleanup",
+        "mode": "v4_module_agent_runtime",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -26,9 +26,21 @@ def health() -> Dict[str, Any]:
             "auto_product_publish": False,
             "auto_price_change": False,
             "auto_inventory_change": False,
+            "auto_refund": False,
+            "auto_erp_crm_write": False,
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "v4_module_agent_layer": True,
+        "v4_agent_version": API_VERSION,
+        "agent_runtime_mode": "advisory_only",
+        "module_agent_endpoint": "/api/modules/agents/{module}/{entity_id}",
+        "module_agent_task_endpoint": "/api/modules/agents/{module}/{entity_id}/tasks",
+        "cycle_agent_endpoint": "/api/modules/agents/cycle/{target}",
+        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions"],
+        "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write"],
+        "agent_requires_human_confirmation": True,
+        "frontend_agent_panel": "task-report",
         "frontend_duplicate_dynamic_loading_removed": True,
         "report_runtime_file": "/web_demo/modules/report/report-runtime.js",
         "manager_modules_file": "/web_demo/modules/manager/manager-modules.js",
