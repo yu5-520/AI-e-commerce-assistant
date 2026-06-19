@@ -2,12 +2,10 @@
 
 ## 1. 当前 MVP 定义
 
-当前 v4.3.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层、RAG-ready 运营经验记忆层、RAG 驱动的任务生成与任务解析 Agent、标题主图垂直类目 Agent。
+当前 v4.4.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层、RAG-ready 运营经验记忆层、RAG 驱动的任务生成与任务解析 Agent、标题主图垂直类目 Agent、回流任务 Agent。
 
 ```text
 ERP / CRM Mock 数据
-↓
-数据校验与加载
 ↓
 经营单元识别
 ↓
@@ -29,12 +27,12 @@ V4.2 任务解析 Agent：稳健型 / 增长型 / 利润型打法
 ↓
 任务派发 / 运营提交 / 总管复核
 ↓
-日报 / 周报 / 日志记录与复盘
+V4.4 回流任务 Agent：日报 / 周报 / 经验卡草案 / 反馈指标
 ↓
-V4.1 经验卡草案 / 复核入库 / RAG 召回
+V4.1 经验卡复核入库 / RAG 召回
 ```
 
-当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4 Agent 只是模块增强层，不是最高控制位；V4.1 RAG 经验记忆只召回复核过的结构化经验；V4.2 任务 Agent 只生成任务候选和打法解释；V4.3 标题主图 Agent 只生成表达策略和测试计划，不直接发布商品或改动线上内容。
+当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4.4 回流任务 Agent 只生成经验卡草案和复盘摘要，不自动批准经验入库，不把日志原文直接写入正式 RAG。
 
 ## 2. 当前必须保留
 
@@ -73,7 +71,7 @@ GET  /api/modules/task-reports/tasks/{task_id}
 GET  /api/modules/task-reports/candidates/{module}/{entity_id}
 ```
 
-V4 / V4.2 / V4.3 Agent 接口：
+Agent / 回流接口：
 
 ```text
 GET  /api/modules/agents
@@ -85,9 +83,12 @@ GET  /api/modules/agents/tasks/{task_id}/playbook
 POST /api/modules/agents/creative/{product_id}
 GET  /api/modules/agents/creative/{product_id}
 POST /api/modules/agents/creative/{product_id}/tasks
+GET  /api/modules/feedback-flywheel
+GET  /api/modules/feedback-flywheel/cycle/{target}
+POST /api/modules/feedback-flywheel/cycle/{target}/draft
 ```
 
-V4.1 RAG Memory 接口：
+RAG Memory 接口：
 
 ```text
 GET  /api/modules/rag-memory
@@ -134,40 +135,12 @@ POST /api/system/clear-runtime-data?confirm=true
 
 ## 4. 当前验收标准
 
-本地脚本必须通过：
-
 ```bash
 python scripts/check_version_governance.py
 python scripts/smoke_test_runtime.py
 python scripts/smoke_test_api.py
-```
-
-服务必须可以启动：
-
-```bash
 uvicorn src.api.main:app --host 127.0.0.1 --port 3000
-```
-
-关键接口必须可访问：
-
-```bash
-curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:3000/api/modules/dashboard
-curl http://127.0.0.1:3000/api/modules/agents
-curl http://127.0.0.1:3000/api/modules/rag-memory
-curl http://127.0.0.1:3000/api/accounts
-```
-
-前端必须通过：
-
-```text
-web_demo/index.html
-↓
-web_demo/core/router.js
-↓
-web_demo/modules/*/page.js
-↓
-/api/modules/* + /api/accounts
+curl http://127.0.0.1:3000/api/modules/feedback-flywheel
 ```
 
 ## 5. 当前不做
@@ -186,7 +159,7 @@ web_demo/modules/*/page.js
 不自动处理退款
 不自动回写真实 ERP / CRM
 不把未复核原始日志直接写入 RAG
-不自动生成真实图片文件
+不自动批准经验卡入库
 不自动发布标题 / 主图到店铺后台
 不保存真实客户隐私
 ```
@@ -204,7 +177,7 @@ web_demo/modules/*/page.js
 ## 7. Agent / RAG 边界
 
 ```text
-Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿、任务候选、任务打法、标题主图方向和测试计划。
+Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿、任务候选、任务打法、标题主图方向、测试计划和经验卡草案。
 RAG 可以召回复核过的类目知识、问题打法、历史案例、创意模式和失败边界。
 Agent 不直接改价，不直接投放，不直接退款，不直接发布商品，不直接回写真实 ERP / CRM / 店铺数据。
 RAG 不直接吃原始日志；日志必须先提炼为经验卡并复核。
@@ -212,8 +185,4 @@ RAG 不直接吃原始日志；日志必须先提炼为经验卡并复核。
 
 ## 8. 当前结论
 
-当前阶段只追求：
-
-> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、任务生成、任务打法、标题主图垂直类目策略、详情报告、统一任务池、账号协同、派发提交复核、日志归档、经验卡草案和 RAG 召回闭环。
-
-任何新增页面、接口、Agent、脚本或文档，都必须先确认不会偏离当前可运行主线。
+> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、任务生成、任务打法、标题主图垂直类目策略、详情报告、统一任务池、账号协同、派发提交复核、日志归档、经验卡草案、反馈飞轮和 RAG 召回闭环。
