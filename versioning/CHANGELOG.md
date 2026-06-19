@@ -11,7 +11,7 @@
 ### Changed
 - FastAPI app version and frontend cache query strings are bumped to `4.0.0`.
 - Detail reports can now fetch module Agent advice without moving Agent into the highest control position.
-- Agent-created task drafts still enter the existing unified task pool and keep the existing human confirmation / lifecycle flow.
+- Agent-created task drafts still enter the existing unified task pool and keep the existing `/api/modules` task lifecycle and `/api/accounts` role boundary.
 
 ### Product Engineering Rule
 - Agent belongs inside modules as an advisory layer. It can write suggestions, summaries, task drafts, and decision points, but it must not directly change price, ads, refunds, publishing state, marketplace data, or ERP / CRM records.
