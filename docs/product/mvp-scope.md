@@ -2,7 +2,7 @@
 
 ## 1. 当前 MVP 定义
 
-当前 v4.2.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层、RAG-ready 运营经验记忆层、RAG 驱动的任务生成与任务解析 Agent。
+当前 v4.3.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层、RAG-ready 运营经验记忆层、RAG 驱动的任务生成与任务解析 Agent、标题主图垂直类目 Agent。
 
 ```text
 ERP / CRM Mock 数据
@@ -16,6 +16,8 @@ ERP / CRM Mock 数据
 候选预警与详情报告
 ↓
 V4.2 任务生成 Agent：规则 + RAG + 置信度 + 任务候选
+↓
+V4.3 标题主图 Agent：类目 Profile + 平台规则 + 竞品信号 + A/B 测试计划
 ↓
 V4 模块 Agent 分析 / 摘要 / 任务草案
 ↓
@@ -32,7 +34,7 @@ V4.2 任务解析 Agent：稳健型 / 增长型 / 利润型打法
 V4.1 经验卡草案 / 复核入库 / RAG 召回
 ```
 
-当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4 Agent 只是模块增强层，不是最高控制位；V4.1 RAG 经验记忆只召回复核过的结构化经验；V4.2 任务 Agent 只生成任务候选和打法解释，不直接执行经营动作。
+当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4 Agent 只是模块增强层，不是最高控制位；V4.1 RAG 经验记忆只召回复核过的结构化经验；V4.2 任务 Agent 只生成任务候选和打法解释；V4.3 标题主图 Agent 只生成表达策略和测试计划，不直接发布商品或改动线上内容。
 
 ## 2. 当前必须保留
 
@@ -71,7 +73,7 @@ GET  /api/modules/task-reports/tasks/{task_id}
 GET  /api/modules/task-reports/candidates/{module}/{entity_id}
 ```
 
-V4 / V4.2 Agent 接口：
+V4 / V4.2 / V4.3 Agent 接口：
 
 ```text
 GET  /api/modules/agents
@@ -80,6 +82,9 @@ POST /api/modules/agents/{module}/{entity_id}/tasks
 GET  /api/modules/agents/cycle/{target}
 POST /api/modules/agents/tasks/generate
 GET  /api/modules/agents/tasks/{task_id}/playbook
+POST /api/modules/agents/creative/{product_id}
+GET  /api/modules/agents/creative/{product_id}
+POST /api/modules/agents/creative/{product_id}/tasks
 ```
 
 V4.1 RAG Memory 接口：
@@ -181,6 +186,8 @@ web_demo/modules/*/page.js
 不自动处理退款
 不自动回写真实 ERP / CRM
 不把未复核原始日志直接写入 RAG
+不自动生成真实图片文件
+不自动发布标题 / 主图到店铺后台
 不保存真实客户隐私
 ```
 
@@ -189,7 +196,7 @@ web_demo/modules/*/page.js
 ```text
 老板账号：全局观察、下发任务、查看复核结果，复核经验入库。
 店群总管账号：拆分任务、派发运营、复核提交，复核经验卡。
-运营账号：只处理自己的任务并提交，可查看任务打法。
+运营账号：只处理自己的任务并提交，可查看任务打法和创意测试方案。
 数据 / 财务账号：看报表和财务数据，不直接处理运营任务。
 只读观察账号：只读看板、报告、日志。
 ```
@@ -197,8 +204,8 @@ web_demo/modules/*/page.js
 ## 7. Agent / RAG 边界
 
 ```text
-Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿、任务候选和任务打法。
-RAG 可以召回复核过的类目知识、问题打法、历史案例和失败边界。
+Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿、任务候选、任务打法、标题主图方向和测试计划。
+RAG 可以召回复核过的类目知识、问题打法、历史案例、创意模式和失败边界。
 Agent 不直接改价，不直接投放，不直接退款，不直接发布商品，不直接回写真实 ERP / CRM / 店铺数据。
 RAG 不直接吃原始日志；日志必须先提炼为经验卡并复核。
 ```
@@ -207,6 +214,6 @@ RAG 不直接吃原始日志；日志必须先提炼为经验卡并复核。
 
 当前阶段只追求：
 
-> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、任务生成、任务打法、详情报告、统一任务池、账号协同、派发提交复核、日志归档、经验卡草案和 RAG 召回闭环。
+> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、任务生成、任务打法、标题主图垂直类目策略、详情报告、统一任务池、账号协同、派发提交复核、日志归档、经验卡草案和 RAG 召回闭环。
 
 任何新增页面、接口、Agent、脚本或文档，都必须先确认不会偏离当前可运行主线。
