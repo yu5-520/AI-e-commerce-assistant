@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v4.2.0 - 2026-06-19
+
+### Product Decision
+- V4.2 把“任务生成”和“任务解析运营方式”正式拆成两个 Agent。
+- Product truth: 任务不是 Agent 凭空生成，而是由规则命中、模块数据、RAG 经验召回和人工确认共同决定。
+- 这让系统从“经验卡可召回”继续升级为“规则 + RAG 生成任务草案 → 多打法解析 → 人工选择执行”。
+
+### Changed
+- 新增自动解析生成任务 Agent：`POST /api/modules/agents/tasks/generate`。
+- 新增任务解析运营方式 Agent：`GET /api/modules/agents/tasks/{task_id}/playbook`。
+- 新增 `src/services/task_agent_service.py`，负责规则命中、问题类型判断、RAG 召回、置信度评分、任务草案和多打法 playbook。
+- 任务生成 Agent 输出：候选任务、问题类型、置信度、规则命中、证据要求、RAG 引用、人工确认点和禁止动作。
+- 任务解析 Agent 输出：稳健型、增长型、利润型打法，适用条件、不适用条件、风险、证据要求和验收标准。
+- 前端 API client 增加 `generateTaskCandidates` 与 `taskPlaybook` 方法。
+- V4.2 继续复用统一任务池、RAG memory 和 `/api/accounts` 权限边界。
+
+### Product Boundary
+- 当前 V4.2 仍是规则 + 结构化 RAG 的 Agent-ready 层，不自动执行真实经营动作。`autoCreate=true` 也只是把高置信任务草案加入系统任务池，不会改价、投放、退款、发布或回写 ERP / CRM。
+
 ## v4.1.0 - 2026-06-19
 
 ### Product Decision
@@ -73,59 +92,3 @@
 
 ### Product Boundary
 - Current detail page uses existing snapshot, alert, and rollback data. Production should add immutable audit pages, permission logs, and owner approval for high-impact rollback.
-
-## v3.1.2 - 2026-06-17
-
-### Product Decision
-- V3.1.2 completes the rollback product loop by defining what happens to tasks created by a wrong report version.
-- Product truth: 预警可以回滚，但已经生成的待办不能假装不存在。它们必须被转人工复核、归档保留审计，或明确保持当前状态。
-- This prevents silent task loss while keeping the system operable after wrong report uploads.
-
-### Changed
-- Data-version rollback now accepts a linked-task strategy.
-- Default strategy is `review`: active linked tasks become `待复核` with `数据回滚待复核` workflow status.
-- `archive` keeps audit history and removes linked active tasks from the active queue.
-- `keep` records rollback impact but preserves current task status.
-- Report page import records now include a linked-task strategy selector before rollback.
-- Rollback result now reports affected alerts and affected tasks.
-- Frontend dynamic assets now use `?v=3.1.2`; API and health versions are aligned.
-
-### Product Boundary
-- Current strategy is MVP-level task-state handling. Production should require manager / owner confirmation for high-impact rollback, task cancellation records, and immutable audit trails.
-
-## v3.1.1 - 2026-06-17
-
-### Product Decision
-- V3.1.1 solves the operational problem of uploading the wrong report.
-- Product truth: 上传报表是数据版本动作，不是不可逆动作。错误版本应该可以回滚，但必须留下审计记录。
-- This makes the report runtime safer before connecting real ERP / CRM adapters.
-
-### Changed
-- Added import-record management under `/api/data/import-records`.
-- Added data-version rollback under `/api/data/versions/{data_version}/rollback`.
-- Report page now shows import records, active alerts, generated tasks, rollback state, and rollback history.
-- Rolling back a version soft-removes that version's active alerts from dashboards and report warning lists.
-- Linked tasks and historical evidence are kept for audit instead of being deleted.
-- Added rollback UI styling and dynamic bootstrap loading.
-- Frontend assets can be refreshed with `?v=3.1.1`; API and health versions are aligned.
-
-### Product Boundary
-- Current rollback is soft rollback for alert events. Production should also support task cancellation rules, attachment retention, owner approval for rollback, and irreversible audit logs.
-
-## v3.1.0 - 2026-06-17
-
-### Product Decision
-- V3.1.0 makes inventory and customer-service handling independent operation centers.
-- Product truth: 库存和售后不能长期藏在报表页里；报表负责触发预警，经营中心负责日常处理和任务归属。
-- This gives the manager operation-module hub a complete six-module structure: 商品、竞品、上新、流量、库存、售后。
-
-### Changed
-- Added standalone inventory center API and page.
-- Added standalone customer-service center API and page.
-- Manager `经营模块` cards now open库存中心 and售后中心 instead of routing both into报表.
-- Inventory center shows SKU count, danger / warning / normal inventory states, handling rules, and store-scoped task creation.
-- Customer-service center shows abnormal / sensitive / normal service states, service归因 rules, and store-scoped task creation.
-- Frontend assets now use `?v=3.1.0`; API and health versions are aligned.
-
-### Product Boundary
-- Current V3.1.0 data still derives from mock product and report-alert data. Production should connect inventory and service centers to ERP / CRM adapters, full row-level evidence, and persistent task records.
