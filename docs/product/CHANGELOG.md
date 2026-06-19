@@ -12,6 +12,7 @@
 - 详情报告页新增 V4 Agent 板块，展示 Agent 总结、证据、建议、任务草案、人工确认点和禁止动作。
 - Agent 任务草案可以人工确认后加入统一任务池，继续走运营接收、提交、总管复核、日志归档链路。
 - 新增 Agent API：`/api/modules/agents`、`/api/modules/agents/{module}/{entity_id}`、`/api/modules/agents/{module}/{entity_id}/tasks`、`/api/modules/agents/cycle/{target}`。
+- V4 继续复用 `/api/modules` 模块入口和 `/api/accounts` 账号权限边界，Agent 不绕过角色、店铺和任务生命周期。
 - 前端资产版本提升到 `?v=4.0.0`，API 与健康检查版本对齐。
 
 ### Product Boundary
