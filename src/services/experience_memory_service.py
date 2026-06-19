@@ -163,9 +163,32 @@ def _row_to_case(row: Any) -> Dict[str, Any]:
     return payload
 
 
+def _protect_approved_case(existing: Dict[str, Any], incoming: Dict[str, Any], now: str) -> Dict[str, Any]:
+    protected = deepcopy(existing)
+    history = list(protected.get("feedbackDraftHistory") or [])
+    history.append(
+        {
+            "draftAt": now,
+            "sourceTaskId": incoming.get("sourceTaskId"),
+            "draftStatus": incoming.get("status"),
+            "draftLevel": incoming.get("level"),
+            "draftQualityScore": incoming.get("qualityScore"),
+            "draft": incoming,
+            "rule": "approved_case_protected_from_auto_draft_overwrite",
+        }
+    )
+    protected["latestFeedbackDraft"] = incoming
+    protected["feedbackDraftHistory"] = history[-10:]
+    protected["protectedApprovedCase"] = True
+    protected["protectionRule"] = "已批准经验卡不能被自动回流草案降级；如需修改，必须走人工复核状态变更。"
+    protected["updatedAt"] = now
+    return protected
+
+
 def upsert_case(card: Dict[str, Any]) -> Dict[str, Any]:
     ensure_memory_tables()
     item = deepcopy(card)
+    allow_status_overwrite = bool(item.pop("_allowStatusOverwrite", False))
     case_id = item.get("caseId") or make_id("CASE")
     item["caseId"] = case_id
     item.setdefault("caseType", "operation_solution")
@@ -183,6 +206,11 @@ def upsert_case(card: Dict[str, Any]) -> Dict[str, Any]:
     item.setdefault("createdAt", now)
     item["updatedAt"] = now
     with connect() as conn:
+        existing_row = conn.execute("SELECT * FROM rag_experience_cards WHERE case_id = ?", (case_id,)).fetchone()
+        if existing_row:
+            existing = _row_to_case(existing_row)
+            if existing.get("status") in APPROVED_STATUSES and item.get("status") not in APPROVED_STATUSES and not allow_status_overwrite:
+                item = _protect_approved_case(existing, item, now)
         conn.execute(
             """
             INSERT INTO rag_experience_cards(case_id, case_type, level, status, category_id, platform, store_id, problem_type, operator_style, quality_score, effective, source_task_id, payload, created_at, updated_at)
@@ -395,7 +423,7 @@ def build_experience_card_from_task(
     if score >= 0.85 and manager_review and _metric_changed(before_metrics, after_metrics):
         level = "L3"
     source_store_ids = task.get("storeIds") or task.get("visibleStoreIds") or ["global"]
-    card = {
+    return {
         "caseId": f"CASE-{task_id}",
         "caseType": "operation_solution",
         "level": level,
@@ -427,7 +455,6 @@ def build_experience_card_from_task(
         "successRateAfterReuse": None,
         "writeRule": "只有复核通过、动作清楚、结果指标明确的经验才进入正式 RAG 召回。",
     }
-    return card
 
 
 def draft_experience_from_task(
@@ -462,6 +489,7 @@ def draft_experience_from_task(
             "minQualityScore": 0.7,
             "currentQualityScore": saved.get("qualityScore"),
         },
+        "protection": "approved_case_preserved" if saved.get("protectedApprovedCase") else "pending_review_draft",
     }
 
 
@@ -475,6 +503,7 @@ def update_case_status(case_id: str, *, status: str, reviewer_id: str | None = N
     case["reviewerId"] = reviewer.get("id")
     case["reviewerName"] = reviewer.get("name")
     case["reviewReason"] = reason
+    case["_allowStatusOverwrite"] = True
     if status == "approved":
         case["effective"] = bool(case.get("qualityScore", 0) >= 0.7)
         if case.get("qualityScore", 0) >= 0.85:
@@ -514,4 +543,5 @@ def memory_summary() -> Dict[str, Any]:
             "L4": "失败案例 / 避坑边界",
         },
         "writeBoundary": "日报、周报和任务日志必须先提炼为经验卡，复核后才能进入正式 RAG 召回。",
+        "protectionRule": "已批准经验卡不会被自动 feedbackDraft 降级覆盖。",
     }
