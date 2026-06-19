@@ -1,11 +1,12 @@
-"""API smoke test for the current AI ERP operating advisor V4.2 product surface.
+"""API smoke test for the current AI ERP operating advisor V4.3 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
 process. It checks modular routes, account roles, task reports, V3 report
-alerts, V4 module agents, V4.1 RAG memory, V4.2 task agents, and the dispatch / accept / submit / review flow.
+alerts, V4 module agents, V4.1 RAG memory, V4.2 task agents, V4.3 creative vertical Agent,
+and the dispatch / accept / submit / review flow.
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ def run_smoke_test() -> None:
     assert health["v410_rag_memory"] is True, "V4.1 RAG memory runtime should be exposed"
     assert health["v420_task_generation_agent"] is True, "V4.2 task generation Agent should be exposed"
     assert health["task_playbook_agent"] is True, "V4.2 task playbook Agent should be exposed"
+    assert health["v430_creative_vertical_agent"] is True, "V4.3 creative vertical Agent should be exposed"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
@@ -151,6 +153,17 @@ def run_smoke_test() -> None:
     assert generated["candidates"], "task generation should return candidates"
     assert generated["candidates"][0]["ragReferences"], "task generation should cite RAG references"
     assert generated["candidates"][0]["taskDraft"]["taskType"] == "V4.2 RAG任务生成", "task draft should carry V4.2 identity"
+
+    creative = assert_post_json(
+        "/api/modules/agents/creative/P002",
+        {"taskGoal": "提升点击率并降低安装预期退款", "platform": "拼多多", "categoryId": "home_living_goods"},
+    )
+    assert_keys(creative, ["agentName", "categoryProfile", "platformRule", "titleVariants", "mainImageDirections", "sellingPointOrder", "testPlan", "taskDraft", "forbiddenActions"], "V4.3 creative vertical agent")
+    assert creative["agentName"] == "标题主图垂直类目 Agent", "creative agent should identify itself"
+    assert len(creative["titleVariants"]) >= 3, "creative agent should generate title variants"
+    assert len(creative["mainImageDirections"]) >= 3, "creative agent should generate main-image directions"
+    assert creative["taskDraft"]["taskType"] == "V4.3 垂直类目创意测试", "creative task draft should carry V4.3 identity"
+    assert "不直接发布商品" in creative["forbiddenActions"], "creative agent must not publish products"
 
     todo_reset = assert_status("POST", "/api/modules/todo/reset")
     assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
