@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.1.0
+Current Version: v4.2.0
 
 ## Version History
 
+- v4.2.0: Added RAG-driven task generation and task playbook Agents with `src/services/task_agent_service.py`, `/api/modules/agents/tasks/generate`, `/api/modules/agents/tasks/{task_id}/playbook`, multi-style operating playbooks, confidence scoring, RAG references, frontend client methods, V4.2 health flags, and smoke-test coverage.
 - v4.1.0: Added the RAG-ready operation experience memory layer with structured experience cards, seed playbooks, negative cases, `/api/modules/rag-memory` endpoints, feedback-to-experience drafting, owner/manager approval and rejection, frontend API client methods, V4.1 health flags, and smoke-test coverage for memory search and feedback learning.
 - v4.0.0: Added the V4 module Agent layer with advisory-only Agent service, `/api/modules/agents` endpoints, Agent task-draft creation, detail-report Agent panel, cycle report Agent, V4 health flags, frontend asset cache bump, and documentation. Agent outputs suggestions, summaries, task drafts, and human decision points, but does not directly execute price, ads, refund, publish, or ERP / CRM write actions.
 - v3.1.4: Fixed frontend / backend breakpoints by adding backend data-version detail payloads, aligning data-version service version to 3.1.4, replacing versioned report and manager module filenames with normalized runtime files, removing duplicate bootstrap dynamic loading, and deleting unused report / manager versioned runtime files.
