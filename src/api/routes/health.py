@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "4.2.0"
+API_VERSION = "4.3.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v420_rag_task_agents",
+        "mode": "v430_creative_vertical_agent",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -44,8 +44,14 @@ def health() -> Dict[str, Any]:
         "task_generation_sources": ["product", "traffic", "competitor", "listing", "report"],
         "task_generation_inputs": ["rules", "metrics", "structured_rag_memory", "module_snapshot"],
         "task_playbook_styles": ["稳健型", "增长型", "利润型"],
-        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence"],
-        "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write"],
+        "v430_creative_vertical_agent": True,
+        "creative_vertical_endpoint": "/api/modules/agents/creative/{product_id}",
+        "creative_vertical_task_endpoint": "/api/modules/agents/creative/{product_id}/tasks",
+        "creative_vertical_inputs": ["product_facts", "category_profile", "platform_rules", "competitor_signals", "rag_memory", "task_goal"],
+        "creative_vertical_outputs": ["titleVariants", "mainImageDirections", "sellingPointOrder", "testPlan", "taskDraft", "humanDecision"],
+        "creative_platform_rules": ["淘宝", "拼多多", "抖音小店", "通用"],
+        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence", "creativePlan"],
+        "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write", "exaggerated_claim"],
         "agent_requires_human_confirmation": True,
         "v410_rag_memory": True,
         "rag_memory_endpoint": "/api/modules/rag-memory",
