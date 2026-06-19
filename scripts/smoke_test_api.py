@@ -1,11 +1,11 @@
-"""API smoke test for the current AI ERP operating advisor V4.1 product surface.
+"""API smoke test for the current AI ERP operating advisor V4.2 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
 process. It checks modular routes, account roles, task reports, V3 report
-alerts, V4 module agents, V4.1 RAG memory, and the dispatch / accept / submit / review flow.
+alerts, V4 module agents, V4.1 RAG memory, V4.2 task agents, and the dispatch / accept / submit / review flow.
 """
 
 from __future__ import annotations
@@ -55,6 +55,8 @@ def run_smoke_test() -> None:
     assert health["v4_module_agent_layer"] is True, "V4 module agent runtime should be exposed"
     assert health["agent_requires_human_confirmation"] is True, "Agent output must require human confirmation"
     assert health["v410_rag_memory"] is True, "V4.1 RAG memory runtime should be exposed"
+    assert health["v420_task_generation_agent"] is True, "V4.2 task generation Agent should be exposed"
+    assert health["task_playbook_agent"] is True, "V4.2 task playbook Agent should be exposed"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
@@ -141,6 +143,15 @@ def run_smoke_test() -> None:
     assert_keys(rag_search, ["version", "items", "retrievalRule"], "RAG memory search")
     assert rag_search["items"], "RAG memory should retrieve seeded low ROI playbook"
 
+    generated = assert_post_json(
+        "/api/modules/agents/tasks/generate",
+        {"sourceModule": "traffic", "entityId": "T001", "autoCreate": False},
+    )
+    assert_keys(generated, ["agentName", "candidates", "retrieval", "boundary"], "V4.2 task generation")
+    assert generated["candidates"], "task generation should return candidates"
+    assert generated["candidates"][0]["ragReferences"], "task generation should cite RAG references"
+    assert generated["candidates"][0]["taskDraft"]["taskType"] == "V4.2 RAG任务生成", "task draft should carry V4.2 identity"
+
     todo_reset = assert_status("POST", "/api/modules/todo/reset")
     assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
 
@@ -148,6 +159,10 @@ def run_smoke_test() -> None:
     assert_keys(todo, ["tasks", "activeTasks", "scope"], "todo")
     assert todo["activeTasks"], "todo should expose active task pool"
     task_id = todo["activeTasks"][0]["id"]
+
+    playbook = assert_status("GET", f"/api/modules/agents/tasks/{task_id}/playbook")
+    assert_keys(playbook, ["agentName", "recommendedStyle", "strategies", "evidenceToSubmit", "ragReferences"], "V4.2 task playbook")
+    assert len(playbook["strategies"]) >= 3, "playbook should expose multiple operating styles"
 
     task_report = assert_status("GET", f"/api/modules/task-reports/tasks/{task_id}")
     assert_keys(task_report, ["reportType", "title", "evidence", "suggestedActions", "relatedTask"], "task report")
