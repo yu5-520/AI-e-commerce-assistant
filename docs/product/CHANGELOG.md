@@ -1,5 +1,22 @@
 # Product Changelog
 
+## v4.0.0 - 2026-06-19
+
+### Product Decision
+- V4 将 Agent 从“最高控制位”降到“模块增强层”。
+- Product truth: Agent 适合做分析、摘要、任务草案和人工确认点，不适合直接接管价格、投放、退款、上新发布或真实店铺数据。
+- 这让系统从“预警转任务”升级为“预警 → 模块 Agent 判断 → 人工确认 → 任务流转”。
+
+### Changed
+- 新增 V4 模块 Agent：竞品分析、上新标题 / 主图方案、售后归因、流量复盘、报表摘要、任务拆解、日报 / 周报。
+- 详情报告页新增 V4 Agent 板块，展示 Agent 总结、证据、建议、任务草案、人工确认点和禁止动作。
+- Agent 任务草案可以人工确认后加入统一任务池，继续走运营接收、提交、总管复核、日志归档链路。
+- 新增 Agent API：`/api/modules/agents`、`/api/modules/agents/{module}/{entity_id}`、`/api/modules/agents/{module}/{entity_id}/tasks`、`/api/modules/agents/cycle/{target}`。
+- 前端资产版本提升到 `?v=4.0.0`，API 与健康检查版本对齐。
+
+### Product Boundary
+- 当前 V4 是规则型 / Mock Agent-ready 层，用来先跑通产品结构。后续接 DeepSeek / OpenAI / RAG 时，只替换 Agent 推理内部，不改变任务池、人审边界和模块 API。
+
 ## v3.1.4 - 2026-06-17
 
 ### Product Decision
