@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from src.services.account_service import current_user, user_has_permission, user_id_from_headers
+from src.services.experience_memory_service import draft_experience_from_task
 from src.services.module_task_service import (
     accept_task,
     assign_task,
@@ -151,14 +152,27 @@ def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"review_tasks"})
     body = body or {}
+    decision = body.get("decision") or "approve"
+    note = body.get("note") or ""
     task = review_task(
         task_id,
-        decision=body.get("decision") or "approve",
-        note=body.get("note") or "",
+        decision=decision,
+        note=note,
         reviewer_id=body.get("reviewer_id") or body.get("reviewerId") or viewer_id,
     )
     if not task:
         raise HTTPException(status_code=400, detail="cannot review task")
+    if decision in {"approve", "approved", "pass", "通过"}:
+        memory_draft = draft_experience_from_task(
+            task_id,
+            operator_submission=task.get("submissionNote") or "运营提交内容待补充。",
+            manager_review=task.get("reviewNote") or note or "总管复核通过，待确认是否沉淀经验。",
+            before_metrics=body.get("beforeMetrics") or body.get("before_metrics") or task.get("beforeMetrics") or {},
+            after_metrics=body.get("afterMetrics") or body.get("after_metrics") or task.get("afterMetrics") or {},
+            user_id=viewer_id,
+        )
+        task["feedbackDraft"] = memory_draft
+        task["feedbackRule"] = "V4.4 自动生成经验卡草案，但仍需老板 / 总管在 RAG Memory 中确认入库。"
     return task
 
 
