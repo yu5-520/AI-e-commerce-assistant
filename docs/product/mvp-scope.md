@@ -2,7 +2,7 @@
 
 ## 1. 当前 MVP 定义
 
-当前 v4.0.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层。
+当前 v4.1.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层与 RAG-ready 运营经验记忆层。
 
 ```text
 ERP / CRM Mock 数据
@@ -24,9 +24,11 @@ V4 模块 Agent 分析 / 摘要 / 任务草案
 任务派发 / 运营提交 / 总管复核
 ↓
 日报 / 周报 / 日志记录与复盘
+↓
+V4.1 经验卡草案 / 复核入库 / RAG 召回
 ```
 
-当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4 Agent 只是模块增强层，不是最高控制位。
+当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4 Agent 只是模块增强层，不是最高控制位；V4.1 RAG 经验记忆只召回复核过的结构化经验，不直接执行经营动作。
 
 ## 2. 当前必须保留
 
@@ -72,6 +74,17 @@ GET  /api/modules/agents
 GET  /api/modules/agents/{module}/{entity_id}
 POST /api/modules/agents/{module}/{entity_id}/tasks
 GET  /api/modules/agents/cycle/{target}
+```
+
+V4.1 RAG Memory 接口：
+
+```text
+GET  /api/modules/rag-memory
+GET  /api/modules/rag-memory/cases
+GET  /api/modules/rag-memory/search
+POST /api/modules/rag-memory/feedback/tasks/{task_id}
+POST /api/modules/rag-memory/cases/{case_id}/approve
+POST /api/modules/rag-memory/cases/{case_id}/reject
 ```
 
 账号与任务协同接口：
@@ -130,6 +143,7 @@ uvicorn src.api.main:app --host 127.0.0.1 --port 3000
 curl http://127.0.0.1:3000/api/health
 curl http://127.0.0.1:3000/api/modules/dashboard
 curl http://127.0.0.1:3000/api/modules/agents
+curl http://127.0.0.1:3000/api/modules/rag-memory
 curl http://127.0.0.1:3000/api/accounts
 ```
 
@@ -160,30 +174,33 @@ web_demo/modules/*/page.js
 不自动群发客户
 不自动处理退款
 不自动回写真实 ERP / CRM
+不把未复核原始日志直接写入 RAG
 不保存真实客户隐私
 ```
 
 ## 6. 账号系统边界
 
 ```text
-老板账号：全局观察、下发任务、查看复核结果。
-店群总管账号：拆分任务、派发运营、复核提交。
+老板账号：全局观察、下发任务、查看复核结果，复核经验入库。
+店群总管账号：拆分任务、派发运营、复核提交，复核经验卡。
 运营账号：只处理自己的任务并提交。
 数据 / 财务账号：看报表和财务数据，不直接处理运营任务。
 只读观察账号：只读看板、报告、日志。
 ```
 
-## 7. Agent 边界
+## 7. Agent / RAG 边界
 
 ```text
 Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿。
+RAG 可以召回复核过的类目知识、问题打法、历史案例和失败边界。
 Agent 不直接改价，不直接投放，不直接退款，不直接发布商品，不直接回写真实 ERP / CRM / 店铺数据。
+RAG 不直接吃原始日志；日志必须先提炼为经验卡并复核。
 ```
 
 ## 8. 当前结论
 
 当前阶段只追求：
 
-> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、详情报告、统一任务池、账号协同、派发提交复核和日志归档闭环。
+> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、详情报告、统一任务池、账号协同、派发提交复核、日志归档、经验卡草案和 RAG 召回闭环。
 
 任何新增页面、接口、Agent、脚本或文档，都必须先确认不会偏离当前可运行主线。
