@@ -23,13 +23,15 @@ ERP / CRM Mock 数据
 ↓
 候选预警 / 详情报告
 ↓
+V4 模块 Agent 分析 / 摘要 / 任务草案
+↓
 统一任务池
 ↓
 账号角色 / 权限 / 店群范围
 ↓
 任务派发 / 运营提交 / 总管复核
 ↓
-日志归档
+日报 / 周报 / 日志归档
 ↓
 /api/modules/* + /api/accounts
 ↓
@@ -39,6 +41,7 @@ web_demo/index.html + web_demo/modules/*/page.js
 ## 当前原则
 
 - 先跑通企业协同的最小闭环，再接真实登录、企业租户、真实 ERP / CRM 接口。
+- V4 Agent 只做模块增强，不绕过 `/api/accounts` 权限边界，不直接执行经营动作。
 - 当前主线以 README、`src/api/main.py`、`/api/modules/*`、`/api/accounts` 和 smoke tests 为准。
 - 产品主链路、页面结构、API 边界或产品定位发生变化时，必须同步更新 `CHANGELOG.md`。
 - 结构级清理还必须同步更新 `versioning/CHANGELOG.md` 和 `versioning/VERSION.md`。
