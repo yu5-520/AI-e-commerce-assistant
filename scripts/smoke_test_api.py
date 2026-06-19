@@ -1,11 +1,11 @@
-"""API smoke test for the current AI ERP operating advisor v3 product surface.
+"""API smoke test for the current AI ERP operating advisor V4 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
 The script uses FastAPI TestClient, so it does not need a running uvicorn
 process. It checks modular routes, account roles, task reports, V3 report
-alerts, and the dispatch / accept / submit / review flow.
+alerts, V4 module agents, and the dispatch / accept / submit / review flow.
 """
 
 from __future__ import annotations
@@ -52,6 +52,8 @@ def run_smoke_test() -> None:
     assert health["api_entry"] == "/api/modules/*", "active API entry should be modular"
     assert health["account_entry"] == "/api/accounts", "account entry should be exposed"
     assert health["v3_report_alert_event"] is True, "V3 report alert runtime should be exposed"
+    assert health["v4_module_agent_layer"] is True, "V4 module agent runtime should be exposed"
+    assert health["agent_requires_human_confirmation"] is True, "Agent output must require human confirmation"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
@@ -117,6 +119,19 @@ def run_smoke_test() -> None:
     report = assert_status("GET", "/api/modules/report")
     assert_keys(report, ["reportGroups", "reportDetails", "v3", "recentAlerts"], "report module")
 
+    agents = assert_status("GET", "/api/modules/agents")
+    assert_keys(agents, ["version", "agents", "boundary", "forbiddenActions"], "module agents")
+    assert agents["version"] == "4.0.0", "Agent registry should be V4"
+    assert len(agents["agents"]) >= 7, "V4 should expose the seven module agents"
+
+    product_agent = assert_status("GET", "/api/modules/agents/product/P001")
+    assert_keys(product_agent, ["agentId", "summary", "evidence", "suggestions", "taskDrafts", "forbiddenActions"], "product agent")
+    assert product_agent["taskDrafts"], "product agent should produce task drafts"
+    assert "不直接改价" in product_agent["forbiddenActions"], "Agent must expose forbidden actions"
+
+    cycle_agent = assert_status("GET", "/api/modules/agents/cycle/日报")
+    assert_keys(cycle_agent, ["agentName", "summary", "humanDecision", "forbiddenActions"], "cycle agent")
+
     todo_reset = assert_status("POST", "/api/modules/todo/reset")
     assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
 
@@ -127,6 +142,9 @@ def run_smoke_test() -> None:
 
     task_report = assert_status("GET", f"/api/modules/task-reports/tasks/{task_id}")
     assert_keys(task_report, ["reportType", "title", "evidence", "suggestedActions", "relatedTask"], "task report")
+
+    task_agent = assert_status("GET", f"/api/modules/agents/task/{task_id}?mode=breakdown")
+    assert task_agent["taskDrafts"], "task breakdown agent should produce task drafts"
 
     assigned = assert_post_json(
         f"/api/modules/todo/{task_id}/assign",
