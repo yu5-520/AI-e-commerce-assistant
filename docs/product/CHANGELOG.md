@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v4.3.0 - 2026-06-19
+
+### Product Decision
+- V4.3 把“标题主图 Agent”从简单素材生成升级为“垂直类目表达策略 Agent”。
+- Product truth: 真正有价值的不是生成几句标题，而是结合类目、平台、人群、竞品差评和历史测试，生成可被运营验证的表达方案。
+- 这让系统从“任务生成 / 任务解析”继续升级为“类目表达策略 → 标题主图方案 → 小流量测试 → 任务回流”。
+
+### Changed
+- 新增标题主图垂直类目 Agent：`POST /api/modules/agents/creative/{product_id}`。
+- 新增创意方案入任务池接口：`POST /api/modules/agents/creative/{product_id}/tasks`。
+- 新增 `src/services/creative_vertical_agent_service.py`，负责商品事实、类目 Profile、平台表达规则、竞品信号、RAG 经验召回、标题方案、主图方向、卖点排序和 A/B 测试计划。
+- 创意 Agent 输出：`titleVariants`、`mainImageDirections`、`sellingPointOrder`、`testPlan`、`taskDraft`、`ragReferences`、`humanDecision`、`forbiddenActions`。
+- 内置平台表达规则：淘宝、拼多多、抖音小店、通用。
+- 前端 API client 增加 `creativeAgent` 与 `createCreativeTask` 方法。
+- V4.3 继续复用 RAG memory、统一任务池和 `/api/accounts` 权限边界。
+
+### Product Boundary
+- 当前 V4.3 只生成表达策略和测试计划，不生成真实图片文件，不自动发布商品，不改价、不投放、不回写 ERP / CRM / 店铺后台。创意方案若要进入执行，必须作为任务进入统一任务池并由人工确认。
+
 ## v4.2.0 - 2026-06-19
 
 ### Product Decision
@@ -74,21 +93,3 @@
 
 ### Product Boundary
 - Operation center and organization override files still carry old filename suffixes because they need a separate safe rename pass. They remain referenced and functional, but are now isolated as the remaining cleanup items.
-
-## v3.1.3 - 2026-06-17
-
-### Product Decision
-- V3.1.3 cleans the report page hierarchy so operators see the report workflow first and data-version management last.
-- Product truth: 导入记录是审计与回滚工具，不是报表页主流程。首页只展示摘要，详情页承载完整版本信息和回滚策略。
-- Operator accounts can view version records and details, but rollback remains a management-level action.
-
-### Changed
-- Import records are moved to the bottom of the report page.
-- Import records are compacted into list rows instead of large cards.
-- Added a data-version detail route for full version information, alert impact, linked tasks, rollback records, and rollback controls.
-- Rollback task strategy moved from the record list into the detail page.
-- Rollback buttons are hidden from operator accounts and backend rollback is restricted to owner / manager / finance roles.
-- Frontend assets now use `?v=3.1.3`; API and health versions are aligned.
-
-### Product Boundary
-- Current detail page uses existing snapshot, alert, and rollback data. Production should add immutable audit pages, permission logs, and owner approval for high-impact rollback.
