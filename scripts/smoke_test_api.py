@@ -1,4 +1,4 @@
-"""API smoke test for the current AI ERP operating advisor V4.3 product surface.
+"""API smoke test for the current AI ERP operating advisor V4.4 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
@@ -6,7 +6,7 @@ Run from repository root:
 The script uses FastAPI TestClient, so it does not need a running uvicorn
 process. It checks modular routes, account roles, task reports, V3 report
 alerts, V4 module agents, V4.1 RAG memory, V4.2 task agents, V4.3 creative vertical Agent,
-and the dispatch / accept / submit / review flow.
+V4.4 feedback flywheel, and the dispatch / accept / submit / review flow.
 """
 
 from __future__ import annotations
@@ -59,6 +59,8 @@ def run_smoke_test() -> None:
     assert health["v420_task_generation_agent"] is True, "V4.2 task generation Agent should be exposed"
     assert health["task_playbook_agent"] is True, "V4.2 task playbook Agent should be exposed"
     assert health["v430_creative_vertical_agent"] is True, "V4.3 creative vertical Agent should be exposed"
+    assert health["v440_feedback_flywheel"] is True, "V4.4 feedback flywheel should be exposed"
+    assert health["feedback_requires_human_approval"] is True, "feedback memory must require human approval"
 
     db_status = assert_status("GET", "/api/system/db-status")
     assert_keys(db_status, ["ok", "database", "tables", "summary"], "db_status")
@@ -127,7 +129,7 @@ def run_smoke_test() -> None:
     agents = assert_status("GET", "/api/modules/agents")
     assert_keys(agents, ["version", "agents", "boundary", "forbiddenActions"], "module agents")
     assert str(agents["version"]).startswith("4."), "Agent registry should be V4"
-    assert len(agents["agents"]) >= 7, "V4 should expose the seven module agents"
+    assert len(agents["agents"]) >= 10, "V4.4 should expose module, task, and creative agents"
 
     product_agent = assert_status("GET", "/api/modules/agents/product/P001")
     assert_keys(product_agent, ["agentId", "summary", "evidence", "suggestions", "taskDrafts", "forbiddenActions"], "product agent")
@@ -164,6 +166,14 @@ def run_smoke_test() -> None:
     assert len(creative["mainImageDirections"]) >= 3, "creative agent should generate main-image directions"
     assert creative["taskDraft"]["taskType"] == "V4.3 垂直类目创意测试", "creative task draft should carry V4.3 identity"
     assert "不直接发布商品" in creative["forbiddenActions"], "creative agent must not publish products"
+
+    feedback = assert_status("GET", "/api/modules/feedback-flywheel")
+    assert_keys(feedback, ["agentName", "chain", "memorySummary", "agentEvalMetrics", "learningCandidates", "forbiddenActions"], "V4.4 feedback flywheel")
+    assert feedback["agentName"] == "回流任务 Agent", "feedback flywheel should identify itself"
+    assert "不自动批准经验入库" in feedback["forbiddenActions"], "feedback flywheel must not approve memory automatically"
+
+    cycle_feedback = assert_status("GET", "/api/modules/feedback-flywheel/cycle/日报")
+    assert_keys(cycle_feedback, ["agentName", "summary", "draftSections", "learningCandidates", "forbiddenActions"], "V4.4 cycle feedback agent")
 
     todo_reset = assert_status("POST", "/api/modules/todo/reset")
     assert_keys(todo_reset, ["tasks", "logs"], "todo reset")
@@ -236,6 +246,14 @@ def run_smoke_test() -> None:
     )
     assert approved["status"] == "已完成", "approved task should complete"
     assert approved["workflowStatus"] == "已归档", "approved task should archive workflow"
+    assert approved.get("feedbackDraft", {}).get("needsHumanReviewBeforeWrite") is True, "manager approval should auto-create a pending memory draft"
+
+    feedback_after_review = assert_status("GET", "/api/modules/feedback-flywheel")
+    assert feedback_after_review["agentEvalMetrics"]["taskCompleted"] >= 1, "feedback metrics should see completed tasks"
+
+    cycle_draft = assert_post_json("/api/modules/feedback-flywheel/cycle/日报/draft", {"limit": 3})
+    assert_keys(cycle_draft, ["agentName", "draftedCount", "drafts", "needsHumanReviewBeforeWrite", "writeBoundary"], "V4.4 cycle memory draft")
+    assert cycle_draft["needsHumanReviewBeforeWrite"] is True, "cycle draft must require review before RAG write"
 
     active_after_review = assert_status("GET", "/api/modules/todo")
     assert task_id not in {task["id"] for task in active_after_review["activeTasks"]}, "approved task should leave active todo"
