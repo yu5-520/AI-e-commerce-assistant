@@ -1,5 +1,22 @@
 # Changelog
 
+## v4.4.0 - 2026-06-19
+
+### Added
+- Added `src/services/feedback_flywheel_service.py` for task-to-memory-to-RAG feedback analysis.
+- Added `src/api/routes/modules/feedback_flywheel.py` with `/api/modules/feedback-flywheel`, `/api/modules/feedback-flywheel/cycle/{target}`, and `/api/modules/feedback-flywheel/cycle/{target}/draft`.
+- Added automatic pending experience-card drafting after manager approval in the todo review flow.
+- Added feedback metrics: task completion, pending tasks, memory approval, learning candidates, and problem distribution.
+- Added frontend API client methods `feedbackFlywheel`, `feedbackCycle`, and `draftFeedbackCycle`.
+- Added V4.4 health flags and smoke-test coverage for feedback flywheel endpoints and manager-review memory drafting.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.4.0`.
+- Approved tasks now carry a `feedbackDraft` payload so the operator / manager action can flow into RAG Memory review instead of staying only in logs.
+
+### Product Engineering Rule
+- 回流任务 Agent 可以生成经验卡草案和复盘摘要，但不能自动批准入库。正式 RAG 召回只使用复核通过的结构化经验。
+
 ## v4.3.0 - 2026-06-19
 
 ### Added
@@ -78,32 +95,3 @@
 ### Changed
 - `data_version_service.py` now reports service version `3.1.4` instead of the stale rollback version.
 - Data-version detail no longer depends on the browser stitching `/api/data/import-records` and `/api/data/alerts?limit=200`.
-- `bootstrap.js` no longer dynamically loads page modules already loaded by `index.html`, reducing duplicate frontend loading.
-- `index.html` now loads normalized report / manager runtime filenames and bumps all static assets to `?v=3.1.4`.
-- Removed unused versioned report and manager runtime files.
-- FastAPI app version and health version are aligned to `3.1.4`.
-
-### Product Engineering Rule
-- Version numbers belong in cache query strings and version files, not long-lived module filenames. Detail pages should read one backend payload rather than assembling business facts from multiple frontend list calls.
-
-## v3.1.3 - 2026-06-17
-
-### Added
-- Added `data-version-detail` as a standalone data-version detail route.
-- Added compact import-record rows at the bottom of the report page.
-- Added permission-based rollback controls: owner / manager / finance can rollback; operator can only view records and details.
-
-### Changed
-- Report page hierarchy now prioritizes upload, preview, latest alerts, and report cards before data-version management.
-- Import records are moved from the top/middle of the report page to the bottom.
-- Import records no longer show rollback strategy directly in the list; rollback strategy moved into the version detail page.
-- Report rollback UI assets were bumped to `?v=3.1.3`.
-- FastAPI app version and health version are aligned to `3.1.3`.
-
-### Product Engineering Rule
-- Import records are audit tools, not the primary report workflow. The report homepage should stay operational, while rollback and strategy controls live in data-version detail.
-
-## v3.1.2 - 2026-06-17
-
-### Added
-- Added linked-task strategy handling to `src/services/data_version_service.py`.
