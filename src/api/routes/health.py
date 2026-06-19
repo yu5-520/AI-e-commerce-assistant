@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "4.1.0"
+API_VERSION = "4.2.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v410_rag_memory_flywheel",
+        "mode": "v420_rag_task_agents",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -37,7 +37,14 @@ def health() -> Dict[str, Any]:
         "module_agent_endpoint": "/api/modules/agents/{module}/{entity_id}",
         "module_agent_task_endpoint": "/api/modules/agents/{module}/{entity_id}/tasks",
         "cycle_agent_endpoint": "/api/modules/agents/cycle/{target}",
-        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions"],
+        "v420_task_generation_agent": True,
+        "task_generation_endpoint": "/api/modules/agents/tasks/generate",
+        "task_playbook_agent": True,
+        "task_playbook_endpoint": "/api/modules/agents/tasks/{task_id}/playbook",
+        "task_generation_sources": ["product", "traffic", "competitor", "listing", "report"],
+        "task_generation_inputs": ["rules", "metrics", "structured_rag_memory", "module_snapshot"],
+        "task_playbook_styles": ["稳健型", "增长型", "利润型"],
+        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence"],
         "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write"],
         "agent_requires_human_confirmation": True,
         "v410_rag_memory": True,
