@@ -2,7 +2,7 @@
 
 ## 1. 当前 MVP 定义
 
-当前 v2.0.0 MVP 是一个 AI ERP 经营单元协同工作台。
+当前 v4.0.0 MVP 是一个 AI ERP 经营单元协同工作台，并新增模块 Agent 增强层。
 
 ```text
 ERP / CRM Mock 数据
@@ -15,16 +15,18 @@ ERP / CRM Mock 数据
 ↓
 候选预警与详情报告
 ↓
+V4 模块 Agent 分析 / 摘要 / 任务草案
+↓
 统一任务池
 ↓
 账号角色 / 权限 / 店群范围
 ↓
 任务派发 / 运营提交 / 总管复核
 ↓
-日志记录与复盘
+日报 / 周报 / 日志记录与复盘
 ```
 
-当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。
+当前产品不是完整 ERP、完整 CRM、真实登录系统，也不是自动运营 Agent。V4 Agent 只是模块增强层，不是最高控制位。
 
 ## 2. 当前必须保留
 
@@ -61,6 +63,15 @@ GET  /api/modules/todo
 GET  /api/modules/log
 GET  /api/modules/task-reports/tasks/{task_id}
 GET  /api/modules/task-reports/candidates/{module}/{entity_id}
+```
+
+V4 Agent 接口：
+
+```text
+GET  /api/modules/agents
+GET  /api/modules/agents/{module}/{entity_id}
+POST /api/modules/agents/{module}/{entity_id}/tasks
+GET  /api/modules/agents/cycle/{target}
 ```
 
 账号与任务协同接口：
@@ -118,6 +129,7 @@ uvicorn src.api.main:app --host 127.0.0.1 --port 3000
 ```bash
 curl http://127.0.0.1:3000/api/health
 curl http://127.0.0.1:3000/api/modules/dashboard
+curl http://127.0.0.1:3000/api/modules/agents
 curl http://127.0.0.1:3000/api/accounts
 ```
 
@@ -147,6 +159,7 @@ web_demo/modules/*/page.js
 不自动投放广告
 不自动群发客户
 不自动处理退款
+不自动回写真实 ERP / CRM
 不保存真实客户隐私
 ```
 
@@ -160,10 +173,17 @@ web_demo/modules/*/page.js
 只读观察账号：只读看板、报告、日志。
 ```
 
-## 7. 当前结论
+## 7. Agent 边界
+
+```text
+Agent 可以生成建议、草案、任务拆解、报表摘要、日报 / 周报初稿。
+Agent 不直接改价，不直接投放，不直接退款，不直接发布商品，不直接回写真实 ERP / CRM / 店铺数据。
+```
+
+## 8. 当前结论
 
 当前阶段只追求：
 
-> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、详情报告、统一任务池、账号协同、派发提交复核和日志归档闭环。
+> 用 Mock ERP / CRM 数据跑通经营单元识别、候选预警、模块 Agent 建议、详情报告、统一任务池、账号协同、派发提交复核和日志归档闭环。
 
 任何新增页面、接口、Agent、脚本或文档，都必须先确认不会偏离当前可运行主线。
