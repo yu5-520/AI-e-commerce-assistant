@@ -1,5 +1,22 @@
 # Changelog
 
+## v4.1.0 - 2026-06-19
+
+### Added
+- Added `src/services/experience_memory_service.py` as the structured operation experience memory layer.
+- Added `src/api/routes/modules/rag_memory.py` with `/api/modules/rag-memory`, `/api/modules/rag-memory/cases`, `/api/modules/rag-memory/search`, `/api/modules/rag-memory/feedback/tasks/{task_id}`, `/api/modules/rag-memory/cases/{case_id}/approve`, and `/api/modules/rag-memory/cases/{case_id}/reject`.
+- Added seed playbooks and negative cases so V4 Agent workflows can retrieve approved operating experience before real RAG embeddings are connected.
+- Added frontend API client methods for RAG memory summary, case listing, search, feedback drafting, approval, and rejection.
+- Added V4.1 smoke-test coverage for memory search, task feedback-to-experience drafting, and owner / manager experience approval.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.1.0`.
+- `/api/modules` now includes the RAG memory routes while preserving `/api/accounts` role boundaries.
+- Feedback from task handling can now become a pending experience card instead of being written directly into RAG.
+
+### Product Engineering Rule
+- RAG memory is not raw log storage. 日报、周报和任务日志必须先被提炼成经验卡，并经过质量分与人工复核，才能进入正式召回。
+
 ## v4.0.0 - 2026-06-19
 
 ### Added
