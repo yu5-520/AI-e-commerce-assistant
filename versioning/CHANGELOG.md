@@ -1,5 +1,21 @@
 # Changelog
 
+## v4.0.0 - 2026-06-19
+
+### Added
+- Added `src/services/module_agent_service.py` as the V4 advisory-only module Agent layer.
+- Added `src/api/routes/modules/agents.py` with `/api/modules/agents`, `/api/modules/agents/{module}/{entity_id}`, `/api/modules/agents/{module}/{entity_id}/tasks`, and `/api/modules/agents/cycle/{target}`.
+- Added V4 Agent panel to the independent detail report page so product / competitor / listing / traffic / report / task details can show Agent analysis and task drafts.
+- Added V4 health flags and `docs/V4_MODULE_AGENT_RUNTIME.md`.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.0.0`.
+- Detail reports can now fetch module Agent advice without moving Agent into the highest control position.
+- Agent-created task drafts still enter the existing unified task pool and keep the existing human confirmation / lifecycle flow.
+
+### Product Engineering Rule
+- Agent belongs inside modules as an advisory layer. It can write suggestions, summaries, task drafts, and decision points, but it must not directly change price, ads, refunds, publishing state, marketplace data, or ERP / CRM records.
+
 ## v3.1.4 - 2026-06-17
 
 ### Added
