@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v4.4.0 - 2026-06-19
+
+### Product Decision
+- V4.4 把“回流任务 Agent”从理念落到产品闭环：任务处理结果不再只进入日志，而是进入经验卡草案、日报 / 周报回流和 RAG 复核入库流程。
+- Product truth: 回流不是把原始日志塞进 RAG，而是把运营动作、复核结论、结果指标和适用边界整理成结构化经验，再由老板 / 总管确认。
+- 这让系统从“任务生成 / 任务解析 / 创意测试”继续升级为“任务处理 → 复盘回流 → 经验卡 → RAG 召回 → 反哺下一轮 Agent”。
+
+### Changed
+- 新增回流任务 Agent：`GET /api/modules/feedback-flywheel`。
+- 新增日报 / 周报回流接口：`GET /api/modules/feedback-flywheel/cycle/{target}`。
+- 新增周期经验卡草案接口：`POST /api/modules/feedback-flywheel/cycle/{target}/draft`。
+- 新增 `src/services/feedback_flywheel_service.py`，负责学习候选、周期摘要、经验草案、反馈指标和 RAG 召回上下文。
+- 总管复核通过任务后，待办接口会自动生成 `feedbackDraft` 经验卡草案，但仍需在 RAG Memory 中人工复核入库。
+- 前端 API client 增加 `feedbackFlywheel`、`feedbackCycle`、`draftFeedbackCycle` 方法。
+- V4.4 继续复用 RAG memory、统一任务池和 `/api/accounts` 权限边界。
+
+### Product Boundary
+- 当前 V4.4 不自动批准经验入库，不把日报 / 周报 / 日志原文直接写进正式 RAG，不自动执行经营动作。经验卡必须经过复核通过后，才可用于正式召回。
+
 ## v4.3.0 - 2026-06-19
 
 ### Product Decision
@@ -74,22 +93,3 @@
 
 ### Product Boundary
 - 当前 V4 是规则型 / Mock Agent-ready 层，用来先跑通产品结构。后续接 DeepSeek / OpenAI / RAG 时，只替换 Agent 推理内部，不改变任务池、人审边界和模块 API。
-
-## v3.1.4 - 2026-06-17
-
-### Product Decision
-- V3.1.4 stops adding new features and repairs the current frontend / backend breakpoints.
-- Product truth: once a feature starts depending on multiple frontend list calls, versioned file names, and duplicate loaders, the product becomes harder to operate and debug.
-- Data-version detail should be a backend business payload. Frontend should display it, not reassemble it from unrelated lists.
-
-### Changed
-- Added backend data-version detail payload under `/api/data/versions/{data_version}/detail`.
-- Report detail page now reads one detail payload containing the record, alerts, linked tasks, rollback, summary, and permissions.
-- Data-version service version is aligned to `3.1.4`.
-- Replaced `report-v311.js` with `report-runtime.js` and `manager-modules-v305.js` with `manager-modules.js`.
-- Removed duplicate bootstrap dynamic loading; `index.html` is now the page module loading authority.
-- Deleted unused old report and manager versioned runtime files.
-- Frontend assets now use `?v=3.1.4`; API and health versions are aligned.
-
-### Product Boundary
-- Operation center and organization override files still carry old filename suffixes because they need a separate safe rename pass. They remain referenced and functional, but are now isolated as the remaining cleanup items.
