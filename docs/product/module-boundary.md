@@ -2,12 +2,12 @@
 
 ## 1. 当前边界目标
 
-本文件只描述 v4.0.0 当前 active trunk 的模块边界。
+本文件只描述 v4.1.0 当前 active trunk 的模块边界。
 
 当前产品是：
 
 ```text
-AI ERP 经营单元协同工作台 + 模块 Agent 增强层
+AI ERP 经营单元协同工作台 + 模块 Agent 增强层 + RAG-ready 运营经验记忆层
 ```
 
 当前产品不是：
@@ -18,9 +18,10 @@ AI ERP 经营单元协同工作台 + 模块 Agent 增强层
 真实企业 SSO
 自动运营 Agent
 真实店铺后台操作系统
+无审核知识库写入系统
 ```
 
-V4 的 Agent 不处在最高控制位，只处在模块判断层。
+V4 的 Agent 不处在最高控制位，只处在模块判断层。V4.1 的 RAG 记忆不直接吃原始日志，只召回复核过的结构化经验卡。
 
 ## 2. API 入口边界
 
@@ -51,21 +52,27 @@ src.api.main:app
 ### 负责
 
 ```text
-/api/modules/dashboard                         总览
-/api/modules/operating-unit                    经营单元
-/api/modules/product                           商品经营列表
-/api/modules/competitor                        竞品观察列表
-/api/modules/listing                           上新测试台
-/api/modules/traffic                           流量测试台
-/api/modules/report                            ERP / CRM 报表
-/api/modules/todo                              统一任务池
-/api/modules/log                               日志
-/api/modules/task-reports/tasks/{task_id}      任务详情报告
-/api/modules/task-reports/candidates/{m}/{id}  候选预警报告
-/api/modules/agents                            V4 Agent 注册表
-/api/modules/agents/{module}/{entity_id}       V4 模块 Agent 建议
-/api/modules/agents/{module}/{entity_id}/tasks V4 Agent 草案入池
-/api/modules/agents/cycle/{target}             V4 日报 / 周报 Agent
+/api/modules/dashboard                             总览
+/api/modules/operating-unit                        经营单元
+/api/modules/product                               商品经营列表
+/api/modules/competitor                            竞品观察列表
+/api/modules/listing                               上新测试台
+/api/modules/traffic                               流量测试台
+/api/modules/report                                ERP / CRM 报表
+/api/modules/todo                                  统一任务池
+/api/modules/log                                   日志
+/api/modules/task-reports/tasks/{task_id}          任务详情报告
+/api/modules/task-reports/candidates/{m}/{id}      候选预警报告
+/api/modules/agents                                V4 Agent 注册表
+/api/modules/agents/{module}/{entity_id}           V4 模块 Agent 建议
+/api/modules/agents/{module}/{entity_id}/tasks     V4 Agent 草案入池
+/api/modules/agents/cycle/{target}                 V4 日报 / 周报 Agent
+/api/modules/rag-memory                            V4.1 经验记忆摘要
+/api/modules/rag-memory/cases                      V4.1 经验卡列表
+/api/modules/rag-memory/search                     V4.1 经验召回
+/api/modules/rag-memory/feedback/tasks/{task_id}   V4.1 任务回流经验卡草案
+/api/modules/rag-memory/cases/{case_id}/approve    V4.1 经验卡复核通过
+/api/modules/rag-memory/cases/{case_id}/reject     V4.1 经验卡复核拒绝
 ```
 
 ### 不负责
@@ -79,6 +86,7 @@ src.api.main:app
 不直接触达客户
 不直接退款
 不直接回写真实 ERP / CRM
+不把未复核原始日志直接写入 RAG
 ```
 
 ## 4. Accounts API 边界
@@ -112,6 +120,7 @@ src.api.main:app
 ```text
 候选预警进入统一任务池
 Agent 任务草案经人工确认后进入统一任务池
+任务完成或复核后可生成经验卡草案
 老板 / 总管可以派发任务
 运营可以提交处理结果
 店群总管可以复核通过或退回
@@ -129,6 +138,8 @@ Agent 任务草案经人工确认后进入统一任务池
 → 已提交 / 待复核
 → 已通过 / 已退回
 → 已归档
+→ 经验卡草案
+→ 经验卡复核通过 / 拒绝
 ```
 
 ### 不负责
@@ -137,6 +148,7 @@ Agent 任务草案经人工确认后进入统一任务池
 不替运营真实修改商品、库存、价格、投放或客服话术
 不跳过人工复核
 不把报告建议或 Agent 建议直接变成店铺动作
+不把运营主观说法直接变成可召回经验
 ```
 
 ## 6. V4 Agent 边界
@@ -165,7 +177,30 @@ Agent 任务草案经人工确认后进入统一任务池
 不绕过任务生命周期
 ```
 
-## 7. Workflow 边界
+## 7. V4.1 RAG Memory 边界
+
+### 负责
+
+```text
+存储结构化经验卡
+维护经验卡等级 L0-L4
+按类目、平台、店铺、问题类型、运营风格、质量分检索
+把任务处理结果提炼成经验卡草案
+允许老板 / 总管复核经验卡
+召回复核通过的 playbook / 历史案例 / 失败案例
+```
+
+### 不负责
+
+```text
+不直接连接真实向量库
+不自动批准经验入库
+不把日报 / 周报 / 日志原文直接用于正式召回
+不把失败案例当默认建议
+不替代 Agent / 任务池 / 人工复核
+```
+
+## 8. Workflow 边界
 
 ### 负责
 
@@ -188,7 +223,7 @@ Agent 任务草案经人工确认后进入统一任务池
 不产生真实经营动作
 ```
 
-## 8. Frontend 边界
+## 9. Frontend 边界
 
 ### 负责
 
@@ -198,7 +233,7 @@ web_demo/core/router.js
 web_demo/core/api-client.js
 web_demo/stores/task-store.js
 web_demo/modules/*/page.js
-展示账号、经营单元、商品、竞品、上新、流量、报表、待办、日志、详情报告和 V4 Agent 建议
+展示账号、经营单元、商品、竞品、上新、流量、报表、待办、日志、详情报告、V4 Agent 建议和 V4.1 RAG memory 数据
 调用 /api/modules/* 与 /api/accounts
 ```
 
@@ -211,7 +246,7 @@ web_demo/modules/*/page.js
 不把当前 Mock 协同页包装成完整企业后台
 ```
 
-## 9. Scripts / CI 边界
+## 10. Scripts / CI 边界
 
 ### 负责
 
@@ -233,11 +268,12 @@ scripts/deploy_server.sh              服务器部署
 不检查旧 demo route
 ```
 
-## 10. 当前原则
+## 11. 当前原则
 
 ```text
 AI 可以建议，但不能越权执行。
 Agent 可以增强模块判断，但不能取代人工确认。
+RAG 可以召回复核经验，但不能污染知识库。
 账号可以派发任务，但不能绕过经营责任。
 运营可以提交结果，但需要总管复核后归档。
 报告可以辅助经营判断，但不能替用户承担经营责任。
