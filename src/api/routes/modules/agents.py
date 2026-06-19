@@ -23,9 +23,30 @@ def request_user_id(request: Request) -> str:
     return user_id_from_headers(request.headers)
 
 
+def v43_agent_plan() -> Dict[str, Any]:
+    plan = get_agent_plan()
+    plan["version"] = "4.3.0"
+    plan["mode"] = "module_task_creative_agent_layer"
+    plan["principle"] = "Agent 不放在最高控制位；模块 Agent 做判断，任务 Agent 做任务候选，创意 Agent 做类目表达策略。"
+    existing_ids = {item.get("id") for item in plan.get("agents", [])}
+    additions = [
+        {"id": "task-generation", "name": "自动解析生成任务 Agent", "module": "task", "output": "规则命中、RAG 引用、置信度、任务候选"},
+        {"id": "task-playbook", "name": "任务解析运营方式 Agent", "module": "task", "output": "稳健型 / 增长型 / 利润型打法、证据要求、验收标准"},
+        {"id": "creative-vertical", "name": "标题主图垂直类目 Agent", "module": "product", "output": "标题方案、主图方向、卖点排序、A/B 测试计划"},
+    ]
+    plan["agents"] = [*(plan.get("agents") or []), *[item for item in additions if item["id"] not in existing_ids]]
+    plan["v43Endpoints"] = {
+        "taskGeneration": "/api/modules/agents/tasks/generate",
+        "taskPlaybook": "/api/modules/agents/tasks/{task_id}/playbook",
+        "creativeVertical": "/api/modules/agents/creative/{product_id}",
+        "creativeVerticalTask": "/api/modules/agents/creative/{product_id}/tasks",
+    }
+    return plan
+
+
 @router.get("/agents")
 def agents() -> Dict[str, Any]:
-    return get_agent_plan()
+    return v43_agent_plan()
 
 
 @router.post("/agents/tasks/generate")
