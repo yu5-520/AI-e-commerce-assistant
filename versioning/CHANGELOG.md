@@ -1,5 +1,23 @@
 # Changelog
 
+## v4.3.0 - 2026-06-19
+
+### Added
+- Added `src/services/creative_vertical_agent_service.py` for vertical category title / main-image / selling-point planning.
+- Added `POST /api/modules/agents/creative/{product_id}` and `GET /api/modules/agents/creative/{product_id}` for V4.3 creative strategy generation.
+- Added `POST /api/modules/agents/creative/{product_id}/tasks` so a selected creative plan can become a human-reviewed test task in the unified task pool.
+- Added platform expression rules for 淘宝、拼多多、抖音小店、通用.
+- Added creative outputs: title variants, main-image directions, selling-point order, A/B test plan, creative task draft, RAG references, human decisions, and forbidden actions.
+- Added frontend API client methods `creativeAgent` and `createCreativeTask`.
+- Added V4.3 health flags and smoke-test coverage for the creative vertical Agent.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.3.0`.
+- Agent outputs now cover product expression strategy in addition to task generation, task playbooks, module analysis, and RAG memory.
+
+### Product Engineering Rule
+- 标题主图 Agent 不是“素材生成器”，而是类目表达策略生成器。它可以生成标题、主图方向、卖点排序和测试计划，但不能直接发布商品、改价、投放或回写店铺后台。
+
 ## v4.2.0 - 2026-06-19
 
 ### Added
@@ -89,9 +107,3 @@
 
 ### Added
 - Added linked-task strategy handling to `src/services/data_version_service.py`.
-- Added `taskStrategy` support to `/api/data/versions/{data_version}/rollback`.
-- Added report-page strategy selector for rollback-linked tasks.
-- Added V3.1.2 health flags for `review`, `archive`, and `keep` rollback strategies.
-
-### Changed
-- Data-version rollback now handles linked tasks instead of only rolling back alert events.
