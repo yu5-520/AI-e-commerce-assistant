@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v3.1.4
+Current Version: v4.0.0
 
 ## Version History
 
+- v4.0.0: Added the V4 module Agent layer with advisory-only Agent service, `/api/modules/agents` endpoints, Agent task-draft creation, detail-report Agent panel, cycle report Agent, V4 health flags, frontend asset cache bump, and documentation. Agent outputs suggestions, summaries, task drafts, and human decision points, but does not directly execute price, ads, refund, publish, or ERP / CRM write actions.
 - v3.1.4: Fixed frontend / backend breakpoints by adding backend data-version detail payloads, aligning data-version service version to 3.1.4, replacing versioned report and manager module filenames with normalized runtime files, removing duplicate bootstrap dynamic loading, and deleting unused report / manager versioned runtime files.
 - v3.1.3: Reworked the report page hierarchy by moving import records to the bottom, compacting import records into list rows, adding a data-version detail route, moving rollback strategy into the detail page, and hiding rollback from operator accounts.
 - v3.1.2: Added rollback linked-task strategies so report version rollback can move related tasks to manual review, archive them with audit, or keep current status; added strategy selector on the report page.
