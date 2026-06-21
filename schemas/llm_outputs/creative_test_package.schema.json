@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreativeTestPackageEnrichment",
+  "type": "object",
+  "required": ["llmSummary", "titleVariants", "mainImageDirections", "riskCheck"],
+  "properties": {
+    "llmSummary": {"type": "string"},
+    "titleVariants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["angle", "title"],
+        "properties": {
+          "angle": {"type": "string"},
+          "title": {"type": "string"}
+        }
+      }
+    },
+    "mainImageDirections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["direction", "firstImageText", "layout"],
+        "properties": {
+          "direction": {"type": "string"},
+          "firstImageText": {"type": "string"},
+          "layout": {"type": "string"}
+        }
+      }
+    },
+    "riskCheck": {"type": "array", "items": {"type": "string"}}
+  }
+}
