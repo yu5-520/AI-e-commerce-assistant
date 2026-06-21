@@ -1,10 +1,10 @@
-"""V3.0.6 report schema preview and field mapping service.
+"""V5 report schema preview and field mapping service.
 
 Upload flow:
     rows -> field mapping -> import preview -> confirm import -> alert runtime
 
-V3.0.6 adds store ownership mapping so imported rows can bind to store-scoped
-alerts, task assignees, and operator-visible report slices.
+V5 also persists the full normalized imported rows so ModuleProjection can update
+module content from the complete DataVersion instead of only sample rows.
 """
 
 from __future__ import annotations
@@ -13,9 +13,10 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List
 
+from src.services.import_row_store_service import save_import_rows
 from src.services.report_alert_service import import_report_dataset
 
-SCHEMA_VERSION = "3.0.6"
+SCHEMA_VERSION = "5.0.0"
 
 FIELD_LABELS = {
     "product_id": "商品ID",
@@ -187,6 +188,8 @@ def confirm_report_import(dataset_name: str, rows: List[Dict[str, Any]] | None, 
     if not preview["canImport"]:
         raise ValueError(preview["message"])
     result = import_report_dataset(preview["datasetName"], rows=preview["normalizedRows"], auto_create_tasks=auto_create_tasks)
+    save_import_rows(result["dataVersion"], preview["datasetName"], preview["normalizedRows"])
     result["schemaPreview"] = {key: value for key, value in preview.items() if key != "normalizedRows"}
     result["version"] = SCHEMA_VERSION
+    result["fullRowsPersisted"] = True
     return result
