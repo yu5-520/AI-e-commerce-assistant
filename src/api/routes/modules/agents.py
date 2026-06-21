@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 
 router = APIRouter()
 
-AGENT_REGISTRY_VERSION = "4.4.1"
+AGENT_REGISTRY_VERSION = "4.4.2"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,11 +28,12 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "module_task_creative_feedback_agent_layer"
-    plan["principle"] = "Agent 不放在最高控制位；模块 Agent 做判断，任务 Agent 做候选，创意 Agent 生成可上架测试包，回流 Agent 做经验草案和复盘摘要。"
+    plan["mode"] = "module_task_creative_feedback_action_plan_layer"
+    plan["principle"] = "Agent 不放在最高控制位；模块发现问题，problemType 决定处理包，创意 Agent 生成测试包，回流 Agent 做经验草案。"
     existing_ids = {item.get("id") for item in plan.get("agents", [])}
     additions = [
-        {"id": "task-generation", "name": "自动解析生成任务 Agent", "module": "task", "output": "规则命中、RAG 引用、置信度、任务候选"},
+        {"id": "problem-type-action-plan", "name": "问题类型处理包 Agent", "module": "task", "output": "problemType、executionPackages、证据、复核标准、失败阈值"},
+        {"id": "task-generation", "name": "自动解析生成任务 Agent", "module": "task", "output": "规则命中、RAG 引用、置信度、问题类型处理包"},
         {"id": "task-playbook", "name": "任务解析运营方式 Agent", "module": "task", "output": "稳健型 / 增长型 / 利润型打法、证据要求、验收标准"},
         {"id": "creative-vertical", "name": "标题主图垂直类目 Agent", "module": "product", "output": "标题测试包、主图方向、卖点排序、上架测试指标"},
         {"id": "feedback-flywheel", "name": "回流任务 Agent", "module": "feedback", "output": "周期摘要、学习候选、经验卡草案、反馈指标"},
@@ -46,6 +47,12 @@ def current_agent_plan() -> Dict[str, Any]:
         "feedbackFlywheel": "/api/modules/feedback-flywheel",
         "feedbackCycle": "/api/modules/feedback-flywheel/cycle/{target}",
         "feedbackCycleDraft": "/api/modules/feedback-flywheel/cycle/{target}/draft",
+    }
+    plan["v442ActionPlan"] = {
+        "service": "src/services/action_plan_service.py",
+        "rule": "模块负责发现问题，problemType 决定处理包，避免所有任务套同一模板。",
+        "problemTypes": ["low_ctr_low_conversion", "detail_page_conversion", "low_roi_high_refund", "low_inventory_activity", "competitor_signal_to_test", "report_data_anomaly"],
+        "outputs": ["actionPlan", "executionPackages", "executionSteps", "evidenceRequired", "submitMetrics", "acceptanceCriteria", "failureThreshold", "reviewFocus"],
     }
     plan["registryBoundary"] = "Agent 注册表只描述能力和入口；所有经营动作仍走统一任务池、账号权限和人工复核。"
     return plan
