@@ -1,43 +1,42 @@
-"""Dashboard service for the modular backend.
-
-The dashboard route should not directly depend on the old business view route
-helpers. This service is the current boundary for homepage command-board data.
-V3 adds a report-driven data refresh summary so the homepage can change after
-new report snapshots trigger alerts and tasks.
-"""
+"""Dashboard service for the V5 product demo runtime."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-from src.services.business_view_service import get_today_advice
+from src.services.module_projection_service import projection_summary
 from src.services.module_task_service import list_tasks
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 
 def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
-    payload = get_today_advice(write_outputs=True, record_logs=True)
     active_tasks = list_tasks(viewer_id=user_id, active_only=True)[:5]
     v3_summary = get_v3_dashboard_summary(user_id)
-    payload["tasks"] = active_tasks
-    payload["api_entry"] = "/api/modules/dashboard"
-    payload["service"] = "dashboard_service"
-    payload["version"] = "3.0.6"
-    payload["v3"] = v3_summary
-    payload["data_refresh"] = {
-        "title": "准实时数据更新",
-        "latestDataVersion": v3_summary.get("latestDataVersion"),
-        "latestSnapshotAt": v3_summary.get("latestSnapshotAt"),
-        "activeAlertCount": v3_summary.get("activeAlertCount", 0),
-        "highPriorityAlertCount": v3_summary.get("highPriorityAlertCount", 0),
-        "taskLinkedAlertCount": v3_summary.get("taskLinkedAlertCount", 0),
-        "storeScoped": v3_summary.get("storeScoped", False),
-        "message": "导入新报表后，首页、商品页、流量页、待办和日志会按当前账号店铺权限同步刷新。",
+    projection = projection_summary(user_id)
+    has_data = bool(projection.get("hasData") or v3_summary.get("latestDataVersion"))
+    return {
+        "api_entry": "/api/modules/dashboard",
+        "service": "dashboard_service",
+        "version": "5.0.0",
+        "hasData": has_data,
+        "emptyState": "No data",
+        "tasks": active_tasks,
+        "v3": v3_summary,
+        "projection": projection,
+        "data_refresh": {
+            "title": "Imported data runtime",
+            "latestDataVersion": projection.get("latestDataVersion") or v3_summary.get("latestDataVersion"),
+            "latestSnapshotAt": projection.get("latestSnapshotAt") or v3_summary.get("latestSnapshotAt"),
+            "activeAlertCount": v3_summary.get("activeAlertCount", 0),
+            "highPriorityAlertCount": v3_summary.get("highPriorityAlertCount", 0),
+            "taskLinkedAlertCount": v3_summary.get("taskLinkedAlertCount", 0),
+            "storeScoped": v3_summary.get("storeScoped", False),
+            "message": "Dashboard only shows summaries produced after report imports.",
+        },
+        "cards": [
+            {"title": "Data versions", "value": projection.get("dataVersionCount", 0), "desc": "current scope"},
+            {"title": "Products", "value": projection.get("productCount", 0), "desc": "from imports"},
+            {"title": "Alerts", "value": v3_summary.get("activeAlertCount", 0), "desc": "scoped"},
+            {"title": "Tasks", "value": len(active_tasks), "desc": "active"},
+        ],
     }
-    payload["cards"] = [
-        {"title": "新增预警", "value": v3_summary.get("activeAlertCount", 0), "desc": "当前范围"},
-        {"title": "高风险", "value": v3_summary.get("highPriorityAlertCount", 0), "desc": "优先处理"},
-        {"title": "已进待办", "value": v3_summary.get("taskLinkedAlertCount", 0), "desc": "任务同步"},
-        {"title": "活跃任务", "value": len(active_tasks), "desc": "当前可处理"},
-    ]
-    return payload
