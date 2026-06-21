@@ -1,10 +1,14 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.0.2。V5 保留原有模块栏和模块功能，清除前端 MVP 托底业务内容；报表模块负责导入数据表，导入后按账号权限生成模块内容、预警和任务。V5.0.2 已修复 Agent 读取旧空数据、报表前后端重复实现、前端缓存版本和 API 版本断点。
+> 当前版本：V5.0.3。V5 保留原有模块栏和模块功能，清除前端 MVP 托底业务内容；报表模块负责导入数据表，导入后按账号权限生成模块内容、预警和任务。V5.0.3 已加入运行态清空能力：旧服务器 SQLite 残留会在首次启动时自动清空一次，之后新导入数据不会被反复清空。
 
 ## 当前主链路
 
 ```text
+V5 启动时一次性清理旧 SQLite 残留
+↓
+首页 / 模块进入真实空状态
+↓
 报表模块导入数据表
 ↓
 字段映射 / 数据校验 / 店铺归属 / 账号权限切片
@@ -37,7 +41,9 @@ RAG Memory：老板 / 总管复核入库 → 下一轮召回
 ## 关键目录
 
 ```text
-src/api/main.py                              FastAPI 入口
+src/api/main.py                              FastAPI 入口，V5.0.3 启动清理旧运行态
+src/api/routes/system.py                      系统状态与运行态清空接口
+src/services/system_service.py                V5 runtime reset / one-time cleanup
 src/api/routes/modules/__init__.py            模块 API 聚合
 src/api/routes/modules/agents.py              Agent 注册表与 Agent API
 src/api/routes/llm.py                         LLM Gateway API
@@ -61,7 +67,8 @@ src/services/tool_gateway_service.py          内部安全 Tool Gateway
 src/services/mcp_adapter_service.py           MCP 外部适配边界
 src/services/feedback_flywheel_service.py     回流 Agent
 src/services/experience_memory_service.py     结构化经验卡 / 轻量 RAG
-web_demo/index.html                           前端入口，缓存号 v5.0.2
+web_demo/index.html                           前端入口，缓存号 v5.0.3
+web_demo/core/api-client.js                   前端 API 客户端，含 resetRuntimeData
 web_demo/modules/report/report-runtime.js     唯一报表前端运行文件
 web_demo/modules/dashboard/page.js            V5 首页空状态 / 经营摘要
 scripts/smoke_test_api.py                     当前 API 主验收
@@ -71,6 +78,9 @@ scripts/smoke_test_api.py                     当前 API 主验收
 
 ```text
 GET  /api/health
+GET  /api/system/db-status
+POST /api/system/reset-runtime-data?confirm=true
+POST /api/system/reset-legacy-runtime-once
 GET  /api/llm/status
 POST /api/llm/generate
 GET  /api/llm/traces
@@ -101,7 +111,8 @@ bash scripts/start_server.sh
 
 ```bash
 curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:3000/api/data/templates
+curl http://127.0.0.1:3000/api/system/db-status
+curl -X POST 'http://127.0.0.1:3000/api/system/reset-runtime-data?confirm=true'
 curl http://127.0.0.1:3000/api/modules/product
 curl http://127.0.0.1:3000/api/modules/traffic
 curl http://127.0.0.1:3000/api/modules/todo
