@@ -5,7 +5,8 @@ Run from repository root:
 
 This smoke test checks the current `/api/modules/*` product trunk instead of
 legacy workflow assumptions: module routes, Agent registry, RAG memory,
-feedback flywheel, and task lifecycle with approved-memory protection.
+feedback flywheel, title/main-image test packages, and task lifecycle with
+approved-memory protection.
 """
 
 from __future__ import annotations
@@ -96,7 +97,18 @@ def run_smoke_test() -> None:
     assert creative["agentName"] == "标题主图垂直类目 Agent"
     assert len(creative["titleVariants"]) >= 3
     assert len(creative["mainImageDirections"]) >= 3
+    assert len(creative["testPackages"]) >= 3, "creative Agent should generate ready-to-test packages"
+    first_package = creative["testPackages"][0]
+    assert_keys(first_package, ["title", "mainImageDirection", "firstImageText", "operatorAction", "submitMetrics", "fitTraffic"], "creative test package")
     assert creative["taskDraft"]["taskType"] == "V4.3 垂直类目创意测试"
+    assert creative["taskDraft"]["executionSteps"], "creative task draft should carry operator execution steps"
+
+    creative_task = assert_post_json(
+        "/api/modules/agents/creative/P002/tasks",
+        {"packageIndex": 1, "taskGoal": "测试标题主图点击率", "platform": "拼多多", "categoryId": "home_living_goods"},
+    )
+    assert creative_task["task"]["selectedPackage"]["packageName"].startswith("方案 B"), "packageIndex should select a concrete test package"
+    assert creative_task["task"]["executionSteps"], "created creative task should be executable by operator"
 
     feedback = assert_status("GET", "/api/modules/feedback-flywheel")
     assert_keys(feedback, ["agentName", "chain", "memorySummary", "agentEvalMetrics", "learningCandidates", "forbiddenActions"], "feedback flywheel")
