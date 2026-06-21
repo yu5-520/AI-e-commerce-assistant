@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 
 router = APIRouter()
 
-AGENT_REGISTRY_VERSION = "4.4.0"
+AGENT_REGISTRY_VERSION = "4.4.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -29,12 +29,12 @@ def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
     plan["mode"] = "module_task_creative_feedback_agent_layer"
-    plan["principle"] = "Agent 不放在最高控制位；模块 Agent 做判断，任务 Agent 做候选，创意 Agent 做类目表达，回流 Agent 做经验草案和复盘摘要。"
+    plan["principle"] = "Agent 不放在最高控制位；模块 Agent 做判断，任务 Agent 做候选，创意 Agent 生成可上架测试包，回流 Agent 做经验草案和复盘摘要。"
     existing_ids = {item.get("id") for item in plan.get("agents", [])}
     additions = [
         {"id": "task-generation", "name": "自动解析生成任务 Agent", "module": "task", "output": "规则命中、RAG 引用、置信度、任务候选"},
         {"id": "task-playbook", "name": "任务解析运营方式 Agent", "module": "task", "output": "稳健型 / 增长型 / 利润型打法、证据要求、验收标准"},
-        {"id": "creative-vertical", "name": "标题主图垂直类目 Agent", "module": "product", "output": "标题方案、主图方向、卖点排序、A/B 测试计划"},
+        {"id": "creative-vertical", "name": "标题主图垂直类目 Agent", "module": "product", "output": "标题测试包、主图方向、卖点排序、上架测试指标"},
         {"id": "feedback-flywheel", "name": "回流任务 Agent", "module": "feedback", "output": "周期摘要、学习候选、经验卡草案、反馈指标"},
     ]
     plan["agents"] = [*(plan.get("agents") or []), *[item for item in additions if item["id"] not in existing_ids]]
