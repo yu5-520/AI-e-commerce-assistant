@@ -16,7 +16,7 @@ from src.services.module_task_service import create_task
 from src.services.task_agent_service import generate_task_candidates, task_playbook
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "5.0.5"
+AGENT_REGISTRY_VERSION = "5.0.6"
 
 
 def request_user_id(request: Request) -> str:
@@ -26,12 +26,12 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "decision_task_draft_agent_layer"
-    plan["principle"] = "导入数据生成只读证据和 Agent 判断；运营只补系统不知道的现实变量，并选择主经营路径。"
+    plan["mode"] = "decision_path_execution_flow"
+    plan["principle"] = "详情页负责选择主路径和补充决策变量；待办页负责执行证据、截图、成果和复盘材料。"
     plan["decisionTaskDraft"] = {
         "service": "src/services/action_plan_service.py",
-        "outputs": ["readonlyEvidence", "commonActions", "supplementSchema", "decisionPaths", "selectedPathId", "operatorSupplement", "reviewPlan"],
-        "uiRule": "前端默认展示任务草案和路径选择，不展示问题处理包、方案补充、人工确认等工程模块。",
+        "outputs": ["readonlyEvidence", "supplementSchema", "decisionPaths", "selectedPathId", "operatorSupplement", "reviewPlan"],
+        "uiRule": "前端默认展示任务草案、路径选择和补充信息；选择路径后直接进入处理中。",
     }
     return plan
 
@@ -46,12 +46,18 @@ def _merge_decision_payload(draft: Dict[str, Any], body: Dict[str, Any]) -> Dict
     if selected_path:
         item["selectedDecisionPath"] = selected_path
         item["actionType"] = selected_path.get("pathName") or item.get("actionType")
-        item["task"] = f"选择“{selected_path.get('pathName')}”路径，补充现实变量后进入任务池，等待下一轮数据复盘。"
+        item["task"] = f"执行“{selected_path.get('pathName')}”路径，并提交截图、处理结果和复盘指标。"
+        item["reason"] = f"已在详情页选择“{selected_path.get('pathName')}”路径，待办页只补充执行证据和成果。"
     item["operatorSupplement"] = supplement
     item["reviewPlan"] = body.get("reviewPlan") or body.get("review_plan") or plan.get("reviewPlan") or {}
-    item["taskType"] = "V5 经营路径任务"
-    item["taskSignal"] = "readonlyEvidence + supplement + selectedDecisionPath + reviewPlan"
-    item["agentJudgment"] = {**(item.get("agentJudgment") or {}), "status": "decision_confirmed", "selectedPathId": selected_path_id, "operatorSupplementKeys": list(supplement.keys()), "boundary": "运营选择路径并补充现实变量；系统等待下一轮数据复盘。"}
+    item["taskType"] = "V5 经营路径执行"
+    item["taskSignal"] = "selectedDecisionPath + executionEvidence + reviewPlan"
+    item["status"] = "处理中"
+    item["workflowStatus"] = "处理中"
+    item["autoAccepted"] = True
+    item["acceptedFrom"] = "decision_draft_confirmed"
+    item["taskLayer"] = item.get("taskLayer") or "operator_execution"
+    item["agentJudgment"] = {**(item.get("agentJudgment") or {}), "status": "decision_path_auto_accepted", "selectedPathId": selected_path_id, "operatorSupplementKeys": list(supplement.keys()), "boundary": "已选路径直接进入处理中；待办只提交执行证据和等待复盘。"}
     return item
 
 
@@ -135,4 +141,4 @@ def module_agent_task(request: Request, module: str, entity_id: str, body: Dict[
         raise HTTPException(status_code=400, detail="task draft not found")
     draft = _merge_decision_payload(drafts[draft_index], body)
     task = create_task(draft)
-    return {"agent": enrich_module_agent_result(agent_result), "task": task, "message": "经营路径任务已进入统一任务池。"}
+    return {"agent": enrich_module_agent_result(agent_result), "task": task, "message": "经营路径已确认，任务进入处理中。"}
