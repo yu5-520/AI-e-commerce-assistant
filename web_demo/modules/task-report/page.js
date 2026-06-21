@@ -5,23 +5,58 @@
   let agentNotice = "";
   const s = (value) => AppShell.escape(value ?? "");
 
+  function arr(value) {
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  }
+
+  function cleanPill(value) {
+    const text = String(value || "").trim();
+    if (!text || text === "通用" || text === "ActionPlan" || /^AP-/i.test(text)) return "";
+    return text;
+  }
+
+  function pillRow(items = []) {
+    const list = items.map(cleanPill).filter(Boolean);
+    if (!list.length) return "";
+    return `<div class="action-package-pills">${list.map((item) => `<span>${s(item)}</span>`).join("")}</div>`;
+  }
+
+  function numberedList(items = []) {
+    const list = arr(items);
+    if (!list.length) return "";
+    return `<ol class="action-step-list">${list.map((item) => `<li>${s(item)}</li>`).join("")}</ol>`;
+  }
+
+  function chipList(items = []) {
+    const list = arr(items);
+    if (!list.length) return "";
+    return `<div class="action-chip-list">${list.map((item) => `<span>${s(item)}</span>`).join("")}</div>`;
+  }
+
+  function packagePanel(title, items = [], type = "chips") {
+    const list = arr(items);
+    if (!list.length) return "";
+    return `<div class="action-package-panel"><h5>${s(title)}</h5>${type === "steps" ? numberedList(list) : chipList(list)}</div>`;
+  }
+
   function listBlock(title, items = [], options = {}) {
-    const list = (items || []).filter(Boolean);
+    const list = arr(items);
     if (!list.length) return "";
     const label = options.label || `${list.length} 项`;
-    return `<section class="page-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${s(label)}</span></div><div class="report-card-list">${list.map((item, index) => {
-      if (typeof item === "string") return `<article class="report-card"><strong>${index + 1}. ${s(item)}</strong></article>`;
-      return `<article class="report-card"><strong>${s(item.title || item.label || `第 ${index + 1} 项`)}</strong><p>${s(item.value || item.summary || item.text || item.reason || "待确认")}</p></article>`;
+    return `<section class="page-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${s(label)}</span></div><div class="report-card-list compact-report-list">${list.map((item, index) => {
+      if (typeof item === "string") return `<article class="report-card compact"><strong>${index + 1}. ${s(item)}</strong></article>`;
+      return `<article class="report-card compact"><strong>${s(item.title || item.label || `第 ${index + 1} 项`)}</strong><p>${s(item.value || item.summary || item.text || item.reason || "待确认")}</p></article>`;
     }).join("")}</div></section>`;
   }
 
   function evidenceBlock(items = []) {
-    if (!items.length) return "";
-    return `<section class="page-section"><div class="section-header"><h3>数据证据</h3><span class="status-badge">可追溯</span></div><div class="kpi-grid report-metrics">${items.map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div></section>`;
+    const list = arr(items);
+    if (!list.length) return "";
+    return `<section class="page-section"><div class="section-header"><h3>数据证据</h3><span class="status-badge">可追溯</span></div><div class="kpi-grid report-metrics">${list.map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div></section>`;
   }
 
   function kvBlock(title, items = []) {
-    const list = (items || []).filter((item) => item?.value !== undefined && item?.value !== null && item?.value !== "");
+    const list = arr(items).filter((item) => item?.value !== undefined && item?.value !== null && item?.value !== "");
     if (!list.length) return "";
     return `<section class="page-section alert-evidence-section"><div class="section-header"><h3>${s(title)}</h3><span class="status-badge">${list.length}</span></div><div class="alert-kv-grid">${list.map((item) => `<article><span>${s(item.label)}</span><strong>${s(item.value)}</strong></article>`).join("")}</div></section>`;
   }
@@ -50,60 +85,101 @@
   }
 
   function packageCard(pkg, index, productId, mode = "action") {
-    const hasCreative = pkg.title || pkg.mainImageDirection || pkg.firstImageText;
-    return `<article class="report-card"><header><strong>${s(pkg.packageName || `方案 ${index + 1}`)}</strong><span class="status-badge">${s(pkg.targetMetric || "处理指标")}</span></header>
-      ${pkg.diagnosis ? `<p><b>判断：</b>${s(pkg.diagnosis)}</p>` : ""}
-      ${hasCreative ? `<p><b>标题：</b>${s(pkg.title)}</p><p><b>主图：</b>${s(pkg.mainImageDirection)} · ${s(pkg.mainImageLayout)}</p><p><b>首图文案：</b>${s(pkg.firstImageText)}</p><p><b>卖点顺序：</b>${s((pkg.sellingPointOrder || []).join(" → "))}</p>` : ""}
-      <div class="permission-chip-row"><span>${s(pkg.fitPlatform || "通用")}</span><span>${s(pkg.fitTraffic || pkg.testDuration || "执行包")}</span><span>${s(pkg.style || pkg.packageId || "ActionPlan")}</span></div>
-      <p><b>运营执行：</b>${s((pkg.operatorAction || []).join("；"))}</p>
-      <p><b>提交指标：</b>${s((pkg.submitMetrics || []).join("、"))}</p>
-      ${(pkg.acceptanceCriteria || []).length ? `<p><b>复核标准：</b>${s(pkg.acceptanceCriteria.join("、"))}</p>` : ""}
-      ${(pkg.failureThreshold || []).length ? `<p><b>失败阈值：</b>${s(pkg.failureThreshold.join("、"))}</p>` : ""}
-      <p><b>风险：</b>${s(pkg.risk || "不得越权执行经营动作")}</p>
-      ${mode === "creative" ? `<div class="report-actions"><button type="button" data-creative-task="${s(productId)}:${index}">选择此方案创建测试任务</button></div>` : ""}
+    const isCreative = mode === "creative";
+    const packageName = pkg.packageName || pkg.name || `方案 ${index + 1}`;
+    const mainTitle = pkg.llmTitle || pkg.title;
+    const imageDirection = pkg.llmMainImageDirection || pkg.mainImageDirection;
+    const firstImageText = pkg.llmFirstImageText || pkg.firstImageText;
+    const imageLayout = pkg.llmMainImageLayout || pkg.mainImageLayout;
+    const sellingPoints = arr(pkg.sellingPointOrder);
+    const targetMetric = pkg.targetMetric || (isCreative ? "点击率 / 转化率" : "处理指标");
+    return `<article class="action-package-card ${isCreative ? "creative" : ""}">
+      <div class="action-package-head">
+        <div>
+          <span class="action-package-label">${isCreative ? "测试包" : "处理包"}</span>
+          <h4>${s(packageName)}</h4>
+          ${pkg.diagnosis ? `<p>${s(pkg.diagnosis)}</p>` : ""}
+        </div>
+        <span class="status-badge">${s(targetMetric)}</span>
+      </div>
+      ${pillRow([pkg.testDuration, pkg.fitTraffic, pkg.fitPlatform, pkg.style])}
+      ${isCreative && (mainTitle || imageDirection || firstImageText) ? `<div class="creative-preview-grid"><article><span>标题</span><strong>${s(mainTitle || "待生成")}</strong></article><article><span>主图方向</span><strong>${s(imageDirection || "待生成")}</strong><small>${s(imageLayout || "")}</small></article><article><span>首图文案</span><strong>${s(firstImageText || "待生成")}</strong></article>${sellingPoints.length ? `<article><span>卖点顺序</span><strong>${s(sellingPoints.join(" → "))}</strong></article>` : ""}</div>` : ""}
+      <div class="action-package-body">
+        ${packagePanel("运营动作", pkg.operatorAction, "steps")}
+        ${packagePanel("提交指标", pkg.submitMetrics)}
+        ${packagePanel("复核标准", pkg.acceptanceCriteria)}
+        ${packagePanel("失败阈值", pkg.failureThreshold)}
+        ${packagePanel("复核重点", pkg.reviewFocus)}
+      </div>
+      ${pkg.risk ? `<div class="action-package-risk"><strong>风险提醒</strong><p>${s(pkg.risk)}</p></div>` : ""}
+      ${isCreative ? `<div class="report-actions"><button type="button" data-creative-task="${s(productId)}:${index}">选择此方案创建测试任务</button></div>` : ""}
     </article>`;
   }
 
   function testPackagesBlock(agent) {
-    const packages = agent?.testPackages || [];
+    const packages = arr(agent?.llmPackagePreviews).length ? agent.llmPackagePreviews : arr(agent?.testPackages);
     if (!packages.length) return "";
-    return `<section class="page-section"><div class="section-header"><h3>Agent 测试包</h3><span class="status-badge">运营直接上架测试</span></div><div class="report-card-list">${packages.map((pkg, index) => packageCard(pkg, index, agent.productId || lastReport?.relatedTask?.productId || lastReport?.entityId, "creative")).join("")}</div></section>`;
+    return `<section class="page-section action-plan-section"><div class="section-header"><h3>Agent 测试包</h3><span class="status-badge">运营上架测试</span></div><div class="action-package-list">${packages.map((pkg, index) => packageCard(pkg, index, agent.productId || lastReport?.relatedTask?.productId || lastReport?.entityId, "creative")).join("")}</div></section>`;
   }
 
   function executionPackagesBlock(agent) {
-    const packages = agent?.executionPackages || agent?.actionPlan?.executionPackages || [];
+    const packages = arr(agent?.executionPackages).length ? agent.executionPackages : arr(agent?.actionPlan?.executionPackages);
     if (!packages.length) return "";
-    return `<section class="page-section"><div class="section-header"><h3>问题处理包</h3><span class="status-badge">${s(agent?.actionPlan?.problemLabel || agent?.problemLabel || "按问题类型生成")}</span></div><div class="report-card-list">${packages.map((pkg, index) => packageCard(pkg, index, agent?.productId || lastReport?.relatedTask?.productId || lastReport?.entityId, "action")).join("")}</div></section>`;
+    return `<section class="page-section action-plan-section"><div class="section-header"><h3>问题处理包</h3><span class="status-badge">${s(agent?.actionPlan?.problemLabel || agent?.problemLabel || "按问题类型生成")}</span></div><div class="action-package-list">${packages.map((pkg, index) => packageCard(pkg, index, agent?.productId || lastReport?.relatedTask?.productId || lastReport?.entityId, "action")).join("")}</div></section>`;
   }
 
   function actionPlanBlock(agent, report) {
-    if (agent?.testPackages?.length) return testPackagesBlock(agent);
-    if (agent?.executionPackages?.length || agent?.actionPlan?.executionPackages?.length) return executionPackagesBlock(agent);
-    const suggestions = (agent?.structuredSteps || agent?.suggestions || report?.suggestedActions || []).filter(Boolean);
+    if (arr(agent?.testPackages).length) return testPackagesBlock(agent);
+    if (arr(agent?.executionPackages).length || arr(agent?.actionPlan?.executionPackages).length) return executionPackagesBlock(agent);
+    const suggestions = arr(agent?.structuredSteps || agent?.suggestions || report?.suggestedActions);
     if (!suggestions.length) return "";
-    return `<section class="page-section"><div class="section-header"><h3>Agent 处理方案</h3><span class="status-badge">转成运营动作</span></div><div class="report-card-list">${suggestions.map((item, index) => `<article class="report-card"><strong>${index + 1}. ${s(item.title || item)}</strong>${item.summary || item.action ? `<p>${s(item.summary || item.action)}</p>` : ""}</article>`).join("")}</div></section>`;
+    return `<section class="page-section action-plan-section"><div class="section-header"><h3>Agent 处理方案</h3><span class="status-badge">转成运营动作</span></div><div class="action-package-list"><article class="action-package-card"><div class="action-package-head"><div><span class="action-package-label">处理步骤</span><h4>运营动作</h4></div></div>${numberedList(suggestions.map((item) => item.title || item.action || item.summary || item))}</article></div></section>`;
   }
 
   function taskDraftCard(draft, index, sourceKey) {
-    const steps = draft.executionSteps || [];
-    const evidence = draft.evidenceRequired || [];
-    const criteria = draft.acceptanceCriteria || [];
-    const failure = draft.failureThreshold || [];
+    const steps = arr(draft.executionSteps);
+    const evidence = arr(draft.evidenceRequired);
+    const metrics = arr(draft.submitMetrics);
+    const criteria = arr(draft.acceptanceCriteria);
+    const failure = arr(draft.failureThreshold);
     const pkg = draft.selectedPackage || {};
-    return `<article class="report-card"><header><strong>${s(draft.title || draft.taskType || "任务草案")}</strong><span class="status-badge">${s(draft.priority || "待确认")}</span></header><p>${s(draft.task || draft.reason || "待确认")}</p>${pkg.packageName ? `<p><b>处理包：</b>${s(pkg.packageName)}</p>` : ""}${steps.length ? `<p><b>执行动作：</b>${s(steps.join("；"))}</p>` : ""}${evidence.length ? `<p><b>提交证据：</b>${s(evidence.join("、"))}</p>` : ""}${criteria.length ? `<p><b>复核标准：</b>${s(criteria.join("、"))}</p>` : ""}${failure.length ? `<p><b>失败阈值：</b>${s(failure.join("、"))}</p>` : ""}<div class="report-actions"><button type="button" data-agent-task="${s(sourceKey)}:${index}">确认加入任务清单</button></div></article>`;
+    return `<article class="task-draft-card">
+      <div class="task-draft-head">
+        <div>
+          <span class="action-package-label">即将加入待办</span>
+          <h4>${s(draft.title || draft.taskType || "任务草案")}</h4>
+          <p>${s(draft.task || draft.reason || "人工确认后进入任务池。")}</p>
+        </div>
+        <span class="status-badge">${s(draft.priority || "待确认")}</span>
+      </div>
+      <div class="task-draft-meta">
+        <article><span>处理包</span><strong>${s(pkg.packageName || draft.actionType || "待选择")}</strong></article>
+        <article><span>截止时间</span><strong>${s(draft.deadline || "待确认")}</strong></article>
+        <article><span>来源</span><strong>${s(draft.sourceModule || draft.entityType || "经营模块")}</strong></article>
+        <article><span>风险域</span><strong>${s(draft.riskDomain || "待确认")}</strong></article>
+      </div>
+      <div class="task-draft-grid">
+        ${packagePanel("执行动作", steps, "steps")}
+        ${packagePanel("提交材料", [...evidence, ...metrics])}
+        ${packagePanel("验收标准", criteria)}
+        ${packagePanel("失败阈值", failure)}
+      </div>
+      <div class="report-actions"><button type="button" data-agent-task="${s(sourceKey)}:${index}">确认加入任务清单</button></div>
+    </article>`;
   }
 
   function taskDraftBlock(agent) {
-    const drafts = agent?.taskDrafts || (agent?.taskDraft ? [agent.taskDraft] : []);
+    const drafts = arr(agent?.taskDrafts).length ? agent.taskDrafts : (agent?.taskDraft ? [agent.taskDraft] : []);
     if (!drafts.length) return "";
     const sourceKey = `${agent.module || "creative"}:${agent.entityId || agent.productId || lastReport?.entityId}`;
-    return `<section class="page-section"><div class="section-header"><h3>任务草案</h3><span class="status-badge">人工确认后加入</span></div><div class="report-card-list">${drafts.map((draft, index) => taskDraftCard(draft, index, sourceKey)).join("")}</div></section>`;
+    return `<section class="page-section task-draft-section"><div class="section-header"><h3>任务草案</h3><span class="status-badge">人工确认后加入</span></div><div class="task-draft-list">${drafts.map((draft, index) => taskDraftCard(draft, index, sourceKey)).join("")}</div></section>`;
   }
 
   function agentBlock(agent, report) {
     if (!agent) return "";
-    const evidence = agent.evidence || [];
-    return `${agentNotice ? AppShell.notice("Agent", agentNotice) : ""}<section class="page-section"><div class="section-header"><h3>Agent 判断</h3><span class="status-badge">${s(agent.agentName || "Agent")}</span></div><p>${s(agent.categoryStrategy || agent.summary || "已生成处理方案。")}</p>${evidence.length ? `<div class="kpi-grid report-metrics">${evidence.slice(0, 4).map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div>` : ""}</section>${actionPlanBlock(agent, report)}${taskDraftBlock(agent)}<section class="page-section"><div class="section-header"><h3>人工确认</h3><span class="status-badge">${s((agent.humanDecision || report.humanDecision || []).length)} 项</span></div><div class="report-card-list">${(agent.humanDecision || report.humanDecision || []).map((item) => `<article class="report-card"><strong>${s(item)}</strong></article>`).join("")}</div><div class="report-actions"><button type="button" data-refresh-agent>重新生成 Agent 方案</button></div></section>`;
+    const evidence = arr(agent.evidence);
+    const humanDecision = arr(agent.humanDecision || report.humanDecision);
+    return `${agentNotice ? AppShell.notice("Agent", agentNotice) : ""}<section class="page-section"><div class="section-header"><h3>Agent 判断</h3><span class="status-badge">${s(agent.agentName || "Agent")}</span></div><p class="agent-summary-text">${s(agent.categoryStrategy || agent.summary || "已生成处理方案。")}</p>${evidence.length ? `<div class="kpi-grid report-metrics">${evidence.slice(0, 4).map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div>` : ""}</section>${actionPlanBlock(agent, report)}${taskDraftBlock(agent)}${humanDecision.length ? `<section class="page-section"><div class="section-header"><h3>人工确认</h3><span class="status-badge">${humanDecision.length} 项</span></div>${chipList(humanDecision)}<div class="report-actions"><button type="button" data-refresh-agent>重新生成 Agent 方案</button></div></section>` : ""}`;
   }
 
   function actionButtons(report) {
