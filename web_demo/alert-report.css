@@ -264,6 +264,21 @@
   line-height: 1.5;
 }
 
+.report-actions button.is-loading,
+.report-actions button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.inline-action-error {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 @media (max-width: 1180px) {
   .action-package-body,
   .task-draft-grid,
