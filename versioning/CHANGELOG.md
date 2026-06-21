@@ -1,5 +1,17 @@
 # Changelog
 
+## v4.5.2 - 2026-06-21
+
+### Changed
+- Removed top notice bars such as “Agent 任务草案提交中...” from the task-report page.
+- Task creation and creative-package creation now use only local button loading state and inline error feedback.
+- “重新生成 Agent 方案” no longer schedules a full route refresh; it keeps the current report visible, replaces only the Agent result when successful, and preserves the old Agent result when generation fails.
+- Frontend asset cache query strings are bumped to `4.5.2`.
+- FastAPI app and health version are bumped to `4.5.2`.
+
+### Product Engineering Rule
+- Task-report actions should not expose internal process copy. Users see the action result through button state, task navigation, or local failure feedback.
+
 ## v4.5.1 - 2026-06-21
 
 ### Added
@@ -79,45 +91,3 @@
 
 ### Product Engineering Rule
 - 回流任务 Agent 可以生成经验卡草案和复盘摘要，但不能自动批准入库。正式 RAG 召回只使用复核通过的结构化经验。
-
-## v4.3.0 - 2026-06-19
-
-### Added
-- Added `src/services/creative_vertical_agent_service.py` for vertical category title / main-image / selling-point planning.
-- Added `POST /api/modules/agents/creative/{product_id}` and `GET /api/modules/agents/creative/{product_id}` for V4.3 creative strategy generation.
-- Added `POST /api/modules/agents/creative/{product_id}/tasks` so a selected creative plan can become a human-reviewed test task in the unified task pool.
-- Added platform expression rules for 淘宝、拼多多、抖音小店、通用.
-- Added creative outputs: title variants, main-image directions, selling-point order, A/B test plan, creative task draft, RAG references, human decisions, and forbidden actions.
-- Added frontend API client methods `creativeAgent` and `createCreativeTask`.
-- Added V4.3 health flags and smoke-test coverage for the creative vertical Agent.
-
-### Changed
-- FastAPI app version and frontend cache query strings are bumped to `4.3.0`.
-- Agent outputs now cover product expression strategy in addition to task generation, task playbooks, module analysis, and RAG memory.
-
-### Product Engineering Rule
-- 标题主图 Agent 不是“素材生成器”，而是类目表达策略生成器。它可以生成标题、主图方向、卖点排序和测试计划，但不能直接发布商品、改价、投放或回写店铺后台。
-
-## v4.2.0 - 2026-06-19
-
-### Added
-- Added `src/services/task_agent_service.py` for RAG-driven task generation and task playbook Agents.
-- Added `POST /api/modules/agents/tasks/generate` to convert module signals into task candidates using rules, structured RAG memory, confidence scoring, and human-confirmation gates.
-- Added `GET /api/modules/agents/tasks/{task_id}/playbook` to explain active tasks with multiple operating styles: 稳健型、增长型、利润型.
-- Added frontend API client methods `generateTaskCandidates` and `taskPlaybook`.
-- Added V4.2 health flags and smoke-test coverage for generated task candidates, RAG references, task playbooks, and multi-style strategy output.
-
-### Changed
-- FastAPI app version and frontend cache query strings are bumped to `4.2.0`.
-- Agent outputs now include task-generation confidence, RAG references, evidence requirements, and playbook strategies.
-- Task generation can optionally create a task only when `autoCreate=true` and confidence clears the requested threshold.
-
-### Product Engineering Rule
-- 规则负责稳定触发，RAG 负责召回经验，Agent 负责生成任务草案和打法解释，人审负责是否进入任务池和是否执行。
-
-## v4.1.0 - 2026-06-19
-
-### Added
-- Added `src/services/experience_memory_service.py` as the structured operation experience memory layer.
-- Added `src/api/routes/modules/rag_memory.py` with `/api/modules/rag-memory`, `/api/modules/rag-memory/cases`, `/api/modules/rag-memory/search`, `/api/modules/rag-memory/feedback/tasks/{task_id}`, `/api/modules/rag-memory/cases/{case_id}/approve`, and `/api/modules/rag-memory/cases/{case_id}/reject`.
-- Added seed playbooks and negative cases so V4 Agent workflows can retrieve approved operating experience before real RAG embeddings are connected.
