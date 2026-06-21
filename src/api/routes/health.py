@@ -10,7 +10,7 @@ from src.services.llm_provider_service import llm_status
 from src.services.mcp_adapter_service import mcp_adapter_summary
 from src.services.tool_gateway_service import tool_gateway_summary
 
-API_VERSION = "4.5.2"
+API_VERSION = "4.5.3"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -22,7 +22,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v452_task_report_state_fix",
+        "mode": "v453_llm_rag_enrichment",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "llm_entry": "/api/llm/status",
@@ -37,6 +37,14 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "v453_llm_rag_enrichment": True,
+        "agent_llm_enrichment_service": "src/services/agent_llm_enrichment_service.py",
+        "module_agent_llm_enrichment": True,
+        "task_generation_llm_enrichment": True,
+        "task_playbook_llm_enrichment": True,
+        "feedback_flywheel_llm_enrichment": True,
+        "agent_enrichment_outputs": ["retrievedCases", "ragReferences", "llmEnrichment", "llmSummary", "llmOperatorBrief", "llmManagerReviewBrief", "llmRiskCheck", "llmFallbackUsed"],
+        "frontend_llm_brief_section": True,
         "v452_task_report_state_fix": True,
         "frontend_agent_notice_bars_removed": True,
         "frontend_agent_refresh_preserves_report": True,
@@ -63,7 +71,7 @@ def health() -> Dict[str, Any]:
         "llm_model": llm.get("model"),
         "llm_api_key_configured": llm.get("apiKeyConfigured"),
         "llm_gateway_rule": "LLM 只做表达增强和草案生成；ActionPlan、权限、任务池、人审和审计链路保持确定性。",
-        "llm_priority_modules": ["creative_vertical_agent", "feedback_flywheel", "task_action_plan", "module_report_summary"],
+        "llm_priority_modules": ["creative_vertical_agent", "module_agent", "task_generation_agent", "task_playbook", "feedback_flywheel"],
         "v450_tool_gateway": True,
         "tool_gateway": tool_gateway_summary(),
         "v450_mcp_adapter_boundary": True,
@@ -76,7 +84,7 @@ def health() -> Dict[str, Any]:
         "action_plan_outputs": ["actionPlan", "executionPackages", "executionSteps", "evidenceRequired", "submitMetrics", "acceptanceCriteria", "failureThreshold", "reviewFocus"],
         "v4_module_agent_layer": True,
         "v4_agent_version": API_VERSION,
-        "agent_runtime_mode": "advisory_only_with_llm_enrichment",
+        "agent_runtime_mode": "action_plan_with_rag_and_llm_enrichment",
         "module_agent_endpoint": "/api/modules/agents/{module}/{entity_id}",
         "module_agent_task_endpoint": "/api/modules/agents/{module}/{entity_id}/tasks",
         "cycle_agent_endpoint": "/api/modules/agents/cycle/{target}",
@@ -93,7 +101,7 @@ def health() -> Dict[str, Any]:
         "feedback_cycle_endpoint": "/api/modules/feedback-flywheel/cycle/{target}",
         "feedback_cycle_draft_endpoint": "/api/modules/feedback-flywheel/cycle/{target}/draft",
         "feedback_requires_human_approval": True,
-        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence", "creativeTestPackages", "actionPlan", "executionPackages", "llmEnrichment", "feedbackMetrics"],
+        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "retrievedCases", "confidence", "creativeTestPackages", "actionPlan", "executionPackages", "llmEnrichment", "feedbackMetrics"],
         "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write", "exaggerated_claim", "auto_memory_approval"],
         "agent_requires_human_confirmation": True,
         "v410_rag_memory": True,
