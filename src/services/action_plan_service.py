@@ -1,12 +1,8 @@
-"""Problem-type action plan service.
+"""Problem-type decision path service.
 
-This layer prevents Agent outputs from falling back to one generic template. The
-module detects a signal, then this service turns the signal's problem type into
-an execution package for operators and a review package for managers.
-
-It is deterministic and advisory-only. LLM providers can later fill in richer
-copy, titles, image text, and category wording, but the problem type and action
-package contract should stay stable.
+V5 keeps execution packages as an internal Agent contract, but the operator-facing
+surface is a decision task draft: readonly evidence, real-world supplement fields,
+clearly separated business paths, and review metrics.
 """
 
 from __future__ import annotations
@@ -14,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List
 
-ACTION_PLAN_VERSION = "4.4.2"
+ACTION_PLAN_VERSION = "5.0.5"
 
 FORBIDDEN_ACTIONS = [
     "不直接改价",
@@ -31,6 +27,7 @@ PROBLEM_LABELS = {
     "competitor_signal_to_test": "竞品差评 / 机会点",
     "detail_page_conversion": "详情页承接不足",
     "report_data_anomaly": "报表数据异常",
+    "listing_test_path": "上新测试路径",
     "general_operation": "经营异常",
 }
 
@@ -38,36 +35,8 @@ PROBLEM_LABELS = {
 def _text(item: Dict[str, Any] | None) -> str:
     if not item:
         return ""
-    values: List[str] = []
-    for key in [
-        "title",
-        "productTitle",
-        "productShort",
-        "riskDomain",
-        "taskType",
-        "taskSignal",
-        "task",
-        "reason",
-        "status",
-        "statusLevel",
-        "suggestion",
-        "nextStep",
-        "risk",
-        "refundRate",
-        "roi",
-        "conversion",
-        "ctr",
-        "inventoryStatus",
-        "afterSales",
-        "badReview",
-        "opportunity",
-        "testType",
-        "testPlan",
-        "sourceModule",
-        "source",
-    ]:
-        if item.get(key) is not None:
-            values.append(str(item[key]))
+    keys = ["title", "productTitle", "productShort", "riskDomain", "taskType", "taskSignal", "task", "reason", "status", "statusLevel", "suggestion", "nextStep", "risk", "refundRate", "roi", "conversion", "ctr", "inventoryStatus", "afterSales", "badReview", "opportunity", "testType", "testPlan", "sourceModule", "source"]
+    values = [str(item.get(key)) for key in keys if item.get(key) is not None]
     values.extend(str(value) for value in item.get("judgmentTags") or [])
     return " ".join(values)
 
@@ -75,296 +44,163 @@ def _text(item: Dict[str, Any] | None) -> str:
 def infer_action_problem_type(item: Dict[str, Any] | None, *, source_module: str | None = None, fallback: str = "general_operation") -> str:
     text = _text(item)
     source = source_module or str((item or {}).get("sourceModule") or "")
+    if any(word in text for word in ["库存", "补货", "缺货", "安全库存", "活动流量", "待补货", "爆品"]):
+        return "low_inventory_activity"
     if any(word in text for word in ["点击", "CTR", "ctr", "主图", "标题", "素材", "创意"]):
         return "low_ctr_low_conversion"
     if any(word in text for word in ["转化率", "详情页", "承接", "落地页", "首屏卖点"]):
         return "detail_page_conversion"
-    if any(word in text for word in ["ROI", "ROAS", "roi", "退款", "售后", "客服", "材质", "尺寸", "安装", "暂停放量", "先查售后"]):
+    if any(word in text for word in ["ROI", "ROAS", "roi", "退款", "售后", "客服", "材质", "尺寸", "安装"]):
         return "low_roi_high_refund"
-    if any(word in text for word in ["库存", "补货", "缺货", "安全库存", "活动流量", "待补货"]):
-        return "low_inventory_activity"
     if "competitor" in source.lower() or "竞品" in source or any(word in text for word in ["竞品", "差评", "机会点", "跟价"]):
         return "competitor_signal_to_test"
-    if "report" in source.lower() or "报表" in source or any(word in text for word in ["字段", "同步", "导入", "ERP", "CRM"]):
+    if "listing" in source.lower() or "上新" in source or any(word in text for word in ["上新", "测款", "新品", "打样"]):
+        return "listing_test_path"
+    if "report" in source.lower() or "报表" in source or any(word in text for word in ["字段", "同步", "导入", "ERP", "CRM", "数据版本"]):
         return "report_data_anomaly"
     return fallback
 
 
 def _product_name(item: Dict[str, Any] | None) -> str:
     item = item or {}
-    return str(item.get("productShort") or item.get("shortName") or item.get("sourceName") or item.get("targetProduct") or item.get("title") or item.get("id") or "经营对象")
+    return str(item.get("productShort") or item.get("shortName") or item.get("sourceName") or item.get("targetProduct") or item.get("title") or item.get("name") or item.get("id") or "经营对象")
 
 
-def _package(
-    *,
-    package_id: str,
-    name: str,
-    target_metric: str,
-    diagnosis: str,
-    operator_actions: List[str],
-    submit_metrics: List[str],
-    evidence_required: List[str],
-    acceptance_criteria: List[str],
-    failure_threshold: List[str],
-    review_focus: List[str],
-    fit_condition: List[str],
-    risk: str,
-    duration: str = "24-48 小时",
-) -> Dict[str, Any]:
-    return {
-        "packageId": package_id,
-        "packageName": name,
-        "targetMetric": target_metric,
-        "diagnosis": diagnosis,
-        "operatorAction": operator_actions,
-        "submitMetrics": submit_metrics,
-        "evidenceRequired": evidence_required,
-        "acceptanceCriteria": acceptance_criteria,
-        "failureThreshold": failure_threshold,
-        "reviewFocus": review_focus,
-        "fitCondition": fit_condition,
-        "risk": risk,
-        "testDuration": duration,
-    }
+def _field(key: str, label: str, field_type: str = "text", *, options: List[str] | None = None, required: bool = False, unit: str | None = None) -> Dict[str, Any]:
+    item: Dict[str, Any] = {"key": key, "label": label, "type": field_type, "required": required}
+    if options:
+        item["options"] = options
+    if unit:
+        item["unit"] = unit
+    return item
 
 
-def _ctr_conversion_packages(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _path(path_id: str, name: str, goal: str, fit: List[str], actions: List[str], do_not_do: List[str], review: List[str], required: List[str], risk: str) -> Dict[str, Any]:
+    return {"pathId": path_id, "pathName": name, "businessGoal": goal, "fitConditions": fit, "actions": actions, "doNotDo": do_not_do, "reviewMetrics": review, "requiredSupplementFields": required, "risk": risk}
+
+
+def _package(package_id: str, name: str, target_metric: str, diagnosis: str, actions: List[str], submit: List[str], evidence: List[str], acceptance: List[str], failure: List[str], review: List[str], fit: List[str], risk: str, duration: str = "24-48 小时") -> Dict[str, Any]:
+    return {"packageId": package_id, "packageName": name, "targetMetric": target_metric, "diagnosis": diagnosis, "operatorAction": actions, "submitMetrics": submit, "evidenceRequired": evidence, "acceptanceCriteria": acceptance, "failureThreshold": failure, "reviewFocus": review, "fitCondition": fit, "risk": risk, "testDuration": duration}
+
+
+def _readonly_evidence(problem_type: str, item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    keys = [
+        ("dataVersion", "数据版本"), ("latestDataVersion", "数据版本"), ("stock", "当前库存"), ("safetyStock", "安全库存"), ("refundRate", "退款率"), ("roi", "ROI"), ("roas", "ROAS"), ("ctr", "点击率"), ("conversion", "转化率"), ("orders", "订单"), ("sales", "销售额"), ("count", "记录数"), ("store", "店铺"), ("platform", "平台"),
+    ]
+    seen = set()
+    evidence: List[Dict[str, Any]] = []
+    for key, label in keys:
+        if key in seen:
+            continue
+        value = item.get(key)
+        if value not in [None, "", []]:
+            evidence.append({"label": label, "value": value, "source": "imported_report"})
+            seen.add(key)
+    for row in item.get("evidence") or []:
+        if row.get("label") and row.get("value") is not None:
+            evidence.append({"label": row.get("label"), "value": row.get("value"), "source": "alert_event"})
+    return evidence[:8]
+
+
+def _inventory_contract(name: str) -> Dict[str, Any]:
+    fields = [
+        _field("can_emergency_transfer", "是否可以紧急调货", "select", options=["可以", "不可以", "待确认"], required=True),
+        _field("transfer_quantity", "最多可调货数量", "number", unit="件"),
+        _field("transfer_source", "调货来源", "select", options=["其他仓", "其他店", "供应商", "线下库存", "无"], required=True),
+        _field("can_compress_lead_time", "是否可以压缩补货周期", "select", options=["可以", "不可以", "待确认"], required=True),
+        _field("earliest_arrival", "最早到货时间", "date"),
+        _field("supplier_extra_capacity", "供应商可追加产能", "number", unit="件"),
+        _field("replacement_sku", "可替代 SKU", "text"),
+        _field("selected_path_note", "选择原因", "textarea"),
+    ]
+    paths = [
+        _path("hot_supply_acceleration", "爆品承接加速", "保增长", ["订单或活动流量正在放大", "毛利和售后风险可承接", "调货、补货或加产有空间"], ["保留核心活动流量", "紧急调货或分批补货", "与供应商确认加急产能", "同步库存和发货承诺", "按日复盘库存消耗"], ["不立即停投", "不退出有效活动", "不把流量切给无法承接的商品"], ["是否断货", "爆品周期是否延续", "加急成本是否被利润覆盖", "退款率是否稳定"], ["can_emergency_transfer", "transfer_quantity", "can_compress_lead_time", "earliest_arrival", "supplier_extra_capacity"], "供应链承接不实会放大缺货和售后风险。"),
+        _path("supply_limit_loss_control", "供应链不足控量止损", "控风险", ["无法调货", "补货周期无法压缩", "缺货退款风险高"], ["限制活动或预算", "设置限购或控制订单进入速度", "优先保障高利润渠道", "客服提前同步发货预期"], ["不继续追高流量", "不扩大预算", "不承诺无法保证的发货时间"], ["缺货投诉是否下降", "退款率是否下降", "店铺评分是否稳定", "放弃流量损失是否可接受"], ["can_emergency_transfer", "can_compress_lead_time", "earliest_arrival", "selected_path_note"], "控量过慢会拖累评分，控量过急会损失有效流量。"),
+        _path("replacement_sku_redirect", "替代商品承接", "转承接", ["主商品库存不足", "有替代 SKU 或同类商品", "替代商品库存和供应链可承接"], ["降低主商品曝光", "将资源切到替代商品", "调整关联推荐", "客服引导替代款"], ["不把全部流量压在缺货商品上", "不强推无库存替代款"], ["替代商品转化率", "整体成交是否保住", "主商品退款风险是否下降"], ["replacement_sku", "transfer_quantity", "selected_path_note"], "替代商品承接不当会损失转化并增加咨询成本。"),
+    ]
+    return {"commonActions": ["确认供应链调度空间", "确认是否值得为爆品加急补货", "确认是否存在替代承接对象"], "supplementSchema": fields, "decisionPaths": paths, "recommendedPathId": "hot_supply_acceleration"}
+
+
+def _traffic_contract(name: str) -> Dict[str, Any]:
+    fields = [_field("budget_adjustable", "预算是否可调整", "select", options=["可调整", "不可调整", "待确认"], required=True), _field("campaign_constraint", "平台活动/达人/直播约束", "textarea"), _field("mis_targeting", "是否存在关键词/人群误投", "select", options=["是", "否", "待确认"]), _field("competitor_price_change", "竞品是否突然降价", "select", options=["是", "否", "未知"]), _field("replacement_product", "可转移承接商品", "text"), _field("selected_path_note", "选择原因", "textarea")]
+    paths = [
+        _path("growth_continue", "继续放量承接", "吃增长", ["ROI 可接受", "库存和售后能承接", "活动约束要求持续承接"], ["保留有效渠道", "扩大高 ROI 人群或关键词", "同步监控库存和退款"], ["不盲目全渠道加预算", "不忽略库存承接"], ["ROAS", "订单增量", "退款率", "库存消耗"], ["budget_adjustable", "campaign_constraint"], "放量必须受库存和售后承接约束。"),
+        _path("budget_loss_control", "缩预算控损", "控损耗", ["ROI 下降但仍有测试价值", "可识别低效渠道"], ["收缩低效渠道", "保留可验证测试流量", "记录预算调整前后指标"], ["不继续扩大低效预算", "不直接清空所有测试流量"], ["花费下降", "ROAS 回稳", "有效点击占比"], ["budget_adjustable", "mis_targeting"], "过度缩量会丢失判断样本。"),
+        _path("traffic_redirect", "流量转移", "转承接", ["当前商品承接差", "存在替代商品", "流量仍有价值"], ["把预算或入口切到替代商品", "调整关联推荐", "客服引导替代款"], ["不把流量继续压在承接弱商品上", "不让替代商品无库存承接"], ["替代转化率", "整体成交", "退款率"], ["replacement_product", "selected_path_note"], "承接对象不清会造成流量浪费。"),
+        _path("pause_review", "停投复盘", "止损", ["ROI 失控", "退款或库存风险高", "无法解释转化下滑"], ["暂停高风险投放", "锁定掉点环节", "等待下一轮数据复盘"], ["不继续投放高风险渠道", "不在未归因前换多个变量"], ["损耗是否停止", "退款是否回落", "复盘是否定位原因"], ["selected_path_note"], "停投后必须复盘原因，否则无法沉淀经验。"),
+    ]
+    return {"commonActions": ["识别预算是否能动", "确认是否有外部流量约束", "确认是否有可转移承接对象"], "supplementSchema": fields, "decisionPaths": paths, "recommendedPathId": "budget_loss_control"}
+
+
+def _competitor_contract(name: str) -> Dict[str, Any]:
+    fields = [_field("has_same_product", "是否有同类商品", "select", options=["有", "没有", "待确认"], required=True), _field("price_room", "是否有价格调整空间", "select", options=["有", "没有", "待确认"]), _field("proof_advantage", "可证明优势", "textarea"), _field("supply_advantage", "供应链优势", "textarea"), _field("selected_path_note", "选择原因", "textarea")]
+    paths = [_path("price_follow", "价格跟随", "缩小价格劣势", ["价格差距是核心问题", "毛利允许"], ["小幅跟随价格", "同步复核毛利", "观察转化变化"], ["不无底线降价", "不牺牲毛利追销量"], ["转化率", "毛利率", "订单量"], ["price_room"], "价格跟随会压缩利润。"), _path("selling_point_offset", "卖点错位", "避开正面对抗", ["不能打价格", "有材质/功能/服务优势"], ["重排标题主图卖点", "突出可证明差异", "小流量测试"], ["不正面攻击竞品", "不虚构优势"], ["点击率", "转化率", "咨询关键词"], ["proof_advantage"], "卖点必须可证明。"), _path("bad_review_counter", "差评反打", "把竞品问题转成自己的卖点", ["竞品差评集中", "自己能解决该痛点"], ["整理差评痛点", "生成不点名反向卖点", "测试主图/详情页表达"], ["不抄竞品", "不直接攻击竞品"], ["点击率", "转化率", "差评关键词变化"], ["proof_advantage", "has_same_product"], "差评反打必须合规。"), _path("give_up_follow", "放弃跟进", "避免无效消耗", ["毛利/供应链/转化都不支持"], ["记录放弃原因", "保持观察", "转向其他机会"], ["不继续投入素材和预算", "不强行跟价"], ["机会成本", "后续竞品变化"], ["selected_path_note"], "放弃不是失败，是避免无效投入。")]
+    return {"commonActions": ["确认自身承接能力", "确认是否有可证明优势", "确认毛利和供应链空间"], "supplementSchema": fields, "decisionPaths": paths, "recommendedPathId": "bad_review_counter"}
+
+
+def _listing_contract(name: str) -> Dict[str, Any]:
+    fields = [_field("has_spot_inventory", "是否有现货", "select", options=["有", "没有", "待确认"], required=True), _field("supplier_quote", "供应商报价", "text"), _field("has_material", "是否有素材图", "select", options=["有", "没有", "待确认"]), _field("test_budget", "预计测试预算", "number", unit="元"), _field("category_limit", "平台类目限制", "textarea"), _field("selected_path_note", "选择原因", "textarea")]
+    paths = [_path("light_test", "轻量测款", "低成本验证点击和收藏", ["有现货", "有素材", "风险低"], ["上架轻量测试链接", "控制预算", "观察点击收藏"], ["不大批量备货", "不一次改多个变量"], ["点击率", "收藏加购", "询单"], ["has_spot_inventory", "has_material", "test_budget"], "轻量测款不能承诺大规模交付。"), _path("small_batch_listing", "小批量上新", "控制库存风险", ["供应链可承接", "需求不确定"], ["小批量备货", "有限预算测试", "设置复盘周期"], ["不满仓铺货", "不跳过利润复核"], ["转化率", "售后", "周转"], ["supplier_quote", "test_budget"], "小批量仍需复核售后和周转。"), _path("review_gap_entry", "竞品差评切入", "用差异化卖点测试", ["竞品痛点明确", "自己能解决"], ["围绕痛点设计标题主图", "准备证明素材", "小范围测试"], ["不虚构能力", "不攻击竞品"], ["点击率", "转化率", "咨询关键词"], ["has_material", "selected_path_note"], "差异化必须可验证。"), _path("delay_listing", "暂缓上新", "避免盲目铺货", ["供应链/素材/利润/类目不成熟"], ["记录暂缓原因", "补齐供应商和素材", "等待下一轮机会"], ["不强行上架", "不为上新而上新"], ["补齐进度", "机会复查时间"], ["category_limit", "selected_path_note"], "暂缓要明确下一次复查条件。")]
+    return {"commonActions": ["确认现货和供应链", "确认素材和类目限制", "确认测试预算"], "supplementSchema": fields, "decisionPaths": paths, "recommendedPathId": "light_test"}
+
+
+def _report_contract(name: str) -> Dict[str, Any]:
+    fields = [_field("is_final_report", "是否最终版报表", "select", options=["是", "否", "待确认"], required=True), _field("need_rollback", "是否需要回滚", "select", options=["需要", "不需要", "待确认"]), _field("missing_fields", "缺失字段", "textarea"), _field("wrong_store_scope", "是否有店铺归属错误", "select", options=["有", "没有", "待确认"]), _field("selected_path_note", "选择原因", "textarea")]
+    paths = [_path("confirm_import", "确认入库", "让数据进入经营决策", ["字段正确", "数据可信"], ["确认数据版本", "允许模块投影和任务生成"], ["不重复导入同一版本"], ["生成模块内容", "生成预警", "任务数量"], ["is_final_report"], "错误入库会污染后续判断。"), _path("reupload_fix", "补传修正", "修正后重新生成判断", ["字段缺失", "归属错误"], ["补齐字段", "重新预览", "确认后再入库"], ["不让脏数据进入任务池"], ["字段完整率", "归属正确率"], ["missing_fields", "wrong_store_scope"], "修正前不要触发正式任务。"), _path("rollback_version", "版本回滚", "恢复上一版经营状态", ["导入错误", "数据污染"], ["回滚数据版本", "冻结相关任务", "记录原因"], ["不继续基于错误版本决策"], ["回滚成功", "受影响任务数"], ["need_rollback", "selected_path_note"], "回滚会影响已生成任务，需要记录链路。"), _path("observe_only", "仅作观察", "保留记录但不触发正式任务", ["数据不完整但有参考价值"], ["记录观察结论", "等待补传", "不进入正式任务池"], ["不触发强执行任务"], ["补传完成", "观察结论"], ["selected_path_note"], "观察数据不能替代正式决策数据。")]
+    return {"commonActions": ["确认数据可信度", "确认是否影响任务生成", "确认是否需要回滚或补传"], "supplementSchema": fields, "decisionPaths": paths, "recommendedPathId": "confirm_import"}
+
+
+def _general_contract(name: str) -> Dict[str, Any]:
+    fields = [_field("known_external_factor", "系统外部影响因素", "textarea"), _field("selected_path_note", "选择原因", "textarea")]
+    paths = [_path("small_scope_verify", "小范围验证", "先确认问题归因", ["问题类型不明确"], ["只改一个变量", "记录前后变化", "等待复盘"], ["不做大动作", "不同时改多个变量"], ["异常是否改善", "归因是否更清楚"], ["known_external_factor"], "通用路径只能用于过渡，后续要沉淀明确问题类型。")]
+    return {"commonActions": ["补齐系统不知道的现实变量", "选择最小可复盘路径"], "supplementSchema": fields, "decisionPaths": paths, "recommendedPathId": "small_scope_verify"}
+
+
+def _contract(problem_type: str, item: Dict[str, Any]) -> Dict[str, Any]:
     name = _product_name(item)
-    return [
-        _package(
-            package_id="AP-low-ctr-title-image",
-            name="标题主图点击率测试包",
-            target_metric="点击率",
-            diagnosis=f"{name}疑似标题关键词或首图吸引力不足，需要测试可点击变量。",
-            operator_actions=[
-                "选择 Agent 生成的 2-3 组标题 / 主图方案",
-                "把方案上架到测试商品或测试计划",
-                "保持价格、库存、详情页不变，只测试标题和首图变量",
-                "小流量观察 24-48 小时",
-                "提交每组方案的曝光、点击率、转化率、收藏加购和退款率",
-            ],
-            submit_metrics=["曝光", "点击率", "转化率", "收藏加购", "退款率", "测试版本截图"],
-            evidence_required=["旧标题 / 旧主图", "新标题 / 新主图", "测试开始时间", "测试结束时间", "分版本数据"],
-            acceptance_criteria=["点击率提升", "转化率不明显下滑", "退款率不异常升高", "胜出版本可复用"],
-            failure_threshold=["点击率无提升", "转化率明显下滑", "退款率升高", "平台提示违规或夸大"],
-            review_focus=["是否只变更标题 / 主图", "是否有足够曝光", "胜出版本是否有复用价值"],
-            fit_condition=["点击率下降", "主图 / 标题疑似弱", "商品库存可承接", "价格暂不调整"],
-            risk="不要同时改价、改详情页和换主图，否则无法判断哪个变量有效。",
-        ),
-        _package(
-            package_id="AP-low-conversion-detail",
-            name="详情页承接测试包",
-            target_metric="转化率",
-            diagnosis=f"{name}点击后转化偏弱时，优先测试详情页首屏卖点和承诺可信度。",
-            operator_actions=[
-                "对比竞品详情页前三屏表达",
-                "调整首屏卖点顺序，把核心利益点提前",
-                "补充尺寸、材质、安装或使用场景说明",
-                "保持主图标题不变，小范围观察转化变化",
-                "提交新旧详情页截图和转化率变化",
-            ],
-            submit_metrics=["转化率", "停留 / 咨询关键词", "收藏加购", "退款率", "新旧详情页截图"],
-            evidence_required=["竞品前三屏截图", "旧详情页首屏", "新详情页首屏", "测试时间", "转化数据"],
-            acceptance_criteria=["转化率提升", "咨询关键词减少", "退款率不升高", "详情页承诺更清楚"],
-            failure_threshold=["转化无提升", "咨询或退款变多", "新增表达被判定夸大"],
-            review_focus=["卖点顺序是否改变", "承诺是否可证明", "是否和标题 / 主图一致"],
-            fit_condition=["点击率尚可但转化低", "详情页承接弱", "退款原因与认知偏差有关"],
-            risk="详情页优化不能新增无法证明的承诺，也不能掩盖商品真实限制。",
-        ),
-    ]
+    if problem_type == "low_inventory_activity":
+        return _inventory_contract(name)
+    if problem_type in {"low_roi_high_refund", "low_ctr_low_conversion", "detail_page_conversion"}:
+        return _traffic_contract(name) if problem_type == "low_roi_high_refund" else _listing_contract(name)
+    if problem_type == "competitor_signal_to_test":
+        return _competitor_contract(name)
+    if problem_type == "listing_test_path":
+        return _listing_contract(name)
+    if problem_type == "report_data_anomaly":
+        return _report_contract(name)
+    return _general_contract(name)
 
 
-def _roi_refund_packages(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    name = _product_name(item)
-    return [
-        _package(
-            package_id="AP-refund-root-cause",
-            name="售后归因与承诺修正包",
-            target_metric="退款率 / ROI",
-            diagnosis=f"{name}出现 ROI 低或退款偏高时，先处理承接和售后预期，再决定是否继续放量。",
-            operator_actions=[
-                "导出近 7 日退款原因并按关键词归类",
-                "核对详情页承诺、主图文案和客服话术是否一致",
-                "补充尺寸 / 材质 / 安装 / 使用限制说明",
-                "暂停扩大预算，只保留必要测试流量",
-                "观察 24-48 小时 ROI、退款率和咨询关键词变化",
-            ],
-            submit_metrics=["退款率", "退款原因关键词", "ROI", "客服咨询关键词", "修改前后截图"],
-            evidence_required=["退款原因列表", "详情页承诺截图", "客服话术", "调整记录", "调整后数据"],
-            acceptance_criteria=["退款率下降", "ROI 回升或止损", "咨询关键词更集中", "承诺表达更清楚"],
-            failure_threshold=["退款率继续上升", "ROI 继续低于安全线", "出现新的高频投诉词"],
-            review_focus=["是否先止损", "是否修正承诺", "是否保留可追溯证据"],
-            fit_condition=["退款率高", "ROI 低", "售后原因集中", "详情页或客服承诺可能不一致"],
-            risk="不要在退款原因未查清前继续放大投放。",
-        ),
-        _package(
-            package_id="AP-traffic-loss-control",
-            name="流量止损复盘包",
-            target_metric="ROI / 转化率",
-            diagnosis=f"{name}需要判断流量问题、承接问题还是退款损耗，而不是直接加预算。",
-            operator_actions=[
-                "找出高消耗低转化关键词或渠道",
-                "拆分点击率、转化率、退款率三个指标判断先掉哪一环",
-                "对低效流量先缩量或暂停扩大",
-                "若是素材问题转入标题主图测试包；若是承接问题转入详情页测试包",
-                "提交 ROI 复盘结论和下一步建议",
-            ],
-            submit_metrics=["花费", "点击率", "转化率", "ROI", "退款率", "高消耗低转化来源"],
-            evidence_required=["渠道消耗表", "关键词 / 人群数据", "商品转化数据", "退款损耗数据"],
-            acceptance_criteria=["明确问题环节", "预算风险被控制", "下一步测试路径清楚"],
-            failure_threshold=["继续扩大预算", "没有区分点击 / 转化 / 退款原因", "缺少渠道数据"],
-            review_focus=["是否先控制损耗", "是否能解释 ROI 下降原因", "是否有下一步测试包"],
-            fit_condition=["ROI 低", "投放或活动流量参与", "退款或转化有异常"],
-            risk="流量复盘不是直接停投或加投，而是先定位掉点环节。",
-        ),
-    ]
-
-
-def _inventory_packages(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    name = _product_name(item)
-    return [
-        _package(
-            package_id="AP-inventory-activity-control",
-            name="库存与活动节奏控制包",
-            target_metric="缺货风险 / 活动承接",
-            diagnosis=f"{name}存在库存承接风险，先确认补货与活动节奏，避免爆单缺货和退款。",
-            operator_actions=[
-                "确认当前可售库存和安全库存",
-                "确认供应商补货周期和最早到货时间",
-                "估算当前活动 / 推广流量的库存消耗",
-                "必要时限制活动、缩小推广或设置限量",
-                "提交库存处理结论和是否继续放量建议",
-            ],
-            submit_metrics=["当前库存", "安全库存", "补货周期", "活动消耗预估", "缺货退款风险"],
-            evidence_required=["库存截图", "补货计划", "活动报名 / 流量计划", "库存消耗估算"],
-            acceptance_criteria=["补货周期清楚", "活动节奏可控", "缺货风险有处理方案"],
-            failure_threshold=["补货时间不明确", "继续放大活动", "缺货退款风险未处理"],
-            review_focus=["库存是否能承接", "是否需要暂缓活动", "是否需要调整推广节奏"],
-            fit_condition=["库存偏低", "活动流量上升", "补货周期不确定"],
-            risk="库存任务的核心是承接风险，不是单纯看当前库存数字。",
-        )
-    ]
-
-
-def _competitor_packages(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    name = _product_name(item)
-    bad_review = item.get("badReview") or "竞品差评"
-    return [
-        _package(
-            package_id="AP-competitor-review-to-selling-point",
-            name="竞品差评反向卖点测试包",
-            target_metric="点击率 / 转化率",
-            diagnosis=f"{name}可把“{bad_review}”转成自家可证明卖点，但不能直接跟价或攻击竞品。",
-            operator_actions=[
-                "收集 5-10 条同类竞品差评样本",
-                "提取可验证痛点，转成自家标题 / 主图 / 详情页卖点",
-                "生成不点名竞品的对比表达",
-                "上架小范围测试卖点表达",
-                "提交点击率、转化率和咨询关键词变化",
-            ],
-            submit_metrics=["竞品差评样本", "点击率", "转化率", "咨询关键词", "测试版本截图"],
-            evidence_required=["竞品差评截图", "自家商品事实证明", "测试标题 / 主图 / 详情页截图", "测试数据"],
-            acceptance_criteria=["差评痛点被转成可验证卖点", "点击或转化改善", "没有直接攻击竞品"],
-            failure_threshold=["无事实支撑", "直接跟价", "违规对比或攻击竞品"],
-            review_focus=["痛点是否真实", "自家是否能证明", "表达是否合规"],
-            fit_condition=["竞品差评集中", "自家存在对应优势", "需要生成测试假设"],
-            risk="竞品信号要转成测试假设，不是直接跟价。",
-        )
-    ]
-
-
-def _report_packages(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return [
-        _package(
-            package_id="AP-report-to-operation-task",
-            name="报表异常转经营任务包",
-            target_metric="异常对象识别",
-            diagnosis="报表异常属于 Agent 判定链路，不应直接变成运营执行动作，需先转成具体商品 / 流量 / 售后 / 库存任务。",
-            operator_actions=[
-                "确认本次报表来源和同步时间",
-                "筛出异常商品 / 订单 / 客户对象",
-                "按异常类型转成商品、流量、售后、库存或竞品任务",
-                "不把报表复核本身当作长期待办",
-                "提交异常对象列表和转任务结果",
-            ],
-            submit_metrics=["异常对象数", "异常字段", "转任务数量", "退回补充数量"],
-            evidence_required=["导入记录", "异常字段列表", "异常对象 ID", "转任务清单"],
-            acceptance_criteria=["异常对象被定位", "可执行任务已生成", "无效报表已退回补充"],
-            failure_threshold=["只停留在查看报表", "没有定位对象", "没有转成经营任务"],
-            review_focus=["报表是否可信", "异常是否转成具体任务", "是否避免重复任务"],
-            fit_condition=["报表刚导入", "字段或数据异常", "需要转成经营任务"],
-            risk="报表处理是 Agent / 总管判定工作，不应让运营做无边界的数据排查。",
-        )
-    ]
-
-
-def _general_packages(item: Dict[str, Any]) -> List[Dict[str, Any]]:
-    name = _product_name(item)
-    return [
-        _package(
-            package_id="AP-general-small-test",
-            name="通用小范围验证包",
-            target_metric="异常指标改善",
-            diagnosis=f"{name}问题类型暂不明确，先用小范围验证避免大动作误伤。",
-            operator_actions=["补齐关键指标", "选择一个最小变量测试", "记录前后数据", "提交处理结果", "由总管决定是否扩展"],
-            submit_metrics=["处理前指标", "处理后指标", "操作截图", "异常说明"],
-            evidence_required=["来源数据", "处理动作", "结果指标", "复核结论"],
-            acceptance_criteria=["问题归因更清楚", "动作可回滚", "证据完整"],
-            failure_threshold=["动作过大", "证据不足", "无法判断变量"],
-            review_focus=["是否小范围", "是否可回滚", "是否有数据结果"],
-            fit_condition=["问题类型不明确", "缺少历史经验", "需要先验证"],
-            risk="通用方案只能用于过渡，后续必须沉淀成明确问题类型。",
-        )
-    ]
-
-
-def action_plan_for_problem(
-    problem_type: str,
-    *,
-    item: Dict[str, Any] | None = None,
-    source_module: str | None = None,
-    rag_items: List[Dict[str, Any]] | None = None,
-) -> Dict[str, Any]:
+def action_plan_for_problem(problem_type: str, *, item: Dict[str, Any] | None = None, source_module: str | None = None, rag_items: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     item = deepcopy(item or {})
     if not problem_type or problem_type == "general_operation":
         problem_type = infer_action_problem_type(item, source_module=source_module, fallback=problem_type or "general_operation")
-    if problem_type == "low_ctr_low_conversion":
-        packages = _ctr_conversion_packages(item)
-        action_type = "标题主图 / 详情页测试"
-    elif problem_type == "detail_page_conversion":
-        packages = [_ctr_conversion_packages(item)[1]]
-        action_type = "详情页承接优化"
-    elif problem_type == "low_roi_high_refund":
-        packages = _roi_refund_packages(item)
-        action_type = "售后归因 / 流量止损"
-    elif problem_type == "low_inventory_activity":
-        packages = _inventory_packages(item)
-        action_type = "库存承接 / 活动节奏"
-    elif problem_type == "competitor_signal_to_test":
-        packages = _competitor_packages(item)
-        action_type = "竞品差评反向测试"
-    elif problem_type == "report_data_anomaly":
-        packages = _report_packages(item)
-        action_type = "报表异常转任务"
-    else:
-        packages = _general_packages(item)
-        action_type = "小范围验证"
-    selected = packages[0]
+    contract = _contract(problem_type, item)
+    decision_paths = contract["decisionPaths"]
+    selected_path = next((path for path in decision_paths if path["pathId"] == contract.get("recommendedPathId")), decision_paths[0])
+    package = _package(f"DP-{selected_path['pathId']}", selected_path["pathName"], " / ".join(selected_path["reviewMetrics"][:2]) or "复盘指标", f"{_product_name(item)}需要选择“{selected_path['pathName']}”经营路径，并补充系统不知道的现实变量。", selected_path["actions"], selected_path["reviewMetrics"], selected_path["requiredSupplementFields"], [f"路径目标：{selected_path['businessGoal']}", *selected_path["fitConditions"][:2]], [selected_path["risk"]], [*selected_path["reviewMetrics"], "路径是否有效"], selected_path["fitConditions"], selected_path["risk"])
+    readonly = _readonly_evidence(problem_type, item)
     return {
         "version": ACTION_PLAN_VERSION,
         "problemType": problem_type,
         "problemLabel": PROBLEM_LABELS.get(problem_type, PROBLEM_LABELS["general_operation"]),
-        "actionPlanType": action_type,
-        "diagnosis": selected["diagnosis"],
-        "recommendedPackage": selected,
-        "executionPackages": packages,
-        "executionSteps": selected["operatorAction"],
-        "evidenceRequired": selected["evidenceRequired"],
-        "submitMetrics": selected["submitMetrics"],
-        "acceptanceCriteria": selected["acceptanceCriteria"],
-        "failureThreshold": selected["failureThreshold"],
-        "reviewFocus": selected["reviewFocus"],
+        "actionPlanType": selected_path["pathName"],
+        "diagnosis": package["diagnosis"],
+        "readonlyEvidence": readonly,
+        "commonActions": contract["commonActions"],
+        "supplementSchema": contract["supplementSchema"],
+        "decisionPaths": decision_paths,
+        "recommendedPathId": selected_path["pathId"],
+        "reviewPlan": {"nextDataTrigger": "下一轮报表导入 / 任务提交复核", "reviewMetrics": selected_path["reviewMetrics"], "selectedPathRequired": True},
+        "recommendedPackage": package,
+        "executionPackages": [package],
+        "executionSteps": selected_path["actions"],
+        "evidenceRequired": [field["label"] for field in contract["supplementSchema"] if field.get("required")],
+        "submitMetrics": selected_path["reviewMetrics"],
+        "acceptanceCriteria": [f"已选择主路径：{selected_path['pathName']}", "补充信息完整", "下一轮数据可复盘"],
+        "failureThreshold": [selected_path["risk"]],
+        "reviewFocus": selected_path["reviewMetrics"],
         "ragReferences": [case.get("caseId") for case in rag_items or []],
-        "boundary": "模块发现问题，Action Plan 按问题类型生成处理包；Agent 不按模块套同一模板，也不直接执行经营动作。",
+        "boundary": "ActionPlan 是 Agent 内部工程包；前端默认展示 DecisionTaskDraft，不展示工程处理包。",
         "forbiddenActions": FORBIDDEN_ACTIONS,
     }
