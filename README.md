@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V4.5.1。README 只保留当前主线、入口和运行方式；详细边界以 `docs/product/module-boundary.md` 为准，MVP 范围以 `docs/product/mvp-scope.md` 为准，版本记录以 `versioning/CHANGELOG.md` 和 `docs/product/CHANGELOG.md` 为准。
+> 当前版本：V4.5.2。README 只保留当前主线、入口和运行方式；详细边界以 `docs/product/module-boundary.md` 为准，MVP 范围以 `docs/product/mvp-scope.md` 为准，版本记录以 `versioning/CHANGELOG.md` 和 `docs/product/CHANGELOG.md` 为准。
 
 ## 当前主链路
 
