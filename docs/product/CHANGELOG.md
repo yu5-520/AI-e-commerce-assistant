@@ -1,5 +1,26 @@
 # Product Changelog
 
+## v4.5.0 - 2026-06-21
+
+### Product Decision
+- V4.5 不把系统直接 MCP 化，而是先做统一 LLM Gateway 和内部 Tool Gateway。
+- Product truth: LLM 负责标题、主图文案、任务说明、经验卡草案等“表达增强”；problemType、ActionPlan、权限、任务池、人审和审计仍由确定性系统负责。
+- MCP 只作为未来外部工具生态适配层，不能绕过内部任务池、账号权限、ActionPlan 和复核链路。
+
+### Changed
+- 新增统一模型层：`src/services/llm_provider_service.py`。
+- 新增 LLM 防越权校验：`src/services/llm_guardrail_service.py`。
+- 新增 LLM 调用追踪：`src/services/llm_trace_service.py`。
+- 新增 Prompt 模板服务：`src/services/prompt_template_service.py`。
+- 新增内部安全工具网关：`src/services/tool_gateway_service.py`。
+- 新增 MCP 适配边界：`src/services/mcp_adapter_service.py`。
+- 新增 `/api/llm/status`、`/api/llm/generate`、`/api/llm/traces`、`/api/llm/tools`、`/api/llm/mcp`。
+- 新增 prompts 与 LLM 输出 schema。
+- 创意 Agent 已接入第一层 LLM enrichment，输出 `llmEnrichment`、`llmTitleVariants`、`llmMainImageDirections`、`llmRiskCheck`、`llmPackagePreviews`。
+
+### Product Boundary
+- LLM 输出只作为草案，不能直接改价、投放、退款、发布商品、写 ERP / CRM 或自动批准经验入库。若 LLM 未启用、无 API Key、调用失败或命中越权动作，系统使用确定性 fallback。
+
 ## v4.4.2 - 2026-06-21
 
 ### Product Decision
