@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v5.0.5
+Current Version: v5.0.6
 
 ## Version History
 
+- v5.0.6: Compact path selection and execution evidence flow. Detail report removes the non-changing top copy and shared-action block, shows horizontal path rows, creates selected-path tasks directly in processing status, and changes todo detail into execution evidence, screenshot/link, result, and review-metric submission.
 - v5.0.5: Upgraded detail reports into a decision task draft flow. ActionPlan now returns readonly evidence, shared actions, supplement fields, decision paths, recommended path, and review plan. The user-facing report hides engineering packages and shows path selection plus supplement fields before joining the todo pool.
 - v5.0.4: Removed remaining owner / manager / operating-unit frontend mock dashboards. Dashboard no longer duplicates module entry cards or explanatory copy. Operating unit is now data-driven from ModuleProjection and empty by default. Manager and owner views now read imported-data projections and task state instead of hard-coded demo stores, tasks, finance, traffic, and recap arrays. Runtime reset also clears manager / owner localStorage view state.
 - v5.0.3: Added V5 runtime cleanup to solve stale SQLite residual data after removing frontend fallback content. The API applies a one-time startup cleanup marker, exposes `/api/system/reset-runtime-data`, clears module projections / report rows / alerts / tasks, and bumps frontend cache to V5.0.3.
