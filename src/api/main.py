@@ -18,8 +18,8 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="5.0.4",
-    description="V5.0.4 runtime with data-driven owner, manager, operating-unit, and dashboard pages.",
+    version="5.0.5",
+    description="V5.0.5 runtime with decision task drafts, supplement fields, and path-based review flow.",
 )
 
 app.add_middleware(
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.4"}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.5"}
 
 
 app.include_router(modules.router)
