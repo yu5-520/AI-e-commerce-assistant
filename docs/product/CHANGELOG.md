@@ -1,5 +1,21 @@
 # Product Changelog
 
+## v4.5.2 - 2026-06-21
+
+### Product Decision
+- V4.5.2 删除任务详情页顶部过程提示，不再出现“Agent 任务草案提交中...”这类工程化文案。
+- Product truth: 用户点击确认后只需要看到按钮状态、成功跳转或局部失败提示，不需要看到内部流程提示条。
+
+### Changed
+- `web_demo/modules/task-report/page.js` 删除 Agent notice bar 和全局操作提示。
+- 任务创建、创意测试包创建、普通来源任务创建改为按钮 loading。
+- 失败时只在按钮旁边展示局部错误，不刷新整页。
+- “重新生成 Agent 方案”改为只替换 Agent 区块数据；生成失败时保留旧方案，不让整张报告消失。
+- `web_demo/alert-report.css` 新增按钮 loading 与局部错误样式。
+
+### Product Boundary
+- 这次只修前端状态和交互，不改变 Agent、ActionPlan、LLM Gateway、任务池和权限链路。
+
 ## v4.5.1 - 2026-06-21
 
 ### Product Decision
@@ -78,42 +94,3 @@
 
 ### Changed
 - 新增回流任务 Agent：`GET /api/modules/feedback-flywheel`。
-- 新增日报 / 周报回流接口：`GET /api/modules/feedback-flywheel/cycle/{target}`。
-- 新增周期经验卡草案接口：`POST /api/modules/feedback-flywheel/cycle/{target}/draft`。
-- 新增 `src/services/feedback_flywheel_service.py`，负责学习候选、周期摘要、经验草案、反馈指标和 RAG 召回上下文。
-- 总管复核通过任务后，待办接口会自动生成 `feedbackDraft` 经验卡草案，但仍需在 RAG Memory 中人工复核入库。
-- 前端 API client 增加 `feedbackFlywheel`、`feedbackCycle`、`draftFeedbackCycle` 方法。
-- V4.4 继续复用 RAG memory、统一任务池和 `/api/accounts` 权限边界。
-
-### Product Boundary
-- 当前 V4.4 不自动批准经验入库，不把日报 / 周报 / 日志原文直接写进正式 RAG，不自动执行经营动作。经验卡必须经过复核通过后，才可用于正式召回。
-
-## v4.3.0 - 2026-06-19
-
-### Product Decision
-- V4.3 把“标题主图 Agent”从简单素材生成升级为“垂直类目表达策略 Agent”。
-- Product truth: 真正有价值的不是生成几句标题，而是结合类目、平台、人群、竞品差评和历史测试，生成可被运营验证的表达方案。
-- 这让系统从“任务生成 / 任务解析”继续升级为“类目表达策略 → 标题主图方案 → 小流量测试 → 任务回流”。
-
-### Changed
-- 新增标题主图垂直类目 Agent：`POST /api/modules/agents/creative/{product_id}`。
-- 新增创意方案入任务池接口：`POST /api/modules/agents/creative/{product_id}/tasks`。
-- 新增 `src/services/creative_vertical_agent_service.py`，负责商品事实、类目 Profile、平台表达规则、竞品信号、RAG 经验召回、标题方案、主图方向、卖点排序和 A/B 测试计划。
-- 创意 Agent 输出：`titleVariants`、`mainImageDirections`、`sellingPointOrder`、`testPlan`、`taskDraft`、`ragReferences`、`humanDecision`、`forbiddenActions`。
-- 内置平台表达规则：淘宝、拼多多、抖音小店、通用。
-- 前端 API client 增加 `creativeAgent` 与 `createCreativeTask` 方法。
-- V4.3 继续复用 RAG memory、统一任务池和 `/api/accounts` 权限边界。
-
-### Product Boundary
-- 当前 V4.3 只生成表达策略和测试计划，不生成真实图片文件，不自动发布商品，不改价、不投放、不回写 ERP / CRM / 店铺后台。创意方案若要进入执行，必须作为任务进入统一任务池并由人工确认。
-
-## v4.2.0 - 2026-06-19
-
-### Product Decision
-- V4.2 把“任务生成”和“任务解析运营方式”正式拆成两个 Agent。
-- Product truth: 任务不是 Agent 凭空生成，而是由规则命中、模块数据、RAG 经验召回和人工确认共同决定。
-- 这让系统从“经验卡可召回”继续升级为“规则 + RAG 生成任务草案 → 多打法解析 → 人工选择执行”。
-
-### Changed
-- 新增自动解析生成任务 Agent：`POST /api/modules/agents/tasks/generate`。
-- 新增任务解析运营方式 Agent：`GET /api/modules/agents/tasks/{task_id}/playbook`。
