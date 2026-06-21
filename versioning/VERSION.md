@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.4.2
+Current Version: v4.5.0
 
 ## Version History
 
+- v4.5.0: Added the unified LLM Gateway with `src/services/llm_provider_service.py`, `llm_guardrail_service.py`, `llm_trace_service.py`, `prompt_template_service.py`, `tool_gateway_service.py`, `mcp_adapter_service.py`, `/api/llm/*` routes, prompt templates, LLM output schemas, `.env.example` settings, and first creative-Agent LLM enrichment. MCP is kept as a future external tool adapter behind Tool Gateway, not the primary model interface.
 - v4.4.2: Added the problem-type Action Plan layer with `src/services/action_plan_service.py`; task and module Agents now output `problemType`, `actionPlan`, `executionPackages`, `executionSteps`, `evidenceRequired`, `submitMetrics`, `acceptanceCriteria`, `failureThreshold`, and `reviewFocus` so each module signal becomes a targeted handling package instead of one generic task-breakdown template.
 - v4.4.1: Refined the creative vertical Agent into a ready-to-test package generator. Added `testPackages`, selected-package task creation with `packageIndex`, operator execution steps, submit metrics, task-report page cleanup, and smoke-test coverage for title / main-image test packages.
 - v4.4.0: Added the feedback flywheel Agent with `src/services/feedback_flywheel_service.py`, `/api/modules/feedback-flywheel`, `/api/modules/feedback-flywheel/cycle/{target}`, `/api/modules/feedback-flywheel/cycle/{target}/draft`, automatic experience-card drafting on manager approval, feedback metrics, frontend client methods, V4.4 health flags, and smoke-test coverage.
