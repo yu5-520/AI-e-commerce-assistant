@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.5.1
+Current Version: v4.5.2
 
 ## Version History
 
+- v4.5.2: Removed task-report top notice bars for Agent refresh and task creation, changed task creation to local button loading / inline error feedback, and made “重新生成 Agent 方案” preserve the current report and old Agent output if refresh fails.
 - v4.5.1: Productized the ActionPlan detail UI. `web_demo/modules/task-report/page.js` now renders problem handling packages and task drafts as dedicated product cards with numbered operator steps, submit metrics, review criteria, failure thresholds, and hidden engineering IDs; `web_demo/alert-report.css` adds responsive iPad-safe layout styles.
 - v4.5.0: Added the unified LLM Gateway with `src/services/llm_provider_service.py`, `llm_guardrail_service.py`, `llm_trace_service.py`, `prompt_template_service.py`, `tool_gateway_service.py`, `mcp_adapter_service.py`, `/api/llm/*` routes, prompt templates, LLM output schemas, `.env.example` settings, and first creative-Agent LLM enrichment. MCP is kept as a future external tool adapter behind Tool Gateway, not the primary model interface.
 - v4.4.2: Added the problem-type Action Plan layer with `src/services/action_plan_service.py`; task and module Agents now output `problemType`, `actionPlan`, `executionPackages`, `executionSteps`, `evidenceRequired`, `submitMetrics`, `acceptanceCriteria`, `failureThreshold`, and `reviewFocus` so each module signal becomes a targeted handling package instead of one generic task-breakdown template.
@@ -23,4 +24,3 @@ Current Version: v4.5.1
 - v3.0.7: Added alert evidence detail reports with source trace, trigger rule, store responsibility, raw report rows, evidence chain, and frontend entry from latest report alerts.
 - v3.0.6: Hardened report data ownership by binding imported report rows, alert events, dashboard summary, report module alerts, and generated warning tasks to store scope; added store_id / store_name field aliases and account-scoped alert APIs.
 - v3.0.5: Compacted manager navigation, nested product / competitor / listing / traffic / report operation pages under the manager operation-module hub, added clickable manager module cards, and extended minimal UI cleanup to manager pages.
-- v3.0.4: Added minimal UI cleanup, removed explanatory grey microcopy through a global UI layer, changed store owner changes into confirmed next-day migration records, added pending store migrations, and changed owner-side store responsibility changes to require management confirmation.
