@@ -1,5 +1,35 @@
 # Changelog
 
+## v4.4.2 - 2026-06-21
+
+### Added
+- Added `src/services/action_plan_service.py` as the deterministic problem-type → execution-package layer.
+- Added ActionPlan outputs to task and module Agent payloads: `problemType`, `actionPlan`, `executionPackages`, `executionSteps`, `evidenceRequired`, `submitMetrics`, `acceptanceCriteria`, `failureThreshold`, and `reviewFocus`.
+- Added frontend rendering for generic problem-type execution packages in `web_demo/modules/task-report/page.js`.
+- Added V4.4.2 health flags and smoke-test coverage for problem-type ActionPlan outputs.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.4.2`.
+- `task_agent_service.py` no longer creates generic "补证据 / 交复核" task drafts; it routes module signals through ActionPlan packages.
+- `module_agent_service.py` now uses ActionPlan for product, traffic, competitor, listing, report, and task detail Agent outputs.
+
+### Product Engineering Rule
+- 模块发现问题，problemType 决定处理包。Agent 不能按模块套同一模板；点击率、退款率、库存、竞品、报表等问题必须生成不同的执行包、提交指标和复核标准。
+
+## v4.4.1 - 2026-06-21
+
+### Added
+- Added ready-to-test creative packages for the creative vertical Agent.
+- Added selected package task creation through `packageIndex`.
+- Added frontend task-report rendering for title / main-image test packages.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.4.1`.
+- Creative Agent output now includes package-level operator actions and submit metrics.
+
+### Product Engineering Rule
+- 标题主图 Agent 不是让运营继续想标题，而是生成可上架测试包。运营负责选择、测试和反馈。
+
 ## v4.4.0 - 2026-06-19
 
 ### Added
@@ -58,40 +88,3 @@
 - Added `src/services/experience_memory_service.py` as the structured operation experience memory layer.
 - Added `src/api/routes/modules/rag_memory.py` with `/api/modules/rag-memory`, `/api/modules/rag-memory/cases`, `/api/modules/rag-memory/search`, `/api/modules/rag-memory/feedback/tasks/{task_id}`, `/api/modules/rag-memory/cases/{case_id}/approve`, and `/api/modules/rag-memory/cases/{case_id}/reject`.
 - Added seed playbooks and negative cases so V4 Agent workflows can retrieve approved operating experience before real RAG embeddings are connected.
-- Added frontend API client methods for RAG memory summary, case listing, search, feedback drafting, approval, and rejection.
-- Added V4.1 smoke-test coverage for memory search, task feedback-to-experience drafting, and owner / manager experience approval.
-
-### Changed
-- FastAPI app version and frontend cache query strings are bumped to `4.1.0`.
-- `/api/modules` now includes the RAG memory routes while preserving `/api/accounts` role boundaries.
-- Feedback from task handling can now become a pending experience card instead of being written directly into RAG.
-
-### Product Engineering Rule
-- RAG memory is not raw log storage. 日报、周报和任务日志必须先被提炼成经验卡，并经过质量分与人工复核，才能进入正式召回。
-
-## v4.0.0 - 2026-06-19
-
-### Added
-- Added `src/services/module_agent_service.py` as the V4 advisory-only module Agent layer.
-- Added `src/api/routes/modules/agents.py` with `/api/modules/agents`, `/api/modules/agents/{module}/{entity_id}`, `/api/modules/agents/{module}/{entity_id}/tasks`, and `/api/modules/agents/cycle/{target}`.
-- Added V4 Agent panel to the independent detail report page so product / competitor / listing / traffic / report / task details can show Agent analysis and task drafts.
-- Added V4 health flags and `docs/V4_MODULE_AGENT_RUNTIME.md`.
-
-### Changed
-- FastAPI app version and frontend cache query strings are bumped to `4.0.0`.
-- Detail reports can now fetch module Agent advice without moving Agent into the highest control position.
-- Agent-created task drafts still enter the existing unified task pool and keep the existing `/api/modules` task lifecycle and `/api/accounts` role boundary.
-
-### Product Engineering Rule
-- Agent belongs inside modules as an advisory layer. It can write suggestions, summaries, task drafts, and decision points, but it must not directly change price, ads, refunds, publishing state, marketplace data, or ERP / CRM records.
-
-## v3.1.4 - 2026-06-17
-
-### Added
-- Added backend `/api/data/versions/{data_version}/detail` for one data-version detail payload.
-- Added `web_demo/modules/report/report-runtime.js` as the normalized report runtime file.
-- Added `web_demo/modules/manager/manager-modules.js` as the normalized manager module hub runtime file.
-
-### Changed
-- `data_version_service.py` now reports service version `3.1.4` instead of the stale rollback version.
-- Data-version detail no longer depends on the browser stitching `/api/data/import-records` and `/api/data/alerts?limit=200`.
