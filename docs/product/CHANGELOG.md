@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v5.0.5 - 2026-06-21
+
+### Product Decision
+- V5.0.5 把详情报告从 Agent 工程报告改成经营路径任务草案。
+- 导入数据生成只读证据和 Agent 判断；运营只补充系统不知道的现实变量，并选择主经营路径。
+- 问题处理包、方案补充和人工确认不再作为运营端默认模块展示。
+
+### Changed
+- `src/services/action_plan_service.py` 输出 `readonlyEvidence`、`commonActions`、`supplementSchema`、`decisionPaths`、`recommendedPathId`、`reviewPlan`。
+- `src/api/routes/modules/agents.py` 在创建任务时写入 `selectedPathId`、`operatorSupplement` 和 `reviewPlan`。
+- 新增 `web_demo/modules/task-report/decision-runtime.js` 覆盖详情报告前端展示。
+- 新增 `web_demo/decision-task.css` 放大任务草案、路径选择和补充信息输入区。
+- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.5`。
+
+### Product Boundary
+- ActionPlan 仍是 Agent 内部工程包，默认不给运营端阅读。
+- 方案路径必须有经营取舍：目标、动作、不做什么、复盘指标都不同。
+- 运营补充的是供应链、预算、活动约束、替代 SKU 等现实变量，不重复录入系统已有数据。
+
 ## v5.0.4 - 2026-06-21
 
 ### Product Decision
@@ -20,21 +39,3 @@
 - 清的是托底经营数据，不是账号体系和模块导航。
 - 店铺权限配置留在账号/权限体系里；经营单元页只展示导入数据后的经营结果。
 - 老板端、总管端、运营端都必须遵循同一个空状态标准。
-
-## v5.0.3 - 2026-06-21
-
-### Product Decision
-- V5.0.3 解决“前端托底已清，但服务器 SQLite 旧导入数据仍被 ModuleProjection 读取”的残留问题。
-- 产品运行态需要一个可控清空能力：清掉导入行、数据版本、预警、任务和日志，但保留产品模块、账号体系和代码骨架。
-
-### Changed
-- `src/services/system_service.py` 新增 V5 runtime reset：清空 `imported_report_rows`、`data_snapshots`、`metric_snapshots`、`alert_events`、任务状态、导入记录和运行日志。
-- `src/api/main.py` 新增启动时一次性 legacy runtime cleanup；旧服务器数据库只在 V5.0.3 首次启动时自动清空一次，并写入 marker，后续重启不会反复清空新导入数据。
-- `src/api/routes/system.py` 新增 `/api/system/reset-runtime-data` 和 `/api/system/reset-legacy-runtime-once`。
-- `web_demo/core/api-client.js` 新增 `resetRuntimeData()`，清空后同步清理前端内存态。
-- `web_demo/index.html` 资源缓存号升级到 `v=5.0.3`。
-
-### Product Boundary
-- 清的是运行态数据，不是模块功能。
-- 一次性启动清理只为处理 V5 迁移前旧 SQLite 残留；新导入数据不会在每次重启时被清空。
-- 后续手动清空必须调用 reset 接口并带确认参数。
