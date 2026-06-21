@@ -1,5 +1,24 @@
 # Changelog
 
+## v4.5.0 - 2026-06-21
+
+### Added
+- Added `src/services/llm_provider_service.py` as the unified LLM Provider Gateway for OpenAI-compatible providers and deterministic fallback.
+- Added `src/services/llm_guardrail_service.py`, `src/services/llm_trace_service.py`, and `src/services/prompt_template_service.py` for schema checks, forbidden-action checks, prompt loading, and local trace records.
+- Added `src/services/tool_gateway_service.py` as the internal safe tool gateway and `src/services/mcp_adapter_service.py` as the future MCP boundary.
+- Added `/api/llm/status`, `/api/llm/generate`, `/api/llm/traces`, `/api/llm/tools`, `/api/llm/tools/{tool_name}`, and `/api/llm/mcp`.
+- Added prompt templates under `prompts/` and output schemas under `schemas/llm_outputs/`.
+- Added `src/services/creative_llm_enrichment_service.py` and connected creative Agent responses to LLM enrichment with fallback.
+
+### Changed
+- FastAPI app version and frontend cache query strings are bumped to `4.5.0`.
+- `src/api/routes/modules/agents.py` now registers LLM Gateway, Tool Gateway, and MCP Adapter boundary in the Agent registry.
+- `.env.example` now includes V4.5 LLM Gateway settings: `LLM_ENABLED`, `LLM_MOCK_MODE`, `LLM_TRACE_ENABLED`, provider, model, base URL, key, timeout, temperature, and max tokens.
+- `scripts/smoke_test_api.py` now validates LLM Gateway status, manual generation fallback, Tool Gateway safe / blocked tools, MCP boundary, and creative LLM enrichment.
+
+### Product Engineering Rule
+- LLM 只做表达增强和草案生成；ActionPlan、账号权限、任务池、人审、复核和审计链路保持确定性。MCP 只作为未来外部工具适配层，不替代内部 Tool Gateway。
+
 ## v4.4.2 - 2026-06-21
 
 ### Added
