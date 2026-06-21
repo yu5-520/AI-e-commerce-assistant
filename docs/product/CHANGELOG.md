@@ -1,5 +1,21 @@
 # Product Changelog
 
+## v4.5.3 - 2026-06-21
+
+### Product Decision
+- V4.5.3 把普通模块、任务生成、任务解析和回流任务都接入 LLM + RAG 增强。
+- Product truth: ActionPlan 仍负责稳定判断和处理包合约；RAG 负责召回复核经验；LLM 负责把处理包写成更具体的执行说明、复核重点和风险提醒。
+
+### Changed
+- 新增 `src/services/agent_llm_enrichment_service.py`。
+- `src/api/routes/modules/agents.py` 中的模块 Agent、任务生成 Agent、任务解析 Agent、周期 Agent 输出统一经过 LLM + RAG enrichment。
+- `src/api/routes/modules/feedback_flywheel.py` 中的回流摘要、周期回流、经验卡草案输出统一经过 LLM enrichment。
+- 输出新增 `retrievedCases`、`ragReferences`、`llmEnrichment`、`llmSummary`、`llmOperatorBrief`、`llmManagerReviewBrief`、`llmRiskCheck`、`llmFallbackUsed`。
+- 详情页新增“方案补充”展示，展示执行说明、复核重点和风险提醒。
+
+### Product Boundary
+- LLM 不改变 `problemType`，不改写 ActionPlan 合约，不自动执行经营动作，不自动批准经验入库。LLM 失败时继续使用确定性 fallback。
+
 ## v4.5.2 - 2026-06-21
 
 ### Product Decision
@@ -78,19 +94,3 @@
 ### Changed
 - `src/services/creative_vertical_agent_service.py` 新增 `testPackages` 输出。
 - 每个测试包包含标题、主图方向、首图文案、卖点排序、适合流量、测试周期、提交指标、风险提醒和运营执行动作。
-- `POST /api/modules/agents/creative/{product_id}/tasks` 支持 `packageIndex`，可以把指定测试包创建成任务。
-- `web_demo/modules/task-report/page.js` 删除运营执行视角、AI 评估和 V4 模块 Agent 小字展示，改成“Agent 判断 → Agent 测试包 / 处理方案 → 任务草案 → 人工确认”。
-- `scripts/smoke_test_api.py` 增加测试包和指定测试包建任务验收。
-
-### Product Boundary
-- Agent 生成测试包，运营上架测试。Agent 不直接发布商品、不改价、不投放、不回写店铺后台。
-
-## v4.4.0 - 2026-06-19
-
-### Product Decision
-- V4.4 把“回流任务 Agent”从理念落到产品闭环：任务处理结果不再只进入日志，而是进入经验卡草案、日报 / 周报回流和 RAG 复核入库流程。
-- Product truth: 回流不是把原始日志塞进 RAG，而是把运营动作、复核结论、结果指标和适用边界整理成结构化经验，再由老板 / 总管确认。
-- 这让系统从“任务生成 / 任务解析 / 创意测试”继续升级为“任务处理 → 复盘回流 → 经验卡 → RAG 召回 → 反哺下一轮 Agent”。
-
-### Changed
-- 新增回流任务 Agent：`GET /api/modules/feedback-flywheel`。
