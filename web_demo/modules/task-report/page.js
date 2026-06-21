@@ -198,11 +198,21 @@
     return `<section class="page-section task-draft-section"><div class="section-header"><h3>任务草案</h3><span class="status-badge">人工确认后加入</span></div><div class="task-draft-list">${drafts.map((draft, index) => taskDraftCard(draft, index, sourceKey)).join("")}</div></section>`;
   }
 
+  function llmBriefBlock(agent) {
+    const cards = [];
+    if (agent?.llmSummary) cards.push({ title: "判断补充", value: agent.llmSummary });
+    if (agent?.llmOperatorBrief) cards.push({ title: "执行说明", value: agent.llmOperatorBrief });
+    if (agent?.llmManagerReviewBrief) cards.push({ title: "复核重点", value: agent.llmManagerReviewBrief });
+    const risk = arr(agent?.llmRiskCheck);
+    if (!cards.length && !risk.length) return "";
+    return `<section class="page-section llm-brief-section"><div class="section-header"><h3>方案补充</h3><span class="status-badge">已结合经验</span></div><div class="llm-brief-grid">${cards.map((item) => `<article><span>${s(item.title)}</span><strong>${s(item.value)}</strong></article>`).join("")}${risk.length ? `<article><span>风险提醒</span>${chipList(risk)}</article>` : ""}</div></section>`;
+  }
+
   function agentBlock(agent, report) {
     if (!agent) return "";
     const evidence = arr(agent.evidence);
     const humanDecision = arr(agent.humanDecision || report.humanDecision);
-    return `<section class="page-section"><div class="section-header"><h3>Agent 判断</h3><span class="status-badge">${s(agent.agentName || "Agent")}</span></div><p class="agent-summary-text">${s(agent.categoryStrategy || agent.summary || "已生成处理方案。")}</p>${evidence.length ? `<div class="kpi-grid report-metrics">${evidence.slice(0, 4).map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div>` : ""}</section>${actionPlanBlock(agent, report)}${taskDraftBlock(agent)}${humanDecision.length ? `<section class="page-section"><div class="section-header"><h3>人工确认</h3><span class="status-badge">${humanDecision.length} 项</span></div>${chipList(humanDecision)}<div class="report-actions"><button type="button" data-refresh-agent>重新生成 Agent 方案</button></div></section>` : ""}`;
+    return `<section class="page-section"><div class="section-header"><h3>Agent 判断</h3><span class="status-badge">${s(agent.agentName || "Agent")}</span></div><p class="agent-summary-text">${s(agent.categoryStrategy || agent.summary || "已生成处理方案。")}</p>${evidence.length ? `<div class="kpi-grid report-metrics">${evidence.slice(0, 4).map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div>` : ""}</section>${actionPlanBlock(agent, report)}${llmBriefBlock(agent)}${taskDraftBlock(agent)}${humanDecision.length ? `<section class="page-section"><div class="section-header"><h3>人工确认</h3><span class="status-badge">${humanDecision.length} 项</span></div>${chipList(humanDecision)}<div class="report-actions"><button type="button" data-refresh-agent>重新生成 Agent 方案</button></div></section>` : ""}`;
   }
 
   function actionButtons(report) {
