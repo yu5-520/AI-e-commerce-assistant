@@ -1,5 +1,22 @@
 # Changelog
 
+## v4.5.3 - 2026-06-21
+
+### Added
+- Added `src/services/agent_llm_enrichment_service.py` for Module / Task / Feedback LLM + RAG enrichment.
+- Module Agent outputs now include `retrievedCases`, `ragReferences`, `llmEnrichment`, `llmSummary`, `llmOperatorBrief`, `llmManagerReviewBrief`, `llmRiskCheck`, and `llmFallbackUsed`.
+- Task generation and task playbook endpoints now wrap ActionPlan payloads with RAG cases and LLM enrichment.
+- Feedback flywheel summary, cycle summary, and experience-card drafts now use LLM enrichment while keeping human review gates.
+- Task-report frontend now renders a `方案补充` section when enriched briefs are available.
+
+### Changed
+- FastAPI app, health flags, Agent registry, frontend asset cache query strings, and version docs are bumped to `4.5.3`.
+- `src/api/routes/modules/agents.py` routes module, task-generation, task-playbook, and cycle Agent outputs through the enrichment service.
+- `src/api/routes/modules/feedback_flywheel.py` routes feedback outputs through the enrichment service.
+
+### Product Engineering Rule
+- RAG supplies reviewed experience cases; LLM refines wording and execution briefs. `problemType`, `ActionPlan`, permissions, task lifecycle, and human review remain deterministic.
+
 ## v4.5.2 - 2026-06-21
 
 ### Changed
