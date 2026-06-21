@@ -1,5 +1,22 @@
 # Product Changelog
 
+## v5.0.1 - 2026-06-21
+
+### Product Decision
+- V5.0.1 修复流程链路断点：空系统不能被种子任务撑开；导入后模块内容必须读取完整数据行；报表详情必须走投影数据；报表任务创建不能因路由切换断开。
+
+### Changed
+- `src/services/module_task_service.py` 移除运行态 seed tasks / seed logs，系统初始任务池为空。
+- 新增 `src/services/import_row_store_service.py`，保存完整 normalizedRows。
+- `src/services/report_schema_service.py` 在确认导入后持久化完整数据行。
+- `src/services/module_projection_service.py` 优先读取完整导入行，再 fallback 到历史 sampleRows。
+- 新增 `src/api/routes/modules/report_v5.py`，报表模块走 projected report groups / details。
+- `src/api/routes/modules/__init__.py` 切换到 V5 报表路由。
+
+### Product Boundary
+- 示例数据只能通过报表模块显式试跑，不再自动进入运行态。
+- 首页、商品、流量、报表、待办都以导入数据和账号权限为准。
+
 ## v5.0.0 - 2026-06-21
 
 ### Product Decision
@@ -20,19 +37,3 @@
 - 导入数据不只是生成任务，还要更新对应模块内容。
 - 数据表、预警、任务都必须按店铺和账号权限切片。
 - Agent 仍只做任务增强、执行说明、复核重点和回流草案，不越权执行真实经营动作。
-
-## v4.5.3 - 2026-06-21
-
-### Product Decision
-- V4.5.3 把普通模块、任务生成、任务解析和回流任务都接入 LLM + RAG 增强。
-- Product truth: ActionPlan 仍负责稳定判断和处理包合约；RAG 负责召回复核经验；LLM 负责把处理包写成更具体的执行说明、复核重点和风险提醒。
-
-### Changed
-- 新增 `src/services/agent_llm_enrichment_service.py`。
-- `src/api/routes/modules/agents.py` 中的模块 Agent、任务生成 Agent、任务解析 Agent、周期 Agent 输出统一经过 LLM + RAG enrichment。
-- `src/api/routes/modules/feedback_flywheel.py` 中的回流摘要、周期回流、经验卡草案输出统一经过 LLM enrichment。
-- 输出新增 `retrievedCases`、`ragReferences`、`llmEnrichment`、`llmSummary`、`llmOperatorBrief`、`llmManagerReviewBrief`、`llmRiskCheck`、`llmFallbackUsed`。
-- 详情页新增“方案补充”展示，展示执行说明、复核重点和风险提醒。
-
-### Product Boundary
-- LLM 不改变 `problemType`，不改写 ActionPlan 合约，不自动执行经营动作，不自动批准经验入库。LLM 失败时继续使用确定性 fallback。
