@@ -6,26 +6,63 @@
   padding: 28px;
 }
 
-.decision-path-list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.task-draft-head.compact {
+  margin-bottom: 14px;
 }
 
-.decision-path-card {
-  display: block;
+.decision-path-list.horizontal {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.decision-path-row {
+  display: grid;
+  grid-template-columns: 44px minmax(220px, 0.8fr) minmax(260px, 1.2fr) minmax(220px, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.045);
   cursor: pointer;
 }
 
-.decision-path-card > input {
-  margin: 0 0 12px;
+.decision-path-row input {
+  width: 18px;
+  height: 18px;
 }
 
-.decision-path-card:has(input:checked) {
-  border-color: rgba(37, 99, 235, 0.42);
-  box-shadow: 0 18px 48px rgba(37, 99, 235, 0.12);
+.decision-path-row:has(input:checked) {
+  border-color: rgba(37, 99, 235, 0.46);
+  box-shadow: 0 18px 48px rgba(37, 99, 235, 0.13);
 }
 
-.action-package-panel.wide {
-  margin-top: 14px;
+.decision-path-title span,
+.decision-path-summary span {
+  display: block;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.decision-path-title strong {
+  display: block;
+  color: #080b12;
+  font-size: clamp(24px, 2.2vw, 34px);
+  font-weight: 950;
+  line-height: 1.15;
+  letter-spacing: -0.06em;
+}
+
+.decision-path-summary strong {
+  display: block;
+  color: #1f2937;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.65;
 }
 
 .decision-input-grid {
@@ -78,9 +115,41 @@
   margin-top: 18px;
 }
 
+.todo-path-summary {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.todo-path-summary strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.todo-supplement-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.todo-supplement-list span {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 @media (max-width: 1180px) {
-  .decision-path-list {
-    grid-template-columns: 1fr;
+  .decision-path-row {
+    grid-template-columns: 36px 1fr;
   }
 }
 
