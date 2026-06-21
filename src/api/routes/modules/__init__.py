@@ -12,7 +12,7 @@ from src.api.routes.modules import listing
 from src.api.routes.modules import traffic
 from src.api.routes.modules import inventory
 from src.api.routes.modules import aftersales
-from src.api.routes.modules import report
+from src.api.routes.modules import report_v5 as report
 from src.api.routes.modules import task_report
 from src.api.routes.modules import agents
 from src.api.routes.modules import rag_memory
