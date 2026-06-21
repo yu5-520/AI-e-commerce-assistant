@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "4.4.0"
+API_VERSION = "4.4.1"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v440_feedback_flywheel",
+        "mode": "v441_creative_test_packages",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -45,10 +45,12 @@ def health() -> Dict[str, Any]:
         "task_generation_inputs": ["rules", "metrics", "structured_rag_memory", "module_snapshot"],
         "task_playbook_styles": ["稳健型", "增长型", "利润型"],
         "v430_creative_vertical_agent": True,
+        "v441_creative_test_packages": True,
         "creative_vertical_endpoint": "/api/modules/agents/creative/{product_id}",
         "creative_vertical_task_endpoint": "/api/modules/agents/creative/{product_id}/tasks",
         "creative_vertical_inputs": ["product_facts", "category_profile", "platform_rules", "competitor_signals", "rag_memory", "task_goal"],
-        "creative_vertical_outputs": ["titleVariants", "mainImageDirections", "sellingPointOrder", "testPlan", "taskDraft", "humanDecision"],
+        "creative_vertical_outputs": ["titleVariants", "mainImageDirections", "sellingPointOrder", "testPackages", "selectedPackage", "testPlan", "taskDraft", "humanDecision"],
+        "creative_test_package_fields": ["title", "mainImageDirection", "firstImageText", "sellingPointOrder", "fitTraffic", "operatorAction", "submitMetrics"],
         "creative_platform_rules": ["淘宝", "拼多多", "抖音小店", "通用"],
         "v440_feedback_flywheel": True,
         "feedback_flywheel_endpoint": "/api/modules/feedback-flywheel",
@@ -57,7 +59,7 @@ def health() -> Dict[str, Any]:
         "feedback_flywheel_chain": ["task_handling", "operator_submission", "manager_review", "daily_weekly_recap", "experience_card_draft", "human_approval", "rag_retrieval"],
         "feedback_memory_auto_draft_on_review": True,
         "feedback_requires_human_approval": True,
-        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence", "creativePlan", "feedbackMetrics"],
+        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence", "creativeTestPackages", "feedbackMetrics"],
         "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write", "exaggerated_claim", "auto_memory_approval"],
         "agent_requires_human_confirmation": True,
         "v410_rag_memory": True,
