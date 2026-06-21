@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "4.4.1"
+API_VERSION = "4.4.2"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -17,7 +17,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v441_creative_test_packages",
+        "mode": "v442_problem_type_action_plans",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "safety": {
@@ -37,12 +37,17 @@ def health() -> Dict[str, Any]:
         "module_agent_endpoint": "/api/modules/agents/{module}/{entity_id}",
         "module_agent_task_endpoint": "/api/modules/agents/{module}/{entity_id}/tasks",
         "cycle_agent_endpoint": "/api/modules/agents/cycle/{target}",
+        "v442_problem_type_action_plan": True,
+        "action_plan_service": "src/services/action_plan_service.py",
+        "action_plan_rule": "模块发现问题，problemType 决定处理包，Agent 不按模块套同一模板。",
+        "action_plan_problem_types": ["low_ctr_low_conversion", "detail_page_conversion", "low_roi_high_refund", "low_inventory_activity", "competitor_signal_to_test", "report_data_anomaly"],
+        "action_plan_outputs": ["actionPlan", "executionPackages", "executionSteps", "evidenceRequired", "submitMetrics", "acceptanceCriteria", "failureThreshold", "reviewFocus"],
         "v420_task_generation_agent": True,
         "task_generation_endpoint": "/api/modules/agents/tasks/generate",
         "task_playbook_agent": True,
         "task_playbook_endpoint": "/api/modules/agents/tasks/{task_id}/playbook",
         "task_generation_sources": ["product", "traffic", "competitor", "listing", "report"],
-        "task_generation_inputs": ["rules", "metrics", "structured_rag_memory", "module_snapshot"],
+        "task_generation_inputs": ["rules", "metrics", "structured_rag_memory", "module_snapshot", "problem_type_action_plan"],
         "task_playbook_styles": ["稳健型", "增长型", "利润型"],
         "v430_creative_vertical_agent": True,
         "v441_creative_test_packages": True,
@@ -59,7 +64,7 @@ def health() -> Dict[str, Any]:
         "feedback_flywheel_chain": ["task_handling", "operator_submission", "manager_review", "daily_weekly_recap", "experience_card_draft", "human_approval", "rag_retrieval"],
         "feedback_memory_auto_draft_on_review": True,
         "feedback_requires_human_approval": True,
-        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence", "creativeTestPackages", "feedbackMetrics"],
+        "agent_outputs": ["analysis", "summary", "taskDrafts", "humanDecision", "forbiddenActions", "ragReferences", "confidence", "creativeTestPackages", "actionPlan", "executionPackages", "feedbackMetrics"],
         "agent_forbidden_actions": ["direct_price_change", "direct_ad_spend_change", "direct_refund", "direct_publish", "direct_erp_crm_write", "exaggerated_claim", "auto_memory_approval"],
         "agent_requires_human_confirmation": True,
         "v410_rag_memory": True,
@@ -72,6 +77,7 @@ def health() -> Dict[str, Any]:
         "rag_memory_write_gate": ["manager_review", "quality_score", "metrics_change", "human_approval"],
         "rag_memory_levels": ["L0 raw/rejected", "L1 draft", "L2 reviewed", "L3 high_quality", "L4 negative_case"],
         "frontend_agent_panel": "task-report",
+        "frontend_action_plan_rendering": True,
         "frontend_duplicate_dynamic_loading_removed": True,
         "report_runtime_file": "/web_demo/modules/report/report-runtime.js",
         "manager_modules_file": "/web_demo/modules/manager/manager-modules.js",
