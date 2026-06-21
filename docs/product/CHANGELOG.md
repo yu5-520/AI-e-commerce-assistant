@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v5.0.2 - 2026-06-21
+
+### Product Decision
+- V5.0.2 修复 Agent 仍读取旧空数据的断点，并删除报表模块前后端重复实现。
+- 商品、流量、报表内容来自 ModuleProjection；Module Agent、Task Agent、Creative Agent 也必须读取同一套投影数据。
+
+### Changed
+- `src/services/module_agent_service.py` 改为读取 `projected_products`、`projected_traffic`、`projected_report_groups`、`projected_report_details`。
+- `src/services/task_agent_service.py` 改为从 ModuleProjection 找 source item；没有 sourcePayload 时不再读旧空数组。
+- `src/services/creative_vertical_agent_service.py` 改为从 `projected_products` 找商品事实。
+- 删除重复后端文件 `src/api/routes/modules/report.py`，统一使用 `report_v5.py`。
+- 删除重复前端文件 `web_demo/modules/report/page.js`，统一使用 `report-runtime.js`。
+- `web_demo/index.html` 删除旧报表脚本加载，并把资源缓存号升级到 `v=5.0.2`。
+- `src/api/main.py` 版本升级到 `5.0.2`。
+
+### Product Boundary
+- Agent 不再读取 MVP 托底数组。
+- 报表功能只有一个前端入口和一个后端入口，避免双源维护。
+- Agent 仍然只做建议、草案、执行说明和复核重点，不直接执行真实经营动作。
+
 ## v5.0.1 - 2026-06-21
 
 ### Product Decision
