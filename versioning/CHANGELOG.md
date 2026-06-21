@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.5.1 - 2026-06-21
+
+### Added
+- Added dedicated ActionPlan package-card layout styles in `web_demo/alert-report.css`.
+- Added productized task-draft card layout with meta fields, numbered operator steps, evidence, metrics, acceptance criteria, and failure thresholds.
+
+### Changed
+- `web_demo/modules/task-report/page.js` now renders problem handling packages and task drafts through dedicated components instead of generic report cards.
+- Frontend asset cache query strings are bumped to `4.5.1`.
+- FastAPI app and health version are bumped to `4.5.1`.
+
+### Product Engineering Rule
+- ActionPlan UI should show what operators need to execute and what managers need to review. Engineering IDs such as `AP-refund-root-cause`, `AP-inventory-activity-control`, and `ActionPlan` stay hidden from the product page.
+
 ## v4.5.0 - 2026-06-21
 
 ### Added
