@@ -1,5 +1,21 @@
 # Product Changelog
 
+## v4.4.2 - 2026-06-21
+
+### Product Decision
+- 将“模块发现任务”与“Agent 处理方案”彻底分层：模块只负责发现信号，`problemType` 决定处理包。
+- Product truth: 商品、流量、竞品、上新、报表不应该各自套一套固定模板；同一个点击率问题无论来自商品页还是流量页，都应进入标题主图 / 详情页测试包。同一个退款问题无论来自商品页还是流量页，都应进入售后归因与承诺修正包。
+
+### Changed
+- 新增 `src/services/action_plan_service.py`，提供问题类型到处理包的确定性映射。
+- `task_agent_service.py` 输出 `actionPlan`、`executionPackages`、`executionSteps`、`submitMetrics`、`acceptanceCriteria`、`failureThreshold`、`reviewFocus`。
+- `module_agent_service.py` 的商品、流量、竞品、上新、报表、任务 Agent 全部改成先识别 problemType，再生成对应处理包。
+- `web_demo/modules/task-report/page.js` 增加“问题处理包”展示，避免详情页继续显示通用的“先看报告 / 补证据 / 交复核”模板。
+- `/api/health`、`/api/modules/agents` 和 `scripts/smoke_test_api.py` 已加入 V4.4.2 ActionPlan 验收。
+
+### Product Boundary
+- ActionPlan 只生成处理包和复核标准，不直接改价、投放、退款、发布商品或回写店铺后台。运营执行测试和处理，总管复核结果，回流 Agent 再沉淀经验卡。
+
 ## v4.4.1 - 2026-06-21
 
 ### Product Decision
