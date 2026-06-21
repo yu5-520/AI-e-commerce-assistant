@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.5.2
+Current Version: v4.5.3
 
 ## Version History
 
+- v4.5.3: Added Module / Task / Feedback LLM + RAG enrichment through `src/services/agent_llm_enrichment_service.py`. Module Agent, task generation, task playbook, and feedback flywheel outputs now include `retrievedCases`, `ragReferences`, `llmEnrichment`, `llmSummary`, `llmOperatorBrief`, `llmManagerReviewBrief`, `llmRiskCheck`, and fallback metadata while problemType and ActionPlan remain deterministic.
 - v4.5.2: Removed task-report top notice bars for Agent refresh and task creation, changed task creation to local button loading / inline error feedback, and made “重新生成 Agent 方案” preserve the current report and old Agent output if refresh fails.
 - v4.5.1: Productized the ActionPlan detail UI. `web_demo/modules/task-report/page.js` now renders problem handling packages and task drafts as dedicated product cards with numbered operator steps, submit metrics, review criteria, failure thresholds, and hidden engineering IDs; `web_demo/alert-report.css` adds responsive iPad-safe layout styles.
 - v4.5.0: Added the unified LLM Gateway with `src/services/llm_provider_service.py`, `llm_guardrail_service.py`, `llm_trace_service.py`, `prompt_template_service.py`, `tool_gateway_service.py`, `mcp_adapter_service.py`, `/api/llm/*` routes, prompt templates, LLM output schemas, `.env.example` settings, and first creative-Agent LLM enrichment. MCP is kept as a future external tool adapter behind Tool Gateway, not the primary model interface.
