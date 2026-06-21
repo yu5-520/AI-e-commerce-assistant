@@ -1,8 +1,4 @@
-"""Operating unit module route.
-
-经营单元是共同业务空间；店铺责任权限决定进入后能看到哪些店铺切片。
-老板 / 总管看经营单元全量，运营只看自己负责店铺。
-"""
+"""Operating unit route for V5 projection data."""
 
 from __future__ import annotations
 
@@ -10,34 +6,67 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 
-from src.services.account_service import current_user, list_store_groups, list_stores, user_id_from_headers, visible_store_ids_for_user
+from src.services.account_service import current_user, user_id_from_headers
+from src.services.module_projection_service import projection_summary, projected_products, projected_report_groups, projected_traffic
+from src.services.module_task_service import get_task_counters_for_user
+from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
+
+
+def _report_rows(groups: list[Dict[str, Any]]) -> int:
+    total = 0
+    for group in groups:
+        for report in group.get("reports", []):
+            text = str(report.get("count") or "0").split()[0]
+            try:
+                total += int(text)
+            except ValueError:
+                continue
+    return total
 
 
 @router.get("/operating-unit")
 def operating_unit(request: Request) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     user = current_user(user_id)
-    group = list_store_groups()[0]
-    all_stores = [store for store in list_stores() if store.get("groupId") == group["id"]]
-    visible_ids = set(visible_store_ids_for_user(user_id))
-    visible_stores = [store for store in all_stores if store["id"] in visible_ids]
-    role_id = user.get("roleId")
-    can_see_all = role_id in {"owner", "manager", "finance"}
-    scope_label = "经营单元全量" if can_see_all else "我的店铺切片"
+    projection = projection_summary(user_id)
+    v3 = get_v3_dashboard_summary(user_id)
+    products = projected_products(user_id)
+    traffic = projected_traffic(user_id)
+    reports = projected_report_groups(user_id)
+    task_counters = get_task_counters_for_user(user_id)
+    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or v3.get("activeAlertCount"))
+    if not has_data:
+        return {
+            "version": "5.0.4",
+            "hasData": False,
+            "emptyState": "暂无数据",
+            "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
+            "metrics": [],
+            "agents": [],
+            "tasks": {},
+        }
     return {
-        "unitId": group["id"],
-        "unitName": group["name"],
-        "viewer": user,
-        "scopeLabel": scope_label,
-        "canSeeAllUnitStores": can_see_all,
-        "allStoreCount": len(all_stores),
-        "visibleStoreCount": len(visible_stores),
-        "platforms": sorted({store["platform"] for store in visible_stores}),
-        "stores": visible_stores,
-        "allStores": all_stores if can_see_all else [],
-        "dataSources": ["ERP", "CRM", "报表上传"],
-        "pendingSources": ["聚水潭", "广告后台"],
-        "permissionRule": "总管看经营单元全量；运营进入同一经营单元，但商品、报表、预警、待办只返回自己负责店铺。",
+        "version": "5.0.4",
+        "hasData": True,
+        "unitName": "经营单元",
+        "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion"),
+        "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
+        "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
+        "metrics": [
+            {"label": "商品", "value": len(products)},
+            {"label": "流量", "value": len(traffic)},
+            {"label": "报表行", "value": _report_rows(reports)},
+            {"label": "预警", "value": v3.get("activeAlertCount", 0)},
+            {"label": "任务", "value": task_counters.get("visibleActive", 0)},
+        ],
+        "agents": [
+            {"name": "经营单元 Agent", "status": "待增强", "basis": "ModuleProjection"},
+            {"name": "回流 Agent", "status": "待复核", "basis": "任务完成记录"},
+            {"name": "RAG Memory", "status": "复核后入库", "basis": "经验卡"},
+        ],
+        "tasks": task_counters,
+        "projection": projection,
+        "v3": v3,
     }
