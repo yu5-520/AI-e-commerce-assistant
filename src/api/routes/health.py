@@ -10,7 +10,7 @@ from src.services.llm_provider_service import llm_status
 from src.services.mcp_adapter_service import mcp_adapter_summary
 from src.services.tool_gateway_service import tool_gateway_summary
 
-API_VERSION = "4.5.1"
+API_VERSION = "4.5.2"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -22,7 +22,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v451_action_plan_ui",
+        "mode": "v452_task_report_state_fix",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "llm_entry": "/api/llm/status",
@@ -37,6 +37,11 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "v452_task_report_state_fix": True,
+        "frontend_agent_notice_bars_removed": True,
+        "frontend_agent_refresh_preserves_report": True,
+        "frontend_task_create_uses_button_state": True,
+        "frontend_local_error_only": True,
         "v451_action_plan_ui": True,
         "frontend_action_plan_package_cards": True,
         "frontend_task_draft_cards": True,
