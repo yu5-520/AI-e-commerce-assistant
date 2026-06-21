@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.0.0。V5 保留原有模块栏和模块功能，清除前端 MVP 托底业务内容；报表模块负责导入数据表，导入后按账号权限生成模块内容、预警和任务。
+> 当前版本：V5.0.1。V5 保留原有模块栏和模块功能，清除前端 MVP 托底业务内容；报表模块负责导入数据表，导入后按账号权限生成模块内容、预警和任务。V5.0.1 已修复空系统种子任务、完整导入行投影、报表详情投影和报表任务路由断点。
 
 ## 当前主链路
 
@@ -10,6 +10,8 @@
 字段映射 / 数据校验 / 店铺归属 / 账号权限切片
 ↓
 DataVersion 数据版本
+↓
+完整导入行持久化 imported_report_rows
 ↓
 ModuleProjection：更新商品、竞品、上新、流量、报表、首页摘要
 ↓
@@ -44,7 +46,10 @@ src/api/routes/modules/rag_memory.py          RAG Memory API
 src/api/routes/modules/todo.py                统一任务池生命周期
 src/api/routes/modules/product.py             V5 商品模块数据投影
 src/api/routes/modules/traffic.py             V5 流量模块数据投影
+src/api/routes/modules/report_v5.py           V5 报表模块投影路由
+src/services/import_row_store_service.py      V5 完整导入行持久化
 src/services/module_projection_service.py     V5 导入数据 → 模块内容投影
+src/services/module_task_service.py           V5 空任务池运行态 / 数据生成任务
 src/services/module_data_service.py           V5 空运行态边界，不再放前端托底业务内容
 src/services/module_agent_service.py          V4 模块 Agent
 src/services/task_agent_service.py            V4.2 任务 Agent
