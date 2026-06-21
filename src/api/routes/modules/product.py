@@ -2,70 +2,67 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 
 from src.api.routes.modules.common import find_or_404
-from src.services.account_service import current_user, user_id_from_headers, visible_store_ids_for_user
-from src.services.module_data_service import PRODUCTS
+from src.services.account_service import user_id_from_headers
+from src.services.module_projection_service import projected_products
 from src.services.module_task_service import create_task, visible_candidates
 from src.services.report_alert_service import attach_alert_state
 
 router = APIRouter()
 
 
-def scoped_items(items: List[Dict[str, Any]], request: Request) -> List[Dict[str, Any]]:
-    user_id = user_id_from_headers(request.headers)
-    user = current_user(user_id)
-    if user.get("roleId") in {"owner", "manager", "finance"}:
-        return items
-    allowed = set(visible_store_ids_for_user(user_id))
-    return [item for item in items if item.get("storeId") in allowed]
-
-
 def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
-    risk_domain = "售后" if item["afterSalesLevel"] != "good" else "库存" if item["inventoryLevel"] == "danger" else "商品"
-    high_risk = item["afterSalesLevel"] != "good" or item["inventoryLevel"] == "danger"
+    risk_domain = "售后" if item.get("afterSalesLevel") != "good" else "库存" if item.get("inventoryLevel") == "danger" else "商品"
+    high_risk = item.get("afterSalesLevel") != "good" or item.get("inventoryLevel") == "danger"
+    store_id = item.get("storeId")
     return {
         "entityType": "商品",
         "entityId": item["id"],
         "riskDomain": risk_domain,
         "actionType": "观察" if risk_domain == "商品" else "复查",
-        "sourceModule": "商品经营列表",
-        "source": "商品触发",
+        "sourceModule": "商品模块",
+        "source": "导入数据触发",
         "sourceRoute": "business-products",
         "productId": item["id"],
-        "storeIds": [item.get("storeId")] if item.get("storeId") else [],
-        "visibleStoreIds": [item.get("storeId")] if item.get("storeId") else [],
-        "imageLabel": item["imageLabel"],
-        "productShort": item["shortName"],
-        "productTitle": item["title"],
-        "title": item["title"],
-        "platform": item["platform"],
-        "store": item["store"],
-        "link": item["link"],
+        "storeIds": [store_id] if store_id else [],
+        "visibleStoreIds": [store_id] if store_id else [],
+        "imageLabel": item.get("imageLabel") or "品",
+        "productShort": item.get("shortName") or item["id"],
+        "productTitle": item.get("title") or item["id"],
+        "title": item.get("title") or item["id"],
+        "platform": item.get("platform") or "导入数据",
+        "store": item.get("store") or "未绑定店铺",
+        "link": item.get("link") or "",
         "priority": "高" if high_risk else "中",
         "priorityLevel": "danger" if high_risk else "warning",
         "deadline": "今天内" if high_risk else "明天前",
-        "taskType": "售后复查" if item["afterSalesLevel"] != "good" else "库存承接" if item["inventoryLevel"] == "danger" else "商品优化",
-        "taskSignal": "先查售后" if item["afterSalesLevel"] != "good" else "确认补货" if item["inventoryLevel"] == "danger" else "优化测试",
-        "task": "复查售后原因，暂不扩大推广" if item["afterSalesLevel"] != "good" else "确认补货周期，再决定活动节奏" if item["inventoryLevel"] == "danger" else "加入商品优化观察",
-        "reason": item["suggestion"],
-        "judgmentTags": [item["inventoryStatus"], item["afterSales"], f"毛利 {item['grossMargin']}"],
+        "taskType": "售后复查" if item.get("afterSalesLevel") != "good" else "库存承接" if item.get("inventoryLevel") == "danger" else "商品复核",
+        "taskSignal": "先查售后" if item.get("afterSalesLevel") != "good" else "确认补货" if item.get("inventoryLevel") == "danger" else "数据复核",
+        "task": item.get("suggestion") or "根据导入数据复核商品状态。",
+        "reason": item.get("suggestion") or "商品内容来自报表导入后的模块投影。",
+        "judgmentTags": [item.get("inventoryStatus", "库存待确认"), item.get("afterSales", "售后待确认"), f"毛利 {item.get('grossMargin', '—')}", *(item.get("sourceDataVersions") or [])[:1]],
+        "sourceDataVersions": item.get("sourceDataVersions", []),
+        "sourceDatasets": item.get("sourceDatasets", []),
     }
 
 
-def with_alert_state(item: Dict[str, Any]) -> Dict[str, Any]:
-    return attach_alert_state(item, "商品", item["id"])
+def with_alert_state(item: Dict[str, Any], user_id: str | None = None) -> Dict[str, Any]:
+    return attach_alert_state(item, "商品", item["id"], user_id=user_id)
 
 
 @router.get("/product")
-def product(request: Request) -> List[Dict[str, Any]]:
-    return [with_alert_state(item) for item in visible_candidates(scoped_items(PRODUCTS, request), product_task_payload)]
+def product(request: Request) -> list[Dict[str, Any]]:
+    user_id = user_id_from_headers(request.headers)
+    items = projected_products(user_id)
+    return [with_alert_state(item, user_id) for item in visible_candidates(items, product_task_payload)]
 
 
 @router.post("/product/{product_id}/tasks")
-def product_task(product_id: str) -> Dict[str, Any]:
-    item = find_or_404(PRODUCTS, product_id, "product")
+def product_task(request: Request, product_id: str) -> Dict[str, Any]:
+    user_id = user_id_from_headers(request.headers)
+    item = find_or_404(projected_products(user_id), product_id, "product")
     return create_task(product_task_payload(item))
