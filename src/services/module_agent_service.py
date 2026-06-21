@@ -1,10 +1,8 @@
 """V4 module Agent service.
 
-The V4 Agent layer is deliberately advisory. It reads the same module / task
-payloads that the product already shows, then returns structured suggestions,
-evidence, draft tasks, and human decision points. It must not directly execute
-marketplace actions such as price changes, ad spend changes, refunds, publishing,
-or ERP / CRM writes.
+The module Agent layer is advisory-only. In V4.4.2 it no longer returns one
+generic task-breakdown template. Module signals are converted into problem types,
+then the Action Plan service returns targeted execution packages.
 """
 
 from __future__ import annotations
@@ -14,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from src.services.account_service import current_user, visible_store_ids_for_user
+from src.services.action_plan_service import action_plan_for_problem, infer_action_problem_type
 from src.services.module_data_service import (
     COMPETITORS,
     LISTINGS,
@@ -25,7 +24,7 @@ from src.services.module_data_service import (
 )
 from src.services.module_task_service import create_task, list_tasks
 
-AGENT_VERSION = "4.0.0"
+AGENT_VERSION = "4.4.2"
 FORBIDDEN_ACTIONS = [
     "不直接改价",
     "不直接投放",
@@ -79,7 +78,7 @@ def _meta(module: str) -> Dict[str, str]:
 
 def _agent_id(module: str, entity_id: str, mode: str) -> str:
     safe_mode = mode.replace(" ", "-") or "analysis"
-    return f"AGENT-V4-{module.upper()}-{entity_id}-{safe_mode}"
+    return f"AGENT-V442-{module.upper()}-{entity_id}-{safe_mode}"
 
 
 def _common_result(
@@ -133,6 +132,38 @@ def _common_result(
     return result
 
 
+def _problem(module: str, item: Dict[str, Any]) -> str:
+    return infer_action_problem_type(item, source_module=module)
+
+
+def _enrich_with_plan(draft: Dict[str, Any], plan: Dict[str, Any]) -> Dict[str, Any]:
+    package = plan.get("recommendedPackage") or {}
+    draft["problemType"] = plan.get("problemType")
+    draft["actionPlan"] = plan
+    draft["selectedPackage"] = package
+    draft["executionPackages"] = plan.get("executionPackages") or []
+    draft["executionSteps"] = plan.get("executionSteps") or []
+    draft["evidenceRequired"] = plan.get("evidenceRequired") or []
+    draft["submitMetrics"] = plan.get("submitMetrics") or []
+    draft["acceptanceCriteria"] = plan.get("acceptanceCriteria") or []
+    draft["failureThreshold"] = plan.get("failureThreshold") or []
+    draft["reviewFocus"] = plan.get("reviewFocus") or []
+    draft["actionType"] = plan.get("actionPlanType") or draft.get("actionType")
+    draft["taskType"] = "V4.4.2 问题类型处理包"
+    draft["taskSignal"] = "problemType + ActionPlan + 人工确认"
+    draft["task"] = f"执行“{package.get('packageName') or plan.get('actionPlanType')}”，按问题类型处理，不套通用模板。"
+    draft["agentJudgment"] = {
+        **(draft.get("agentJudgment") or {}),
+        "version": AGENT_VERSION,
+        "problemType": plan.get("problemType"),
+        "actionPlanType": plan.get("actionPlanType"),
+        "summary": plan.get("diagnosis"),
+        "boundary": plan.get("boundary") or AGENT_BOUNDARY,
+        "forbiddenActions": FORBIDDEN_ACTIONS,
+    }
+    return draft
+
+
 def _draft_base(module: str, item: Dict[str, Any], title: str, task: str, reason: str, risk_domain: str, priority: str = "中") -> Dict[str, Any]:
     meta = _meta(module)
     product_id = item.get("productId") or item.get("id")
@@ -145,7 +176,7 @@ def _draft_base(module: str, item: Dict[str, Any], title: str, task: str, reason
         "priorityLevel": "danger" if priority == "高" else "warning" if priority == "中" else "good",
         "deadline": "今天内" if priority == "高" else "明天前",
         "riskDomain": risk_domain,
-        "actionType": "复查",
+        "actionType": "处理",
         "taskType": f"V4 Agent {risk_domain}检查",
         "taskSignal": "Agent 建议，人工确认",
         "entityType": meta["entityType"],
@@ -176,93 +207,98 @@ def _draft_base(module: str, item: Dict[str, Any], title: str, task: str, reason
 def get_agent_plan() -> Dict[str, Any]:
     return {
         "version": AGENT_VERSION,
-        "mode": "module_agent_layer",
-        "principle": "Agent 不放在最高控制位，而是放进各经营模块做增强。",
+        "mode": "module_agent_layer_with_action_plan",
+        "principle": "模块负责发现问题，Agent 按 problemType 生成处理包，不按模块套同一模板。",
         "boundary": AGENT_BOUNDARY,
         "forbiddenActions": FORBIDDEN_ACTIONS,
         "agents": [
-            {"id": "competitor-analysis", "name": "竞品数据收集分析 Agent", "module": "competitor", "output": "机会点、风险点、上新假设"},
-            {"id": "listing-creative", "name": "上新标题 / 主图方案 Agent", "module": "listing", "output": "标题方向、主图构图、卖点排序"},
-            {"id": "aftersales-root-cause", "name": "售后归因 Agent", "module": "product", "output": "售后原因、详情页承诺、客服检查清单"},
-            {"id": "traffic-review", "name": "流量复盘 Agent", "module": "traffic", "output": "ROI 复盘、承接短板、放量边界"},
-            {"id": "report-summary", "name": "报表摘要 Agent", "module": "report", "output": "异常摘要、影响范围、下一轮任务"},
-            {"id": "task-breakdown", "name": "任务拆解 Agent", "module": "task", "output": "子任务草案、证据要求、复核点"},
+            {"id": "competitor-analysis", "name": "竞品数据收集分析 Agent", "module": "competitor", "output": "差评反向测试包、机会点、上新假设"},
+            {"id": "listing-creative", "name": "上新标题 / 主图方案 Agent", "module": "listing", "output": "标题主图测试包、卖点排序、失败阈值"},
+            {"id": "aftersales-root-cause", "name": "售后归因 Agent", "module": "product", "output": "售后归因包、承诺修正、客服话术检查"},
+            {"id": "traffic-review", "name": "流量复盘 Agent", "module": "traffic", "output": "ROI 止损包、标题主图包、详情页承接包"},
+            {"id": "report-summary", "name": "报表摘要 Agent", "module": "report", "output": "报表异常转经营任务包"},
+            {"id": "task-breakdown", "name": "任务处理包 Agent", "module": "task", "output": "problemType、executionPackages、证据与复核标准"},
             {"id": "cycle-report", "name": "日报 / 周报 Agent", "module": "task", "output": "周期摘要、完成/未完成、下轮风险"},
         ],
     }
 
 
 def _product_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict[str, Any]:
+    problem = _problem("product", item)
+    plan = action_plan_for_problem(problem, item=item, source_module="product")
     high = item.get("afterSalesLevel") != "good" or item.get("inventoryLevel") == "danger"
-    risk_domain = "售后" if item.get("afterSalesLevel") != "good" else "库存" if item.get("inventoryLevel") == "danger" else "商品"
+    risk_domain = plan.get("actionPlanType") or ("售后" if item.get("afterSalesLevel") != "good" else "库存" if item.get("inventoryLevel") == "danger" else "商品")
     evidence = [
         {"label": "库存", "value": f"{item.get('inventory')}（{item.get('inventoryStatus')}）"},
         {"label": "售后", "value": item.get("afterSales")},
         {"label": "毛利率", "value": item.get("grossMargin")},
         {"label": "售价 / 成本", "value": f"¥{item.get('price')} / ¥{item.get('cost')}"},
     ]
-    suggestions = [
-        "先复查售后原因，再决定是否放量或补货。",
-        "核对详情页承诺、客服话术和用户真实反馈是否一致。",
-        "把库存、退款和毛利放在同一张处理单里看，避免单点决策。",
-    ]
     draft = _draft_base(
         "product",
         item,
-        f"复查{item.get('shortName')}的{risk_domain}风险",
-        f"核对{item.get('shortName')}库存、售后和毛利承接，形成处理结论。",
-        item.get("suggestion") or "商品存在经营信号，需要人工确认。",
+        f"处理{item.get('shortName')}的{plan.get('problemLabel')}问题",
+        "按问题类型处理包执行。",
+        item.get("suggestion") or plan.get("diagnosis") or "商品存在经营信号，需要人工确认。",
         risk_domain,
         "高" if high else "中",
     )
+    draft = _enrich_with_plan(draft, plan)
     return _common_result(
         module="product",
         entity_id=item["id"],
         mode=mode,
-        agent_name="售后归因 Agent" if risk_domain == "售后" else "商品承接 Agent",
-        summary=f"{item.get('shortName')}当前主要风险是{risk_domain}。Agent 建议先做归因，不直接调整价格或投放。",
+        agent_name="商品问题类型处理 Agent",
+        summary=plan.get("diagnosis") or f"{item.get('shortName')}当前主要问题为{plan.get('problemLabel')}。",
         evidence=evidence,
-        suggestions=suggestions,
+        suggestions=plan.get("executionSteps") or [],
         task_drafts=[draft],
-        human_decision=["是否暂停放量", "是否补充详情页说明", "是否进入补货 / 清货流程"],
-        next_step="进入详情报告确认证据，再由人工把 Agent 草案加入任务清单。",
+        human_decision=["选择处理包", "确认是否进入任务池", "确认复核指标"],
+        next_step="选择对应处理包，人工确认后加入任务池。",
         input_snapshot={"id": item.get("id"), "title": item.get("title"), "storeId": item.get("storeId")},
+        extra={"problemType": problem, "actionPlan": plan, "executionPackages": plan.get("executionPackages") or []},
         user_id=user_id,
     )
 
 
 def _competitor_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict[str, Any]:
+    problem = _problem("competitor", item)
+    plan = action_plan_for_problem(problem, item=item, source_module="competitor")
     draft = _draft_base(
         "competitor",
         item,
-        f"把{item.get('targetProduct')}竞品信号转成测试假设",
-        f"围绕“{item.get('badReview')}”差评点，整理自家商品可验证的详情页 / 上新测试方案。",
-        item.get("suggestion") or "竞品出现可转化信号。",
-        "竞品",
+        f"把{item.get('targetProduct')}竞品信号转成测试包",
+        "按竞品差评反向卖点测试包执行。",
+        item.get("suggestion") or plan.get("diagnosis") or "竞品出现可转化信号。",
+        plan.get("actionPlanType") or "竞品",
         "中" if item.get("status") == "机会" else "高",
     )
+    draft = _enrich_with_plan(draft, plan)
     return _common_result(
         module="competitor",
         entity_id=item["id"],
         mode=mode,
         agent_name="竞品数据收集分析 Agent",
-        summary=f"竞品价格位置为{item.get('pricePosition')}，差评集中在“{item.get('badReview')}”。适合先转成测试假设，而不是直接跟价。",
+        summary=plan.get("diagnosis") or f"竞品差评集中在“{item.get('badReview')}”。",
         evidence=[
             {"label": "目标商品", "value": item.get("targetProduct")},
             {"label": "价格位置", "value": item.get("pricePosition")},
             {"label": "差评关键词", "value": item.get("badReview")},
             {"label": "机会点", "value": item.get("opportunity")},
         ],
-        suggestions=["补齐竞品差评样本", "对照自家详情页承诺", "把机会点转成上新 / 详情页测试，不直接降价"],
+        suggestions=plan.get("executionSteps") or [],
         task_drafts=[draft],
-        human_decision=["是否跟进测试", "是否转入上新模块", "是否保持观察"],
-        next_step="由总管或运营确认竞品信号是否足够进入任务池。",
+        human_decision=["是否跟进测试", "选择哪个卖点测试包", "是否保持观察"],
+        next_step="把竞品信号转成测试包，而不是直接跟价。",
         input_snapshot=deepcopy(item),
+        extra={"problemType": problem, "actionPlan": plan, "executionPackages": plan.get("executionPackages") or []},
         user_id=user_id,
     )
 
 
 def _listing_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict[str, Any]:
+    problem = _problem("listing", item)
+    plan = action_plan_for_problem(problem, item=item, source_module="listing")
     creative_variants = [
         {"type": "标题方向", "value": f"{item.get('sourceName')}｜突出{item.get('testType')}与核心使用场景"},
         {"type": "主图方向", "value": "第一屏只放核心利益点 + 使用前后对比，不堆小字。"},
@@ -271,51 +307,55 @@ def _listing_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict
     draft = _draft_base(
         "listing",
         item,
-        f"确认{item.get('title')}测试版本",
-        "确认标题、主图、测试指标和失败阈值，再进入小范围上新测试。",
-        item.get("suggestion") or item.get("risk") or "上新测试需要人工确认。",
-        "上新",
+        f"上架测试{item.get('title')}处理包",
+        "按标题主图 / 详情页测试包执行。",
+        item.get("suggestion") or item.get("risk") or plan.get("diagnosis") or "上新测试需要人工确认。",
+        plan.get("actionPlanType") or "上新",
         "高" if item.get("statusLevel") == "danger" else "中",
     )
+    draft = _enrich_with_plan(draft, plan)
     return _common_result(
         module="listing",
         entity_id=item["id"],
         mode=mode,
         agent_name="上新标题 / 主图方案多样生成 Agent",
-        summary=f"{item.get('title')}适合先做小范围测试，Agent 只生成标题 / 主图方向，不自动发布商品。",
+        summary=plan.get("diagnosis") or f"{item.get('title')}适合先做小范围测试。",
         evidence=[
             {"label": "测试类型", "value": item.get("testType")},
             {"label": "测试计划", "value": item.get("testPlan")},
             {"label": "目标指标", "value": item.get("targetMetric")},
             {"label": "截止时间", "value": item.get("due")},
         ],
-        suggestions=[variant["value"] for variant in creative_variants],
+        suggestions=plan.get("executionSteps") or [variant["value"] for variant in creative_variants],
         task_drafts=[draft],
-        human_decision=["是否启动测试", "是否调整测试版本", "是否推迟上新"],
-        next_step="先人工确认素材与指标，再把测试任务加入待办。",
+        human_decision=["是否启动测试", "选择哪个测试包", "是否推迟上新"],
+        next_step="先人工确认测试包和指标，再加入待办。",
         input_snapshot=deepcopy(item),
-        extra={"creativeVariants": creative_variants},
+        extra={"creativeVariants": creative_variants, "problemType": problem, "actionPlan": plan, "executionPackages": plan.get("executionPackages") or []},
         user_id=user_id,
     )
 
 
 def _traffic_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict[str, Any]:
+    problem = _problem("traffic", item)
+    plan = action_plan_for_problem(problem, item=item, source_module="traffic")
     priority = "高" if item.get("statusLevel") == "danger" else "中"
     draft = _draft_base(
         "traffic",
         item,
-        f"复盘{item.get('channel')}流量承接",
-        "先复查 ROI、退款率、库存和落地页一致性，再决定是否继续放量。",
-        item.get("nextStep") or "流量数据需要复盘。",
-        "流量",
+        f"处理{item.get('channel')}流量中的{plan.get('problemLabel')}问题",
+        "按流量问题处理包执行。",
+        item.get("nextStep") or plan.get("diagnosis") or "流量数据需要复盘。",
+        plan.get("actionPlanType") or "流量",
         priority,
     )
+    draft = _enrich_with_plan(draft, plan)
     return _common_result(
         module="traffic",
         entity_id=item["id"],
         mode=mode,
         agent_name="流量复盘 Agent",
-        summary=f"{item.get('channel')}当前状态为“{item.get('status')}”。Agent 建议先确认低 ROI 是流量问题还是商品承接问题。",
+        summary=plan.get("diagnosis") or f"{item.get('channel')}当前状态为“{item.get('status')}”。",
         evidence=[
             {"label": "曝光 / CTR", "value": f"{item.get('exposure')} / {item.get('ctr')}"},
             {"label": "转化率", "value": item.get("conversion")},
@@ -323,11 +363,12 @@ def _traffic_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict
             {"label": "退款率", "value": item.get("refundRate")},
             {"label": "库存", "value": item.get("inventory")},
         ],
-        suggestions=["不要先改预算", "先查售后 / 库存 / 素材短板", "人工确认后再决定暂停、缩量或换素材"],
+        suggestions=plan.get("executionSteps") or [],
         task_drafts=[draft],
-        human_decision=["继续放量 / 暂停放量", "先查售后 / 先查库存", "是否更换素材"],
-        next_step="把流量复盘草案加入任务池，由运营处理后提交给总管复核。",
+        human_decision=["选择处理包", "是否暂停扩大预算", "是否转入创意 / 售后 / 库存任务"],
+        next_step="把流量信号转成对应处理包，由运营执行后提交给总管复核。",
         input_snapshot=deepcopy(item),
+        extra={"problemType": problem, "actionPlan": plan, "executionPackages": plan.get("executionPackages") or []},
         user_id=user_id,
     )
 
@@ -335,6 +376,9 @@ def _traffic_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict
 def _report_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict[str, Any]:
     detail = REPORT_DETAILS.get(item["id"], {})
     summary_rows = detail.get("summary") or []
+    report_item = {**item, "sourceModule": "报表", "riskDomain": "报表", "taskType": "报表异常", "task": item.get("desc")}
+    problem = _problem("report", report_item)
+    plan = action_plan_for_problem(problem, item=report_item, source_module="report")
     evidence = [
         {"label": "报表来源", "value": item.get("source")},
         {"label": "同步状态", "value": item.get("status")},
@@ -344,31 +388,36 @@ def _report_agent(item: Dict[str, Any], mode: str, user_id: str | None) -> Dict[
     draft = _draft_base(
         "report",
         item,
-        f"摘要复核：{item.get('name')}",
-        "确认报表字段可信度、异常范围和需要进入下一轮任务的对象。",
+        f"把{item.get('name')}异常转成经营任务",
+        "先定位异常对象，再转成具体商品、流量、库存或售后任务。",
         f"{item.get('desc')}。导入后需要转成下一轮经营任务。",
-        "报表",
+        plan.get("actionPlanType") or "报表",
         "中",
     )
     draft["productId"] = f"R-{item.get('id')}"
+    draft = _enrich_with_plan(draft, plan)
     return _common_result(
         module="report",
         entity_id=item["id"],
         mode=mode,
         agent_name="报表摘要 Agent",
-        summary=f"{item.get('name')}已形成可读摘要。Agent 建议先确认数据可信度，再把异常转成任务。",
+        summary=plan.get("diagnosis") or f"{item.get('name')}已形成可读摘要。",
         evidence=evidence,
-        suggestions=["确认同步时间", "检查异常字段", "识别影响商品 / 订单 / 客户范围", "把异常进入任务池而不是停留在查看"],
+        suggestions=plan.get("executionSteps") or [],
         task_drafts=[draft],
-        human_decision=["是否重新导入", "是否生成经营任务", "是否需要人工复核数据"],
-        next_step="确认报表可信度后，由人工创建经营任务。",
+        human_decision=["是否重新导入", "异常对象转成哪些经营任务", "是否需要人工复核数据"],
+        next_step="先定位异常对象，再转成具体经营任务。",
         input_snapshot=deepcopy(item),
+        extra={"problemType": problem, "actionPlan": plan, "executionPackages": plan.get("executionPackages") or []},
         user_id=user_id,
     )
 
 
 def _task_agent(task: Dict[str, Any], mode: str, user_id: str | None) -> Dict[str, Any]:
-    risk_domain = task.get("riskDomain") or "通用"
+    problem = task.get("problemType") or task.get("agentJudgment", {}).get("problemType") or infer_action_problem_type(task, source_module=task.get("sourceModule"))
+    plan = action_plan_for_problem(problem, item=task, source_module=task.get("sourceModule"))
+    package = plan.get("recommendedPackage") or {}
+    risk_domain = plan.get("actionPlanType") or task.get("riskDomain") or "通用"
     base = {
         "id": task.get("id"),
         "storeId": (task.get("storeIds") or [None])[0],
@@ -377,44 +426,44 @@ def _task_agent(task: Dict[str, Any], mode: str, user_id: str | None) -> Dict[st
         "shortName": task.get("productShort"),
         "platform": task.get("platform"),
         "store": task.get("store"),
+        "sourceModule": task.get("sourceModule"),
+        "riskDomain": task.get("riskDomain"),
+        "taskType": task.get("taskType"),
+        "taskSignal": task.get("taskSignal"),
+        "task": task.get("task"),
+        "reason": task.get("reason"),
+        "judgmentTags": task.get("judgmentTags") or [],
     }
-    draft_1 = _draft_base(
+    draft = _draft_base(
         "task",
         base,
-        f"拆解执行：{task.get('productShort') or task.get('title')}",
-        task.get("task") or "按来源报告完成第一步处理。",
-        task.get("reason") or "任务需要拆解后执行。",
+        f"执行{task.get('productShort') or task.get('title')}{package.get('packageName') or plan.get('actionPlanType')}",
+        "按当前任务的问题类型处理包执行。",
+        plan.get("diagnosis") or task.get("reason") or "任务需要按问题类型拆解后执行。",
         risk_domain,
         task.get("priority") or "中",
     )
-    draft_2 = _draft_base(
-        "task",
-        base,
-        f"补充证据：{task.get('productShort') or task.get('title')}",
-        "补充处理证据、截图、字段核对结果或客服归因，提交给总管复核。",
-        "当前任务需要形成可复核证据。",
-        "证据",
-        "中",
-    )
+    draft = _enrich_with_plan(draft, plan)
     return _common_result(
         module="task",
         entity_id=task["id"],
         mode=mode,
-        agent_name="任务拆解 Agent",
-        summary=f"该任务当前状态为“{task.get('status')}”，建议拆成执行处理和证据补充两步，避免运营只点击完成。",
+        agent_name="任务处理包 Agent",
+        summary=plan.get("diagnosis") or f"该任务当前问题类型为“{plan.get('problemLabel')}”。",
         evidence=[
             {"label": "来源模块", "value": task.get("sourceModule") or task.get("source")},
             {"label": "任务状态", "value": task.get("status")},
-            {"label": "优先级", "value": task.get("priority")},
+            {"label": "问题类型", "value": plan.get("problemLabel")},
+            {"label": "处理包", "value": package.get("packageName") or plan.get("actionPlanType")},
             {"label": "负责人", "value": task.get("assigneeName")},
-            {"label": "复核人", "value": task.get("reviewerName")},
         ],
-        suggestions=["先看来源详情报告", "按风险域拆成可验收动作", "处理后必须提交证据给总管复核"],
-        task_drafts=[draft_1, draft_2],
-        human_decision=["是否需要拆分给不同运营", "是否需要财务 / 售后协同", "是否直接退回补充证据"],
-        next_step="由总管确认拆分方式；运营只执行被确认后的任务。",
+        suggestions=plan.get("executionSteps") or [],
+        task_drafts=[draft],
+        human_decision=["选择处理包", "是否拆成子任务", "是否退回补充证据"],
+        next_step="按问题类型处理包执行，提交指标和证据给总管复核。",
         risk_level=task.get("priority") or "中",
         input_snapshot={"taskId": task.get("id"), "status": task.get("status"), "workflowStatus": task.get("workflowStatus")},
+        extra={"problemType": problem, "actionPlan": plan, "executionPackages": plan.get("executionPackages") or []},
         user_id=user_id,
     )
 
@@ -451,6 +500,7 @@ def create_agent_task(module: str, entity_id: str, draft_index: int = 0, mode: s
         return None
     draft = deepcopy(drafts[draft_index])
     draft["agentJudgment"] = {
+        **(draft.get("agentJudgment") or {}),
         "status": "advisory_confirmed",
         "version": AGENT_VERSION,
         "agentId": agent_result.get("agentId"),
