@@ -1,29 +1,19 @@
-"""V5 data-driven module projection service.
-
-The V5 runtime keeps the module shell, but module content must come from imported
-report data. This service turns persisted DataVersion snapshots into module
-records and applies account store-scope before data reaches the frontend.
-"""
+"""V5 data-driven module projection service."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from copy import deepcopy
 from sqlite3 import OperationalError
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import connect, loads
 from src.services.account_service import current_user, list_stores, visible_store_ids_for_user
+from src.services.import_row_store_service import load_import_rows
 from src.services.module_data_service import REPORT_GROUPS
 
-PROJECTION_VERSION = "5.0.0"
-DATASET_LABELS = {
-    "products": "商品报表",
-    "inventory": "库存报表",
-    "orders": "订单报表",
-    "refunds": "退款报表",
-    "customers": "客户报表",
-}
+PROJECTION_VERSION = "5.0.1"
+DATASET_LABELS = {"products": "商品报表", "inventory": "库存报表", "orders": "订单报表", "refunds": "退款报表", "customers": "客户报表"}
 DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "ERP", "refunds": "CRM", "customers": "CRM"}
 
 
@@ -47,9 +37,7 @@ def _as_float(value: Any, default: float | None = None) -> float | None:
 def _format_number(value: float | None, default: str = "—") -> str:
     if value is None:
         return default
-    if float(value).is_integer():
-        return str(int(value))
-    return f"{value:.2f}"
+    return str(int(value)) if float(value).is_integer() else f"{value:.2f}"
 
 
 def _store_index() -> Dict[str, Dict[str, Any]]:
@@ -102,12 +90,7 @@ def _snapshot_payloads() -> List[Dict[str, Any]]:
             rows = conn.execute("SELECT payload FROM data_snapshots ORDER BY created_at ASC").fetchall()
     except OperationalError:
         return []
-    payloads: List[Dict[str, Any]] = []
-    for row in rows:
-        payload = loads(row["payload"])
-        if payload:
-            payloads.append(payload)
-    return payloads
+    return [payload for row in rows if (payload := loads(row["payload"]))]
 
 
 def latest_snapshots_by_dataset() -> Dict[str, Dict[str, Any]]:
@@ -119,30 +102,30 @@ def latest_snapshots_by_dataset() -> Dict[str, Dict[str, Any]]:
     return latest
 
 
-def _snapshot_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    rows = payload.get("rows") or payload.get("sampleRows") or []
-    if not isinstance(rows, list):
-        return []
-    result = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        next_row = {str(key): value for key, value in row.items()}
-        next_row.setdefault("dataVersion", payload.get("dataVersion"))
-        next_row.setdefault("datasetName", payload.get("datasetName"))
-        store_id = _resolve_store_id(next_row)
-        if store_id:
-            next_row.setdefault("storeId", store_id)
-        result.append(next_row)
-    return result
-
-
-def dataset_rows(dataset_name: str | None = None, user_id: str | None = None) -> List[Dict[str, Any]]:
+def _snapshot_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for dataset, payload in latest_snapshots_by_dataset().items():
         if dataset_name and dataset != dataset_name:
             continue
-        rows.extend(_snapshot_rows(payload))
+        source_rows = payload.get("rows") or payload.get("sampleRows") or []
+        if not isinstance(source_rows, list):
+            continue
+        for row in source_rows:
+            if not isinstance(row, dict):
+                continue
+            item = {str(key): value for key, value in row.items()}
+            item.setdefault("dataVersion", payload.get("dataVersion"))
+            item.setdefault("datasetName", payload.get("datasetName"))
+            store_id = _resolve_store_id(item)
+            if store_id:
+                item.setdefault("storeId", store_id)
+            rows.append(item)
+    return rows
+
+
+def dataset_rows(dataset_name: str | None = None, user_id: str | None = None) -> List[Dict[str, Any]]:
+    full_rows = load_import_rows(dataset_name)
+    rows = full_rows if full_rows else _snapshot_rows(dataset_name)
     return [row for row in rows if _row_visible(row, user_id)]
 
 
@@ -189,7 +172,6 @@ def projected_products(user_id: str | None = None) -> List[Dict[str, Any]]:
     products: Dict[str, Dict[str, Any]] = {}
     refund_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"count": 0, "amount": 0.0, "reasons": []})
     order_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"orders": 0, "paid": 0.0, "quantity": 0})
-
     for row in dataset_rows(user_id=user_id):
         dataset = row.get("datasetName")
         product_id = _product_id(row)
@@ -202,7 +184,6 @@ def projected_products(user_id: str | None = None) -> List[Dict[str, Any]]:
             item["sourceDataVersions"].append(data_version)
         if dataset and dataset not in item["sourceDatasets"]:
             item["sourceDatasets"].append(dataset)
-
         title = _pick(row, "product_name", "productTitle", "商品名称", "商品名", "title", "标题")
         if title:
             item["title"] = str(title)
@@ -216,7 +197,6 @@ def projected_products(user_id: str | None = None) -> List[Dict[str, Any]]:
         link = _pick(row, "link", "url", "商品链接", "链接")
         if link:
             item["link"] = str(link)
-
         stock = _as_float(_pick(row, "stock", "available_stock", "current_stock", "库存", "可用库存", "当前库存"))
         safety = _as_float(_pick(row, "safety_stock", "安全库存", "预警库存"))
         if stock is not None:
@@ -238,31 +218,26 @@ def projected_products(user_id: str | None = None) -> List[Dict[str, Any]]:
             item["grossMargin"] = f"{margin:.0%}"
             if margin < 0.2:
                 item["suggestion"] = "毛利低于安全线，先复核活动价、成本和投放预算。"
-
         key = _product_key(product_id, store_id)
         if dataset == "refunds":
             refund_stats[key]["count"] += 1
             refund_stats[key]["amount"] += _as_float(_pick(row, "refund_amount", "退款金额", default=0), 0) or 0
-            reason = _pick(row, "refund_reason", "退款原因", "售后原因", default="未填写")
-            refund_stats[key]["reasons"].append(str(reason))
+            refund_stats[key]["reasons"].append(str(_pick(row, "refund_reason", "退款原因", "售后原因", default="未填写")))
         if dataset == "orders":
             order_stats[key]["orders"] += 1
             order_stats[key]["quantity"] += int(_as_float(_pick(row, "quantity", "数量", default=1), 1) or 1)
             order_stats[key]["paid"] += _as_float(_pick(row, "actual_paid", "实付金额", "订单金额", default=0), 0) or 0
-
     for key, stat in refund_stats.items():
         item = products.get(key)
-        if not item:
-            continue
-        item["afterSales"] = f"退款 {stat['count']} 笔"
-        item["afterSalesLevel"] = "danger" if stat["count"] >= 2 or stat["amount"] >= 100 else "warning"
-        top_reason = stat["reasons"][0] if stat["reasons"] else "售后异常"
-        item["suggestion"] = f"复查退款原因：{top_reason}。售后归因完成前不继续放量。"
+        if item:
+            item["afterSales"] = f"退款 {stat['count']} 笔"
+            item["afterSalesLevel"] = "danger" if stat["count"] >= 2 or stat["amount"] >= 100 else "warning"
+            top_reason = stat["reasons"][0] if stat["reasons"] else "售后异常"
+            item["suggestion"] = f"复查退款原因：{top_reason}。售后归因完成前不继续放量。"
     for key, stat in order_stats.items():
         item = products.get(key)
         if item and stat["orders"]:
             item["orderSummary"] = f"订单 {stat['orders']} 笔 / ¥{stat['paid']:.2f}"
-
     return sorted((deepcopy(item) for item in products.values()), key=lambda item: (item.get("storeId") or "", item.get("id") or ""))
 
 
@@ -276,33 +251,7 @@ def projected_traffic(user_id: str | None = None) -> List[Dict[str, Any]]:
         store_id = row.get("storeId") or _resolve_store_id(row)
         key = _product_key(product_id, store_id)
         product = products.get(key) or _ensure_product({}, product_id, store_id)
-        card = cards.setdefault(
-            key,
-            {
-                "id": f"TR-{store_id or 'GLOBAL'}-{product_id}",
-                "storeId": store_id,
-                "productId": product_id,
-                "title": product.get("title") or f"导入商品 {product_id}",
-                "platform": product.get("platform") or _store_platform(store_id),
-                "store": product.get("store") or _store_name(store_id),
-                "imageLabel": "流",
-                "channel": "订单数据",
-                "source": "报表导入",
-                "exposure": "—",
-                "ctr": "—",
-                "conversion": "—",
-                "roi": "—",
-                "refundRate": "—",
-                "inventory": product.get("inventory") or "—",
-                "status": "观察",
-                "statusLevel": "warning",
-                "backflow": "流量承接复查",
-                "nextStep": "根据订单放大信号，复核库存、售后和承接能力。",
-                "link": product.get("link") or "",
-                "orderCount": 0,
-                "paidAmount": 0.0,
-            },
-        )
+        card = cards.setdefault(key, {"id": f"TR-{store_id or 'GLOBAL'}-{product_id}", "storeId": store_id, "productId": product_id, "title": product.get("title") or f"导入商品 {product_id}", "platform": product.get("platform") or _store_platform(store_id), "store": product.get("store") or _store_name(store_id), "imageLabel": "流", "channel": "订单数据", "source": "报表导入", "exposure": "—", "ctr": "—", "conversion": "—", "roi": "—", "refundRate": "—", "inventory": product.get("inventory") or "—", "status": "观察", "statusLevel": "warning", "backflow": "流量承接复查", "nextStep": "根据订单放大信号，复核库存、售后和承接能力。", "link": product.get("link") or "", "orderCount": 0, "paidAmount": 0.0})
         card["orderCount"] += 1
         card["paidAmount"] += _as_float(_pick(row, "actual_paid", "实付金额", "订单金额", default=0), 0) or 0
     for card in cards.values():
@@ -323,16 +272,7 @@ def projected_report_groups(user_id: str | None = None) -> List[Dict[str, Any]]:
             dataset = report["id"]
             payload = latest.get(dataset)
             rows = dataset_rows(dataset, user_id=user_id)
-            next_group["reports"].append(
-                {
-                    **report,
-                    "status": "已导入" if payload else "待导入",
-                    "count": f"{len(rows)} 条",
-                    "latestDataVersion": payload.get("dataVersion") if payload else None,
-                    "latestSnapshotAt": payload.get("createdAt") if payload else None,
-                    "source": DATASET_SOURCE.get(dataset, report.get("source", "报表")),
-                }
-            )
+            next_group["reports"].append({**report, "status": "已导入" if payload else "待导入", "count": f"{len(rows)} 条", "latestDataVersion": payload.get("dataVersion") if payload else None, "latestSnapshotAt": payload.get("createdAt") if payload else None, "source": DATASET_SOURCE.get(dataset, report.get("source", "报表"))})
         groups.append(next_group)
     return groups
 
@@ -346,15 +286,7 @@ def projected_report_details(user_id: str | None = None) -> Dict[str, Dict[str, 
             for key in row.keys():
                 if key not in {"dataVersion", "datasetName"} and key not in headers:
                     headers.append(key)
-        details[dataset] = {
-            "title": DATASET_LABELS.get(dataset, dataset),
-            "source": DATASET_SOURCE.get(dataset, "导入"),
-            "summary": [["数据行", str(len(rows))], ["数据版本", payload.get("dataVersion") or "—"], ["店铺数", str(len({row.get("storeId") for row in rows if row.get("storeId")}))]],
-            "columns": headers[:12],
-            "rows": [[str(row.get(header, "")) for header in headers[:12]] for row in rows[:30]],
-            "dataVersion": payload.get("dataVersion"),
-            "createdAt": payload.get("createdAt"),
-        }
+        details[dataset] = {"title": DATASET_LABELS.get(dataset, dataset), "source": DATASET_SOURCE.get(dataset, "导入"), "summary": [["数据行", str(len(rows))], ["数据版本", payload.get("dataVersion") or "—"], ["店铺数", str(len({row.get("storeId") for row in rows if row.get("storeId")}))]], "columns": headers[:12], "rows": [[str(row.get(header, "")) for header in headers[:12]] for row in rows[:50]], "dataVersion": payload.get("dataVersion"), "createdAt": payload.get("createdAt")}
     return details
 
 
@@ -364,15 +296,4 @@ def projection_summary(user_id: str | None = None) -> Dict[str, Any]:
     products = projected_products(user_id)
     traffic = projected_traffic(user_id)
     reports = projected_report_groups(user_id)
-    return {
-        "version": PROJECTION_VERSION,
-        "hasData": bool(latest_payload or products or traffic),
-        "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None,
-        "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None,
-        "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None,
-        "productCount": len(products),
-        "trafficCardCount": len(traffic),
-        "reportCount": sum(len(group.get("reports", [])) for group in reports),
-        "dataVersionCount": len(latest),
-        "scopedStoreIds": sorted(_visible_store_ids(user_id)),
-    }
+    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "scopedStoreIds": sorted(_visible_store_ids(user_id))}
