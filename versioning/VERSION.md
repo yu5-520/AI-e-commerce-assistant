@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.5.0
+Current Version: v4.5.1
 
 ## Version History
 
+- v4.5.1: Productized the ActionPlan detail UI. `web_demo/modules/task-report/page.js` now renders problem handling packages and task drafts as dedicated product cards with numbered operator steps, submit metrics, review criteria, failure thresholds, and hidden engineering IDs; `web_demo/alert-report.css` adds responsive iPad-safe layout styles.
 - v4.5.0: Added the unified LLM Gateway with `src/services/llm_provider_service.py`, `llm_guardrail_service.py`, `llm_trace_service.py`, `prompt_template_service.py`, `tool_gateway_service.py`, `mcp_adapter_service.py`, `/api/llm/*` routes, prompt templates, LLM output schemas, `.env.example` settings, and first creative-Agent LLM enrichment. MCP is kept as a future external tool adapter behind Tool Gateway, not the primary model interface.
 - v4.4.2: Added the problem-type Action Plan layer with `src/services/action_plan_service.py`; task and module Agents now output `problemType`, `actionPlan`, `executionPackages`, `executionSteps`, `evidenceRequired`, `submitMetrics`, `acceptanceCriteria`, `failureThreshold`, and `reviewFocus` so each module signal becomes a targeted handling package instead of one generic task-breakdown template.
 - v4.4.1: Refined the creative vertical Agent into a ready-to-test package generator. Added `testPackages`, selected-package task creation with `packageIndex`, operator execution steps, submit metrics, task-report page cleanup, and smoke-test coverage for title / main-image test packages.
@@ -23,15 +24,3 @@ Current Version: v4.5.0
 - v3.0.6: Hardened report data ownership by binding imported report rows, alert events, dashboard summary, report module alerts, and generated warning tasks to store scope; added store_id / store_name field aliases and account-scoped alert APIs.
 - v3.0.5: Compacted manager navigation, nested product / competitor / listing / traffic / report operation pages under the manager operation-module hub, added clickable manager module cards, and extended minimal UI cleanup to manager pages.
 - v3.0.4: Added minimal UI cleanup, removed explanatory grey microcopy through a global UI layer, changed store owner changes into confirmed next-day migration records, added pending store migrations, and changed owner-side store responsibility changes to require management confirmation.
-- v3.0.3: Split operating-unit visibility from store responsibility permissions, added store assignments, scoped operating-unit/product/listing/traffic data by viewer store permissions, redesigned organization responsibility controls, and moved report upload into a separate layout panel.
-- v3.0.2: Added report schema preview, field alias mapping, `/api/data/templates`, `/api/data/preview`, `/api/data/import/confirm`, frontend three-step import flow, preview table, and confirm-before-alert behavior.
-- v3.0.1: Reworked the report page into a file-first upload flow, moved mock alert generation into a backup demo action, added client-side CSV parsing, improved report upload layout, and truncated long data versions in cards.
-- v3.0.0: Added report-driven data snapshots, metric snapshots, alert events, alert-to-task bridge, V3 data summary API, one-click mock report alert import, and frontend alert sync for dashboard/report/product/traffic modules.
-- v2.5.1: Added cross-account task lifecycle sync with task events, per-user counters, operator accept action, manager review sync, and recap handoff.
-- v2.5.0: Rebuilt the task system into a role-scoped task flow with store permissions, visible roles/users/stores, owner decision tasks, manager dispatch tasks, operator execution tasks, warning-to-operator todo routing, and manager split endpoint.
-
-## Version Rules
-
-- Patch: copy, prompt, template, or wording changes.
-- Minor: new module, new mode, new interface, or new runtime config.
-- Major: breaking workflow, API contract, schema, or folder migration changes.
