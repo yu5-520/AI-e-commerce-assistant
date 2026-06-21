@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.5.3
+Current Version: v5.0.0
 
 ## Version History
 
+- v5.0.0: Cleared MVP-stage runtime business fallback content while keeping the original module navigation and module functions. Added `module_projection_service.py` so report imports can project data into product / traffic / report views, and updated product / traffic routes plus the dashboard page to show empty state until imported data creates module content, alerts, and scoped tasks.
 - v4.5.3: Added Module / Task / Feedback LLM + RAG enrichment through `src/services/agent_llm_enrichment_service.py`. Module Agent, task generation, task playbook, and feedback flywheel outputs now include `retrievedCases`, `ragReferences`, `llmEnrichment`, `llmSummary`, `llmOperatorBrief`, `llmManagerReviewBrief`, `llmRiskCheck`, and fallback metadata while problemType and ActionPlan remain deterministic.
 - v4.5.2: Removed task-report top notice bars for Agent refresh and task creation, changed task creation to local button loading / inline error feedback, and made “重新生成 Agent 方案” preserve the current report and old Agent output if refresh fails.
 - v4.5.1: Productized the ActionPlan detail UI. `web_demo/modules/task-report/page.js` now renders problem handling packages and task drafts as dedicated product cards with numbered operator steps, submit metrics, review criteria, failure thresholds, and hidden engineering IDs; `web_demo/alert-report.css` adds responsive iPad-safe layout styles.
@@ -15,13 +16,3 @@ Current Version: v4.5.3
 - v4.2.0: Added RAG-driven task generation and task playbook Agents with `src/services/task_agent_service.py`, `/api/modules/agents/tasks/generate`, `/api/modules/agents/tasks/{task_id}/playbook`, multi-style operating playbooks, confidence scoring, RAG references, frontend client methods, V4.2 health flags, and smoke-test coverage.
 - v4.1.0: Added the RAG-ready operation experience memory layer with structured experience cards, seed playbooks, negative cases, `/api/modules/rag-memory` endpoints, feedback-to-experience drafting, owner/manager approval and rejection, frontend API client methods, V4.1 health flags, and smoke-test coverage for memory search and feedback learning.
 - v4.0.0: Added the V4 module Agent layer with advisory-only Agent service, `/api/modules/agents` endpoints, Agent task-draft creation, detail-report Agent panel, cycle report Agent, V4 health flags, frontend asset cache bump, and documentation. Agent outputs suggestions, summaries, task drafts, and human decision points, but does not directly execute price, ads, refund, publish, or ERP / CRM write actions.
-- v3.1.4: Fixed frontend / backend breakpoints by adding backend data-version detail payloads, aligning data-version service version to 3.1.4, replacing versioned report and manager module filenames with normalized runtime files, removing duplicate bootstrap dynamic loading, and deleting unused report / manager versioned runtime files.
-- v3.1.3: Reworked the report page hierarchy by moving import records to the bottom, compacting import records into list rows, adding a data-version detail route, moving rollback strategy into the detail page, and hiding rollback from operator accounts.
-- v3.1.2: Added rollback linked-task strategies so report version rollback can move related tasks to manual review, archive them with audit, or keep current status; added strategy selector on the report page.
-- v3.1.1: Added report import-record management, data-version soft rollback, rollback audit records, report-page rollback cards, and rollback health flags.
-- v3.1.0: Added standalone inventory and customer-service centers, store-scoped inventory / service task routes, manager operation-module entries, and operation-center UI pages.
-- v3.0.9: Added automatic recap candidates after manager evidence approval, recap candidate service and endpoint, log-page recap candidate board, and automatic复盘候选 logs for daily / weekly review.
-- v3.0.8: Added structured task evidence submission, manager evidence review, evidence records, review records, task evidence endpoints, and the Todo handling form so tasks are submitted with audit material instead of completed by a bare click.
-- v3.0.7: Added alert evidence detail reports with source trace, trigger rule, store responsibility, raw report rows, evidence chain, and frontend entry from latest report alerts.
-- v3.0.6: Hardened report data ownership by binding imported report rows, alert events, dashboard summary, report module alerts, and generated warning tasks to store scope; added store_id / store_name field aliases and account-scoped alert APIs.
-- v3.0.5: Compacted manager navigation, nested product / competitor / listing / traffic / report operation pages under the manager operation-module hub, added clickable manager module cards, and extended minimal UI cleanup to manager pages.
