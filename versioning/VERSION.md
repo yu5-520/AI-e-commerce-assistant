@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v5.0.0
+Current Version: v5.0.1
 
 ## Version History
 
+- v5.0.1: Closed the V5 flow-link breakpoints by removing runtime seed tasks, persisting full normalized import rows for module projection, routing the report module through the V5 projection route, and keeping report task creation available after the route switch.
 - v5.0.0: Cleared MVP-stage runtime business fallback content while keeping the original module navigation and module functions. Added `module_projection_service.py` so report imports can project data into product / traffic / report views, and updated product / traffic routes plus the dashboard page to show empty state until imported data creates module content, alerts, and scoped tasks.
 - v4.5.3: Added Module / Task / Feedback LLM + RAG enrichment through `src/services/agent_llm_enrichment_service.py`. Module Agent, task generation, task playbook, and feedback flywheel outputs now include `retrievedCases`, `ragReferences`, `llmEnrichment`, `llmSummary`, `llmOperatorBrief`, `llmManagerReviewBrief`, `llmRiskCheck`, and fallback metadata while problemType and ActionPlan remain deterministic.
 - v4.5.2: Removed task-report top notice bars for Agent refresh and task creation, changed task creation to local button loading / inline error feedback, and made “重新生成 Agent 方案” preserve the current report and old Agent output if refresh fails.
