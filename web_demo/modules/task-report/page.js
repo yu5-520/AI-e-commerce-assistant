@@ -1,8 +1,6 @@
 (function () {
   let lastReport = null;
   let lastAgent = null;
-  let notice = "";
-  let agentNotice = "";
   const s = (value) => AppShell.escape(value ?? "");
 
   function arr(value) {
@@ -13,6 +11,31 @@
     const text = String(value || "").trim();
     if (!text || text === "通用" || text === "ActionPlan" || /^AP-/i.test(text)) return "";
     return text;
+  }
+
+  function setBusy(node, label = "处理中") {
+    if (!node) return;
+    node.dataset.originalText = node.dataset.originalText || node.textContent || "";
+    node.disabled = true;
+    node.textContent = label;
+    node.classList.add("is-loading");
+  }
+
+  function restoreBusy(node) {
+    if (!node) return;
+    node.disabled = false;
+    node.textContent = node.dataset.originalText || node.textContent || "重试";
+    node.classList.remove("is-loading");
+  }
+
+  function localError(node, message) {
+    if (!node?.parentElement) return;
+    const old = node.parentElement.querySelector(".inline-action-error");
+    old?.remove?.();
+    const tip = document.createElement("span");
+    tip.className = "inline-action-error";
+    tip.textContent = message || "操作失败，请重试";
+    node.parentElement.appendChild(tip);
   }
 
   function pillRow(items = []) {
@@ -179,7 +202,7 @@
     if (!agent) return "";
     const evidence = arr(agent.evidence);
     const humanDecision = arr(agent.humanDecision || report.humanDecision);
-    return `${agentNotice ? AppShell.notice("Agent", agentNotice) : ""}<section class="page-section"><div class="section-header"><h3>Agent 判断</h3><span class="status-badge">${s(agent.agentName || "Agent")}</span></div><p class="agent-summary-text">${s(agent.categoryStrategy || agent.summary || "已生成处理方案。")}</p>${evidence.length ? `<div class="kpi-grid report-metrics">${evidence.slice(0, 4).map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div>` : ""}</section>${actionPlanBlock(agent, report)}${taskDraftBlock(agent)}${humanDecision.length ? `<section class="page-section"><div class="section-header"><h3>人工确认</h3><span class="status-badge">${humanDecision.length} 项</span></div>${chipList(humanDecision)}<div class="report-actions"><button type="button" data-refresh-agent>重新生成 Agent 方案</button></div></section>` : ""}`;
+    return `<section class="page-section"><div class="section-header"><h3>Agent 判断</h3><span class="status-badge">${s(agent.agentName || "Agent")}</span></div><p class="agent-summary-text">${s(agent.categoryStrategy || agent.summary || "已生成处理方案。")}</p>${evidence.length ? `<div class="kpi-grid report-metrics">${evidence.slice(0, 4).map((item) => `<article class="card report-metric-card"><h3>${s(item.label)}</h3><strong>${s(item.value)}</strong></article>`).join("")}</div>` : ""}</section>${actionPlanBlock(agent, report)}${taskDraftBlock(agent)}${humanDecision.length ? `<section class="page-section"><div class="section-header"><h3>人工确认</h3><span class="status-badge">${humanDecision.length} 项</span></div>${chipList(humanDecision)}<div class="report-actions"><button type="button" data-refresh-agent>重新生成 Agent 方案</button></div></section>` : ""}`;
   }
 
   function actionButtons(report) {
@@ -212,7 +235,11 @@
     if (!report) return `<section class="page-section"><h3>报告加载失败</h3><p>没有拿到任务报告。请回到来源模块重新打开。</p></section>`;
     const task = report.relatedTask || {};
     const metrics = [["来源模块", report.sourceModule, report.sourceRoute], ["对象 ID", report.entityId, report.module], ["任务状态", report.taskStatus || "候选预警", task.deadline || "待确认"], ["当前视角", report.viewer?.roleName || "默认", report.insightDepth || "role"]];
-    return `<section class="report-hero"><div><p class="eyebrow">TASK REPORT · ${s(report.sourceModule)}</p><h2>${s(report.title)}</h2><p>${s(report.warningSummary)}</p></div><div class="report-hero-side"><span>风险等级</span><strong>${s(report.riskLevel)}</strong><small>${s(report.taskStatus || report.reportType)}</small></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid report-metrics">${metrics.map(([a,b,c]) => AppShell.metricCard(a,b,c)).join("")}</section>${kvBlock("来源链路", report.sourceTrace || [])}${triggerBlock(report.triggerRule)}${responsibilityBlock(report.responsibility)}${evidenceBlock(report.evidence || [])}${rawRowsBlock(report.rawRows || [])}${listBlock("证据链", report.evidenceChain || [])}${agentBlock(lastAgent, report)}${listBlock("需要补充的数据", report.dataNeeded || [])}<section class="page-section"><div class="section-header"><h3>下一步</h3><span class="status-badge">人工确认</span></div><p>${s(report.nextStep)}</p><div class="report-actions">${actionButtons(report)}</div></section>`;
+    return `<section class="report-hero"><div><p class="eyebrow">TASK REPORT · ${s(report.sourceModule)}</p><h2>${s(report.title)}</h2><p>${s(report.warningSummary)}</p></div><div class="report-hero-side"><span>风险等级</span><strong>${s(report.riskLevel)}</strong><small>${s(report.taskStatus || report.reportType)}</small></div></section><section class="kpi-grid report-metrics">${metrics.map(([a,b,c]) => AppShell.metricCard(a,b,c)).join("")}</section>${kvBlock("来源链路", report.sourceTrace || [])}${triggerBlock(report.triggerRule)}${responsibilityBlock(report.responsibility)}${evidenceBlock(report.evidence || [])}${rawRowsBlock(report.rawRows || [])}${listBlock("证据链", report.evidenceChain || [])}${agentBlock(lastAgent, report)}${listBlock("需要补充的数据", report.dataNeeded || [])}<section class="page-section"><div class="section-header"><h3>下一步</h3><span class="status-badge">人工确认</span></div><p>${s(report.nextStep)}</p><div class="report-actions">${actionButtons(report)}</div></section>`;
+  }
+
+  function rerenderCurrentReport() {
+    AppShell.setView(renderReport(lastReport));
   }
 
   window.TaskReportPage = {
@@ -224,7 +251,7 @@
       if (state.alertId) lastReport = await AppApi.alertReport(state.alertId);
       else if (state.taskId) lastReport = await AppApi.taskReport(state.taskId);
       else if (state.module && state.entityId) lastReport = await AppApi.candidateReport(state.module, state.entityId);
-      else lastReport = null;
+      else lastReport = lastReport || null;
       lastAgent = await loadAgentForReport(lastReport);
       return renderReport(lastReport);
     },
@@ -235,23 +262,28 @@
       });
       ctx.delegate("[data-source]", "click", (_, node) => AppRouter.navigate(node.dataset.source || "dashboard"));
       ctx.delegate("[data-open-task]", "click", (_, node) => AppTaskActions.openTodoTask(node.dataset.openTask));
-      ctx.delegate("[data-refresh-agent]", "click", async () => {
-        agentNotice = "Agent 方案重新生成中...";
-        AppRouter.schedule("task-report-agent-refresh-start");
-        lastAgent = await loadAgentForReport(lastReport);
-        agentNotice = lastAgent ? "Agent 方案已更新，仍需人工确认后执行。" : "Agent 暂时没有生成结果。";
-        AppRouter.schedule("task-report-agent-refresh-done");
+      ctx.delegate("[data-refresh-agent]", "click", async (_, node) => {
+        setBusy(node, "生成中");
+        const previousAgent = lastAgent;
+        const nextAgent = await loadAgentForReport(lastReport);
+        if (nextAgent) {
+          lastAgent = nextAgent;
+          rerenderCurrentReport();
+          return;
+        }
+        lastAgent = previousAgent;
+        restoreBusy(node);
+        localError(node, "生成失败，已保留当前方案");
       });
       ctx.delegate("[data-creative-task]", "click", async (_, node) => {
         const [productId, packageIndex] = (node.dataset.creativeTask || "").split(":");
-        agentNotice = "测试任务创建中...";
-        AppRouter.schedule("task-report-creative-task-start");
+        setBusy(node, "创建中");
         const result = await AppApi.createCreativeTask(productId, { packageIndex: Number(packageIndex || 0), taskGoal: lastAgent?.taskGoal, platform: lastAgent?.platformRule?.platform || lastAgent?.productFacts?.platform || "通用", categoryId: lastAgent?.categoryProfile?.categoryId || "home_living_goods" });
         const task = result?.task;
         if (task?.id) AppTaskActions.openTodoTask(task.id);
         else {
-          agentNotice = result?.message || "测试任务创建失败，请回到商品模块重试。";
-          AppRouter.schedule("task-report-creative-task-failed");
+          restoreBusy(node);
+          localError(node, result?.message || "创建失败，请重试");
         }
       });
       ctx.delegate("[data-agent-task]", "click", async (_, node) => {
@@ -259,32 +291,34 @@
         const module = parts[0];
         const entityId = parts[1];
         const draftIndex = Number(parts[2] || 0);
+        setBusy(node, "创建中");
         if (module === "creative") {
           const result = await AppApi.createCreativeTask(entityId, { packageIndex: draftIndex, taskGoal: lastAgent?.taskGoal });
           const task = result?.task;
           if (task?.id) AppTaskActions.openTodoTask(task.id);
+          else {
+            restoreBusy(node);
+            localError(node, result?.message || "创建失败，请重试");
+          }
           return;
         }
-        agentNotice = "Agent 任务草案提交中...";
-        AppRouter.schedule("task-report-agent-task-start");
         const result = await AppApi.createAgentTask(module, entityId, draftIndex, lastAgent?.mode || "analysis");
         const task = result?.task;
         if (task?.id) AppTaskActions.openTodoTask(task.id);
         else {
-          agentNotice = result?.message || "Agent 任务草案创建失败，请回到来源模块重试。";
-          AppRouter.schedule("task-report-agent-task-failed");
+          restoreBusy(node);
+          localError(node, result?.message || "创建失败，请重试");
         }
       });
       ctx.delegate("[data-create-task]", "click", async (_, node) => {
         const [module, entityId] = node.dataset.createTask.split(":");
-        notice = "任务提交中...";
-        AppRouter.schedule("task-report-create-start");
+        setBusy(node, "创建中");
         const result = await AppTaskActions.createTaskFromReport(module, entityId);
         const task = result?.task;
         if (task?.id) AppTaskActions.openTodoTask(task.id);
         else {
-          notice = result?.message || "任务创建失败，请回到来源模块重试。";
-          AppRouter.schedule("task-report-create-failed");
+          restoreBusy(node);
+          localError(node, result?.message || "创建失败，请重试");
         }
       });
     },
