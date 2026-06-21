@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v4.4.1
+Current Version: v4.4.2
 
 ## Version History
 
+- v4.4.2: Added the problem-type Action Plan layer with `src/services/action_plan_service.py`; task and module Agents now output `problemType`, `actionPlan`, `executionPackages`, `executionSteps`, `evidenceRequired`, `submitMetrics`, `acceptanceCriteria`, `failureThreshold`, and `reviewFocus` so each module signal becomes a targeted handling package instead of one generic task-breakdown template.
 - v4.4.1: Refined the creative vertical Agent into a ready-to-test package generator. Added `testPackages`, selected-package task creation with `packageIndex`, operator execution steps, submit metrics, task-report page cleanup, and smoke-test coverage for title / main-image test packages.
 - v4.4.0: Added the feedback flywheel Agent with `src/services/feedback_flywheel_service.py`, `/api/modules/feedback-flywheel`, `/api/modules/feedback-flywheel/cycle/{target}`, `/api/modules/feedback-flywheel/cycle/{target}/draft`, automatic experience-card drafting on manager approval, feedback metrics, frontend client methods, V4.4 health flags, and smoke-test coverage.
 - v4.3.0: Added the vertical category creative Agent with `src/services/creative_vertical_agent_service.py`, `/api/modules/agents/creative/{product_id}`, `/api/modules/agents/creative/{product_id}/tasks`, category profiles, platform expression rules, competitor-signal transformation, title variants, main-image directions, selling-point ordering, A/B test plans, frontend client methods, V4.3 health flags, and smoke-test coverage.
