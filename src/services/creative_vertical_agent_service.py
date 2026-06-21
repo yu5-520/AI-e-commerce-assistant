@@ -1,9 +1,9 @@
-"""V4.3 vertical category creative Agent service.
+"""V4.3+ vertical category creative Agent service.
 
 This Agent turns product facts, category profiles, platform expression rules,
-competitor signals, and RAG memory into title / main-image / selling-point test
-plans. It is advisory-only: it creates creative strategies and optional task
-plans, but it never publishes products or changes live marketplace content.
+competitor signals, and RAG memory into ready-to-test title / main-image
+packages. It is advisory-only: it creates creative strategies and optional test
+tasks, but it never publishes products or changes live marketplace content.
 """
 
 from __future__ import annotations
@@ -16,29 +16,34 @@ from src.services.experience_memory_service import list_category_profiles, searc
 from src.services.module_data_service import COMPETITORS, LISTINGS, PRODUCTS, find_by_id
 from src.services.module_task_service import create_task
 
-CREATIVE_AGENT_VERSION = "4.3.0"
+CREATIVE_AGENT_VERSION = "4.4.0"
 FORBIDDEN_ACTIONS = ["不直接发布商品", "不直接改价", "不直接投放", "不直接生成夸大承诺", "不直接回写 ERP / CRM / 店铺后台"]
 DEFAULT_CATEGORY_ID = "home_living_goods"
+DEFAULT_SUBMIT_METRICS = ["曝光", "点击率", "转化率", "收藏加购", "退款率", "客服咨询关键词"]
 
 PLATFORM_RULES: Dict[str, Dict[str, Any]] = {
     "淘宝": {
         "titleFocus": ["搜索关键词覆盖", "材质", "场景", "规格可信度"],
         "imageFocus": ["容量可视化", "尺寸参照", "使用前后对比"],
+        "trafficTypes": ["搜索流量", "推荐流量"],
         "avoid": ["标题堆砌无关词", "主图夸大容量", "承诺超出商品事实"],
     },
     "拼多多": {
         "titleFocus": ["到手价值", "套装数量", "价格带", "耐用"],
         "imageFocus": ["数量对比", "家庭囤货场景", "材质耐用展示"],
+        "trafficTypes": ["搜索流量", "活动流量", "推荐流量"],
         "avoid": ["只强调便宜不解释价值", "过度低价暗示", "忽略售后预期"],
     },
     "抖音小店": {
         "titleFocus": ["场景痛点", "短句卖点", "人群需求", "即时改善"],
         "imageFocus": ["首屏冲击", "前后对比", "真实使用场景"],
+        "trafficTypes": ["内容推荐", "直播承接", "短视频引流"],
         "avoid": ["静态堆字", "无场景抽象卖点", "过度医疗或功效承诺"],
     },
     "通用": {
         "titleFocus": ["商品事实", "核心卖点", "使用场景", "风险边界"],
         "imageFocus": ["真实展示", "对比表达", "证据可视化"],
+        "trafficTypes": ["搜索流量", "推荐流量"],
         "avoid": ["夸大承诺", "无证据卖点", "平台敏感词"],
     },
 }
@@ -213,6 +218,128 @@ def _creative_patterns(product: Dict[str, Any], category_id: str, platform: str)
     return rag
 
 
+def _fit_traffic(angle: str, platform: str) -> str:
+    if "搜索" in angle:
+        return "搜索流量"
+    if "场景" in angle or platform == "抖音小店":
+        return "内容推荐 / 场景流量"
+    if "差评" in angle or "证据" in angle:
+        return "转化承接流量"
+    return (_platform_rule(platform).get("trafficTypes") or ["推荐流量"])[0]
+
+
+def _first_image_text(angle: str, selling_points: List[str]) -> str:
+    if "搜索" in angle:
+        return f"{selling_points[0]}更清楚"
+    if "场景" in angle:
+        return f"解决{selling_points[0]}问题"
+    if "证据" in angle:
+        return "看得见的卖点"
+    return f"{selling_points[0]}可视化"
+
+
+def _test_packages(
+    *,
+    product: Dict[str, Any],
+    platform: str,
+    task_goal: str,
+    title_variants: List[Dict[str, Any]],
+    main_image_directions: List[Dict[str, Any]],
+    selling_points: List[str],
+    patterns: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    packages: List[Dict[str, Any]] = []
+    for index, title in enumerate(title_variants):
+        image = main_image_directions[index % len(main_image_directions)]
+        angle = title.get("angle") or f"方案 {index + 1}"
+        package_name = f"方案 {chr(65 + index)}：{angle}"
+        packages.append(
+            {
+                "packageId": f"PKG-{product.get('id') or product.get('productId') or 'product'}-{index + 1}",
+                "packageName": package_name,
+                "targetMetric": "点击率" if index < 2 else "点击率 + 转化承接",
+                "taskGoal": task_goal,
+                "title": title.get("title"),
+                "titleAngle": angle,
+                "mainImageDirection": image.get("direction"),
+                "mainImageLayout": image.get("layout"),
+                "firstImageText": _first_image_text(angle, selling_points),
+                "sellingPointOrder": selling_points[:4],
+                "fitPlatform": platform,
+                "fitTraffic": _fit_traffic(angle, platform),
+                "ragReferences": [case.get("caseId") for case in patterns.get("items") or []],
+                "risk": title.get("risk") or image.get("avoid") or "必须避免夸大承诺。",
+                "testDuration": "24-48 小时",
+                "submitMetrics": DEFAULT_SUBMIT_METRICS,
+                "operatorAction": [
+                    "复制标题版本到测试商品或测试计划",
+                    "按主图方向制作或选择对应图片",
+                    "小流量测试 24-48 小时",
+                    "记录曝光、点击率、转化率、收藏加购、退款率",
+                    "提交胜出方案和异常说明",
+                ],
+                "reviewRule": "总管复核点击率是否提升，转化率是否同步下滑，退款率是否异常升高。",
+            }
+        )
+    return packages
+
+
+def _build_task_draft(
+    *,
+    product_id: str,
+    product: Dict[str, Any],
+    platform: str,
+    category_profile: Dict[str, Any],
+    category_id: str,
+    task_goal: str,
+    selling_points: List[str],
+    patterns: Dict[str, Any],
+    test_packages: List[Dict[str, Any]],
+    selected_package: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    selected = selected_package or (test_packages[0] if test_packages else {})
+    package_name = selected.get("packageName") or "标题主图测试包"
+    title = f"上架测试{product.get('shortName') or product_id}{package_name}"
+    return {
+        "title": title,
+        "task": f"运营不再自行想标题主图，直接选择 Agent 生成的{package_name}上架小流量测试。",
+        "reason": f"当前目标：{task_goal}。平台：{platform}。类目：{category_profile.get('categoryName')}。",
+        "priority": "中",
+        "priorityLevel": "warning",
+        "deadline": selected.get("testDuration") or "24-48 小时后复盘",
+        "riskDomain": "标题主图",
+        "actionType": "上架测试",
+        "taskType": "V4.3 垂直类目创意测试",
+        "taskSignal": "类目 Profile + 平台规则 + RAG 召回 + 竞品信号 + 测试包",
+        "entityType": "商品",
+        "entityId": product_id,
+        "source": "V4.3 Creative Vertical Agent",
+        "sourceModule": "标题主图垂直类目 Agent",
+        "sourceRoute": "business-products",
+        "productRoute": "business-products",
+        "storeIds": [product.get("storeId")] if product.get("storeId") else [],
+        "visibleStoreIds": [product.get("storeId")] if product.get("storeId") else [],
+        "productId": product_id,
+        "productTitle": product.get("title") or product_id,
+        "productShort": product.get("shortName") or product_id,
+        "platform": platform,
+        "store": product.get("store") or "经营单元",
+        "judgmentTags": ["creative_vertical", category_id, platform, *selling_points[:3]],
+        "selectedPackage": selected,
+        "testPackages": test_packages,
+        "executionSteps": selected.get("operatorAction") or ["选择测试包", "上架小流量测试", "提交数据"],
+        "evidenceRequired": selected.get("submitMetrics") or DEFAULT_SUBMIT_METRICS,
+        "acceptanceCriteria": ["点击率是否提升", "转化率是否同步下滑", "退款率是否异常升高", "是否形成可复用标题 / 主图经验"],
+        "agentJudgment": {
+            "status": "advisory",
+            "version": CREATIVE_AGENT_VERSION,
+            "ragReferences": [case.get("caseId") for case in patterns.get("items") or []],
+            "boundary": "Agent 生成测试包，运营负责上架测试和反馈结果，不直接发布到真实店铺。",
+            "forbiddenActions": FORBIDDEN_ACTIONS,
+        },
+    }
+
+
 def run_creative_vertical_agent(
     product_id: str,
     *,
@@ -234,48 +361,35 @@ def run_creative_vertical_agent(
     patterns = _creative_patterns(product, category_id, platform)
     title_variants = _title_variants(product, platform, selling_points, task_goal)
     main_image_directions = _image_directions(product, platform, selling_points, competitors)
+    test_packages = _test_packages(
+        product=product,
+        platform=platform,
+        task_goal=task_goal,
+        title_variants=title_variants,
+        main_image_directions=main_image_directions,
+        selling_points=selling_points,
+        patterns=patterns,
+    )
+    selected_index = int(body.get("packageIndex", body.get("package_index", 0)) or 0)
+    selected_package = test_packages[selected_index] if 0 <= selected_index < len(test_packages) else test_packages[0]
     test_plan = {
-        "variantA": f"{title_variants[0]['angle']} + {main_image_directions[1]['direction']}",
-        "variantB": f"{title_variants[1]['angle']} + {main_image_directions[0]['direction']}",
-        "variantC": f"{title_variants[2]['angle']} + {main_image_directions[2]['direction']}",
-        "metrics": ["点击率", "转化率", "退款率", "客服咨询关键词"],
-        "sampleRule": "先小流量测试，胜出版本再进入上新或详情页优化任务。",
+        "packages": [item.get("packageName") for item in test_packages],
+        "metrics": DEFAULT_SUBMIT_METRICS,
+        "sampleRule": "运营直接选择测试包上架小流量测试，不再从零想标题和主图。",
         "stopRule": "若退款率或违规风险升高，停止放大并回到任务复核。",
     }
-    task_draft = {
-        "title": f"测试{product.get('shortName') or product_id}标题主图垂直类目方案",
-        "task": "基于类目 Profile、平台表达规则、竞品信号和历史经验，选择标题 / 主图测试方向。",
-        "reason": f"当前目标：{task_goal}。平台：{platform}。类目：{profile.get('categoryName')}。",
-        "priority": "中",
-        "priorityLevel": "warning",
-        "deadline": "3 天后复盘",
-        "riskDomain": "标题主图",
-        "actionType": "测试",
-        "taskType": "V4.3 垂直类目创意测试",
-        "taskSignal": "类目 Profile + 平台规则 + RAG 召回 + 竞品信号",
-        "entityType": "商品",
-        "entityId": product_id,
-        "source": "V4.3 Creative Vertical Agent",
-        "sourceModule": "标题主图垂直类目 Agent",
-        "sourceRoute": "business-products",
-        "productRoute": "business-products",
-        "storeIds": [product.get("storeId")] if product.get("storeId") else [],
-        "visibleStoreIds": [product.get("storeId")] if product.get("storeId") else [],
-        "productId": product_id,
-        "productTitle": product.get("title") or product_id,
-        "productShort": product.get("shortName") or product_id,
-        "platform": platform,
-        "store": product.get("store") or "经营单元",
-        "judgmentTags": ["creative_vertical", category_id, platform, *selling_points[:3]],
-        "evidenceRequired": ["标题版本", "主图方向", "测试指标", "竞品差评依据", "退款 / 咨询变化"],
-        "agentJudgment": {
-            "status": "advisory",
-            "version": CREATIVE_AGENT_VERSION,
-            "ragReferences": [case.get("caseId") for case in patterns.get("items") or []],
-            "boundary": "Agent 只生成标题主图测试方案，不直接发布商品或改动线上内容。",
-            "forbiddenActions": FORBIDDEN_ACTIONS,
-        },
-    }
+    task_draft = _build_task_draft(
+        product_id=product_id,
+        product=product,
+        platform=platform,
+        category_profile=profile,
+        category_id=category_id,
+        task_goal=task_goal,
+        selling_points=selling_points,
+        patterns=patterns,
+        test_packages=test_packages,
+        selected_package=selected_package,
+    )
     return {
         "version": CREATIVE_AGENT_VERSION,
         "agentName": "标题主图垂直类目 Agent",
@@ -293,17 +407,27 @@ def run_creative_vertical_agent(
         "titleVariants": title_variants,
         "mainImageDirections": main_image_directions,
         "sellingPointOrder": selling_points,
+        "testPackages": test_packages,
+        "selectedPackage": selected_package,
         "testPlan": test_plan,
         "taskDraft": task_draft,
-        "humanDecision": ["选择标题方向", "选择主图方向", "是否加入上新 / 详情页测试任务", "是否需要补充竞品差评样本"],
+        "humanDecision": ["选择要测试的方案", "确认是否需要补充竞品差评样本", "确认测试周期和复核指标"],
         "forbiddenActions": FORBIDDEN_ACTIONS,
-        "boundary": "生成表达策略与测试计划，不直接发布、不改价、不投放、不回写真实店铺数据。",
+        "boundary": "Agent 生成可复制上架的测试包，运营负责测试和反馈结果。",
     }
 
 
 def create_creative_task(product_id: str, *, body: Dict[str, Any] | None = None, user_id: str | None = None) -> Dict[str, Any] | None:
+    body = body or {}
     result = run_creative_vertical_agent(product_id, body=body, user_id=user_id)
     if not result:
         return None
-    task = create_task(result["taskDraft"])
-    return {"agent": result, "task": task}
+    package_index = int(body.get("packageIndex", body.get("package_index", 0)) or 0)
+    packages = result.get("testPackages") or []
+    selected_package = packages[package_index] if 0 <= package_index < len(packages) else result.get("selectedPackage")
+    task_draft = deepcopy(result["taskDraft"])
+    task_draft["selectedPackage"] = selected_package
+    task_draft["executionSteps"] = selected_package.get("operatorAction") if selected_package else task_draft.get("executionSteps")
+    task_draft["evidenceRequired"] = selected_package.get("submitMetrics") if selected_package else task_draft.get("evidenceRequired")
+    task = create_task(task_draft)
+    return {"agent": result, "task": task, "selectedPackage": selected_package}
