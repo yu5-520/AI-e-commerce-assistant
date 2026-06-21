@@ -1,5 +1,21 @@
 # Product Changelog
 
+## v4.5.1 - 2026-06-21
+
+### Product Decision
+- V4.5.1 把 ActionPlan 从“字段展示”升级为“运营处理页”。
+- Product truth: 后端给出的 `executionPackages`、`operatorAction`、`submitMetrics`、`acceptanceCriteria`、`failureThreshold` 应该被展示成处理包和任务卡，而不是塞进普通白卡里。
+
+### Changed
+- `web_demo/modules/task-report/page.js` 重做问题处理包渲染。
+- 新增处理包卡片：处理目标、适用信息、运营动作、提交指标、复核标准、失败阈值、风险提醒。
+- 新增任务草案卡片：任务标题、处理包、截止时间、来源、风险域、执行动作、提交材料、验收标准、失败阈值。
+- 隐藏 `AP-refund-root-cause`、`AP-inventory-activity-control`、`ActionPlan` 等工程字段，避免给运营看。
+- `web_demo/alert-report.css` 增加 iPad 友好的响应式 ActionPlan 布局，防止标题竖排、标签挤压和长文本横向溢出。
+
+### Product Boundary
+- UI 只做产品化展示，不改变 ActionPlan、LLM Gateway、权限、任务池、人审和复核链路。
+
 ## v4.5.0 - 2026-06-21
 
 ### Product Decision
