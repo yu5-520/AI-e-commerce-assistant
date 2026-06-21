@@ -1,12 +1,11 @@
-"""API smoke test for the current AI ERP operating advisor V4.4 product surface.
+"""API smoke test for the current AI ERP operating advisor V4.4.2 product surface.
 
 Run from repository root:
     python scripts/smoke_test_api.py
 
-This smoke test checks the current `/api/modules/*` product trunk instead of
-legacy workflow assumptions: module routes, Agent registry, RAG memory,
-feedback flywheel, title/main-image test packages, and task lifecycle with
-approved-memory protection.
+This smoke test checks the current `/api/modules/*` product trunk: Agent registry,
+problem-type Action Plans, RAG memory, creative test packages, feedback flywheel,
+and task lifecycle with approved-memory protection.
 """
 
 from __future__ import annotations
@@ -45,12 +44,20 @@ def assert_keys(payload: Dict[str, Any], keys: list[str], name: str) -> None:
     assert not missing, f"{name} missing keys: {missing}"
 
 
+def assert_action_plan(payload: Dict[str, Any], name: str) -> None:
+    assert_keys(payload, ["actionPlan", "executionPackages", "executionSteps", "evidenceRequired", "acceptanceCriteria"], name)
+    assert payload["actionPlan"]["problemType"], f"{name} should expose problem type"
+    assert payload["executionPackages"], f"{name} should expose targeted execution packages"
+    assert payload["executionSteps"], f"{name} should expose operator actions"
+
+
 def run_smoke_test() -> None:
     health = assert_status("GET", "/api/health")
     assert_keys(health, ["ok", "version", "product", "mode", "safety", "account_entry"], "health")
     assert health["ok"] is True
     assert health["version"] == app.version
     assert health["api_entry"] == "/api/modules/*"
+    assert health["v442_problem_type_action_plan"] is True
     assert health["v440_feedback_flywheel"] is True
     assert health["feedback_requires_human_approval"] is True
 
@@ -74,18 +81,23 @@ def run_smoke_test() -> None:
         assert payload is not None, f"{path} should return payload"
 
     agents = assert_status("GET", "/api/modules/agents")
-    assert_keys(agents, ["version", "agents", "boundary", "forbiddenActions", "v44Endpoints"], "module agents")
+    assert_keys(agents, ["version", "agents", "boundary", "forbiddenActions", "v44Endpoints", "v442ActionPlan"], "module agents")
     assert agents["version"] == app.version, "Agent registry should align with FastAPI version"
     agent_ids = {item.get("id") for item in agents["agents"]}
-    assert {"task-generation", "task-playbook", "creative-vertical", "feedback-flywheel"}.issubset(agent_ids)
+    assert {"problem-type-action-plan", "task-generation", "task-playbook", "creative-vertical", "feedback-flywheel"}.issubset(agent_ids)
 
-    product_agent = assert_status("GET", "/api/modules/agents/product/P001")
-    assert_keys(product_agent, ["agentId", "summary", "evidence", "suggestions", "taskDrafts", "forbiddenActions"], "product agent")
+    product_agent = assert_status("GET", "/api/modules/agents/product/P002")
+    assert_keys(product_agent, ["agentId", "summary", "evidence", "suggestions", "taskDrafts", "forbiddenActions", "actionPlan", "executionPackages"], "product agent")
+    assert_action_plan(product_agent["taskDrafts"][0], "product task draft")
     assert "不直接改价" in product_agent["forbiddenActions"]
 
     generated = assert_post_json("/api/modules/agents/tasks/generate", {"sourceModule": "traffic", "entityId": "T001", "autoCreate": False})
     assert generated["candidates"]
-    assert generated["candidates"][0]["taskDraft"]["taskType"] == "V4.2 RAG任务生成"
+    candidate = generated["candidates"][0]
+    assert candidate["taskDraft"]["taskType"] == "V4.4.2 问题类型处理包"
+    assert candidate["actionPlanType"], "candidate should expose actionPlanType"
+    assert candidate["executionPackages"], "candidate should expose targeted execution packages"
+    assert_action_plan(candidate["taskDraft"], "generated task draft")
 
     playbook_seed = assert_status("GET", "/api/modules/rag-memory/search?problem_type=low_roi_high_refund&category_id=home_living_goods")
     assert playbook_seed["items"], "RAG memory should retrieve seeded playbook"
@@ -125,8 +137,14 @@ def run_smoke_test() -> None:
     assert todo["activeTasks"], "todo should expose active task pool"
     task_id = todo["activeTasks"][0]["id"]
 
+    task_agent = assert_status("GET", f"/api/modules/agents/task/{task_id}?mode=breakdown")
+    assert_keys(task_agent, ["actionPlan", "executionPackages", "taskDrafts", "suggestions"], "module task agent")
+    assert_action_plan(task_agent["taskDrafts"][0], "task agent draft")
+
     task_playbook = assert_status("GET", f"/api/modules/agents/tasks/{task_id}/playbook")
+    assert_keys(task_playbook, ["actionPlan", "executionPackages", "strategies"], "task playbook")
     assert len(task_playbook["strategies"]) >= 3
+    assert task_playbook["executionPackages"], "task playbook should expose execution packages"
 
     feedback_draft = assert_post_json(
         f"/api/modules/rag-memory/feedback/tasks/{task_id}",
