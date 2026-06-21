@@ -1,15 +1,21 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V4.5.3。README 只保留当前主线、入口和运行方式；详细边界以 `docs/product/module-boundary.md` 为准，MVP 范围以 `docs/product/mvp-scope.md` 为准，版本记录以 `versioning/CHANGELOG.md` 和 `docs/product/CHANGELOG.md` 为准。
+> 当前版本：V5.0.0。V5 保留原有模块栏和模块功能，清除前端 MVP 托底业务内容；报表模块负责导入数据表，导入后按账号权限生成模块内容、预警和任务。
 
 ## 当前主链路
 
 ```text
-ERP / CRM Mock 数据 / 导入报表
+报表模块导入数据表
 ↓
-数据校验 / 数据版本 / 预警事件
+字段映射 / 数据校验 / 店铺归属 / 账号权限切片
 ↓
-模块 Agent：商品、竞品、上新、流量、报表、任务拆解
+DataVersion 数据版本
+↓
+ModuleProjection：更新商品、竞品、上新、流量、报表、首页摘要
+↓
+AlertEvent：系统规则生成预警事件
+↓
+模块 Agent：在系统规则下增强任务候选
 ↓
 V4.4.2 ActionPlan：problemType → 针对性处理包
 ↓
@@ -17,16 +23,14 @@ RAG Memory：召回复核过的结构化经验
 ↓
 V4.5.3 LLM 增强：执行说明、复核重点、风险提醒、经验卡表达
 ↓
-V4.3 创意 Agent：类目 Profile + 平台规则 + 竞品信号 → 标题主图测试包
-↓
-统一任务池：派发 / 接收 / 提交 / 复核 / 归档
+统一任务池：按模块归属和账号权限派发 / 接收 / 提交 / 复核 / 归档
 ↓
 V4.4 回流 Agent：日报 / 周报 / 学习候选 / 经验卡草案
 ↓
 RAG Memory：老板 / 总管复核入库 → 下一轮召回
 ```
 
-核心规则：**ActionPlan 决定处理包，RAG 召回复核经验，LLM 只做表达增强；Agent 可以建议和生成草案，但不能越权执行；RAG 不直接吃原始日志。**
+核心规则：**首页是产品化封面和经营摘要，不做导入入口；报表模块是唯一数据导入入口；清除托底数据但不清模块功能；导入数据后同时刷新模块内容和任务；数据、预警、任务都按账号权限切片；ActionPlan 决定处理包，RAG 召回复核经验，LLM 只做表达增强。**
 
 ## 关键目录
 
@@ -38,6 +42,10 @@ src/api/routes/llm.py                         V4.5 LLM Gateway API
 src/api/routes/modules/feedback_flywheel.py   V4.4 回流任务 Agent API
 src/api/routes/modules/rag_memory.py          RAG Memory API
 src/api/routes/modules/todo.py                统一任务池生命周期
+src/api/routes/modules/product.py             V5 商品模块数据投影
+src/api/routes/modules/traffic.py             V5 流量模块数据投影
+src/services/module_projection_service.py     V5 导入数据 → 模块内容投影
+src/services/module_data_service.py           V5 空运行态边界，不再放前端托底业务内容
 src/services/module_agent_service.py          V4 模块 Agent
 src/services/task_agent_service.py            V4.2 任务 Agent
 src/services/action_plan_service.py           V4.4.2 问题类型处理包
@@ -45,12 +53,10 @@ src/services/agent_llm_enrichment_service.py  V4.5.3 模块 / 任务 / 回流 LL
 src/services/llm_provider_service.py          V4.5 统一 LLM Provider Gateway
 src/services/tool_gateway_service.py          V4.5 内部安全 Tool Gateway
 src/services/mcp_adapter_service.py           V4.5 MCP 外部适配边界
-src/services/creative_vertical_agent_service.py V4.3 创意 Agent
-src/services/creative_llm_enrichment_service.py V4.5 创意 LLM 增强
 src/services/feedback_flywheel_service.py     V4.4 回流 Agent
 src/services/experience_memory_service.py     结构化经验卡 / 轻量 RAG
 web_demo/index.html                           前端入口
-web_demo/modules/feedback/page.js             经验回流页面
+web_demo/modules/dashboard/page.js            V5 首页空状态 / 经营摘要
 scripts/smoke_test_api.py                     当前 API 主验收
 ```
 
@@ -63,9 +69,14 @@ POST /api/llm/generate
 GET  /api/llm/traces
 GET  /api/llm/tools
 GET  /api/llm/mcp
-GET  /api/modules/agents
-GET  /api/modules/feedback-flywheel
-GET  /api/modules/rag-memory
+GET  /api/data/templates
+POST /api/data/preview
+POST /api/data/import/confirm
+GET  /api/data/versions
+GET  /api/data/alerts
+GET  /api/modules/product
+GET  /api/modules/traffic
+GET  /api/modules/report
 GET  /api/modules/todo
 GET  /api/accounts
 ```
@@ -83,10 +94,10 @@ bash scripts/start_server.sh
 
 ```bash
 curl http://127.0.0.1:3000/api/health
-curl http://127.0.0.1:3000/api/llm/status
-curl http://127.0.0.1:3000/api/modules/agents
-curl http://127.0.0.1:3000/api/modules/feedback-flywheel
-curl http://127.0.0.1:3000/api/modules/rag-memory
+curl http://127.0.0.1:3000/api/data/templates
+curl http://127.0.0.1:3000/api/modules/product
+curl http://127.0.0.1:3000/api/modules/traffic
+curl http://127.0.0.1:3000/api/modules/todo
 ```
 
 ## 当前不做
