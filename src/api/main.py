@@ -11,14 +11,15 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import accounts, approvals, data_import, health, llm, modules, system
+from src.services.system_service import reset_legacy_runtime_once
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="5.0.2",
-    description="V5.0.2 runtime with data-table module projections, scoped tasks, and Agent projection binding.",
+    version="5.0.3",
+    description="V5.0.3 runtime with one-time stale data cleanup and data-table module projections.",
 )
 
 app.add_middleware(
@@ -33,12 +34,18 @@ if WEB_DEMO_DIR.exists():
     app.mount("/web_demo", StaticFiles(directory=WEB_DEMO_DIR), name="web_demo")
 
 
+@app.on_event("startup")
+def apply_v5_runtime_cleanup() -> None:
+    """Clear pre-V5 persisted demo rows once so the product starts empty after deploy."""
+    reset_legacy_runtime_once()
+
+
 @app.get("/", response_model=None)
 def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.2"}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.3"}
 
 
 app.include_router(modules.router)
