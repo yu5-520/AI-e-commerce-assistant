@@ -17,16 +17,16 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="4.5.3",
-    description="V4.5.3 runtime with Module / Task / Feedback LLM + RAG enrichment.",
+    version="5.0.2",
+    description="V5.0.2 runtime with data-table module projections, scoped tasks, and Agent projection binding.",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Accept", "Content-Type", "X-Mock-User-Id"],
 )
 
 if WEB_DEMO_DIR.exists():
@@ -38,7 +38,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": "4.5.3"}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.2"}
 
 
 app.include_router(modules.router)
