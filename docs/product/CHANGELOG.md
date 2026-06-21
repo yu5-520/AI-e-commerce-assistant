@@ -1,5 +1,26 @@
 # Product Changelog
 
+## v5.0.4 - 2026-06-21
+
+### Product Decision
+- V5.0.4 清理最后一批老板端、总管端、经营单元页的演示盘面。
+- 经营单元不再展示店铺权限配置和 Mock 接入状态；只有报表导入产生经营数据后才显示经营摘要。
+- 总览页不再重复左侧功能栏，不再展示“模块入口”和工程解释小字。
+
+### Changed
+- `src/api/routes/modules/operating_unit.py` 改为读取 ModuleProjection、预警和任务统计；无导入数据时返回空状态。
+- `web_demo/modules/operating-unit/page.js` 删除店铺组、Mock 接入、待接入系统等演示内容。
+- `web_demo/modules/dashboard/page.js` 删除模块入口卡片和说明小字，只保留空状态或经营摘要。
+- `web_demo/modules/manager/page.js` 删除 `baseTasks`、`operators`、`moduleSignals`、`recaps` 等前端硬编码数据，改为读取任务池和模块投影。
+- `web_demo/modules/executive/page.js` 删除 `stores`、`people`、`supply`、`traffic`、`finance`、`retrospectives`、`auditIssues`、`nextTasks` 等老板端演示数据，改为读取导入数据和任务池。
+- `web_demo/core/api-client.js` 的 `resetRuntimeData()` 会同步清理管理视角 localStorage。
+- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.4`。
+
+### Product Boundary
+- 清的是托底经营数据，不是账号体系和模块导航。
+- 店铺权限配置留在账号/权限体系里；经营单元页只展示导入数据后的经营结果。
+- 老板端、总管端、运营端都必须遵循同一个空状态标准。
+
 ## v5.0.3 - 2026-06-21
 
 ### Product Decision
@@ -17,61 +38,3 @@
 - 清的是运行态数据，不是模块功能。
 - 一次性启动清理只为处理 V5 迁移前旧 SQLite 残留；新导入数据不会在每次重启时被清空。
 - 后续手动清空必须调用 reset 接口并带确认参数。
-
-## v5.0.2 - 2026-06-21
-
-### Product Decision
-- V5.0.2 修复 Agent 仍读取旧空数据的断点，并删除报表模块前后端重复实现。
-- 商品、流量、报表内容来自 ModuleProjection；Module Agent、Task Agent、Creative Agent 也必须读取同一套投影数据。
-
-### Changed
-- `src/services/module_agent_service.py` 改为读取 `projected_products`、`projected_traffic`、`projected_report_groups`、`projected_report_details`。
-- `src/services/task_agent_service.py` 改为从 ModuleProjection 找 source item；没有 sourcePayload 时不再读旧空数组。
-- `src/services/creative_vertical_agent_service.py` 改为从 `projected_products` 找商品事实。
-- 删除重复后端文件 `src/api/routes/modules/report.py`，统一使用 `report_v5.py`。
-- 删除重复前端文件 `web_demo/modules/report/page.js`，统一使用 `report-runtime.js`。
-- `web_demo/index.html` 删除旧报表脚本加载，并把资源缓存号升级到 `v=5.0.2`。
-- `src/api/main.py` 版本升级到 `5.0.2`。
-
-### Product Boundary
-- Agent 不再读取 MVP 托底数组。
-- 报表功能只有一个前端入口和一个后端入口，避免双源维护。
-- Agent 仍然只做建议、草案、执行说明和复核重点，不直接执行真实经营动作。
-
-## v5.0.1 - 2026-06-21
-
-### Product Decision
-- V5.0.1 修复流程链路断点：空系统不能被种子任务撑开；导入后模块内容必须读取完整数据行；报表详情必须走投影数据；报表任务创建不能因路由切换断开。
-
-### Changed
-- `src/services/module_task_service.py` 移除运行态 seed tasks / seed logs，系统初始任务池为空。
-- 新增 `src/services/import_row_store_service.py`，保存完整 normalizedRows。
-- `src/services/report_schema_service.py` 在确认导入后持久化完整数据行。
-- `src/services/module_projection_service.py` 优先读取完整导入行，再 fallback 到历史 sampleRows。
-- 新增 `src/api/routes/modules/report_v5.py`，报表模块走 projected report groups / details。
-- `src/api/routes/modules/__init__.py` 切换到 V5 报表路由。
-
-### Product Boundary
-- 示例数据只能通过报表模块显式试跑，不再自动进入运行态。
-- 首页、商品、流量、报表、待办都以导入数据和账号权限为准。
-
-## v5.0.0 - 2026-06-21
-
-### Product Decision
-- V5 进入产品 Demo 操作系统阶段：保留原模块栏和模块功能，清除前端 MVP 托底业务内容。
-- 首页不做导入入口，只作为产品化封面和经营摘要；没有导入数据时只显示暂无数据。
-- 报表模块继续作为唯一数据入口；导入数据后，系统同时更新模块内容、生成预警、生成任务，并按账号权限切片。
-
-### Changed
-- `src/services/module_data_service.py` 清空运行态商品、竞品、上新、流量和报表详情托底数据，只保留空边界和报表模板。
-- 新增 `src/services/module_projection_service.py`，把 DataVersion 快照投影成商品、流量和报表模块内容。
-- `src/api/routes/modules/product.py` 改为从导入数据投影读取商品内容，并把任务绑定到商品模块和店铺权限。
-- `src/api/routes/modules/traffic.py` 改为从订单导入数据投影读取流量承接内容，并把任务绑定到流量模块和店铺权限。
-- `web_demo/modules/dashboard/page.js` 清除老板 / 总管 / 运营首页硬编码经营盘面，改成“暂无数据 / 经营摘要 / 模块入口”。
-- `README.md` 和 `versioning/VERSION.md` 更新为 V5 主链路。
-
-### Product Boundary
-- 清托底数据，不清模块功能。
-- 导入数据不只是生成任务，还要更新对应模块内容。
-- 数据表、预警、任务都必须按店铺和账号权限切片。
-- Agent 仍只做任务增强、执行说明、复核重点和回流草案，不越权执行真实经营动作。
