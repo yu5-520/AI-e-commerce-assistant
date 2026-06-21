@@ -46,31 +46,39 @@
   function isCreativeSignal(report) {
     const task = report?.relatedTask || {};
     const text = [report?.title, report?.warningSummary, task?.title, task?.task, task?.riskDomain, task?.taskType, ...(task?.judgmentTags || [])].filter(Boolean).join(" ");
-    return /点击|CTR|主图|标题|创意|转化/.test(text) && (task.productId || report?.entityId);
+    return /点击|CTR|主图|标题|创意|转化/.test(text) && (task.productId || report?.entityId) && !task?.actionPlan;
   }
 
-  function packageCard(pkg, index, productId) {
-    return `<article class="report-card"><header><strong>${s(pkg.packageName || `方案 ${index + 1}`)}</strong><span class="status-badge">${s(pkg.targetMetric || "点击率")}</span></header>
-      <p><b>标题：</b>${s(pkg.title)}</p>
-      <p><b>主图：</b>${s(pkg.mainImageDirection)} · ${s(pkg.mainImageLayout)}</p>
-      <p><b>首图文案：</b>${s(pkg.firstImageText)}</p>
-      <p><b>卖点顺序：</b>${s((pkg.sellingPointOrder || []).join(" → "))}</p>
-      <div class="permission-chip-row"><span>${s(pkg.fitPlatform || "通用")}</span><span>${s(pkg.fitTraffic || "测试流量")}</span><span>${s(pkg.testDuration || "24-48 小时")}</span></div>
+  function packageCard(pkg, index, productId, mode = "action") {
+    const hasCreative = pkg.title || pkg.mainImageDirection || pkg.firstImageText;
+    return `<article class="report-card"><header><strong>${s(pkg.packageName || `方案 ${index + 1}`)}</strong><span class="status-badge">${s(pkg.targetMetric || "处理指标")}</span></header>
+      ${pkg.diagnosis ? `<p><b>判断：</b>${s(pkg.diagnosis)}</p>` : ""}
+      ${hasCreative ? `<p><b>标题：</b>${s(pkg.title)}</p><p><b>主图：</b>${s(pkg.mainImageDirection)} · ${s(pkg.mainImageLayout)}</p><p><b>首图文案：</b>${s(pkg.firstImageText)}</p><p><b>卖点顺序：</b>${s((pkg.sellingPointOrder || []).join(" → "))}</p>` : ""}
+      <div class="permission-chip-row"><span>${s(pkg.fitPlatform || "通用")}</span><span>${s(pkg.fitTraffic || pkg.testDuration || "执行包")}</span><span>${s(pkg.style || pkg.packageId || "ActionPlan")}</span></div>
       <p><b>运营执行：</b>${s((pkg.operatorAction || []).join("；"))}</p>
       <p><b>提交指标：</b>${s((pkg.submitMetrics || []).join("、"))}</p>
-      <p><b>风险：</b>${s(pkg.risk || "避免夸大承诺")}</p>
-      <div class="report-actions"><button type="button" data-creative-task="${s(productId)}:${index}">选择此方案创建测试任务</button></div>
+      ${(pkg.acceptanceCriteria || []).length ? `<p><b>复核标准：</b>${s(pkg.acceptanceCriteria.join("、"))}</p>` : ""}
+      ${(pkg.failureThreshold || []).length ? `<p><b>失败阈值：</b>${s(pkg.failureThreshold.join("、"))}</p>` : ""}
+      <p><b>风险：</b>${s(pkg.risk || "不得越权执行经营动作")}</p>
+      ${mode === "creative" ? `<div class="report-actions"><button type="button" data-creative-task="${s(productId)}:${index}">选择此方案创建测试任务</button></div>` : ""}
     </article>`;
   }
 
   function testPackagesBlock(agent) {
     const packages = agent?.testPackages || [];
     if (!packages.length) return "";
-    return `<section class="page-section"><div class="section-header"><h3>Agent 测试包</h3><span class="status-badge">运营直接上架测试</span></div><div class="report-card-list">${packages.map((pkg, index) => packageCard(pkg, index, agent.productId || lastReport?.relatedTask?.productId || lastReport?.entityId)).join("")}</div></section>`;
+    return `<section class="page-section"><div class="section-header"><h3>Agent 测试包</h3><span class="status-badge">运营直接上架测试</span></div><div class="report-card-list">${packages.map((pkg, index) => packageCard(pkg, index, agent.productId || lastReport?.relatedTask?.productId || lastReport?.entityId, "creative")).join("")}</div></section>`;
+  }
+
+  function executionPackagesBlock(agent) {
+    const packages = agent?.executionPackages || agent?.actionPlan?.executionPackages || [];
+    if (!packages.length) return "";
+    return `<section class="page-section"><div class="section-header"><h3>问题处理包</h3><span class="status-badge">${s(agent?.actionPlan?.problemLabel || agent?.problemLabel || "按问题类型生成")}</span></div><div class="report-card-list">${packages.map((pkg, index) => packageCard(pkg, index, agent?.productId || lastReport?.relatedTask?.productId || lastReport?.entityId, "action")).join("")}</div></section>`;
   }
 
   function actionPlanBlock(agent, report) {
     if (agent?.testPackages?.length) return testPackagesBlock(agent);
+    if (agent?.executionPackages?.length || agent?.actionPlan?.executionPackages?.length) return executionPackagesBlock(agent);
     const suggestions = (agent?.structuredSteps || agent?.suggestions || report?.suggestedActions || []).filter(Boolean);
     if (!suggestions.length) return "";
     return `<section class="page-section"><div class="section-header"><h3>Agent 处理方案</h3><span class="status-badge">转成运营动作</span></div><div class="report-card-list">${suggestions.map((item, index) => `<article class="report-card"><strong>${index + 1}. ${s(item.title || item)}</strong>${item.summary || item.action ? `<p>${s(item.summary || item.action)}</p>` : ""}</article>`).join("")}</div></section>`;
@@ -80,7 +88,9 @@
     const steps = draft.executionSteps || [];
     const evidence = draft.evidenceRequired || [];
     const criteria = draft.acceptanceCriteria || [];
-    return `<article class="report-card"><header><strong>${s(draft.title || draft.taskType || "任务草案")}</strong><span class="status-badge">${s(draft.priority || "待确认")}</span></header><p>${s(draft.task || draft.reason || "待确认")}</p>${steps.length ? `<p><b>执行动作：</b>${s(steps.join("；"))}</p>` : ""}${evidence.length ? `<p><b>提交证据：</b>${s(evidence.join("、"))}</p>` : ""}${criteria.length ? `<p><b>复核标准：</b>${s(criteria.join("、"))}</p>` : ""}<div class="report-actions"><button type="button" data-agent-task="${s(sourceKey)}:${index}">确认加入任务清单</button></div></article>`;
+    const failure = draft.failureThreshold || [];
+    const pkg = draft.selectedPackage || {};
+    return `<article class="report-card"><header><strong>${s(draft.title || draft.taskType || "任务草案")}</strong><span class="status-badge">${s(draft.priority || "待确认")}</span></header><p>${s(draft.task || draft.reason || "待确认")}</p>${pkg.packageName ? `<p><b>处理包：</b>${s(pkg.packageName)}</p>` : ""}${steps.length ? `<p><b>执行动作：</b>${s(steps.join("；"))}</p>` : ""}${evidence.length ? `<p><b>提交证据：</b>${s(evidence.join("、"))}</p>` : ""}${criteria.length ? `<p><b>复核标准：</b>${s(criteria.join("、"))}</p>` : ""}${failure.length ? `<p><b>失败阈值：</b>${s(failure.join("、"))}</p>` : ""}<div class="report-actions"><button type="button" data-agent-task="${s(sourceKey)}:${index}">确认加入任务清单</button></div></article>`;
   }
 
   function taskDraftBlock(agent) {
