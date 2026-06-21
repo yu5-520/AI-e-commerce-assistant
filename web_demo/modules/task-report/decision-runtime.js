@@ -7,7 +7,6 @@
   function draft() { return a(agent?.taskDrafts)[0] || agent?.taskDraft || {}; }
   function plan() { const d = draft(); return d.actionPlan || agent?.actionPlan || {}; }
   function chips(rows) { return a(rows).map((x) => `<span>${s(x)}</span>`).join(""); }
-  function steps(rows) { return `<ol class="action-step-list">${a(rows).map((x) => `<li>${s(x)}</li>`).join("")}</ol>`; }
   function busy(node, text) { node.dataset.oldText = node.dataset.oldText || node.textContent; node.disabled = true; node.textContent = text; }
   function recover(node) { node.disabled = false; node.textContent = node.dataset.oldText || "重试"; }
 
@@ -33,7 +32,9 @@
 
   function pathCard(x, recommended, i) {
     const checked = x.pathId === recommended || (!recommended && i === 0) ? "checked" : "";
-    return `<label class="task-draft-card decision-path-card"><input type="radio" name="decisionPath" value="${s(x.pathId)}" ${checked} /><div class="task-draft-head"><div><span class="action-package-label">${s(x.businessGoal)}</span><h4>${s(x.pathName)}</h4><p>${s(x.risk)}</p></div></div><div class="task-draft-grid"><div class="action-package-panel"><h5>适用条件</h5><div class="action-chip-list">${chips(x.fitConditions)}</div></div><div class="action-package-panel"><h5>动作</h5>${steps(x.actions)}</div><div class="action-package-panel"><h5>不做什么</h5><div class="action-chip-list">${chips(x.doNotDo)}</div></div><div class="action-package-panel"><h5>复盘指标</h5><div class="action-chip-list">${chips(x.reviewMetrics)}</div></div></div></label>`;
+    const actionText = a(x.actions).slice(0, 3).join(" / ");
+    const reviewText = a(x.reviewMetrics).slice(0, 3).join(" / ");
+    return `<label class="decision-path-row"><input type="radio" name="decisionPath" value="${s(x.pathId)}" ${checked} /><div class="decision-path-title"><span>${s(x.businessGoal)}</span><strong>${s(x.pathName)}</strong></div><div class="decision-path-summary"><span>动作</span><strong>${s(actionText)}</strong></div><div class="decision-path-summary"><span>复盘</span><strong>${s(reviewText)}</strong></div></label>`;
   }
 
   function taskDraft() {
@@ -43,7 +44,7 @@
     const paths = a(p.decisionPaths);
     const fields = a(p.supplementSchema);
     const sourceKey = `${agent.module || "product"}:${agent.entityId || report?.entityId}:0`;
-    return `<section class="page-section task-draft-section decision-task-section"><div class="section-header"><h3>任务草案</h3></div><article class="task-draft-card decision-main-card"><div class="task-draft-head"><div><span class="action-package-label">${s(p.problemLabel || d.riskDomain || "经营任务")}</span><h4>${s(d.title)}</h4><p>${s(d.reason || d.task || agent.summary || "系统已生成任务草案。")}</p></div><span class="status-badge">${s(d.priority || "待确认")}</span></div><div class="task-draft-meta"><article><span>风险域</span><strong>${s(d.riskDomain || "经营")}</strong></article><article><span>截止时间</span><strong>${s(d.deadline || "待确认")}</strong></article><article><span>来源</span><strong>${s(d.sourceModule || report?.sourceModule || "模块")}</strong></article><article><span>复盘</span><strong>${s(p.reviewPlan?.nextDataTrigger || "下一轮数据")}</strong></article></div>${a(p.commonActions).length ? `<div class="action-package-panel wide"><h5>共同动作</h5>${steps(p.commonActions)}</div>` : ""}</article>${paths.length ? `<section class="decision-path-section"><div class="section-header"><h3>选择主路径</h3></div><div class="task-draft-list decision-path-list">${paths.map((x, i) => pathCard(x, p.recommendedPathId, i)).join("")}</div></section>` : ""}${fields.length ? `<section class="decision-supplement-section"><div class="section-header"><h3>补充信息</h3></div><div class="decision-input-grid">${fields.map(field).join("")}</div></section>` : ""}<div class="report-actions decision-actions"><button type="button" data-agent-task="${s(sourceKey)}">确认加入任务清单</button></div></section>`;
+    return `<section class="page-section task-draft-section decision-task-section"><div class="section-header"><h3>任务草案</h3></div><article class="task-draft-card decision-main-card"><div class="task-draft-head compact"><div><span class="action-package-label">${s(p.problemLabel || d.riskDomain || "经营任务")}</span><h4>${s(d.title)}</h4></div><span class="status-badge">${s(d.priority || "待确认")}</span></div><div class="task-draft-meta"><article><span>风险域</span><strong>${s(d.riskDomain || "经营")}</strong></article><article><span>截止时间</span><strong>${s(d.deadline || "待确认")}</strong></article><article><span>来源</span><strong>${s(d.sourceModule || report?.sourceModule || "模块")}</strong></article><article><span>进入待办</span><strong>默认处理中</strong></article></div></article>${paths.length ? `<section class="decision-path-section"><div class="section-header"><h3>选择主路径</h3></div><div class="decision-path-list horizontal">${paths.map((x, i) => pathCard(x, p.recommendedPathId, i)).join("")}</div></section>` : ""}${fields.length ? `<section class="decision-supplement-section"><div class="section-header"><h3>补充信息</h3></div><div class="decision-input-grid">${fields.map(field).join("")}</div></section>` : ""}<div class="report-actions decision-actions"><button type="button" data-agent-task="${s(sourceKey)}">确认加入任务清单</button></div></section>`;
   }
 
   async function loadAgent() {
