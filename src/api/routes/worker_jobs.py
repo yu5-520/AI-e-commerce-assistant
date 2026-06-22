@@ -33,12 +33,13 @@ def worker_runtime() -> Dict[str, Any]:
 @router.get("/results")
 def worker_results(
     task_name: str | None = Query(default=None),
+    trace_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     ctx: UserContext = Depends(get_current_context),
 ) -> Dict[str, Any]:
     """Return persisted worker task execution results."""
 
-    return list_worker_task_results(ctx, task_name=task_name, limit=limit)
+    return list_worker_task_results(ctx, task_name=task_name, trace_id=trace_id, limit=limit)
 
 
 @router.get("/summary")
