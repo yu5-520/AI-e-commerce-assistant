@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.5"
+P0_ARCHITECTURE_VERSION = "5.1.6"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -36,9 +36,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-3",
         "name": "任务系统持久化与状态机",
-        "status": "report_task_repository_sync",
+        "status": "frontend_report_auto_sync",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "Agent 入池和待办生命周期动作已接入 TaskRepository 写路径；新增报表任务同步桥和 /api/data/report-tasks/sync-current。下一步把原导入确认按钮切到同步入口或改造导入服务本体。",
+        "currentGap": "Agent 入池和待办生命周期动作已接入 TaskRepository 写路径；报表导入确认与示例试跑通过前端补丁自动调用 /api/data/report-tasks/sync-current。下一步改造导入服务本体或切到 ImportJob。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
@@ -101,7 +101,8 @@ IMPLEMENTATION_SEQUENCE = [
     "TaskRepository 写路径过渡：新增 create / transition / reset 的 repository API",
     "正式任务 API 切换：Agent 入池、待办接收/提交/复核/完成/重置已接入 repository 写路径",
     "报表任务同步桥：新增 report_task_repository_sync_service 与 /api/data/report-tasks/sync-current",
-    "剩余任务入口切换：原导入确认按钮、创意 Agent 入池、证据提交审计",
+    "前端导入确认自动同步：report-task-sync.js 包装 confirmReportImport / importMockAlerts",
+    "剩余任务入口切换：创意 Agent 入池、证据提交审计、导入服务本体 ImportJob 化",
     "ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链",
     "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
@@ -115,7 +116,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "report_task_repository_sync_bridge",
+        "runtimeMode": "frontend_report_import_auto_sync",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
