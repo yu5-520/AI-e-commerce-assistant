@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.3"
+P0_ARCHITECTURE_VERSION = "5.1.4"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -36,9 +36,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-3",
         "name": "任务系统持久化与状态机",
-        "status": "task_repository_write_transition",
+        "status": "official_task_api_write_path",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "已新增 SQLite 持久化镜像、状态机约束、Scoped TaskRepository 读写封装、启动快照恢复与写路径过渡 API；下一步把正式模块任务接口切换到该写路径。",
+        "currentGap": "Agent 入池和待办生命周期动作已接入 TaskRepository 写路径；下一步把报表预警自动建任务、创意 Agent 入池和前端按钮文案完全切到正式写路径。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
@@ -99,7 +99,8 @@ IMPLEMENTATION_SEQUENCE = [
     "Task 持久化镜像：task_status、task_events、task_logs、task_evidence + 状态机约束",
     "TaskRepository Scoped Reads：通过 UserContext 读取可见任务并支持启动快照恢复",
     "TaskRepository 写路径过渡：新增 create / transition / reset 的 repository API",
-    "正式任务 API 切换：把前端待办、Agent 入池、报表预警统一切到 repository 写路径",
+    "正式任务 API 切换：Agent 入池、待办接收/提交/复核/完成/重置已接入 repository 写路径",
+    "剩余任务入口切换：报表预警自动建任务、创意 Agent 入池、证据提交审计",
     "ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链",
     "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
@@ -113,7 +114,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "demo_scaffold_with_task_repository_write_transition",
+        "runtimeMode": "official_task_api_repository_write_path",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
