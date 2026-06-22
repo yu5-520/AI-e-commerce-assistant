@@ -12,7 +12,7 @@ from src.services.account_service import current_user, list_stores, visible_stor
 from src.services.import_row_store_service import load_import_rows
 from src.services.module_data_service import REPORT_GROUPS
 
-PROJECTION_VERSION = "5.0.1"
+PROJECTION_VERSION = "5.0.8"
 DATASET_LABELS = {"products": "商品报表", "inventory": "库存报表", "orders": "订单报表", "refunds": "退款报表", "customers": "客户报表"}
 DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "ERP", "refunds": "CRM", "customers": "CRM"}
 
@@ -78,9 +78,14 @@ def _row_visible(row: Dict[str, Any], user_id: str | None) -> bool:
     store_id = row.get("storeId") or row.get("store_id") or _resolve_store_id(row)
     if not user_id:
         return True
-    role = current_user(user_id).get("roleId")
     if not store_id:
-        return role in {"owner", "manager", "finance"}
+        # If an imported report does not carry a store field, keep it visible to the
+        # current role so the dashboard / report / product projections still refresh.
+        # The task layer can still assign ownership through the default operator.
+        return True
+    role = current_user(user_id).get("roleId")
+    if role in {"owner", "manager", "finance"}:
+        return True
     return store_id in _visible_store_ids(user_id)
 
 
