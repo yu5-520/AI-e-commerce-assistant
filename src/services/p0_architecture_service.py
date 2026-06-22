@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.0"
+P0_ARCHITECTURE_VERSION = "5.2.1"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -44,9 +44,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-4",
         "name": "报表导入事务链与 ImportJob",
-        "status": "import_job_scaffolded",
+        "status": "import_job_enqueue_mode",
         "target": "ImportJob -> DataVersion -> ImportedRows -> ProjectionJob -> AlertEvent -> TaskDraft -> AuditLog。",
-        "currentGap": "已新增 import_jobs / projection_jobs 和 /api/data/import-jobs/* 包装接口；前端导入确认优先走 ImportJob，失败再回退旧导入。下一步把导入、投影、预警拆到 Worker / Redis。",
+        "currentGap": "ImportJob 已支持同步执行和 enqueue=true 入队模式，并新增 demo worker 执行下一条导入任务；仍需接入真正 Redis / ARQ 常驻 Worker。",
         "mustNot": ["导入接口长时间阻塞", "重复执行生成重复任务"],
     },
     {
@@ -60,9 +60,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-6",
         "name": "Worker / Redis 后台任务",
-        "status": "worker_queue_scaffolded",
+        "status": "import_worker_demo_executor",
         "target": "导入、投影、预警、Agent 分析进入后台队列，任务幂等可重试。",
-        "currentGap": "已新增 worker_jobs 队列表、幂等 key、优先级、认领、完成、失败、重试 API；仍需接入 Redis / ARQ 并将 ImportJob 真正异步执行。",
+        "currentGap": "worker_jobs 已支持幂等、优先级、认领、完成、失败、重试；ImportJob 可入队，并可用 /api/data/import-jobs/worker/execute-next 消费一条导入任务。",
         "mustNot": ["大报表阻塞 FastAPI 事件循环", "Worker 重试产生副作用"],
     },
     {
@@ -106,6 +106,7 @@ IMPLEMENTATION_SEQUENCE = [
     "证据提交审计入库：task_evidence_audit_service 写入 task_evidence / task_logs",
     "ImportJob 骨架：import_job_service /api/data/import-jobs/* import_jobs projection_jobs",
     "Worker Queue 骨架：worker_queue_service /api/worker/jobs/* worker_jobs 幂等重试",
+    "ImportJob 入队执行：enqueue=true 返回 WorkerJob，demo worker 执行下一条 import 队列",
     "Redis / ARQ 替换：把 SQLite 队列表切换为真正后台 Worker 执行",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
     "Audit/Logs：业务审计表 + JSON 技术日志 + trace_id",
@@ -118,7 +119,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "worker_queue_scaffolded",
+        "runtimeMode": "import_job_enqueue_mode",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
