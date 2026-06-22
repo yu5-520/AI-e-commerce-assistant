@@ -107,6 +107,23 @@ class TaskRepository(ScopedRepositoryBase):
             conn.commit()
         return result.rowcount > 0
 
+    def soft_delete_all_visible(self, *, deleted_by: str | None = None, reason: str = "runtime reset") -> int:
+        visible_ids = [task.get("id") for task in self.list(active_only=False, limit=5000) if task.get("id")]
+        if not visible_ids:
+            return 0
+        placeholders = ",".join("?" for _ in visible_ids)
+        with connect() as conn:
+            result = conn.execute(
+                f"""
+                UPDATE task_status
+                SET deleted_at = datetime('now'), deleted_by = ?, delete_reason = ?
+                WHERE tenant_id = ? AND deleted_at IS NULL AND task_id IN ({placeholders})
+                """,
+                [deleted_by or self.ctx.user_id, reason, self.ctx.tenant_id, *visible_ids],
+            )
+            conn.commit()
+        return result.rowcount
+
     def summary(self) -> dict[str, Any]:
         visible = self.list(active_only=False, limit=1000)
         active = [task for task in visible if task.get("status") not in {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}]
