@@ -16,7 +16,7 @@ from src.services.module_task_service import create_task
 from src.services.task_agent_service import generate_task_candidates, task_playbook
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "5.0.6"
+AGENT_REGISTRY_VERSION = "5.0.7"
 
 
 def request_user_id(request: Request) -> str:
@@ -26,12 +26,12 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "decision_path_execution_flow"
-    plan["principle"] = "详情页负责选择主路径和补充决策变量；待办页负责执行证据、截图、成果和复盘材料。"
+    plan["mode"] = "action_sequence_decision_flow"
+    plan["principle"] = "路径标题只是小标签；详情页以行动顺序为主，复盘指标留在待办提交和后端复盘链路。"
     plan["decisionTaskDraft"] = {
         "service": "src/services/action_plan_service.py",
         "outputs": ["readonlyEvidence", "supplementSchema", "decisionPaths", "selectedPathId", "operatorSupplement", "reviewPlan"],
-        "uiRule": "前端默认展示任务草案、路径选择和补充信息；选择路径后直接进入处理中。",
+        "uiRule": "前端展示路径小标签和行动顺序；选择路径后直接进入处理中。",
     }
     return plan
 
