@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.1.4。正式 Agent 入池接口与待办生命周期动作已接入 TaskRepository 写路径：任务创建、接收、提交、复核、完成、重置会通过 UserContext 进入数据库持久化与状态机校验，同时保留当前 Demo 页面返回结构。
+> 当前版本：V5.1.5。新增报表任务同步桥：保留现有报表导入链路不动，新增 `report_task_repository_sync_service.py` 和 `/api/data/report-tasks/sync-current`，可把当前由报表预警生成的运行态任务同步进 TaskRepository。
 
 ## 当前主链路
 
@@ -39,18 +39,20 @@ Demo 清理链路：**导入记录删除 → 清除该版本 imported_report_row
 ## V5.1.x P0 SaaS 架构新增
 
 ```text
-src/core/context.py                         UserContext：tenant / user / role / store scope 统一注入
-src/repositories/scoped_repository.py       ScopedRepository：tenant_id / deleted_at / Data Scope 查询约束
-src/repositories/task_repository.py         TaskRepository：基于 UserContext 的任务持久化读写封装
-src/services/task_repository_write_service.py TaskRepository 写路径过渡服务：create / transition / reset
-src/services/p0_architecture_service.py     P0 SaaS 架构拆解运行态摘要
-src/services/task_state_machine_service.py  P0 任务状态机与 SQLite 持久化镜像
-src/api/routes/modules/agents.py            Agent 入池正式接口已接入 TaskRepository 写路径
-src/api/routes/modules/todo.py              待办接收 / 提交 / 复核 / 完成 / 重置已接入 TaskRepository 写路径
-src/api/routes/architecture.py              /api/architecture/p0 与 /api/architecture/context
-src/api/routes/task_persistence.py          /api/architecture/tasks/persistence、repository、create、transition、reset 与 sync-runtime
-docs/P0_SAAS_ARCHITECTURE.md                互联网大厂 SaaS P0 架构说明
-requirements.txt                            补充 SQLAlchemy / asyncpg / Alembic / Redis / ARQ 等生产依赖
+src/core/context.py                            UserContext：tenant / user / role / store scope 统一注入
+src/repositories/scoped_repository.py          ScopedRepository：tenant_id / deleted_at / Data Scope 查询约束
+src/repositories/task_repository.py            TaskRepository：基于 UserContext 的任务持久化读写封装
+src/services/task_repository_write_service.py  TaskRepository 写路径过渡服务：create / transition / reset
+src/services/report_task_repository_sync_service.py 报表预警任务同步桥
+src/api/routes/report_task_sync.py             /api/data/report-tasks/sync-current
+src/services/p0_architecture_service.py        P0 SaaS 架构拆解运行态摘要
+src/services/task_state_machine_service.py     P0 任务状态机与 SQLite 持久化镜像
+src/api/routes/modules/agents.py               Agent 入池正式接口已接入 TaskRepository 写路径
+src/api/routes/modules/todo.py                 待办接收 / 提交 / 复核 / 完成 / 重置已接入 TaskRepository 写路径
+src/api/routes/architecture.py                 /api/architecture/p0 与 /api/architecture/context
+src/api/routes/task_persistence.py             /api/architecture/tasks/persistence、repository、create、transition、reset 与 sync-runtime
+docs/P0_SAAS_ARCHITECTURE.md                   互联网大厂 SaaS P0 架构说明
+requirements.txt                               补充 SQLAlchemy / asyncpg / Alembic / Redis / ARQ 等生产依赖
 ```
 
 P0 升级目标：
@@ -68,35 +70,37 @@ FastAPI 模块化单体
 + Nginx 前后端分离
 ```
 
-当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池与待办核心生命周期动作。下一步是报表预警自动建任务、创意 Agent 入池、证据提交审计。**
+当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池与待办核心生命周期动作。报表预警任务新增同步桥，下一步是把原导入确认按钮直接切到同步入口，或重构报表导入服务本体。**
 
 ## 关键目录
 
 ```text
-src/api/main.py                              FastAPI 入口，版本 5.1.4
-src/core/context.py                          SaaS UserContext 依赖注入骨架
-src/repositories/scoped_repository.py        多租户 / 软删除 / 数据范围统一查询约束
-src/repositories/task_repository.py          任务 Repository：按 tenant / store / deleted_at 过滤读取与 upsert
-src/services/task_repository_write_service.py 任务 Repository 写路径过渡服务
-src/services/task_state_machine_service.py   任务状态机 / 持久化镜像 / task_events / task_logs / task_evidence
-src/services/p0_architecture_service.py      P0 架构摘要服务
-src/api/routes/modules/agents.py             Agent 入池任务持久化入口
-src/api/routes/modules/todo.py               待办生命周期持久化入口
-src/api/routes/architecture.py               P0 架构可视化 API
-src/api/routes/task_persistence.py           任务持久化镜像状态、Repository 读写与同步 API
-src/services/data_version_service.py          数据版本回滚 / Demo 删除
-src/api/routes/data_import.py                 导入记录删除接口
-src/services/dashboard_service.py             总览经营摘要 / 任务排序
-src/services/module_projection_service.py      导入数据到模块内容投影
-src/api/routes/modules/dashboard.py            总览 API
-src/services/action_plan_service.py            DecisionTaskDraft / ActionPlan 合约
-src/services/module_task_service.py            旧 Demo 任务池；当前逐步退到兼容层
-web_demo/index.html                            前端入口，缓存号 v5.0.9
-web_demo/modules/report/report-runtime.js      报表导入 / 回滚 / 删除记录
-web_demo/modules/dashboard/page.js             产品化总览页
-web_demo/decision-task.css                     行动顺序优先路径卡 / 待办路径摘要
+src/api/main.py                                 FastAPI 入口，版本 5.1.5
+src/core/context.py                             SaaS UserContext 依赖注入骨架
+src/repositories/scoped_repository.py           多租户 / 软删除 / 数据范围统一查询约束
+src/repositories/task_repository.py             任务 Repository：按 tenant / store / deleted_at 过滤读取与 upsert
+src/services/task_repository_write_service.py   任务 Repository 写路径过渡服务
+src/services/report_task_repository_sync_service.py 报表任务同步到 Repository
+src/api/routes/report_task_sync.py              报表任务同步 API
+src/services/task_state_machine_service.py      任务状态机 / 持久化镜像 / task_events / task_logs / task_evidence
+src/services/p0_architecture_service.py         P0 架构摘要服务
+src/api/routes/modules/agents.py                Agent 入池任务持久化入口
+src/api/routes/modules/todo.py                  待办生命周期持久化入口
+src/api/routes/architecture.py                  P0 架构可视化 API
+src/api/routes/task_persistence.py              任务持久化镜像状态、Repository 读写与同步 API
+src/services/data_version_service.py            数据版本回滚 / Demo 删除
+src/api/routes/data_import.py                   旧报表导入接口；下一步接同步桥
+src/services/dashboard_service.py               总览经营摘要 / 任务排序
+src/services/module_projection_service.py       导入数据到模块内容投影
+src/api/routes/modules/dashboard.py             总览 API
+src/services/action_plan_service.py             DecisionTaskDraft / ActionPlan 合约
+src/services/module_task_service.py             旧 Demo 任务池；当前逐步退到兼容层
+web_demo/index.html                             前端入口，缓存号 v5.0.9
+web_demo/modules/report/report-runtime.js       报表导入 / 回滚 / 删除记录
+web_demo/modules/dashboard/page.js              产品化总览页
+web_demo/decision-task.css                      行动顺序优先路径卡 / 待办路径摘要
 web_demo/modules/task-report/decision-runtime.js 详情报告路径选择运行层
-web_demo/modules/todo/page.js                  待办执行证据提交页
+web_demo/modules/todo/page.js                   待办执行证据提交页
 ```
 
 ## 常用接口
@@ -112,6 +116,7 @@ POST   /api/architecture/tasks/repository/create
 POST   /api/architecture/tasks/repository/{task_id}/transition/{action}
 POST   /api/architecture/tasks/repository/reset
 POST   /api/architecture/tasks/sync-runtime
+POST   /api/data/report-tasks/sync-current
 POST   /api/modules/agents/{module}/{entity_id}/tasks
 POST   /api/modules/todo/{task_id}/accept
 POST   /api/modules/todo/{task_id}/submit
@@ -137,10 +142,11 @@ GET    /api/modules/agents/{module}/{entity_id}
 5. TaskRepository Scoped Reads：通过 UserContext 读取可见任务并支持启动快照恢复
 6. TaskRepository 写路径过渡：新增 create / transition / reset 的 repository API
 7. 正式任务 API 切换：Agent 入池、待办接收/提交/复核/完成/重置已接入 repository 写路径
-8. 剩余任务入口切换：报表预警自动建任务、创意 Agent 入池、证据提交审计
-9. ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链
-10. Worker / Redis：导入、投影、预警、Agent 异步化与幂等重试
-11. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
-12. Audit / Logs：业务审计表 + JSON 技术日志 + trace_id
-13. Nginx：前后端分离、HTTPS、限流、安全头
+8. 报表任务同步桥：新增 report_task_repository_sync_service 与 /api/data/report-tasks/sync-current
+9. 剩余任务入口切换：原导入确认按钮、创意 Agent 入池、证据提交审计
+10. ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链
+11. Worker / Redis：导入、投影、预警、Agent 异步化与幂等重试
+12. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
+13. Audit / Logs：业务审计表 + JSON 技术日志 + trace_id
+14. Nginx：前后端分离、HTTPS、限流、安全头
 ```
