@@ -1,8 +1,8 @@
-"""V3.1.4 data version rollback, linked-task strategy, and detail service.
+"""Data version rollback, delete, linked-task strategy, and detail service.
 
 Report imports create data versions. Wrong report uploads can be soft-rolled back,
-linked tasks can be handled by a clear strategy, and detail pages can read a
-single backend payload instead of stitching partial lists in the browser.
+linked tasks can be handled by a clear strategy, and demo-stage records can be
+fully deleted so repeated tests do not stack stale imports.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services.account_service import user_display
+from src.services.import_row_store_service import ensure_import_row_table
 from src.services.module_task_service import DONE_STATUS, find_task, update_task
 from src.services.report_alert_service import ACTIVE_ALERT_STATUSES, ensure_v3_tables, list_alert_events, now_iso
 
-DATA_VERSION_SERVICE_VERSION = "3.1.4"
+DATA_VERSION_SERVICE_VERSION = "5.0.9"
 ROLLBACK_VERSION = DATA_VERSION_SERVICE_VERSION
 ROLLBACK_STATUSES = {"rolled_back", "rollback_pending"}
 TASK_STRATEGIES = {"review", "archive", "keep"}
@@ -131,6 +132,7 @@ def list_import_records(limit: int = 50) -> Dict[str, Any]:
             "taskCount": summary["taskCount"],
             "rolledBackAlertCount": summary["rolledBackAlertCount"],
             "canRollback": status != "rolled_back" and summary["activeAlertCount"] > 0,
+            "canDelete": True,
         })
     return {
         "version": DATA_VERSION_SERVICE_VERSION,
@@ -282,3 +284,53 @@ def rollback_data_version(data_version: str, *, operator_id: str | None = None, 
         )
         conn.commit()
     return {"version": DATA_VERSION_SERVICE_VERSION, "rollback": rollback, "records": list_import_records(limit=50)["records"]}
+
+
+def delete_data_version(data_version: str, *, operator_id: str | None = None, reason: str | None = None) -> Dict[str, Any]:
+    """Hard-delete one imported data version for demo testing.
+
+    This removes the imported rows, snapshot, metrics, alert rows and rollback row.
+    Linked in-memory tasks are archived so they disappear from active queues.
+    """
+    ensure_version_tables()
+    ensure_import_row_table()
+    reason = reason or "Demo 阶段删除导入记录，避免测试数据叠加。"
+    created_at = now_iso()
+    with connect() as conn:
+        snapshots = conn.execute("SELECT * FROM data_snapshots WHERE data_version = ?", (data_version,)).fetchall()
+        if not snapshots:
+            raise ValueError(f"data version not found: {data_version}")
+        alert_rows = conn.execute("SELECT * FROM alert_events WHERE data_version = ?", (data_version,)).fetchall()
+        task_ids = _linked_task_ids(alert_rows)
+        handled_tasks = apply_task_strategy(task_ids, strategy="archive", data_version=data_version, reason=reason, operator_id=operator_id, created_at=created_at)
+        snapshot_ids = [row["snapshot_id"] for row in snapshots]
+        deleted = {
+            "dataSnapshots": 0,
+            "metricSnapshots": 0,
+            "alertEvents": len(alert_rows),
+            "importedRows": 0,
+            "rollbacks": 0,
+            "linkedTasks": len(task_ids),
+        }
+        for snapshot_id in snapshot_ids:
+            metric_cursor = conn.execute("DELETE FROM metric_snapshots WHERE snapshot_id = ?", (snapshot_id,))
+            deleted["metricSnapshots"] += metric_cursor.rowcount if metric_cursor.rowcount != -1 else 0
+        imported_cursor = conn.execute("DELETE FROM imported_report_rows WHERE data_version = ?", (data_version,))
+        deleted["importedRows"] = imported_cursor.rowcount if imported_cursor.rowcount != -1 else 0
+        alert_cursor = conn.execute("DELETE FROM alert_events WHERE data_version = ?", (data_version,))
+        deleted["alertEvents"] = alert_cursor.rowcount if alert_cursor.rowcount != -1 else deleted["alertEvents"]
+        rollback_cursor = conn.execute("DELETE FROM data_version_rollbacks WHERE data_version = ?", (data_version,))
+        deleted["rollbacks"] = rollback_cursor.rowcount if rollback_cursor.rowcount != -1 else 0
+        snapshot_cursor = conn.execute("DELETE FROM data_snapshots WHERE data_version = ?", (data_version,))
+        deleted["dataSnapshots"] = snapshot_cursor.rowcount if snapshot_cursor.rowcount != -1 else len(snapshots)
+        conn.commit()
+    return {
+        "version": DATA_VERSION_SERVICE_VERSION,
+        "deletedDataVersion": data_version,
+        "reason": reason,
+        "operatorId": operator_id,
+        "deleted": deleted,
+        "handledTasks": handled_tasks,
+        "records": list_import_records(limit=50)["records"],
+        "message": "导入记录已删除，相关预警和活跃任务已从演示运行态移除。",
+    }
