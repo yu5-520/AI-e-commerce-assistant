@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.1.2。新增 Scoped TaskRepository 与启动快照恢复：保留现有 Demo UI 运行方式，同时提供基于 UserContext 的数据库任务读取入口，并在服务启动时从 SQLite 快照恢复任务池，为后续写路径完全切换到 TaskRepository 做准备。
+> 当前版本：V5.1.3。新增 TaskRepository 写路径过渡层：保留现有 Demo UI 运行方式，同时开放基于 UserContext 的任务 create / transition / reset 数据库写入接口，任务状态流转会做状态机校验并同步持久化。
 
 ## 当前主链路
 
@@ -42,10 +42,11 @@ Demo 清理链路：**导入记录删除 → 清除该版本 imported_report_row
 src/core/context.py                         UserContext：tenant / user / role / store scope 统一注入
 src/repositories/scoped_repository.py       ScopedRepository：tenant_id / deleted_at / Data Scope 查询约束
 src/repositories/task_repository.py         TaskRepository：基于 UserContext 的任务持久化读写封装
+src/services/task_repository_write_service.py TaskRepository 写路径过渡服务：create / transition / reset
 src/services/p0_architecture_service.py     P0 SaaS 架构拆解运行态摘要
 src/services/task_state_machine_service.py  P0 任务状态机与 SQLite 持久化镜像
 src/api/routes/architecture.py              /api/architecture/p0 与 /api/architecture/context
-src/api/routes/task_persistence.py          /api/architecture/tasks/persistence、repository 与 sync-runtime
+src/api/routes/task_persistence.py          /api/architecture/tasks/persistence、repository、create、transition、reset 与 sync-runtime
 docs/P0_SAAS_ARCHITECTURE.md                互联网大厂 SaaS P0 架构说明
 requirements.txt                            补充 SQLAlchemy / asyncpg / Alembic / Redis / ARQ 等生产依赖
 ```
@@ -65,19 +66,20 @@ FastAPI 模块化单体
 + Nginx 前后端分离
 ```
 
-当前 P0 进度：**任务系统已从 SQLite mirror 推进到 TaskRepository scoped reads；服务启动时可从 SQLite 快照恢复任务池。下一步是把 create_task / transition_task / reset_tasks 写路径切换为 TaskRepository 事务源。**
+当前 P0 进度：**任务系统已经具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复和写路径过渡 API。下一步是把正式模块任务接口、Agent 入池接口、待办动作按钮逐步切换到 repository 写路径。**
 
 ## 关键目录
 
 ```text
-src/api/main.py                              FastAPI 入口，版本 5.1.2
+src/api/main.py                              FastAPI 入口，版本 5.1.3
 src/core/context.py                          SaaS UserContext 依赖注入骨架
 src/repositories/scoped_repository.py        多租户 / 软删除 / 数据范围统一查询约束
 src/repositories/task_repository.py          任务 Repository：按 tenant / store / deleted_at 过滤读取与 upsert
+src/services/task_repository_write_service.py 任务 Repository 写路径过渡服务
 src/services/task_state_machine_service.py   任务状态机 / 持久化镜像 / task_events / task_logs / task_evidence
 src/services/p0_architecture_service.py      P0 架构摘要服务
 src/api/routes/architecture.py               P0 架构可视化 API
-src/api/routes/task_persistence.py           任务持久化镜像状态、Repository 读取与同步 API
+src/api/routes/task_persistence.py           任务持久化镜像状态、Repository 读写与同步 API
 src/services/data_version_service.py          数据版本回滚 / Demo 删除
 src/api/routes/data_import.py                 导入记录删除接口
 src/services/dashboard_service.py             总览经营摘要 / 任务排序
@@ -85,7 +87,7 @@ src/services/module_projection_service.py      导入数据到模块内容投影
 src/api/routes/modules/dashboard.py            总览 API
 src/api/routes/modules/agents.py               Agent API，路径任务默认进入处理中
 src/services/action_plan_service.py            DecisionTaskDraft / ActionPlan 合约
-src/services/module_task_service.py            统一任务池；当前仍驱动 Demo，已可同步并从 SQLite 快照恢复
+src/services/module_task_service.py            统一任务池；当前仍驱动 Demo，下一步逐步接入 repository 写路径
 web_demo/index.html                            前端入口，缓存号 v5.0.9
 web_demo/modules/report/report-runtime.js      报表导入 / 回滚 / 删除记录
 web_demo/modules/dashboard/page.js             产品化总览页
@@ -103,6 +105,9 @@ GET    /api/architecture/p0
 GET    /api/architecture/context
 GET    /api/architecture/tasks/persistence
 GET    /api/architecture/tasks/repository
+POST   /api/architecture/tasks/repository/create
+POST   /api/architecture/tasks/repository/{task_id}/transition/{action}
+POST   /api/architecture/tasks/repository/reset
 POST   /api/architecture/tasks/sync-runtime
 POST   /api/system/reset-runtime-data?confirm=true
 POST   /api/data/import/confirm
@@ -122,10 +127,11 @@ POST   /api/modules/agents/{module}/{entity_id}/tasks
 3. ScopedRepository：所有业务查询统一 tenant / store / deleted_at 过滤
 4. Task 持久化镜像：task_status、task_events、task_logs、task_evidence + 状态机约束
 5. TaskRepository Scoped Reads：通过 UserContext 读取可见任务并支持启动快照恢复
-6. TaskRepository 写路径替换：把 create_task / transition_task / reset_tasks 改为数据库事务源
-7. ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链
-8. Worker / Redis：导入、投影、预警、Agent 异步化与幂等重试
-9. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
-10. Audit / Logs：业务审计表 + JSON 技术日志 + trace_id
-11. Nginx：前后端分离、HTTPS、限流、安全头
+6. TaskRepository 写路径过渡：新增 create / transition / reset 的 repository API
+7. 正式任务 API 切换：把前端待办、Agent 入池、报表预警统一切到 repository 写路径
+8. ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链
+9. Worker / Redis：导入、投影、预警、Agent 异步化与幂等重试
+10. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
+11. Audit / Logs：业务审计表 + JSON 技术日志 + trace_id
+12. Nginx：前后端分离、HTTPS、限流、安全头
 ```
