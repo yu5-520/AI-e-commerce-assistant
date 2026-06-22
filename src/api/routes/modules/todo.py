@@ -4,26 +4,20 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
+from src.core.context import UserContext, get_current_context
 from src.services.account_service import current_user, user_has_permission, user_id_from_headers
 from src.services.experience_memory_service import draft_experience_from_task
 from src.services.module_task_service import (
-    accept_task,
-    assign_task,
-    complete_task,
     get_task_counters_for_user,
     list_task_events_for_user,
     list_tasks,
     pin_task,
     reorder_task,
-    reset_tasks,
-    review_task,
-    split_task_for_operator,
-    submit_task,
-    write_task_to_recap,
 )
 from src.services.task_evidence_service import get_task_evidence, review_task_evidence, submit_task_evidence
+from src.services.task_repository_write_service import reset_tasks_with_repository, transition_task_with_repository
 
 router = APIRouter()
 
@@ -36,6 +30,18 @@ def require_any_permission(user_id: str, permissions: set[str]) -> None:
     if not any(user_has_permission(user_id, permission) for permission in permissions):
         user = current_user(user_id)
         raise HTTPException(status_code=403, detail=f"{user['roleName']} does not have permission for this action")
+
+
+def _task_from_write_result(result: Dict[str, Any], *, error_detail: str) -> Dict[str, Any]:
+    task = result.get("task")
+    if not task:
+        raise HTTPException(status_code=400, detail=result.get("message") or error_detail)
+    task["repositoryWrite"] = {
+        "version": result.get("version"),
+        "action": result.get("action"),
+        "repository": result.get("repository"),
+    }
+    return task
 
 
 @router.get("/todo")
@@ -79,62 +85,56 @@ def todo_evidence(request: Request, task_id: str) -> Dict[str, Any]:
 
 
 @router.post("/todo/{task_id}/split")
-def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
     body = body or {}
-    task = split_task_for_operator(
-        task_id,
-        operator_id=body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId"),
-        note=body.get("note") or "",
-        actor_user_id=viewer_id,
-    )
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot split task")
-    return task
+    payload = {
+        "assigneeId": body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId"),
+        "reviewerId": body.get("reviewer_id") or body.get("reviewerId"),
+        "note": body.get("note") or "",
+        "actorUserId": viewer_id,
+    }
+    result = transition_task_with_repository(task_id, "manager_assigned", payload, ctx)
+    return _task_from_write_result(result, error_detail="cannot split task")
 
 
 @router.post("/todo/{task_id}/assign")
-def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
     body = body or {}
-    task = assign_task(
-        task_id,
-        assignee_id=body.get("assignee_id") or body.get("assigneeId"),
-        reviewer_id=body.get("reviewer_id") or body.get("reviewerId"),
-        operator_id=body.get("operator_id") or body.get("operatorId") or viewer_id,
-        note=body.get("note") or "",
-    )
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot assign task")
-    return task
+    payload = {
+        "assigneeId": body.get("assignee_id") or body.get("assigneeId"),
+        "reviewerId": body.get("reviewer_id") or body.get("reviewerId"),
+        "note": body.get("note") or "",
+        "actorUserId": body.get("operator_id") or body.get("operatorId") or viewer_id,
+    }
+    result = transition_task_with_repository(task_id, "manager_assigned", payload, ctx)
+    return _task_from_write_result(result, error_detail="cannot assign task")
 
 
 @router.post("/todo/{task_id}/accept")
-def accept_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def accept_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"submit_tasks", "handle_tasks", "assign_tasks", "dispatch_tasks"})
     body = body or {}
-    task = accept_task(task_id, note=body.get("note") or "", actor_user_id=viewer_id)
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot accept task")
-    return task
+    result = transition_task_with_repository(task_id, "operator_accepted", {"note": body.get("note") or "", "actorUserId": viewer_id}, ctx)
+    return _task_from_write_result(result, error_detail="cannot accept task")
 
 
 @router.post("/todo/{task_id}/submit")
-def submit_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def submit_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"submit_tasks", "dispatch_tasks", "assign_tasks"})
     body = body or {}
-    task = submit_task(
+    result = transition_task_with_repository(
         task_id,
-        note=body.get("note") or "",
-        submitter_id=body.get("submitter_id") or body.get("submitterId") or viewer_id,
+        "operator_submitted",
+        {"note": body.get("note") or "", "actorUserId": body.get("submitter_id") or body.get("submitterId") or viewer_id},
+        ctx,
     )
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot submit task")
-    return task
+    return _task_from_write_result(result, error_detail="cannot submit task")
 
 
 @router.post("/todo/{task_id}/submit-evidence")
@@ -148,20 +148,15 @@ def submit_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | 
 
 
 @router.post("/todo/{task_id}/review")
-def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"review_tasks"})
     body = body or {}
     decision = body.get("decision") or "approve"
     note = body.get("note") or ""
-    task = review_task(
-        task_id,
-        decision=decision,
-        note=note,
-        reviewer_id=body.get("reviewer_id") or body.get("reviewerId") or viewer_id,
-    )
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot review task")
+    action = "manager_returned" if decision in {"return", "reject", "rejected", "退回", "拒绝"} else "manager_approved"
+    result = transition_task_with_repository(task_id, action, {"note": note, "actorUserId": body.get("reviewer_id") or body.get("reviewerId") or viewer_id}, ctx)
+    task = _task_from_write_result(result, error_detail="cannot review task")
     if decision in {"approve", "approved", "pass", "通过"}:
         memory_draft = draft_experience_from_task(
             task_id,
@@ -187,29 +182,25 @@ def review_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | 
 
 
 @router.post("/todo/{task_id}/recap")
-def recap_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def recap_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"review_tasks", "assign_tasks", "dispatch_tasks"})
     body = body or {}
-    task = write_task_to_recap(
-        task_id,
-        recap_target=body.get("recap_target") or body.get("recapTarget") or "日报",
-        note=body.get("note") or "",
-        actor_user_id=viewer_id,
-    )
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot write task to recap")
-    return task
+    payload = {
+        "recapTarget": body.get("recap_target") or body.get("recapTarget") or "日报",
+        "note": body.get("note") or "",
+        "actorUserId": viewer_id,
+    }
+    result = transition_task_with_repository(task_id, "task_written_to_recap", payload, ctx)
+    return _task_from_write_result(result, error_detail="cannot write task to recap")
 
 
 @router.post("/todo/{task_id}/complete")
-def complete_todo(request: Request, task_id: str) -> Dict[str, Any]:
+def complete_todo(request: Request, task_id: str, ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"review_tasks", "submit_tasks", "dispatch_tasks", "assign_tasks"})
-    task = complete_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="task not found")
-    return task
+    result = transition_task_with_repository(task_id, "task_completed", {"actorUserId": viewer_id}, ctx)
+    return _task_from_write_result(result, error_detail="task not found")
 
 
 @router.post("/todo/{task_id}/pin")
@@ -233,5 +224,5 @@ def reorder_todo(request: Request, task_id: str, direction: str = "down") -> Dic
 
 
 @router.post("/todo/reset")
-def reset_todo(request: Request) -> Dict[str, Any]:
-    return reset_tasks(viewer_id=request_user_id(request))
+def reset_todo(request: Request, ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return reset_tasks_with_repository(ctx, reason="todo reset")
