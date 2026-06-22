@@ -13,7 +13,7 @@ from src.services.data_import_service import (
     list_import_sources,
     validate_all_imports,
 )
-from src.services.data_version_service import get_data_version_detail
+from src.services.data_version_service import delete_data_version, get_data_version_detail
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
 from src.services.report_alert_service import (
@@ -89,6 +89,7 @@ def version_detail(request: Request, data_version: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     detail["permissions"] = {
         "canRollback": can_rollback(user_id) and bool(detail.get("record", {}).get("canRollback")),
+        "canDelete": True,
         "rollbackRoleIds": sorted(ROLLBACK_ROLE_IDS),
     }
     return detail
@@ -106,6 +107,28 @@ def rollback_version(request: Request, data_version: str, body: Dict[str, Any] |
             operator_id=user_id,
             reason=body.get("reason") or body.get("note"),
             task_strategy=body.get("task_strategy") or body.get("taskStrategy") or "review",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/versions/{data_version}")
+def delete_version(
+    request: Request,
+    data_version: str,
+    confirm: bool = Query(default=False),
+    body: Dict[str, Any] | None = Body(default=None),
+) -> Dict[str, Any]:
+    """Hard-delete one demo data version so test imports do not keep stacking."""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="删除导入记录需要 confirm=true")
+    body = body or {}
+    user_id = request_user_id(request)
+    try:
+        return delete_data_version(
+            data_version,
+            operator_id=user_id,
+            reason=body.get("reason") or body.get("note") or "Demo 阶段删除导入记录。",
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -186,7 +209,7 @@ def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str
 def latest_version() -> Dict[str, Any]:
     """Return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "3.1.4", "message": "No V3 data snapshot has been imported yet."}
+    return latest or {"version": "5.0.9", "message": "No data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
