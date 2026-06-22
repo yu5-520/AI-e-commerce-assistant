@@ -1,8 +1,9 @@
-"""V3.0.9 task handling evidence service.
+"""V5.1.8 task handling evidence service.
 
 Tasks should not be completed by a bare click. Operators submit structured
 handling evidence, managers review that evidence, and approved evidence creates
-log / retrospective candidates for daily and weekly review.
+log / retrospective candidates for daily and weekly review. V5.1.8 persists
+submission and review evidence into task_evidence / task_logs for auditability.
 """
 
 from __future__ import annotations
@@ -20,9 +21,10 @@ from src.services.module_task_service import (
     submit_task,
     task_visible_to_viewer,
 )
+from src.services.task_evidence_audit_service import persist_evidence_review, persist_evidence_submission
 from src.services.task_recap_service import add_recap_candidate
 
-EVIDENCE_VERSION = "3.0.9"
+EVIDENCE_VERSION = "5.1.8"
 
 DOMAIN_TEMPLATES: Dict[str, Dict[str, Any]] = {
     "库存": {
@@ -97,6 +99,7 @@ def get_task_evidence(task_id: str, viewer_id: str | None = None) -> Dict[str, A
         "submitSummary": task.get("submitSummary") or task.get("submissionNote"),
         "reviewResult": task.get("reviewResult"),
         "reviewComment": task.get("reviewComment") or task.get("reviewNote"),
+        "auditPersistence": task.get("evidenceAudit"),
     }
 
 
@@ -143,6 +146,10 @@ def submit_task_evidence(task_id: str, body: Dict[str, Any] | None = None, submi
     if result_task:
         result_task["latestEvidenceRecord"] = record
         result_task["evidenceRecords"] = records[:10]
+    audit = persist_evidence_submission(result_task or task, record)
+    task["evidenceAudit"] = audit
+    if result_task:
+        result_task["evidenceAudit"] = audit
     create_log({"type": "处理证据提交", "task": task, "status": "待复核", "action": action, "result": summary, "operator": record["submittedByName"]})
     return result_task
 
@@ -186,5 +193,9 @@ def review_task_evidence(task_id: str, body: Dict[str, Any] | None = None, revie
         result_task["evidenceReviews"] = reviews[:10]
         result_task["recapCandidateId"] = task.get("recapCandidateId")
         result_task["recapCandidateStatus"] = task.get("recapCandidateStatus")
+    audit = persist_evidence_review(result_task or task, review)
+    task["evidenceAudit"] = audit
+    if result_task:
+        result_task["evidenceAudit"] = audit
     create_log({"type": "处理证据复核", "task": task, "status": "已完成" if approved else "已退回", "action": f"证据复核{review['decision']}", "result": comment, "operator": review["reviewerName"]})
     return result_task
