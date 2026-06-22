@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.8"
+P0_ARCHITECTURE_VERSION = "5.1.9"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -38,15 +38,15 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "任务系统持久化与状态机",
         "status": "evidence_audit_persistence",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "Agent 入池、待办生命周期、报表导入前端同步、创意 Agent 入池已接入 TaskRepository；证据提交和复核已写入 task_evidence / task_logs。下一步做导入服务本体 ImportJob 化。",
+        "currentGap": "Agent 入池、待办生命周期、报表导入前端同步、创意 Agent 入池已接入 TaskRepository；证据提交和复核已写入 task_evidence / task_logs。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
         "id": "P0-4",
         "name": "报表导入事务链与 ImportJob",
-        "status": "partial",
+        "status": "import_job_scaffolded",
         "target": "ImportJob -> DataVersion -> ImportedRows -> ProjectionJob -> AlertEvent -> TaskDraft -> AuditLog。",
-        "currentGap": "导入行、快照、预警已落库，但任务与投影状态仍需完整事务/Worker 链路。",
+        "currentGap": "已新增 import_jobs / projection_jobs 和 /api/data/import-jobs/* 包装接口；前端导入确认优先走 ImportJob，失败再回退旧导入。下一步把导入、投影、预警拆到 Worker / Redis。",
         "mustNot": ["导入接口长时间阻塞", "重复执行生成重复任务"],
     },
     {
@@ -78,7 +78,7 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "Audit / Logs 双层体系",
         "status": "partial",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "task_evidence / task_logs 已承接证据提交和复核审计；仍需全链路 trace_id 与独立 audit_logs 表。",
+        "currentGap": "task_evidence / task_logs 已承接证据提交和复核审计；ImportJob / ProjectionJob 已有运行记录；仍需全链路 trace_id 与独立 audit_logs 表。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -104,8 +104,7 @@ IMPLEMENTATION_SEQUENCE = [
     "前端导入确认自动同步：report-task-sync.js 包装 confirmReportImport / importMockAlerts",
     "创意 Agent 入池同步：creative_task_repository_sync_service 接入 TaskRepository",
     "证据提交审计入库：task_evidence_audit_service 写入 task_evidence / task_logs",
-    "剩余任务入口切换：导入服务本体 ImportJob 化",
-    "ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链",
+    "ImportJob 骨架：import_job_service /api/data/import-jobs/* import_jobs projection_jobs",
     "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
     "Audit/Logs：业务审计表 + JSON 技术日志 + trace_id",
@@ -118,7 +117,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "task_evidence_audit_persistence",
+        "runtimeMode": "import_job_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
