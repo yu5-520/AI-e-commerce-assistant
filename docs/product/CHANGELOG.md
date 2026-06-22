@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v5.0.9 - 2026-06-22
+
+### Product Decision
+- Demo 阶段允许删除单条导入记录，避免反复测试上传后记录一直叠加。
+- 删除记录是测试清理，不是正式业务回滚；正式留痕仍用回滚功能。
+- 删除一条导入记录后，总览、报表、商品、预警和任务池会跟随刷新。
+
+### Changed
+- `src/services/data_version_service.py` 新增 `delete_data_version()`，清理 data_snapshots、metric_snapshots、alert_events、imported_report_rows、data_version_rollbacks，并归档关联活跃任务。
+- `src/api/routes/data_import.py` 新增 `DELETE /api/data/versions/{data_version}?confirm=true`。
+- `web_demo/modules/report/report-runtime.js` 在导入记录行和数据版本详情页新增“删除 / 删除记录”按钮。
+- `src/api/main.py` 允许 `DELETE` 请求，并升级到 `5.0.9`。
+- `web_demo/index.html` 前端缓存升级到 `5.0.9`。
+
+### Product Boundary
+- 删除用于 Demo 测试清理，避免旧导入版本影响测试。
+- 回滚用于正式留痕和任务策略处理。
+- 删除记录会移除该版本预警和导入行，关联任务会从活跃队列归档。
+
 ## v5.0.8 - 2026-06-22
 
 ### Product Decision
@@ -30,29 +49,3 @@
 - `web_demo/modules/task-report/decision-runtime.js`：路径卡改为小标签 + 大动作步骤，不显示复盘列。
 - `web_demo/decision-task.css`：新增 action-sequence-first 布局，步骤块成为主视觉。
 - `src/services/action_plan_service.py`：`ACTION_PLAN_VERSION` 升级到 `5.0.7`；清空前端用 `commonActions`；报表异常路径改为字段补传修正、归属映射修正、版本回滚、异常标记观察。
-- `src/api/routes/modules/agents.py`：Agent registry 升级到 `5.0.7`，说明路径标题是小标签，行动顺序是主展示。
-- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.7`。
-
-### Product Boundary
-- 报表导入是确定性流程，不由 Agent 决定是否入库。
-- Agent 负责入库后的数据质量复核、补传、归属修正和回滚建议。
-- 运营选择的是行动顺序，不是阅读完整方案报告。
-
-## v5.0.6 - 2026-06-22
-
-### Product Decision
-- 路径选择页只负责选择主路径和补充决策变量，不再展示不会随路径变化的小字和共同动作。
-- 选择路径并确认加入任务清单后，任务默认进入处理中，不再二次接收。
-- 待办页不再重复采集决策变量，改为提交执行证据、截图链接、成果和复盘指标。
-
-### Changed
-- `web_demo/modules/task-report/decision-runtime.js` 改为横向紧凑路径行，删除共同动作区和顶部固定说明。
-- `web_demo/decision-task.css` 调整路径选择为横向行布局，并新增待办路径摘要样式。
-- `src/api/routes/modules/agents.py` 创建路径任务时写入 `status=处理中`、`workflowStatus=处理中`、`autoAccepted=true`。
-- `web_demo/modules/todo/page.js` 改为根据 `selectedDecisionPath`、`operatorSupplement` 和 `reviewPlan` 展示执行证据表单。
-- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.6`。
-
-### Product Boundary
-- 详情页负责决策确认，待办页负责执行证明。
-- 运营不需要再次接收自己刚确认的路径任务。
-- 截图、链接、处理结果、复盘指标属于任务执行证据，不属于路径选择前置变量。
