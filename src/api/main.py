@@ -10,17 +10,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, data_import, health, llm, modules, system
+from src.api.routes import accounts, approvals, architecture, data_import, health, llm, modules, system, task_persistence
 from src.services.system_service import reset_legacy_runtime_once
+from src.services.task_state_machine_service import ensure_task_persistence_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.1.0"
+API_VERSION = "5.1.1"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.1.0 runtime with P0 SaaS architecture scaffolding: UserContext, scoped repository contract, and architecture visibility APIs.",
+    description="V5.1.1 runtime with P0 task persistence mirror, UserContext, scoped repository contract, and architecture visibility APIs.",
 )
 
 app.add_middleware(
@@ -39,6 +40,7 @@ if WEB_DEMO_DIR.exists():
 def apply_v5_runtime_cleanup() -> None:
     """Clear pre-V5 persisted demo rows once so the product starts empty after deploy."""
     reset_legacy_runtime_once()
+    ensure_task_persistence_tables()
 
 
 @app.get("/", response_model=None)
@@ -57,3 +59,4 @@ app.include_router(data_import.router)
 app.include_router(approvals.router)
 app.include_router(system.router)
 app.include_router(architecture.router)
+app.include_router(task_persistence.router)
