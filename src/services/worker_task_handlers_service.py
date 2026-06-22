@@ -65,13 +65,16 @@ def persist_worker_task_result(ctx: UserContext, task_name: str, payload: Dict[s
     return {"resultId": result_id, "traceId": trace_id, "status": status, "taskName": task_name}
 
 
-def list_worker_task_results(ctx: UserContext, task_name: str | None = None, limit: int = 50) -> Dict[str, Any]:
+def list_worker_task_results(ctx: UserContext, task_name: str | None = None, trace_id: str | None = None, limit: int = 50) -> Dict[str, Any]:
     ensure_worker_task_result_table()
     where = ["tenant_id = ?", "deleted_at IS NULL"]
     params: list[Any] = [ctx.tenant_id]
     if task_name:
         where.append("task_name = ?")
         params.append(task_name)
+    if trace_id:
+        where.append("trace_id = ?")
+        params.append(trace_id)
     params.append(limit)
     with connect() as conn:
         rows = conn.execute(f"SELECT * FROM worker_task_results WHERE {' AND '.join(where)} ORDER BY created_at DESC LIMIT ?", params).fetchall()
