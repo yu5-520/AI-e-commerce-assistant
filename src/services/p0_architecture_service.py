@@ -11,8 +11,9 @@ from typing import Any
 
 from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
+from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.0"
+P0_ARCHITECTURE_VERSION = "5.1.1"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -35,9 +36,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-3",
         "name": "任务系统持久化与状态机",
-        "status": "critical_gap",
+        "status": "sqlite_mirror_enabled",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "任务、日志、事件仍为内存数组，服务重启会丢。",
+        "currentGap": "已新增 SQLite 持久化镜像与状态机约束；下一步把内存 TASKS 替换为 TaskRepository 源数据。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
@@ -75,9 +76,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-8",
         "name": "Audit / Logs 双层体系",
-        "status": "planned",
+        "status": "partial",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "任务日志和 LLM trace 已有雏形，但缺少全链路 trace_id 和业务审计表。",
+        "currentGap": "新增 task_events / task_logs 持久化镜像；仍需全链路 trace_id 与独立 audit_logs 表。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -95,7 +96,8 @@ IMPLEMENTATION_SEQUENCE = [
     "数据库基础层：Async SQLAlchemy / Alembic / TenantScopedMixin / SoftDeleteMixin",
     "UserContext：JWT/Session 解析 tenant_id、user_id、role、store scope",
     "ScopedRepository：统一注入 tenant、store、deleted_at 过滤",
-    "Task 持久化：tasks、task_events、task_logs、task_evidence + 严格状态机",
+    "Task 持久化镜像：task_status、task_events、task_logs、task_evidence + 状态机约束",
+    "TaskRepository 替换：把内存 TASKS 替换为数据库源数据",
     "ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链",
     "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
@@ -109,13 +111,14 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "demo_scaffold",
+        "runtimeMode": "demo_scaffold_with_task_persistence_mirror",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
             "params": query_plan.params,
             "rule": query_plan.rule,
         },
+        "taskPersistence": task_persistence_summary(),
         "layers": P0_LAYERS,
         "implementationSequence": IMPLEMENTATION_SEQUENCE,
         "definitionOfDone": [
