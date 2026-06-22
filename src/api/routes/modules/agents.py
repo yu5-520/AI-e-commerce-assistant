@@ -11,13 +11,14 @@ from src.core.context import UserContext, get_current_context
 from src.services.account_service import user_id_from_headers
 from src.services.agent_llm_enrichment_service import enrich_module_agent_result, enrich_task_generation_result, enrich_task_playbook_result
 from src.services.creative_llm_enrichment_service import enrich_creative_agent_result
-from src.services.creative_vertical_agent_service import create_creative_task, run_creative_vertical_agent
+from src.services.creative_task_repository_sync_service import create_creative_task_with_repository
+from src.services.creative_vertical_agent_service import run_creative_vertical_agent
 from src.services.module_agent_service import get_agent_plan, run_cycle_agent, run_module_agent
 from src.services.task_agent_service import generate_task_candidates, task_playbook
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "5.1.4"
+AGENT_REGISTRY_VERSION = "5.1.7"
 
 
 def request_user_id(request: Request) -> str:
@@ -35,9 +36,9 @@ def current_agent_plan() -> Dict[str, Any]:
         "uiRule": "前端展示路径小标签和行动顺序；选择路径后直接进入处理中。",
     }
     plan["taskRepositoryWritePath"] = {
-        "version": "5.1.4",
+        "version": "5.1.7",
         "service": "src/services/task_repository_write_service.py",
-        "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。",
+        "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。创意 Agent 入池也同步到 TaskRepository。",
     }
     return plan
 
@@ -114,11 +115,17 @@ def creative_vertical_agent_get(request: Request, product_id: str, task_goal: st
 
 
 @router.post("/agents/creative/{product_id}/tasks")
-def creative_vertical_task(request: Request, product_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
-    result = create_creative_task(product_id, body=body or {}, user_id=request_user_id(request))
+def creative_vertical_task(
+    request: Request,
+    product_id: str,
+    body: Dict[str, Any] | None = Body(default=None),
+    ctx: UserContext = Depends(get_current_context),
+) -> Dict[str, Any]:
+    result = create_creative_task_with_repository(product_id, body=body or {}, ctx=ctx)
     if not result:
         raise HTTPException(status_code=400, detail="cannot create task from creative vertical agent")
     result["agent"] = enrich_creative_agent_result(result.get("agent") or {})
+    result["message"] = "创意测试任务已进入统一任务池，并已同步到 TaskRepository。"
     return result
 
 
