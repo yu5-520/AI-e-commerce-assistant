@@ -12,7 +12,7 @@ from src.services.module_projection_service import projected_products, projected
 from src.services.report_alert_service import get_v3_dashboard_summary, list_alert_events
 from src.services.trace_audit_service import resolve_trace_id, write_audit_log
 
-WORKER_TASK_HANDLERS_VERSION = "5.2.5"
+WORKER_TASK_HANDLERS_VERSION = "5.2.6"
 
 
 def _result_id(prefix: str) -> str:
@@ -117,4 +117,5 @@ def run_rag_memory_write(ctx: UserContext, payload: Dict[str, Any]) -> Dict[str,
     memory_payload = {"source": payload.get("source") or "worker_result", "taskId": payload.get("taskId") or payload.get("task_id"), "caseId": payload.get("caseId") or payload.get("case_id"), "summary": payload.get("summary") or payload.get("content") or "待沉淀经验", "evidence": payload.get("evidence") or {}, "status": "pending_rag_review", "traceId": trace_id, "boundary": "先进入可审计结果表，后续再迁移到正式 RAG Memory 表和向量索引。"}
     result = {"version": WORKER_TASK_HANDLERS_VERSION, "taskName": "rag_memory_write", "traceId": trace_id, "memory": memory_payload}
     result["persistence"] = persist_worker_task_result(ctx, "rag_memory_write", {**payload, "traceId": trace_id}, result, status="pending_review")
+    write_audit_log(ctx, trace_id=trace_id, event_type="rag_memory.staged", resource_type="rag_memory", resource_id=result["persistence"].get("resultId"), action="rag_memory_write", status="pending_review", payload={"taskId": memory_payload.get("taskId"), "caseId": memory_payload.get("caseId")})
     return result
