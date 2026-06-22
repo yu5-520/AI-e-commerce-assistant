@@ -11,17 +11,19 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import accounts, approvals, architecture, data_import, health, llm, modules, system, task_persistence
+from src.repositories.task_repository import bootstrap_task_repository
+from src.services import module_task_service
 from src.services.system_service import reset_legacy_runtime_once
-from src.services.task_state_machine_service import ensure_task_persistence_tables
+from src.services.task_state_machine_service import load_task_snapshots
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.1.1"
+API_VERSION = "5.1.2"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.1.1 runtime with P0 task persistence mirror, UserContext, scoped repository contract, and architecture visibility APIs.",
+    description="V5.1.2 runtime with scoped TaskRepository, startup task hydration, UserContext, and architecture visibility APIs.",
 )
 
 app.add_middleware(
@@ -38,9 +40,13 @@ if WEB_DEMO_DIR.exists():
 
 @app.on_event("startup")
 def apply_v5_runtime_cleanup() -> None:
-    """Clear pre-V5 persisted demo rows once so the product starts empty after deploy."""
+    """Initialize demo cleanup and hydrate task runtime from persisted snapshots."""
     reset_legacy_runtime_once()
-    ensure_task_persistence_tables()
+    bootstrap_task_repository()
+    if not module_task_service.TASKS:
+        snapshots = load_task_snapshots()
+        if snapshots:
+            module_task_service.TASKS[:] = snapshots
 
 
 @app.get("/", response_model=None)
