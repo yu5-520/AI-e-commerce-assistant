@@ -23,11 +23,16 @@ async def arq_dispatch(ctx: Any, task_name: str, payload: Dict[str, Any] | None 
 
     payload = payload or {}
     user_context = UserContext(
-        user_id=payload.get("userId") or payload.get("user_id") or "U001",
         tenant_id=payload.get("tenantId") or payload.get("tenant_id") or "tenant_demo",
         org_id=payload.get("orgId") or payload.get("org_id") or "org_demo",
+        user_id=payload.get("userId") or payload.get("user_id") or "U001",
         role_id=payload.get("roleId") or payload.get("role_id") or "owner",
+        role_name=payload.get("roleName") or payload.get("role_name") or "老板",
+        permissions=payload.get("permissions") or [],
+        store_group_ids=payload.get("storeGroupIds") or payload.get("store_group_ids") or [],
         store_ids=payload.get("storeIds") or payload.get("store_ids") or [],
+        visible_modules=payload.get("visibleModules") or payload.get("visible_modules") or [],
+        demo_mode=True,
     )
     handler = WORKER_TASK_REGISTRY.get(task_name)
     if not handler:
