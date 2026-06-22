@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.4"
+P0_ARCHITECTURE_VERSION = "5.2.5"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -44,9 +44,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-4",
         "name": "报表导入事务链与 ImportJob",
-        "status": "import_job_arq_dispatch",
+        "status": "trace_audit_linked",
         "target": "ImportJob -> DataVersion -> ImportedRows -> ProjectionJob -> AlertEvent -> TaskDraft -> AuditLog。",
-        "currentGap": "ImportJob enqueue=true 会先写 SQLite worker_jobs，再按 Worker Runtime 尝试投递 ARQ；Redis 不可用时保留 SQLite fallback。",
+        "currentGap": "ImportJob / ProjectionJob 已写入 trace_id 和 audit_logs；enqueue 与 Demo Worker 会沿用同一 trace。下一步扩展到 Task / Evidence / RAG Memory。",
         "mustNot": ["导入接口长时间阻塞", "重复执行生成重复任务"],
     },
     {
@@ -60,9 +60,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-6",
         "name": "Worker / Redis 后台任务",
-        "status": "worker_task_handlers_registered",
+        "status": "trace_audit_linked",
         "target": "导入、投影、预警、Agent 分析进入后台队列，任务幂等可重试。",
-        "currentGap": "projection_refresh / alert_generation / agent_analysis / rag_memory_write 已注册为可执行 Worker handler，并把结果写入 worker_task_results。下一步是 trace_id 与正式 RAG/向量索引。",
+        "currentGap": "WorkerJob 入队/认领/完成/失败/重试和 WorkerTaskResult 创建已写 audit_logs，并支持按 trace_id 查询结果。",
         "mustNot": ["大报表阻塞 FastAPI 事件循环", "Worker 重试产生副作用"],
     },
     {
@@ -76,9 +76,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-8",
         "name": "Audit / Logs 双层体系",
-        "status": "partial",
+        "status": "trace_audit_scaffolded",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "task_evidence / task_logs 已承接证据提交和复核审计；ImportJob / ProjectionJob / WorkerJob / WorkerResult 已有运行记录；仍需全链路 trace_id 与独立 audit_logs 表。",
+        "currentGap": "新增 trace_audit_service、audit_logs、/api/audit/traces/{trace_id}；ImportJob / ProjectionJob / WorkerJob / WorkerResult 已可按 trace 串联。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -110,7 +110,8 @@ IMPLEMENTATION_SEQUENCE = [
     "Redis / ARQ 配置：worker_runtime_config_service、task registry、ARQ WorkerSettings、SQLite fallback",
     "ARQ Dispatch：ImportJob 入队后尝试投递 arq_dispatch，失败保留 SQLite fallback",
     "Worker 任务扩展：projection_refresh、alert_generation、agent_analysis、rag_memory_write 已注册",
-    "Trace / AuditLog：全链路 trace_id、独立 audit_logs 表、WorkerResult 关联",
+    "Trace / AuditLog：trace_audit_service、audit_logs、ImportJob / WorkerJob / WorkerResult 关联",
+    "下一步：Task / Evidence / RAG Memory 接入 trace_id",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
     "Nginx：前后端分离、HTTPS、限流、安全头",
 ]
@@ -121,7 +122,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "worker_task_handlers_registered",
+        "runtimeMode": "trace_audit_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
