@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.1"
+P0_ARCHITECTURE_VERSION = "5.1.2"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -36,9 +36,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-3",
         "name": "任务系统持久化与状态机",
-        "status": "sqlite_mirror_enabled",
+        "status": "task_repository_scoped_reads",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "已新增 SQLite 持久化镜像与状态机约束；下一步把内存 TASKS 替换为 TaskRepository 源数据。",
+        "currentGap": "已新增 SQLite 持久化镜像、状态机约束、Scoped TaskRepository 读写封装与启动快照恢复；下一步把 module_task_service 写路径切换到 TaskRepository。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
@@ -97,7 +97,8 @@ IMPLEMENTATION_SEQUENCE = [
     "UserContext：JWT/Session 解析 tenant_id、user_id、role、store scope",
     "ScopedRepository：统一注入 tenant、store、deleted_at 过滤",
     "Task 持久化镜像：task_status、task_events、task_logs、task_evidence + 状态机约束",
-    "TaskRepository 替换：把内存 TASKS 替换为数据库源数据",
+    "TaskRepository Scoped Reads：通过 UserContext 读取可见任务并支持启动快照恢复",
+    "TaskRepository 写路径替换：把 create_task / transition_task / reset_tasks 改为数据库事务源",
     "ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链",
     "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
@@ -111,7 +112,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "demo_scaffold_with_task_persistence_mirror",
+        "runtimeMode": "demo_scaffold_with_task_repository_reads",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
