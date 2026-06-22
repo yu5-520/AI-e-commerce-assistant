@@ -8,10 +8,15 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from src.core.context import UserContext, get_current_context
 from src.services.import_job_service import get_import_job, list_import_jobs, run_import_job
+from src.services.import_job_worker_service import enqueue_import_worker_job, execute_next_import_worker_job
 from src.services.report_alert_service import import_report_dataset, run_v3_mock_imports
 from src.services.report_schema_service import confirm_report_import
 
 router = APIRouter(prefix="/api/data/import-jobs", tags=["import-jobs"])
+
+
+def _should_enqueue(body: Dict[str, Any]) -> bool:
+    return body.get("enqueue") is True or body.get("async") is True or body.get("asyncMode") is True
 
 
 @router.get("")
@@ -33,11 +38,13 @@ def import_job_detail(import_job_id: str, ctx: UserContext = Depends(get_current
 
 @router.post("/confirm")
 def confirm_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Confirm report import through ImportJob wrapper."""
+    """Confirm report import through ImportJob wrapper or enqueue mode."""
 
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
+    if _should_enqueue(body):
+        return enqueue_import_worker_job(ctx, dataset_name=str(dataset_name), source_type="confirm_report_import", payload=body)
     try:
         return run_import_job(
             ctx,
@@ -57,11 +64,13 @@ def confirm_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx: U
 
 @router.post("/report")
 def report_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Import report payload through ImportJob wrapper."""
+    """Import report payload through ImportJob wrapper or enqueue mode."""
 
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
+    if _should_enqueue(body):
+        return enqueue_import_worker_job(ctx, dataset_name=str(dataset_name), source_type="import_report_dataset", payload=body)
     try:
         return run_import_job(
             ctx,
@@ -80,9 +89,11 @@ def report_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx: Us
 
 @router.post("/mock-alerts")
 def mock_alert_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Run mock report imports through ImportJob wrapper."""
+    """Run mock report imports through ImportJob wrapper or enqueue mode."""
 
     dataset_names = body.get("dataset_names") or body.get("datasetNames")
+    if _should_enqueue(body):
+        return enqueue_import_worker_job(ctx, dataset_name="mock-alerts", source_type="run_v3_mock_imports", payload=body)
     try:
         return run_import_job(
             ctx,
@@ -93,3 +104,10 @@ def mock_alert_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/worker/execute-next")
+def execute_next_import_job(body: Dict[str, Any] = Body(default_factory=dict), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Claim and execute one queued import job with the demo in-process worker."""
+
+    return execute_next_import_worker_job(ctx, worker_id=body.get("workerId") or body.get("worker_id") or "import-worker-demo")
