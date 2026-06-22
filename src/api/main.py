@@ -20,12 +20,12 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.2.5"
+API_VERSION = "5.2.6"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.2.5 runtime with trace_id and audit_logs across ImportJob, WorkerJob, WorkerTaskResult, ARQ dispatch fallback, official task write path, UserContext, and architecture APIs.",
+    description="V5.2.6 runtime with trace_id and audit_logs across Task, Evidence, RAG staging, ImportJob, WorkerJob, WorkerTaskResult, ARQ dispatch fallback, UserContext, and architecture APIs.",
 )
 
 app.add_middleware(
