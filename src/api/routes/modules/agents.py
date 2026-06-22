@@ -5,18 +5,19 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
+from src.core.context import UserContext, get_current_context
 from src.services.account_service import user_id_from_headers
 from src.services.agent_llm_enrichment_service import enrich_module_agent_result, enrich_task_generation_result, enrich_task_playbook_result
 from src.services.creative_llm_enrichment_service import enrich_creative_agent_result
 from src.services.creative_vertical_agent_service import create_creative_task, run_creative_vertical_agent
 from src.services.module_agent_service import get_agent_plan, run_cycle_agent, run_module_agent
-from src.services.module_task_service import create_task
 from src.services.task_agent_service import generate_task_candidates, task_playbook
+from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "5.0.7"
+AGENT_REGISTRY_VERSION = "5.1.4"
 
 
 def request_user_id(request: Request) -> str:
@@ -32,6 +33,11 @@ def current_agent_plan() -> Dict[str, Any]:
         "service": "src/services/action_plan_service.py",
         "outputs": ["readonlyEvidence", "supplementSchema", "decisionPaths", "selectedPathId", "operatorSupplement", "reviewPlan"],
         "uiRule": "前端展示路径小标签和行动顺序；选择路径后直接进入处理中。",
+    }
+    plan["taskRepositoryWritePath"] = {
+        "version": "5.1.4",
+        "service": "src/services/task_repository_write_service.py",
+        "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。",
     }
     return plan
 
@@ -130,7 +136,13 @@ def module_agent(request: Request, module: str, entity_id: str, mode: str = Quer
 
 
 @router.post("/agents/{module}/{entity_id}/tasks")
-def module_agent_task(request: Request, module: str, entity_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def module_agent_task(
+    request: Request,
+    module: str,
+    entity_id: str,
+    body: Dict[str, Any] | None = Body(default=None),
+    ctx: UserContext = Depends(get_current_context),
+) -> Dict[str, Any]:
     body = body or {}
     agent_result = run_module_agent(module, entity_id, mode=body.get("mode") or "analysis", user_id=request_user_id(request))
     if not agent_result:
@@ -140,5 +152,11 @@ def module_agent_task(request: Request, module: str, entity_id: str, body: Dict[
     if draft_index < 0 or draft_index >= len(drafts):
         raise HTTPException(status_code=400, detail="task draft not found")
     draft = _merge_decision_payload(drafts[draft_index], body)
-    task = create_task(draft)
-    return {"agent": enrich_module_agent_result(agent_result), "task": task, "message": "经营路径已确认，任务进入处理中。"}
+    write_result = create_task_with_repository(draft, ctx)
+    task = write_result.get("task") or {}
+    task["repositoryWrite"] = {
+        "version": write_result.get("version"),
+        "action": write_result.get("action"),
+        "repository": write_result.get("repository"),
+    }
+    return {"agent": enrich_module_agent_result(agent_result), "task": task, "message": "经营路径已确认，任务进入处理中，并已持久化到 TaskRepository。"}
