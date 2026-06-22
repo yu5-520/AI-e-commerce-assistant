@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.2"
+P0_ARCHITECTURE_VERSION = "5.2.3"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -44,9 +44,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-4",
         "name": "报表导入事务链与 ImportJob",
-        "status": "import_job_enqueue_mode",
+        "status": "import_job_arq_dispatch",
         "target": "ImportJob -> DataVersion -> ImportedRows -> ProjectionJob -> AlertEvent -> TaskDraft -> AuditLog。",
-        "currentGap": "ImportJob 已支持同步执行和 enqueue=true 入队模式，并新增 demo worker 执行下一条导入任务；ARQ Worker 启动入口已存在，下一步接入常驻执行。",
+        "currentGap": "ImportJob enqueue=true 会先写 SQLite worker_jobs，再按 Worker Runtime 尝试投递 ARQ；Redis 不可用时保留 SQLite fallback。",
         "mustNot": ["导入接口长时间阻塞", "重复执行生成重复任务"],
     },
     {
@@ -60,9 +60,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-6",
         "name": "Worker / Redis 后台任务",
-        "status": "redis_arq_config_scaffolded",
+        "status": "arq_dispatch_with_sqlite_fallback",
         "target": "导入、投影、预警、Agent 分析进入后台队列，任务幂等可重试。",
-        "currentGap": "已新增 worker_runtime_config_service、Worker task registry、ARQ WorkerSettings 启动入口和 /api/worker/jobs/runtime；未配置 Redis 时继续使用 SQLite fallback。",
+        "currentGap": "新增 arq_dispatch_service；enqueue 结果会返回 arqDispatch，展示 redis_arq 或 sqlite_fallback。下一步是把 projection_refresh / alert_generation / agent_analysis 注册为可执行任务。",
         "mustNot": ["大报表阻塞 FastAPI 事件循环", "Worker 重试产生副作用"],
     },
     {
@@ -108,7 +108,8 @@ IMPLEMENTATION_SEQUENCE = [
     "Worker Queue 骨架：worker_queue_service /api/worker/jobs/* worker_jobs 幂等重试",
     "ImportJob 入队执行：enqueue=true 返回 WorkerJob，demo worker 执行下一条 import 队列",
     "Redis / ARQ 配置：worker_runtime_config_service、task registry、ARQ WorkerSettings、SQLite fallback",
-    "Redis / ARQ 常驻执行：让 ImportJob 不再依赖手动 execute-next",
+    "ARQ Dispatch：ImportJob 入队后尝试投递 arq_dispatch，失败保留 SQLite fallback",
+    "Worker 任务扩展：projection_refresh、alert_generation、agent_analysis、rag_memory_write",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
     "Audit/Logs：业务审计表 + JSON 技术日志 + trace_id",
     "Nginx：前后端分离、HTTPS、限流、安全头",
@@ -120,7 +121,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "redis_arq_config_scaffolded",
+        "runtimeMode": "arq_dispatch_with_sqlite_fallback",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
