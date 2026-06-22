@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.1.7。新增创意 Agent 入池同步：`POST /api/modules/agents/creative/{product_id}/tasks` 已通过 `creative_task_repository_sync_service.py` 同步写入 TaskRepository，创意 Agent 仍只生成标题 / 主图测试任务草案，不直接发布商品或回写店铺。
+> 当前版本：V5.1.8。新增证据提交审计入库：待办页提交处理证据、总管复核证据时，会通过 `task_evidence_audit_service.py` 写入 `task_evidence` 与 `task_logs`，保留原待办返回结构，同时补齐可追溯审计链。
 
 ## 当前主链路
 
@@ -47,6 +47,7 @@ src/services/report_task_repository_sync_service.py 报表预警任务同步桥
 src/api/routes/report_task_sync.py             /api/data/report-tasks/sync-current
 web_demo/core/report-task-sync.js              报表导入成功后自动同步 TaskRepository
 src/services/creative_task_repository_sync_service.py 创意 Agent 入池同步桥
+src/services/task_evidence_audit_service.py    证据提交 / 复核写入 task_evidence 与 task_logs
 src/services/p0_architecture_service.py        P0 SaaS 架构拆解运行态摘要
 src/services/task_state_machine_service.py     P0 任务状态机与 SQLite 持久化镜像
 src/api/routes/modules/agents.py               Agent / 创意 Agent 入池接口已接入 TaskRepository 写路径
@@ -72,12 +73,12 @@ FastAPI 模块化单体
 + Nginx 前后端分离
 ```
 
-当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池、待办核心生命周期动作、报表导入前端同步和创意 Agent 入池。下一步是证据提交审计入库、导入服务本体 ImportJob 化。**
+当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池、待办核心生命周期动作、报表导入前端同步、创意 Agent 入池和证据提交审计入库。下一步是导入服务本体 ImportJob 化。**
 
 ## 关键目录
 
 ```text
-src/api/main.py                                 FastAPI 入口，版本 5.1.7
+src/api/main.py                                 FastAPI 入口，版本 5.1.8
 src/core/context.py                             SaaS UserContext 依赖注入骨架
 src/repositories/scoped_repository.py           多租户 / 软删除 / 数据范围统一查询约束
 src/repositories/task_repository.py             任务 Repository：按 tenant / store / deleted_at 过滤读取与 upsert
@@ -87,6 +88,8 @@ src/api/routes/report_task_sync.py              报表任务同步 API
 web_demo/core/report-task-sync.js               前端报表导入自动同步补丁
 src/services/creative_task_repository_sync_service.py 创意任务同步到 Repository
 src/services/creative_vertical_agent_service.py 创意 Agent 分析与测试包生成；仍不直接发布商品
+src/services/task_evidence_audit_service.py     证据提交 / 复核审计持久化
+src/services/task_evidence_service.py           待办执行证据提交与复核
 src/services/task_state_machine_service.py      任务状态机 / 持久化镜像 / task_events / task_logs / task_evidence
 src/services/p0_architecture_service.py         P0 架构摘要服务
 src/api/routes/modules/agents.py                Agent 与创意 Agent 入池任务持久化入口
@@ -126,7 +129,9 @@ POST   /api/modules/agents/{module}/{entity_id}/tasks
 POST   /api/modules/agents/creative/{product_id}/tasks
 POST   /api/modules/todo/{task_id}/accept
 POST   /api/modules/todo/{task_id}/submit
+POST   /api/modules/todo/{task_id}/submit-evidence
 POST   /api/modules/todo/{task_id}/review
+POST   /api/modules/todo/{task_id}/review-evidence
 POST   /api/modules/todo/{task_id}/complete
 POST   /api/modules/todo/reset
 POST   /api/system/reset-runtime-data?confirm=true
@@ -151,10 +156,11 @@ GET    /api/modules/agents/{module}/{entity_id}
 8. 报表任务同步桥：新增 report_task_repository_sync_service 与 /api/data/report-tasks/sync-current
 9. 前端导入确认自动同步：report-task-sync.js 包装 confirmReportImport / importMockAlerts
 10. 创意 Agent 入池同步：creative_task_repository_sync_service 接入 TaskRepository
-11. 剩余任务入口切换：证据提交审计、导入服务本体 ImportJob 化
-12. ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链
-13. Worker / Redis：导入、投影、预警、Agent 异步化与幂等重试
-14. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
-15. Audit / Logs：业务审计表 + JSON 技术日志 + trace_id
-16. Nginx：前后端分离、HTTPS、限流、安全头
+11. 证据提交审计入库：task_evidence_audit_service 写入 task_evidence / task_logs
+12. 剩余任务入口切换：导入服务本体 ImportJob 化
+13. ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链
+14. Worker / Redis：导入、投影、预警、Agent 异步化与幂等重试
+15. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
+16. Audit / Logs：业务审计表 + JSON 技术日志 + trace_id
+17. Nginx：前后端分离、HTTPS、限流、安全头
 ```
