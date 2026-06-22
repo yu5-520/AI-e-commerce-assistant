@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v5.0.7 - 2026-06-22
+
+### Product Decision
+- 路径选择卡改为“行动顺序优先”：路径标题和经营目标只是小标签，动作步骤是视觉重点。
+- 复盘指标不再展示在路径卡里；待办提交时本来就要提供截图、链接、处理结果和数据支撑，复盘指标保留在后端 `reviewPlan` 和待办证据流。
+- 报表上传确认后就是自动入库、自动刷新报表 / 总览 / 商品等模块；Agent 不再生成“确认入库”路径，只生成已入库后的数据质量修正任务。
+
+### Changed
+- `web_demo/modules/task-report/decision-runtime.js`：路径卡改为小标签 + 大动作步骤，不显示复盘列。
+- `web_demo/decision-task.css`：新增 action-sequence-first 布局，步骤块成为主视觉。
+- `src/services/action_plan_service.py`：`ACTION_PLAN_VERSION` 升级到 `5.0.7`；清空前端用 `commonActions`；报表异常路径改为字段补传修正、归属映射修正、版本回滚、异常标记观察。
+- `src/api/routes/modules/agents.py`：Agent registry 升级到 `5.0.7`，说明路径标题是小标签，行动顺序是主展示。
+- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.7`。
+
+### Product Boundary
+- 报表导入是确定性流程，不由 Agent 决定是否入库。
+- Agent 负责入库后的数据质量复核、补传、归属修正和回滚建议。
+- 运营选择的是行动顺序，不是阅读完整方案报告。
+
 ## v5.0.6 - 2026-06-22
 
 ### Product Decision
