@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.9"
+P0_ARCHITECTURE_VERSION = "5.2.0"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -60,9 +60,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-6",
         "name": "Worker / Redis 后台任务",
-        "status": "planned",
+        "status": "worker_queue_scaffolded",
         "target": "导入、投影、预警、Agent 分析进入后台队列，任务幂等可重试。",
-        "currentGap": "当前大部分计算仍在请求链路内同步完成。",
+        "currentGap": "已新增 worker_jobs 队列表、幂等 key、优先级、认领、完成、失败、重试 API；仍需接入 Redis / ARQ 并将 ImportJob 真正异步执行。",
         "mustNot": ["大报表阻塞 FastAPI 事件循环", "Worker 重试产生副作用"],
     },
     {
@@ -78,7 +78,7 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "Audit / Logs 双层体系",
         "status": "partial",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "task_evidence / task_logs 已承接证据提交和复核审计；ImportJob / ProjectionJob 已有运行记录；仍需全链路 trace_id 与独立 audit_logs 表。",
+        "currentGap": "task_evidence / task_logs 已承接证据提交和复核审计；ImportJob / ProjectionJob / WorkerJob 已有运行记录；仍需全链路 trace_id 与独立 audit_logs 表。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -105,7 +105,8 @@ IMPLEMENTATION_SEQUENCE = [
     "创意 Agent 入池同步：creative_task_repository_sync_service 接入 TaskRepository",
     "证据提交审计入库：task_evidence_audit_service 写入 task_evidence / task_logs",
     "ImportJob 骨架：import_job_service /api/data/import-jobs/* import_jobs projection_jobs",
-    "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
+    "Worker Queue 骨架：worker_queue_service /api/worker/jobs/* worker_jobs 幂等重试",
+    "Redis / ARQ 替换：把 SQLite 队列表切换为真正后台 Worker 执行",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
     "Audit/Logs：业务审计表 + JSON 技术日志 + trace_id",
     "Nginx：前后端分离、HTTPS、限流、安全头",
@@ -117,7 +118,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "import_job_scaffolded",
+        "runtimeMode": "worker_queue_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
