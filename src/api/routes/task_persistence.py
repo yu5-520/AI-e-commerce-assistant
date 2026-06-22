@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from src.core.context import UserContext, get_current_context
+from src.repositories.task_repository import TaskRepository
 from src.services import module_task_service
 from src.services.task_state_machine_service import mirror_all, task_persistence_summary
 
@@ -13,14 +15,36 @@ router = APIRouter(prefix="/api/architecture/tasks", tags=["architecture"])
 
 
 @router.get("/persistence")
-def task_persistence() -> Dict[str, Any]:
-    """Return the current SQLite task persistence mirror status."""
+def task_persistence(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return the current SQLite task persistence mirror and scoped repository status."""
 
-    return task_persistence_summary()
+    repo = TaskRepository(ctx)
+    return {
+        "mirror": task_persistence_summary(),
+        "repository": repo.summary(),
+    }
+
+
+@router.get("/repository")
+def repository_tasks(
+    active_only: bool = False,
+    limit: int = 100,
+    ctx: UserContext = Depends(get_current_context),
+) -> Dict[str, Any]:
+    """Read tasks from TaskRepository with tenant / store / deleted_at filtering."""
+
+    repo = TaskRepository(ctx)
+    tasks = repo.list(active_only=active_only, limit=limit)
+    return {
+        "source": "TaskRepository(SQLite mirror)",
+        "count": len(tasks),
+        "tasks": tasks,
+        "summary": repo.summary(),
+    }
 
 
 @router.post("/sync-runtime")
-def sync_runtime_tasks() -> Dict[str, Any]:
+def sync_runtime_tasks(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     """Mirror current in-memory demo task runtime into SQLite P0 tables.
 
     This keeps the current UI safe while preparing the final TaskRepository
@@ -32,9 +56,11 @@ def sync_runtime_tasks() -> Dict[str, Any]:
         module_task_service.TASK_EVENTS,
         module_task_service.LOGS,
     )
+    repo = TaskRepository(ctx)
     return {
         "message": "当前 Demo 任务运行态已同步到 SQLite P0 任务表。",
         "summary": summary,
+        "repository": repo.summary(),
         "source": {
             "inMemoryTasks": len(module_task_service.TASKS),
             "inMemoryEvents": len(module_task_service.TASK_EVENTS),
