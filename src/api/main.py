@@ -10,21 +10,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, worker_jobs
 from src.repositories.task_repository import bootstrap_task_repository
 from src.services import module_task_service
 from src.services.system_service import reset_legacy_runtime_once
 from src.services.task_state_machine_service import load_task_snapshots
+from src.services.trace_audit_service import ensure_trace_audit_tables
 from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.2.4"
+API_VERSION = "5.2.5"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.2.4 runtime with executable Worker task handlers for projection, alerts, Agent analysis and RAG memory staging, ARQ dispatch fallback, official task write path, UserContext, and architecture APIs.",
+    description="V5.2.5 runtime with trace_id and audit_logs across ImportJob, WorkerJob, WorkerTaskResult, ARQ dispatch fallback, official task write path, UserContext, and architecture APIs.",
 )
 
 app.add_middleware(
@@ -45,6 +46,7 @@ def apply_v5_runtime_cleanup() -> None:
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
+    ensure_trace_audit_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
         if snapshots:
@@ -71,3 +73,4 @@ app.include_router(architecture.router)
 app.include_router(task_persistence.router)
 app.include_router(report_task_sync.router)
 app.include_router(worker_jobs.router)
+app.include_router(audit.router)
