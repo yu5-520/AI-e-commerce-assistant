@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v5.0.7
+Current Version: v5.0.8
 
 ## Version History
 
+- v5.0.8: Productized the dashboard into an operating summary. The dashboard hides long data-version codes, reads `/api/modules/dashboard`, shows latest import summary, report rows, product count, task count, and a priority/time-sorted current task queue with differentiated product/risk/deadline labels. Unscoped imports now refresh operator projections so report uploads update dashboard and product views.
 - v5.0.7: Path cards are now action-sequence first. The path title and business goal are small tags; ordered actions are the primary visual content; review metrics stay in backend reviewPlan / todo evidence flow and are not shown on the path selection card. Report anomaly paths no longer include “confirm import”; report upload/import is deterministic and auto-refreshes report, dashboard, and module projections, while Agent only creates post-import data-quality repair paths.
 - v5.0.6: Compact path selection and execution evidence flow. Detail report removes the non-changing top copy and shared-action block, shows horizontal path rows, creates selected-path tasks directly in processing status, and changes todo detail into execution evidence, screenshot/link, result, and review-metric submission.
 - v5.0.5: Upgraded detail reports into a decision task draft flow. ActionPlan now returns readonly evidence, shared actions, supplement fields, decision paths, recommended path, and review plan. The user-facing report hides engineering packages and shows path selection plus supplement fields before joining the todo pool.
