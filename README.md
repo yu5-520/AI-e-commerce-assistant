@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.2.4。新增可执行 Worker 任务：`projection_refresh`、`alert_generation`、`agent_analysis`、`rag_memory_write` 已注册到 Worker task registry，并把执行结果写入 `worker_task_results`；新增 `/api/worker/jobs/results` 查询 Worker 执行结果。
+> 当前版本：V5.2.5。新增 Trace / AuditLog 全链路关联：新增 `trace_audit_service.py`、`audit_logs` 和 `/api/audit/traces/{trace_id}`；ImportJob、ProjectionJob、WorkerJob、WorkerTaskResult 已写入 `trace_id`，并可按 trace 查询审计时间线。
 
 ## 当前主链路
 
@@ -11,6 +11,8 @@
 ↓
 确认导入后自动入库
 ↓
+TraceId：贯穿 ImportJob / ProjectionJob / WorkerJob / WorkerTaskResult / AuditLog
+↓
 ImportJob：记录导入请求、结果、异常和数据版本；支持同步执行或 enqueue 入队
 ↓
 WorkerJob：先写 SQLite 队列表，形成审计、幂等和重试来源
@@ -18,6 +20,8 @@ WorkerJob：先写 SQLite 队列表，形成审计、幂等和重试来源
 ARQ Dispatch：Redis / ARQ 可自动接管执行；失败则保留 SQLite fallback
 ↓
 WorkerTaskResult：记录投影刷新、预警读取、Agent 分析、RAG 写入暂存结果
+↓
+AuditLog：按 trace_id 串联导入、投影、队列、执行结果
 ↓
 DataVersion 数据版本进入后端追溯
 ↓
@@ -58,16 +62,18 @@ src/api/routes/report_task_sync.py             /api/data/report-tasks/sync-curre
 web_demo/core/report-task-sync.js              报表导入优先走 ImportJob，失败回退旧链路
 src/services/creative_task_repository_sync_service.py 创意 Agent 入池同步桥
 src/services/task_evidence_audit_service.py    证据提交 / 复核写入 task_evidence 与 task_logs
-src/services/import_job_service.py             ImportJob / ProjectionJob 运行记录服务
-src/services/import_job_worker_service.py      ImportJob 入队、ARQ 投递和 Demo Worker 执行桥
+src/services/import_job_service.py             ImportJob / ProjectionJob 运行记录服务，已接 trace_id / audit_logs
+src/services/import_job_worker_service.py      ImportJob 入队、ARQ 投递和 Demo Worker 执行桥，已传递 trace_id
 src/api/routes/import_jobs.py                  /api/data/import-jobs/*，支持 enqueue 和 execute-next
-src/services/worker_queue_service.py           WorkerJob 队列表 / 幂等 / 重试 / 认领
+src/services/worker_queue_service.py           WorkerJob 队列表 / 幂等 / 重试 / 认领，已接 trace_id / audit_logs
 src/services/worker_runtime_config_service.py  Redis / ARQ 环境变量与 SQLite fallback 配置
 src/services/arq_dispatch_service.py           ARQ 投递助手，失败回退 SQLite worker_jobs
-src/services/worker_task_handlers_service.py   Worker 可执行任务与 worker_task_results
+src/services/worker_task_handlers_service.py   Worker 可执行任务与 worker_task_results，已接 trace_id / audit_logs
+src/services/trace_audit_service.py            trace_id / audit_logs / audit timeline
+src/api/routes/audit.py                        /api/audit/traces/{trace_id}
 src/workers/task_registry.py                   Worker 任务注册表
 src/workers/arq_worker.py                      ARQ WorkerSettings 启动入口
-src/api/routes/worker_jobs.py                  /api/worker/jobs/*、runtime、results
+src/api/routes/worker_jobs.py                  /api/worker/jobs/*、runtime、results，results 支持 trace_id
 src/services/p0_architecture_service.py        P0 SaaS 架构拆解运行态摘要
 src/services/task_state_machine_service.py     P0 任务状态机与 SQLite 持久化镜像
 src/api/routes/modules/agents.py               Agent / 创意 Agent 入池接口已接入 TaskRepository 写路径
@@ -90,17 +96,17 @@ FastAPI 模块化单体
 + WorkerJob 幂等队列
 + Redis / ARQ 异步执行
 + WorkerTaskResult 运行记录
++ TraceId / AuditLog 审计链
 + LLM Gateway 熔断降级
-+ AuditLog / JSON TechLog
 + Nginx 前后端分离
 ```
 
-当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池、待办核心生命周期动作、报表导入前端同步、创意 Agent 入池和证据提交审计入库。报表导入已新增 ImportJob / ProjectionJob 运行记录，Worker Queue 已支持入队与重试，ImportJob 已支持 enqueue=true。Redis / ARQ 配置层、任务注册表、WorkerSettings 和 ARQ Dispatch 已补齐。projection_refresh、alert_generation、agent_analysis、rag_memory_write 已成为可执行 Worker 任务。下一步是 Trace / AuditLog 全链路关联。**
+当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池、待办核心生命周期动作、报表导入前端同步、创意 Agent 入池和证据提交审计入库。报表导入已新增 ImportJob / ProjectionJob 运行记录，Worker Queue 已支持入队与重试，ImportJob 已支持 enqueue=true。Redis / ARQ 配置层、任务注册表、WorkerSettings 和 ARQ Dispatch 已补齐。projection_refresh、alert_generation、agent_analysis、rag_memory_write 已成为可执行 Worker 任务。Trace / AuditLog 已接入 ImportJob、ProjectionJob、WorkerJob、WorkerTaskResult。下一步是 Task / Evidence / RAG Memory 全面接入 trace_id。**
 
 ## 关键目录
 
 ```text
-src/api/main.py                                 FastAPI 入口，版本 5.2.4
+src/api/main.py                                 FastAPI 入口，版本 5.2.5
 src/core/context.py                             SaaS UserContext 依赖注入骨架
 src/repositories/scoped_repository.py           多租户 / 软删除 / 数据范围统一查询约束
 src/repositories/task_repository.py             任务 Repository：按 tenant / store / deleted_at 过滤读取与 upsert
@@ -112,13 +118,15 @@ src/services/creative_task_repository_sync_service.py 创意任务同步到 Repo
 src/services/creative_vertical_agent_service.py 创意 Agent 分析与测试包生成；仍不直接发布商品
 src/services/task_evidence_audit_service.py     证据提交 / 复核审计持久化
 src/services/task_evidence_service.py           待办执行证据提交与复核
-src/services/import_job_service.py              ImportJob / ProjectionJob 服务
-src/services/import_job_worker_service.py       ImportJob 入队、ARQ 投递与 Demo Worker 执行
+src/services/import_job_service.py              ImportJob / ProjectionJob 服务，已写 trace audit
+src/services/import_job_worker_service.py       ImportJob 入队、ARQ 投递与 Demo Worker 执行，已传递 trace
 src/api/routes/import_jobs.py                   ImportJob API：支持 enqueue 和 execute-next
-src/services/worker_queue_service.py            Worker 队列服务
+src/services/worker_queue_service.py            Worker 队列服务，已写 trace audit
 src/services/worker_runtime_config_service.py   Worker Runtime 配置
 src/services/arq_dispatch_service.py            ARQ Dispatch 与 SQLite fallback
-src/services/worker_task_handlers_service.py    Worker 可执行任务与结果表
+src/services/worker_task_handlers_service.py    Worker 可执行任务与结果表，已写 trace audit
+src/services/trace_audit_service.py             Trace / AuditLog 服务
+src/api/routes/audit.py                         Trace 查询 API
 src/workers/task_registry.py                    Worker 任务注册表
 src/workers/arq_worker.py                       ARQ Worker 启动入口
 src/api/routes/worker_jobs.py                   Worker 队列、Runtime 与 Results API
@@ -165,6 +173,7 @@ POST   /api/data/import-jobs/worker/execute-next
 POST   /api/data/report-tasks/sync-current
 GET    /api/worker/jobs/runtime
 GET    /api/worker/jobs/results
+GET    /api/worker/jobs/results?trace_id=<TRACE_ID>
 GET    /api/worker/jobs/summary
 GET    /api/worker/jobs
 POST   /api/worker/jobs/enqueue
@@ -172,6 +181,7 @@ POST   /api/worker/jobs/claim-next
 POST   /api/worker/jobs/{worker_job_id}/complete
 POST   /api/worker/jobs/{worker_job_id}/fail
 POST   /api/worker/jobs/{worker_job_id}/retry
+GET    /api/audit/traces/{trace_id}
 POST   /api/modules/agents/{module}/{entity_id}/tasks
 POST   /api/modules/agents/creative/{product_id}/tasks
 POST   /api/modules/todo/{task_id}/accept
@@ -222,7 +232,8 @@ arq src.workers.arq_worker.WorkerSettings
 15. Redis / ARQ 配置：worker_runtime_config_service、task registry、ARQ WorkerSettings、SQLite fallback
 16. ARQ Dispatch：ImportJob 入队后尝试投递 arq_dispatch，失败保留 SQLite fallback
 17. Worker 任务扩展：projection_refresh、alert_generation、agent_analysis、rag_memory_write 已注册
-18. Trace / AuditLog：全链路 trace_id、独立 audit_logs 表、WorkerResult 关联
-19. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
-20. Nginx：前后端分离、HTTPS、限流、安全头
+18. Trace / AuditLog：trace_audit_service、audit_logs、ImportJob / WorkerJob / WorkerResult 关联
+19. 下一步：Task / Evidence / RAG Memory 接入 trace_id
+20. LLM Gateway：熔断、限流、配额、缓存、Schema 校验、Trace、降级模板
+21. Nginx：前后端分离、HTTPS、限流、安全头
 ```
