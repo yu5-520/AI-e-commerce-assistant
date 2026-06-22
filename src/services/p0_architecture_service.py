@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.1.7"
+P0_ARCHITECTURE_VERSION = "5.1.8"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -36,9 +36,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-3",
         "name": "任务系统持久化与状态机",
-        "status": "creative_agent_repository_sync",
+        "status": "evidence_audit_persistence",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "Agent 入池、待办生命周期、报表导入前端同步、创意 Agent 入池已接入 TaskRepository；下一步做证据提交审计入库和导入服务本体 ImportJob 化。",
+        "currentGap": "Agent 入池、待办生命周期、报表导入前端同步、创意 Agent 入池已接入 TaskRepository；证据提交和复核已写入 task_evidence / task_logs。下一步做导入服务本体 ImportJob 化。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
@@ -78,7 +78,7 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "Audit / Logs 双层体系",
         "status": "partial",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "新增 task_events / task_logs 持久化镜像；仍需全链路 trace_id 与独立 audit_logs 表。",
+        "currentGap": "task_evidence / task_logs 已承接证据提交和复核审计；仍需全链路 trace_id 与独立 audit_logs 表。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -103,7 +103,8 @@ IMPLEMENTATION_SEQUENCE = [
     "报表任务同步桥：新增 report_task_repository_sync_service 与 /api/data/report-tasks/sync-current",
     "前端导入确认自动同步：report-task-sync.js 包装 confirmReportImport / importMockAlerts",
     "创意 Agent 入池同步：creative_task_repository_sync_service 接入 TaskRepository",
-    "剩余任务入口切换：证据提交审计、导入服务本体 ImportJob 化",
+    "证据提交审计入库：task_evidence_audit_service 写入 task_evidence / task_logs",
+    "剩余任务入口切换：导入服务本体 ImportJob 化",
     "ImportJob：报表导入、DataVersion、ImportedRows、ProjectionJob、AlertEvent 串链",
     "Worker/Redis：导入、投影、预警、Agent 异步化与幂等重试",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
@@ -117,7 +118,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "creative_agent_task_repository_sync",
+        "runtimeMode": "task_evidence_audit_persistence",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
