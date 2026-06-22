@@ -10,16 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, data_import, health, llm, modules, system
+from src.api.routes import accounts, approvals, architecture, data_import, health, llm, modules, system
 from src.services.system_service import reset_legacy_runtime_once
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
+API_VERSION = "5.1.0"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="5.0.9",
-    description="V5.0.9 runtime with demo-stage import record deletion for repeat testing.",
+    version=API_VERSION,
+    description="V5.1.0 runtime with P0 SaaS architecture scaffolding: UserContext, scoped repository contract, and architecture visibility APIs.",
 )
 
 app.add_middleware(
@@ -27,7 +28,7 @@ app.add_middleware(
     allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "DELETE"],
-    allow_headers=["Accept", "Content-Type", "X-Mock-User-Id"],
+    allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id"],
 )
 
 if WEB_DEMO_DIR.exists():
@@ -45,7 +46,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.9"}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION}
 
 
 app.include_router(modules.router)
@@ -55,3 +56,4 @@ app.include_router(llm.router)
 app.include_router(data_import.router)
 app.include_router(approvals.router)
 app.include_router(system.router)
+app.include_router(architecture.router)
