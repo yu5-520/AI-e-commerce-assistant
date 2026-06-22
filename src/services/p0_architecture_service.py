@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.5"
+P0_ARCHITECTURE_VERSION = "5.2.6"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -36,9 +36,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-3",
         "name": "任务系统持久化与状态机",
-        "status": "evidence_audit_persistence",
+        "status": "task_evidence_trace_audit",
         "target": "tasks/task_events/task_logs/task_evidence 落库，状态变更与事件同事务。",
-        "currentGap": "Agent 入池、待办生命周期、报表导入前端同步、创意 Agent 入池已接入 TaskRepository；证据提交和复核已写入 task_evidence / task_logs。",
+        "currentGap": "TaskRepository 写路径、任务流转、重置、证据提交、证据复核已写 trace_id / audit_logs；task_evidence 与 task_logs payload 已带 traceId。",
         "mustNot": ["非法状态跃迁", "任务状态更新成功但审计事件丢失"],
     },
     {
@@ -46,7 +46,7 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "报表导入事务链与 ImportJob",
         "status": "trace_audit_linked",
         "target": "ImportJob -> DataVersion -> ImportedRows -> ProjectionJob -> AlertEvent -> TaskDraft -> AuditLog。",
-        "currentGap": "ImportJob / ProjectionJob 已写入 trace_id 和 audit_logs；enqueue 与 Demo Worker 会沿用同一 trace。下一步扩展到 Task / Evidence / RAG Memory。",
+        "currentGap": "ImportJob / ProjectionJob 已写入 trace_id 和 audit_logs；enqueue 与 Demo Worker 会沿用同一 trace。下一步扩展到正式 DataVersion / AlertEvent。",
         "mustNot": ["导入接口长时间阻塞", "重复执行生成重复任务"],
     },
     {
@@ -60,9 +60,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-6",
         "name": "Worker / Redis 后台任务",
-        "status": "trace_audit_linked",
+        "status": "task_rag_trace_audit",
         "target": "导入、投影、预警、Agent 分析进入后台队列，任务幂等可重试。",
-        "currentGap": "WorkerJob 入队/认领/完成/失败/重试和 WorkerTaskResult 创建已写 audit_logs，并支持按 trace_id 查询结果。",
+        "currentGap": "WorkerJob、WorkerTaskResult、rag_memory.staged 已写 audit_logs，并支持按 trace_id 查询结果。",
         "mustNot": ["大报表阻塞 FastAPI 事件循环", "Worker 重试产生副作用"],
     },
     {
@@ -76,9 +76,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-8",
         "name": "Audit / Logs 双层体系",
-        "status": "trace_audit_scaffolded",
+        "status": "trace_audit_extended",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "新增 trace_audit_service、audit_logs、/api/audit/traces/{trace_id}；ImportJob / ProjectionJob / WorkerJob / WorkerResult 已可按 trace 串联。",
+        "currentGap": "audit_logs 已覆盖 ImportJob / ProjectionJob / WorkerJob / WorkerResult / Task / Evidence / RAG 暂存；下一步补 TechLog JSON 与敏感信息脱敏。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -111,8 +111,8 @@ IMPLEMENTATION_SEQUENCE = [
     "ARQ Dispatch：ImportJob 入队后尝试投递 arq_dispatch，失败保留 SQLite fallback",
     "Worker 任务扩展：projection_refresh、alert_generation、agent_analysis、rag_memory_write 已注册",
     "Trace / AuditLog：trace_audit_service、audit_logs、ImportJob / WorkerJob / WorkerResult 关联",
-    "下一步：Task / Evidence / RAG Memory 接入 trace_id",
-    "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
+    "Task / Evidence / RAG Memory trace：任务写路径、证据提交复核、RAG 暂存已接入 trace_id",
+    "下一步：TechLog JSON、敏感信息脱敏、LLM Gateway 熔断配额",
     "Nginx：前后端分离、HTTPS、限流、安全头",
 ]
 
@@ -122,7 +122,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "trace_audit_scaffolded",
+        "runtimeMode": "task_evidence_rag_trace_audit",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
