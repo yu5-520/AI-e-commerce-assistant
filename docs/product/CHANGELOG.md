@@ -1,5 +1,24 @@
 # Product Changelog
 
+## v5.0.8 - 2026-06-22
+
+### Product Decision
+- 总览从技术状态页改成经营首页。
+- 总览不再把完整 `DV_...` 数据版本号作为主视觉；技术版本只留在后端追溯字段。
+- 报表导入后，总览自动展示最新导入、记录数、影响模块、商品数和任务数。
+- 当前任务按紧急程度和截止时间排序，并用商品 / 风险 / 信号区分，不再显示三条完全一样的任务。
+
+### Changed
+- `src/services/dashboard_service.py` 新增产品化经营摘要：`latestImport`、`metrics`、`taskQueue`。
+- `web_demo/modules/dashboard/page.js` 改为读取 `/api/modules/dashboard`，展示最新导入、经营指标和排序后的任务队列。
+- `src/services/module_projection_service.py` 允许无店铺字段的导入行刷新当前账号投影，避免上传报表后运营端总览和商品栏不更新。
+- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.8`。
+
+### Product Boundary
+- DataVersion 是追溯字段，不是首页主内容。
+- 首页展示经营摘要，不展示工程代号。
+- 当前任务列表按优先级、时限和风险域组织。
+
 ## v5.0.7 - 2026-06-22
 
 ### Product Decision
@@ -37,22 +56,3 @@
 - 详情页负责决策确认，待办页负责执行证明。
 - 运营不需要再次接收自己刚确认的路径任务。
 - 截图、链接、处理结果、复盘指标属于任务执行证据，不属于路径选择前置变量。
-
-## v5.0.5 - 2026-06-21
-
-### Product Decision
-- V5.0.5 把详情报告从 Agent 工程报告改成经营路径任务草案。
-- 导入数据生成只读证据和 Agent 判断；运营只补充系统不知道的现实变量，并选择主经营路径。
-- 问题处理包、方案补充和人工确认不再作为运营端默认模块展示。
-
-### Changed
-- `src/services/action_plan_service.py` 输出 `readonlyEvidence`、`commonActions`、`supplementSchema`、`decisionPaths`、`recommendedPathId`、`reviewPlan`。
-- `src/api/routes/modules/agents.py` 在创建任务时写入 `selectedPathId`、`operatorSupplement` 和 `reviewPlan`。
-- 新增 `web_demo/modules/task-report/decision-runtime.js` 覆盖详情报告前端展示。
-- 新增 `web_demo/decision-task.css` 放大任务草案、路径选择和补充信息输入区。
-- `src/api/main.py` 和 `web_demo/index.html` 升级到 `5.0.5`。
-
-### Product Boundary
-- ActionPlan 仍是 Agent 内部工程包，默认不给运营端阅读。
-- 方案路径必须有经营取舍：目标、动作、不做什么、复盘指标都不同。
-- 运营补充的是供应链、预算、活动约束、替代 SKU 等现实变量，不重复录入系统已有数据。
