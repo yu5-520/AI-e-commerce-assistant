@@ -16,8 +16,17 @@ from src.services.worker_queue_service import (
     retry_worker_job,
     worker_queue_summary,
 )
+from src.services.worker_runtime_config_service import worker_runtime_summary
+from src.workers.task_registry import worker_task_registry_summary
 
 router = APIRouter(prefix="/api/worker/jobs", tags=["worker-jobs"])
+
+
+@router.get("/runtime")
+def worker_runtime() -> Dict[str, Any]:
+    """Return Redis / ARQ runtime config and registered worker tasks."""
+
+    return {"runtime": worker_runtime_summary(), "registry": worker_task_registry_summary()}
 
 
 @router.get("/summary")
