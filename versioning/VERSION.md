@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v5.0.6
+Current Version: v5.0.7
 
 ## Version History
 
+- v5.0.7: Path cards are now action-sequence first. The path title and business goal are small tags; ordered actions are the primary visual content; review metrics stay in backend reviewPlan / todo evidence flow and are not shown on the path selection card. Report anomaly paths no longer include “confirm import”; report upload/import is deterministic and auto-refreshes report, dashboard, and module projections, while Agent only creates post-import data-quality repair paths.
 - v5.0.6: Compact path selection and execution evidence flow. Detail report removes the non-changing top copy and shared-action block, shows horizontal path rows, creates selected-path tasks directly in processing status, and changes todo detail into execution evidence, screenshot/link, result, and review-metric submission.
 - v5.0.5: Upgraded detail reports into a decision task draft flow. ActionPlan now returns readonly evidence, shared actions, supplement fields, decision paths, recommended path, and review plan. The user-facing report hides engineering packages and shows path selection plus supplement fields before joining the todo pool.
 - v5.0.4: Removed remaining owner / manager / operating-unit frontend mock dashboards. Dashboard no longer duplicates module entry cards or explanatory copy. Operating unit is now data-driven from ModuleProjection and empty by default. Manager and owner views now read imported-data projections and task state instead of hard-coded demo stores, tasks, finance, traffic, and recap arrays. Runtime reset also clears manager / owner localStorage view state.
