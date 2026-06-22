@@ -18,12 +18,12 @@ from src.services.task_state_machine_service import load_task_snapshots
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.1.7"
+API_VERSION = "5.1.8"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.1.7 runtime with creative Agent task sync to TaskRepository, frontend report import auto-sync, official task write path, scoped reads, startup hydration, UserContext, and architecture APIs.",
+    description="V5.1.8 runtime with task evidence audit persistence, creative Agent task sync, frontend report import auto-sync, official task write path, scoped reads, startup hydration, UserContext, and architecture APIs.",
 )
 
 app.add_middleware(
