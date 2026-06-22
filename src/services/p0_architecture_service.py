@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.1"
+P0_ARCHITECTURE_VERSION = "5.2.2"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -46,7 +46,7 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "报表导入事务链与 ImportJob",
         "status": "import_job_enqueue_mode",
         "target": "ImportJob -> DataVersion -> ImportedRows -> ProjectionJob -> AlertEvent -> TaskDraft -> AuditLog。",
-        "currentGap": "ImportJob 已支持同步执行和 enqueue=true 入队模式，并新增 demo worker 执行下一条导入任务；仍需接入真正 Redis / ARQ 常驻 Worker。",
+        "currentGap": "ImportJob 已支持同步执行和 enqueue=true 入队模式，并新增 demo worker 执行下一条导入任务；ARQ Worker 启动入口已存在，下一步接入常驻执行。",
         "mustNot": ["导入接口长时间阻塞", "重复执行生成重复任务"],
     },
     {
@@ -60,9 +60,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-6",
         "name": "Worker / Redis 后台任务",
-        "status": "import_worker_demo_executor",
+        "status": "redis_arq_config_scaffolded",
         "target": "导入、投影、预警、Agent 分析进入后台队列，任务幂等可重试。",
-        "currentGap": "worker_jobs 已支持幂等、优先级、认领、完成、失败、重试；ImportJob 可入队，并可用 /api/data/import-jobs/worker/execute-next 消费一条导入任务。",
+        "currentGap": "已新增 worker_runtime_config_service、Worker task registry、ARQ WorkerSettings 启动入口和 /api/worker/jobs/runtime；未配置 Redis 时继续使用 SQLite fallback。",
         "mustNot": ["大报表阻塞 FastAPI 事件循环", "Worker 重试产生副作用"],
     },
     {
@@ -107,7 +107,8 @@ IMPLEMENTATION_SEQUENCE = [
     "ImportJob 骨架：import_job_service /api/data/import-jobs/* import_jobs projection_jobs",
     "Worker Queue 骨架：worker_queue_service /api/worker/jobs/* worker_jobs 幂等重试",
     "ImportJob 入队执行：enqueue=true 返回 WorkerJob，demo worker 执行下一条 import 队列",
-    "Redis / ARQ 替换：把 SQLite 队列表切换为真正后台 Worker 执行",
+    "Redis / ARQ 配置：worker_runtime_config_service、task registry、ARQ WorkerSettings、SQLite fallback",
+    "Redis / ARQ 常驻执行：让 ImportJob 不再依赖手动 execute-next",
     "LLM Gateway：熔断、限流、租户配额、Schema 校验、规则降级",
     "Audit/Logs：业务审计表 + JSON 技术日志 + trace_id",
     "Nginx：前后端分离、HTTPS、限流、安全头",
@@ -119,7 +120,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "import_job_enqueue_mode",
+        "runtimeMode": "redis_arq_config_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
