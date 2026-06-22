@@ -18,15 +18,15 @@ WEB_DEMO_DIR = ROOT_DIR / "web_demo"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
-    version="5.0.8",
-    description="V5.0.8 runtime with productized dashboard import summary and priority-sorted operating tasks.",
+    version="5.0.9",
+    description="V5.0.9 runtime with demo-stage import record deletion for repeat testing.",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS", "DELETE"],
     allow_headers=["Accept", "Content-Type", "X-Mock-User-Id"],
 )
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.8"}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": "5.0.9"}
 
 
 app.include_router(modules.router)
