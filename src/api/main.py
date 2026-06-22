@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, data_import, health, llm, modules, report_task_sync, system, task_persistence
+from src.api.routes import accounts, approvals, architecture, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence
 from src.repositories.task_repository import bootstrap_task_repository
 from src.services import module_task_service
 from src.services.system_service import reset_legacy_runtime_once
@@ -18,12 +18,12 @@ from src.services.task_state_machine_service import load_task_snapshots
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.1.8"
+API_VERSION = "5.1.9"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.1.8 runtime with task evidence audit persistence, creative Agent task sync, frontend report import auto-sync, official task write path, scoped reads, startup hydration, UserContext, and architecture APIs.",
+    description="V5.1.9 runtime with ImportJob routes, task evidence audit persistence, creative Agent task sync, frontend report import auto-sync, official task write path, scoped reads, startup hydration, UserContext, and architecture APIs.",
 )
 
 app.add_middleware(
@@ -62,6 +62,7 @@ app.include_router(accounts.router)
 app.include_router(health.router)
 app.include_router(llm.router)
 app.include_router(data_import.router)
+app.include_router(import_jobs.router)
 app.include_router(approvals.router)
 app.include_router(system.router)
 app.include_router(architecture.router)
