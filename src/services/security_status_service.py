@@ -1,4 +1,4 @@
-"""Deployment and HTTP security status service."""
+"""Deployment and HTTP status service."""
 
 from __future__ import annotations
 
@@ -16,21 +16,21 @@ from src.services.repository_runtime_service import repository_runtime_summary
 from src.services.tech_log_service import tech_log_summary
 from src.services.worker_runtime_config_service import worker_runtime_summary
 
-SECURITY_STATUS_VERSION = "5.3.2"
+SECURITY_STATUS_VERSION = "5.3.3"
 
 
 def security_status(ctx: UserContext) -> Dict[str, Any]:
     cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000")
     return {
         "version": SECURITY_STATUS_VERSION,
-        "apiVersion": "5.3.2",
+        "apiVersion": "5.3.3",
         "securityHeaders": security_headers_summary(),
         "apiRateLimit": api_rate_limit_summary(),
-        "cors": {"allowOrigins": [item.strip() for item in cors_origins.split(",") if item.strip()], "rule": "Avoid wildcard CORS in production; set CORS_ALLOW_ORIGINS to the deployed frontend domain."},
+        "cors": {"allowOrigins": [item.strip() for item in cors_origins.split(",") if item.strip()]},
         "database": {"runtime": database_runtime_summary(), "ormBase": orm_base_summary(), "models": model_registry_summary(), "repositories": repository_runtime_summary(ctx), "alembic": {"enabled": True, "config": "alembic.ini", "versionsPath": "alembic/versions"}},
         "workerRuntime": worker_runtime_summary(),
         "llmGateway": llm_gateway_control_summary(ctx),
         "techLog": tech_log_summary(),
-        "nginx": {"recommended": True, "configPath": "deploy/nginx/ai-erp.conf", "rule": "Production traffic should enter through Nginx HTTPS, static frontend, /api reverse proxy, security headers, and coarse rate limit."},
+        "nginx": {"recommended": True, "configPath": "deploy/nginx/ai-erp.conf"},
         "deploymentMode": os.getenv("DEPLOYMENT_MODE", "demo"),
     }
