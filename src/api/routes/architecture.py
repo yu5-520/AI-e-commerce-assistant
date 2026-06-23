@@ -1,4 +1,4 @@
-"""Architecture visibility routes for SaaS governance."""
+"""Architecture visibility routes for SaaS governance and V8 weight system."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from src.services.v72_tenant_config_console_service import set_feature_flag_stat
 from src.services.v73_config_audit_service import compare_config_audit, config_audit_summary, rollback_config_audit
 from src.services.v74_release_governance_service import release_governance_summary
 from src.services.v75_release_alert_service import generate_release_alerts, release_alert_summary
+from src.services.v80_weight_snapshot_service import generate_weight_snapshots, weight_snapshot_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -87,6 +88,16 @@ async def v75_release_alerts(limit: int = Query(default=100, ge=1, le=300), ctx:
 async def v75_generate_release_alerts(body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     body = body or {}
     return generate_release_alerts(ctx, create_tasks=bool(body.get("createTasks") or body.get("create_tasks")))
+
+
+@router.get("/v8/weight-snapshots")
+async def v80_weight_snapshots(object_type: str | None = Query(default=None), limit: int = Query(default=120, ge=1, le=500), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return weight_snapshot_summary(ctx, object_type=object_type, limit=limit)
+
+
+@router.post("/v8/weight-snapshots/generate")
+async def v80_generate_weight_snapshots(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_weight_snapshots(ctx)
 
 
 @router.get("/context")
