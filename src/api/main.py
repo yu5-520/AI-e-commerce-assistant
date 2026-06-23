@@ -46,10 +46,10 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "9.0.0"
+API_VERSION = "9.1.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
-app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V9 runtime: SaaS enterprise consistency baseline for repository, frontend, backend, tier isolation, RAG isolation, permissions, audit, and deployment governance.")
+app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V9.1 runtime: repository consistency baseline with governed docs, scripts, workflow, and stable SaaS product entrypoints.")
 app.middleware("http")(security_headers_middleware)
 app.middleware("http")(api_rate_limit_middleware)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "DELETE"], allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"])
@@ -59,7 +59,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v90_runtime_bootstrap() -> None:
+def apply_v91_runtime_bootstrap() -> None:
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
