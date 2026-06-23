@@ -1,6 +1,15 @@
 from pathlib import Path
+import py_compile
 
 ROOT = Path(__file__).resolve().parents[1]
+
+CHECK_FILES = [
+    "src/api/main.py",
+    "src/api/routes/health.py",
+    "src/api/routes/modules/agents.py",
+    "src/api/routes/v9_readiness.py",
+    "scripts/check_v99.py",
+]
 
 
 def read(path):
@@ -15,7 +24,13 @@ def must(text, marker):
         raise AssertionError(f"missing {marker}")
 
 
+def compile_files():
+    for path in CHECK_FILES:
+        py_compile.compile(str(ROOT / path), doraise=True)
+
+
 def main():
+    compile_files()
     main_py = read("src/api/main.py")
     health = read("src/api/routes/health.py")
     agents = read("src/api/routes/modules/agents.py")
