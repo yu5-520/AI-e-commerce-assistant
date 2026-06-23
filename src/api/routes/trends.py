@@ -1,4 +1,4 @@
-"""V6.8 Trend Center routes."""
+"""V6.9 Trend Center routes."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from src.services.account_service import current_user, user_id_from_headers
 from src.services.approval_lifecycle_service import approval_lifecycle_summary, approve_flow, reject_flow
 from src.services.execution_feedback_service import execution_feedback_summary, submit_execution_result
+from src.services.execution_review_service import create_review_from_execution_result, execution_review_summary, generate_reviews_for_recent_results
 from src.services.high_risk_trend_gate_service import high_risk_gate_summary
 from src.services.indicator_rag_service import indicator_rule_summary
 from src.services.permission_budget_service import permission_budget_summary
@@ -29,16 +30,18 @@ def trends_summary(request: Request, limit: int = Query(default=30, ge=1, le=200
     summary["permissionBudgetSummary"] = permission_budget_summary(limit=limit)
     summary["approvalLifecycleSummary"] = approval_lifecycle_summary(limit=limit)
     summary["executionFeedbackSummary"] = execution_feedback_summary(limit=limit)
+    summary["executionReviewSummary"] = execution_review_summary(limit=limit)
     summary["approvalActionContext"] = {
-        "version": "6.8.0",
+        "version": "6.9.0",
         "currentRoleId": user.get("roleId"),
         "canApprove": user.get("roleId") in {"manager", "owner", "finance"},
         "canReject": user.get("roleId") in {"manager", "owner", "finance"},
         "canSubmitExecution": user.get("roleId") in {"operator", "manager", "owner"},
-        "rule": "V6.8 前端可审批、驳回，并对审批通过后的执行任务提交结果回写。",
+        "canCreateReview": user.get("roleId") in {"manager", "owner", "finance"},
+        "rule": "V6.9 前端可把执行回写转成复盘案例和RAG记忆。",
     }
-    summary["version"] = "6.8.0"
-    summary["rule"] = "V6.8 增加执行结果回写：审批通过后，执行任务需要提交实际花费、采购金额和证据。"
+    summary["version"] = "6.9.0"
+    summary["rule"] = "V6.9 增加执行复盘与RAG沉淀：执行结果转成复盘案例，进入本地RAG案例记忆。"
     return summary
 
 
@@ -105,3 +108,20 @@ def submit_execution_feedback(request: Request, body: Dict[str, Any] | None = Bo
     body = body or {}
     role_id = current_user(user_id_from_headers(request.headers)).get("roleId") or "operator"
     return submit_execution_result(body, actor_role_id=str(role_id))
+
+
+@router.get("/execution-reviews")
+def execution_reviews(limit: int = Query(default=50, ge=1, le=200)) -> Dict[str, Any]:
+    return execution_review_summary(limit=limit)
+
+
+@router.post("/execution-reviews/generate")
+def generate_execution_reviews(request: Request, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    role_id = current_user(user_id_from_headers(request.headers)).get("roleId") or "manager"
+    if body.get("executionResultId") or body.get("execution_result_id"):
+        try:
+            return create_review_from_execution_result(str(body.get("executionResultId") or body.get("execution_result_id")), actor_role_id=str(role_id), note=body.get("note"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return generate_reviews_for_recent_results(limit=int(body.get("limit") or 30), actor_role_id=str(role_id))
