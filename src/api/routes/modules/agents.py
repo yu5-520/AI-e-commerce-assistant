@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "9.4.0"
+AGENT_REGISTRY_VERSION = "9.5.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,35 +28,33 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "v940_tier_isolation_consistency"
-    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；套餐隔离、RAG namespace、权重算法和审计深度由后端契约控制。"
+    plan["mode"] = "v950_rag_namespace_isolation"
+    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；RAG 检索、写入、模板维护和删除必须走 namespace 隔离与审计门禁。"
+    plan["v95RagIsolation"] = {
+        "service": "src/services/v95_rag_namespace_isolation_service.py",
+        "architectureEndpoint": "/api/architecture/v9/rag-isolation",
+        "namespaces": ["shared_desensitized_rag", "tenant_isolated_rag", "private_customer_rag"],
+        "rule": "Agent 使用 RAG 证据时必须带 namespace、tenant、role、approval 和 audit context。",
+    }
     plan["v94TierIsolation"] = {
         "service": "src/services/v94_tier_isolation_contract_service.py",
         "architectureEndpoint": "/api/architecture/v9/tier-isolation",
         "tiers": ["starter", "professional", "enterprise"],
-        "rule": "Starter、Professional、Enterprise 的能力边界必须通过后端能力开关、RAG namespace、数据范围、部署模式和审计深度共同控制。",
     }
     plan["v93FrontendModules"] = {
         "service": "src/services/v93_frontend_module_contract_service.py",
         "architectureEndpoint": "/api/architecture/v9/frontend-modules",
         "stableModules": ["dashboard", "operating-unit", "product", "competitor", "listing", "traffic", "report", "todo", "log", "system-status", "accounts"],
-        "rule": "前端主模块保持稳定，后端能力通过套餐展示深度补强原模块。",
     }
     plan["v92BackendFlow"] = {
         "service": "src/services/v92_backend_flow_service.py",
         "architectureEndpoint": "/api/architecture/v9/backend-flow",
         "flow": ["ImportJob", "DataVersion", "RawRows", "ModuleProjection", "AlertEvent", "WeightSignal", "DecisionTask", "AgentReport", "ApprovalFlow", "ExecutionFeedback", "ReviewLog", "RagMemoryCandidate"],
-        "rule": "Agent 任务生成读取模块数据、权重上下文、RAG 证据和 ActionPlan；不按模块套同一模板。",
-    }
-    plan["decisionTaskDraft"] = {
-        "service": "src/services/action_plan_service.py",
-        "outputs": ["readonlyEvidence", "supplementSchema", "decisionPaths", "selectedPathId", "operatorSupplement", "reviewPlan"],
-        "uiRule": "前端展示路径小标签和行动顺序；选择路径后直接进入处理中。",
     }
     plan["taskRepositoryWritePath"] = {
         "version": AGENT_REGISTRY_VERSION,
         "service": "src/services/task_repository_write_service.py",
-        "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。创意 Agent 入池也同步到 TaskRepository。",
+        "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。",
     }
     return plan
 
@@ -133,12 +131,7 @@ def creative_vertical_agent_get(request: Request, product_id: str, task_goal: st
 
 
 @router.post("/agents/creative/{product_id}/tasks")
-def creative_vertical_task(
-    request: Request,
-    product_id: str,
-    body: Dict[str, Any] | None = Body(default=None),
-    ctx: UserContext = Depends(get_current_context),
-) -> Dict[str, Any]:
+def creative_vertical_task(request: Request, product_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     result = create_creative_task_with_repository(product_id, body=body or {}, ctx=ctx)
     if not result:
         raise HTTPException(status_code=400, detail="cannot create task from creative vertical agent")
