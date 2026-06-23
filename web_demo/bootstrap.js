@@ -10,6 +10,7 @@
     "operating-unit",
     "data-check",
     "trend-center",
+    "tenant-config",
     "feedback-flywheel",
     "business-report",
     "system-status",
@@ -18,6 +19,7 @@
 
   const FEEDBACK_ROLES = new Set(["owner", "manager"]);
   const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
+  const TENANT_CONFIG_ROLES = new Set(["owner", "manager"]);
   const TREND_ROLES = new Set(["owner", "manager", "operator", "finance"]);
 
   function visibleModulesFor(account) {
@@ -25,6 +27,7 @@
     const base = role === "manager" ? MANAGER_NAV : (account?.currentUser?.visibleModules || []);
     const next = [...base];
     if (TREND_ROLES.has(role)) next.push("trend-center");
+    if (TENANT_CONFIG_ROLES.has(role)) next.push("tenant-config");
     if (FEEDBACK_ROLES.has(role)) next.push("feedback-flywheel");
     if (SYSTEM_STATUS_ROLES.has(role)) next.push("system-status");
     return Array.from(new Set(next));
@@ -40,6 +43,7 @@
     window.AccountPage,
     window.RoleConsolePage,
     window.SystemStatusPage,
+    window.TenantConfigPage,
     window.ManagerTasksPage,
     window.ManagerDispatchPage,
     window.ManagerReviewPage,
@@ -97,7 +101,7 @@
 
   if (window.AppApi?.prefetch) {
     await window.AppApi.prefetch();
-    renderAccountSwitcher(await window.AppApi.accounts());
+    renderAccountSwitcher(await AppApi.accounts());
     const badge = document.getElementById("apiModeBadge");
     if (badge) {
       const usingServer = window.AppApi.status.source === "server";
