@@ -11,6 +11,7 @@ from src.services.p0_architecture_service import p0_architecture_summary
 from src.services.v7_saas_control_plane_service import v7_saas_architecture_summary
 from src.services.v72_tenant_config_console_service import set_feature_flag_status, tenant_config_console_summary, upsert_rollout_rule
 from src.services.v73_config_audit_service import compare_config_audit, config_audit_summary, rollback_config_audit
+from src.services.v74_release_governance_service import release_governance_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -23,7 +24,7 @@ async def p0_architecture(ctx: UserContext = Depends(get_current_context)) -> Di
 
 @router.get("/v7")
 async def v7_saas_architecture(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Return the V7.3 SaaS control-plane architecture and workflow governance baseline."""
+    """Return the V7.4 SaaS control-plane architecture and workflow governance baseline."""
     return v7_saas_architecture_summary(ctx)
 
 
@@ -52,12 +53,7 @@ async def v72_upsert_rollout_rule(flag_key: str, body: Dict[str, Any] | None = B
 
 
 @router.get("/v7/config-audits")
-async def v73_config_audits(
-    action: str | None = Query(default=None),
-    target_key: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    ctx: UserContext = Depends(get_current_context),
-) -> Dict[str, Any]:
+async def v73_config_audits(action: str | None = Query(default=None), target_key: str | None = Query(default=None), limit: int = Query(default=50, ge=1, le=200), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     """Search V7.3 tenant configuration audit events."""
     return config_audit_summary(ctx, action=action, target_key=target_key, limit=limit)
 
@@ -82,6 +78,12 @@ async def v73_rollback_config_audit(audit_id: str, ctx: UserContext = Depends(ge
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/v7/release-governance")
+async def v74_release_governance(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return V7.4 SaaS release governance dashboard metrics."""
+    return release_governance_summary(ctx)
 
 
 @router.get("/context")
