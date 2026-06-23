@@ -1,11 +1,12 @@
 (async function () {
-  const MANAGER_NAV = ["dashboard", "manager-tasks", "manager-dispatch", "manager-review", "manager-modules", "manager-retrospective", "manager-reports", "operating-unit", "data-check", "trend-center", "tenant-config", "config-audit", "release-governance", "release-alerts", "feedback-flywheel", "business-report", "system-status", "accounts"];
+  const MANAGER_NAV = ["dashboard", "manager-tasks", "manager-dispatch", "manager-review", "manager-modules", "manager-retrospective", "manager-reports", "operating-unit", "data-check", "trend-center", "weight-center", "tenant-config", "config-audit", "release-governance", "release-alerts", "feedback-flywheel", "business-report", "system-status", "accounts"];
 
   const FEEDBACK_ROLES = new Set(["owner", "manager"]);
   const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
   const TENANT_CONFIG_ROLES = new Set(["owner", "manager"]);
   const CONFIG_AUDIT_ROLES = new Set(["owner", "manager", "finance"]);
   const RELEASE_GOVERNANCE_ROLES = new Set(["owner", "manager", "finance"]);
+  const WEIGHT_CENTER_ROLES = new Set(["owner", "manager", "finance"]);
   const TREND_ROLES = new Set(["owner", "manager", "operator", "finance"]);
 
   function visibleModulesFor(account) {
@@ -13,6 +14,7 @@
     const base = role === "manager" ? MANAGER_NAV : (account?.currentUser?.visibleModules || []);
     const next = [...base];
     if (TREND_ROLES.has(role)) next.push("trend-center");
+    if (WEIGHT_CENTER_ROLES.has(role)) next.push("weight-center");
     if (TENANT_CONFIG_ROLES.has(role)) next.push("tenant-config");
     if (CONFIG_AUDIT_ROLES.has(role)) next.push("config-audit");
     if (RELEASE_GOVERNANCE_ROLES.has(role)) next.push("release-governance", "release-alerts");
@@ -21,7 +23,7 @@
     return Array.from(new Set(next));
   }
 
-  const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.LogPage, window.FeedbackFlywheelPage, window.TaskReportPage];
+  const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.WeightCenterPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.LogPage, window.FeedbackFlywheelPage, window.TaskReportPage];
 
   pages.filter(Boolean).forEach((page) => AppRouter.register(page));
 
