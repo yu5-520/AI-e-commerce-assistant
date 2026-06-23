@@ -9,9 +9,9 @@ from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.context import UserContext
-from src.db.models import AuditLog, DecisionTask, ImportJob, WorkerJob
+from src.db.models import AuditLog, DecisionTask, ImportJob, TechLog, WorkerJob
 
-REPOSITORY_LAYER_VERSION = "5.3.3"
+REPOSITORY_LAYER_VERSION = "5.3.4"
 
 
 @dataclass(frozen=True)
@@ -43,19 +43,25 @@ def worker_job_to_dict(job: WorkerJob) -> dict[str, Any]:
     return {"workerJobId": job.worker_job_id, "tenantId": job.tenant_id, "orgId": job.org_id, "traceId": job.trace_id, "queueName": job.queue_name, "jobType": job.job_type, "status": job.status, "priority": job.priority, "attemptCount": job.attempt_count, "maxAttempts": job.max_attempts, "idempotencyKey": job.idempotency_key, "correlationId": job.correlation_id, "payload": job.payload or {}, "result": job.result or {}, "errorMessage": job.error_message, "createdAt": job.created_at.isoformat() if job.created_at else None, "updatedAt": job.updated_at.isoformat() if job.updated_at else None}
 
 
+def audit_log_to_dict(row: AuditLog) -> dict[str, Any]:
+    return {"auditId": row.audit_id, "tenantId": row.tenant_id, "orgId": row.org_id, "traceId": row.trace_id, "actorId": row.actor_id, "eventType": row.event_type, "resourceType": row.resource_type, "resourceId": row.resource_id, "action": row.action, "status": row.status, "payload": row.payload or {}, "createdAt": row.created_at.isoformat() if row.created_at else None}
+
+
+def tech_log_to_dict(row: TechLog) -> dict[str, Any]:
+    return {"logId": row.log_id, "tenantId": row.tenant_id, "orgId": row.org_id, "traceId": row.trace_id, "actorId": row.actor_id, "level": row.level, "logger": row.logger, "eventType": row.event_type, "message": row.message, "payload": row.payload or {}, "createdAt": row.created_at.isoformat() if row.created_at else None}
+
+
 class ProductionTaskRepository:
     def __init__(self, session: AsyncSession, ctx: UserContext):
         self.session = session
         self.scope = RepositoryScope.from_context(ctx)
 
     async def list_visible(self, limit: int = 100) -> list[dict[str, Any]]:
-        statement = apply_scope(select(DecisionTask), DecisionTask, self.scope).order_by(DecisionTask.updated_at.desc()).limit(limit)
-        rows = (await self.session.scalars(statement)).all()
+        rows = (await self.session.scalars(apply_scope(select(DecisionTask), DecisionTask, self.scope).order_by(DecisionTask.updated_at.desc()).limit(limit))).all()
         return [task_to_dict(row) for row in rows]
 
     async def get(self, task_id: str) -> dict[str, Any] | None:
-        statement = apply_scope(select(DecisionTask).where(DecisionTask.task_id == task_id), DecisionTask, self.scope)
-        row = (await self.session.scalars(statement)).first()
+        row = (await self.session.scalars(apply_scope(select(DecisionTask).where(DecisionTask.task_id == task_id), DecisionTask, self.scope))).first()
         return task_to_dict(row) if row else None
 
     async def upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -83,13 +89,11 @@ class ProductionImportJobRepository:
         self.scope = RepositoryScope.from_context(ctx)
 
     async def list_recent(self, limit: int = 50) -> list[dict[str, Any]]:
-        statement = apply_scope(select(ImportJob), ImportJob, self.scope).order_by(ImportJob.created_at.desc()).limit(limit)
-        rows = (await self.session.scalars(statement)).all()
+        rows = (await self.session.scalars(apply_scope(select(ImportJob), ImportJob, self.scope).order_by(ImportJob.created_at.desc()).limit(limit))).all()
         return [import_job_to_dict(row) for row in rows]
 
     async def get(self, import_job_id: str) -> dict[str, Any] | None:
-        statement = apply_scope(select(ImportJob).where(ImportJob.import_job_id == import_job_id), ImportJob, self.scope)
-        row = (await self.session.scalars(statement)).first()
+        row = (await self.session.scalars(apply_scope(select(ImportJob).where(ImportJob.import_job_id == import_job_id), ImportJob, self.scope))).first()
         return import_job_to_dict(row) if row else None
 
     async def upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -142,10 +146,43 @@ class ProductionAuditRepository:
         self.scope = RepositoryScope.from_context(ctx)
 
     async def trace_timeline(self, trace_id: str, limit: int = 100) -> list[dict[str, Any]]:
-        statement = apply_scope(select(AuditLog).where(AuditLog.trace_id == trace_id), AuditLog, self.scope).order_by(AuditLog.created_at.asc()).limit(limit)
-        rows = (await self.session.scalars(statement)).all()
-        return [{"auditId": row.audit_id, "traceId": row.trace_id, "eventType": row.event_type, "resourceType": row.resource_type, "resourceId": row.resource_id, "action": row.action, "status": row.status, "payload": row.payload or {}, "createdAt": row.created_at.isoformat() if row.created_at else None} for row in rows]
+        rows = (await self.session.scalars(apply_scope(select(AuditLog).where(AuditLog.trace_id == trace_id), AuditLog, self.scope).order_by(AuditLog.created_at.asc()).limit(limit))).all()
+        return [audit_log_to_dict(row) for row in rows]
+
+    async def upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
+        audit_id = str(payload.get("auditId") or payload.get("audit_id"))
+        existing = await self.session.get(AuditLog, audit_id)
+        data = {"tenant_id": self.scope.tenant_id, "org_id": self.scope.org_id, "trace_id": payload.get("traceId") or payload.get("trace_id"), "actor_id": payload.get("actorId") or payload.get("actor_id") or self.scope.user_id, "event_type": payload.get("eventType") or payload.get("event_type") or "audit.event", "resource_type": payload.get("resourceType") or payload.get("resource_type"), "resource_id": payload.get("resourceId") or payload.get("resource_id"), "action": payload.get("action"), "status": payload.get("status"), "payload": payload.get("payload") or {}}
+        if existing:
+            for key, value in data.items():
+                setattr(existing, key, value)
+            row = existing
+        else:
+            row = AuditLog(audit_id=audit_id, **data)
+            self.session.add(row)
+        await self.session.flush()
+        return audit_log_to_dict(row)
+
+
+class ProductionTechLogRepository:
+    def __init__(self, session: AsyncSession, ctx: UserContext):
+        self.session = session
+        self.scope = RepositoryScope.from_context(ctx)
+
+    async def upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
+        log_id = str(payload.get("logId") or payload.get("log_id"))
+        existing = await self.session.get(TechLog, log_id)
+        data = {"tenant_id": self.scope.tenant_id, "org_id": self.scope.org_id, "trace_id": payload.get("traceId") or payload.get("trace_id"), "actor_id": payload.get("actorId") or payload.get("actor_id") or self.scope.user_id, "level": payload.get("level") or "info", "logger": payload.get("logger") or "app", "event_type": payload.get("eventType") or payload.get("event_type") or "tech.event", "message": payload.get("message"), "payload": payload.get("payload") or {}}
+        if existing:
+            for key, value in data.items():
+                setattr(existing, key, value)
+            row = existing
+        else:
+            row = TechLog(log_id=log_id, **data)
+            self.session.add(row)
+        await self.session.flush()
+        return tech_log_to_dict(row)
 
 
 def production_repository_summary() -> dict[str, Any]:
-    return {"version": REPOSITORY_LAYER_VERSION, "repositories": ["ProductionTaskRepository", "ProductionImportJobRepository", "ProductionWorkerJobRepository", "ProductionAuditRepository"], "scopeRule": "Every query applies tenant_id, org_id, and deleted_at IS NULL through apply_scope().", "writeRule": "Task / ImportJob / WorkerJob can be mirrored from SQLite Demo into PostgreSQL in hybrid/postgres mode."}
+    return {"version": REPOSITORY_LAYER_VERSION, "repositories": ["ProductionTaskRepository", "ProductionImportJobRepository", "ProductionWorkerJobRepository", "ProductionAuditRepository", "ProductionTechLogRepository"], "scopeRule": "Every query applies tenant_id, org_id, and deleted_at IS NULL through apply_scope().", "writeRule": "Task / ImportJob / WorkerJob / AuditLog / TechLog can be mirrored from SQLite Demo into PostgreSQL in hybrid/postgres mode."}
