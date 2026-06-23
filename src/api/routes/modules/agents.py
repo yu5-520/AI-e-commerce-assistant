@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "9.2.0"
+AGENT_REGISTRY_VERSION = "9.3.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,8 +28,14 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "v920_backend_flow_consistency"
+    plan["mode"] = "v930_frontend_module_consistency"
     plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；V8 权重、RAG、审批和复盘信息作为后端证据链补强，不新增前端主模块。"
+    plan["v93FrontendModules"] = {
+        "service": "src/services/v93_frontend_module_contract_service.py",
+        "architectureEndpoint": "/api/architecture/v9/frontend-modules",
+        "stableModules": ["dashboard", "operating-unit", "product", "competitor", "listing", "traffic", "report", "todo", "log", "system-status", "accounts"],
+        "rule": "前端主模块保持稳定，后端能力通过套餐展示深度补强原模块。",
+    }
     plan["v92BackendFlow"] = {
         "service": "src/services/v92_backend_flow_service.py",
         "architectureEndpoint": "/api/architecture/v9/backend-flow",
