@@ -1,16 +1,11 @@
-"""Repository consistency guard for V9 SaaS enterprise baseline.
-
-V9.2 keeps the repository layout, documentation entrypoints, runtime entrypoints,
-and CI expectations explicit while adding backend main-flow consistency as a
-first-class checked contract.
-"""
+"""Repository consistency guard for V9 SaaS enterprise baseline."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "9.2.0"
+EXPECTED_VERSION = "9.3.0"
 
 REQUIRED_DIRECTORIES = [
     "src/api",
@@ -32,15 +27,18 @@ REQUIRED_FILES = [
     "requirements.txt",
     "src/api/main.py",
     "src/services/v92_backend_flow_service.py",
+    "src/services/v93_frontend_module_contract_service.py",
     "scripts/check_version_governance.py",
     "scripts/check_repository_consistency.py",
     "scripts/check_backend_flow_consistency.py",
+    "scripts/check_frontend_module_consistency.py",
     "scripts/smoke_test_runtime.py",
     "scripts/smoke_test_api.py",
     ".github/workflows/runtime-smoke-test.yml",
     "docs/V9_SAAS_CONSISTENCY_BASE.md",
     "docs/V9_REPOSITORY_CONSISTENCY.md",
     "docs/V9_BACKEND_FLOW_CONSISTENCY.md",
+    "docs/V9_FRONTEND_MODULE_CONSISTENCY.md",
     "docs/V8_WEIGHT_SYSTEM.md",
     "docs/P0_SAAS_ARCHITECTURE.md",
     "docs/POSTGRESQL_ALEMBIC.md",
@@ -71,12 +69,14 @@ REMOVED_OR_LEGACY_PATHS = [
 ]
 
 README_REQUIRED_SNIPPETS = [
-    "当前版本：V9.2.0",
+    "当前版本：V9.3.0",
     "docs/V9_REPOSITORY_CONSISTENCY.md",
     "docs/V9_BACKEND_FLOW_CONSISTENCY.md",
+    "docs/V9_FRONTEND_MODULE_CONSISTENCY.md",
     "/api/modules",
     "/api/accounts",
     "/api/architecture/v9/backend-flow",
+    "/api/architecture/v9/frontend-modules",
     "基础版 / Starter",
     "专业版 / Professional",
     "企业版 / Enterprise",
@@ -86,6 +86,7 @@ WORKFLOW_REQUIRED_SNIPPETS = [
     "scripts/check_version_governance.py",
     "scripts/check_repository_consistency.py",
     "scripts/check_backend_flow_consistency.py",
+    "scripts/check_frontend_module_consistency.py",
     "scripts/smoke_test_runtime.py",
     "scripts/smoke_test_api.py",
 ]
@@ -133,7 +134,7 @@ def main() -> None:
         assert_contains(workflow, snippet, "runtime-smoke-test.yml")
     assert_contains(index_html, f"?v={EXPECTED_VERSION}", "web_demo/index.html")
 
-    print("Repository consistency check passed for V9.2.")
+    print("Repository consistency check passed for V9.3.")
 
 
 if __name__ == "__main__":
