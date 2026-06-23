@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "9.5.0"
+AGENT_REGISTRY_VERSION = "9.6.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,34 +28,18 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "v950_rag_namespace_isolation"
-    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；RAG 检索、写入、模板维护和删除必须走 namespace 隔离与审计门禁。"
-    plan["v95RagIsolation"] = {
-        "service": "src/services/v95_rag_namespace_isolation_service.py",
-        "architectureEndpoint": "/api/architecture/v9/rag-isolation",
-        "namespaces": ["shared_desensitized_rag", "tenant_isolated_rag", "private_customer_rag"],
-        "rule": "Agent 使用 RAG 证据时必须带 namespace、tenant、role、approval 和 audit context。",
+    plan["mode"] = "v960_rag_write_memory"
+    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；RAG 候选记忆进入正式记忆库必须经过质量检查、人工复核、审批和审计。"
+    plan["v96RagWriteMemory"] = {
+        "service": "src/services/v96_rag_write_memory_service.py",
+        "architectureEndpoint": "/api/architecture/v9/rag-write-memory",
+        "lifecycle": ["rag_memory_candidate", "quality_check", "namespace_policy_check", "human_review", "approval_decision", "promoted_memory", "audit_record"],
     }
-    plan["v94TierIsolation"] = {
-        "service": "src/services/v94_tier_isolation_contract_service.py",
-        "architectureEndpoint": "/api/architecture/v9/tier-isolation",
-        "tiers": ["starter", "professional", "enterprise"],
-    }
-    plan["v93FrontendModules"] = {
-        "service": "src/services/v93_frontend_module_contract_service.py",
-        "architectureEndpoint": "/api/architecture/v9/frontend-modules",
-        "stableModules": ["dashboard", "operating-unit", "product", "competitor", "listing", "traffic", "report", "todo", "log", "system-status", "accounts"],
-    }
-    plan["v92BackendFlow"] = {
-        "service": "src/services/v92_backend_flow_service.py",
-        "architectureEndpoint": "/api/architecture/v9/backend-flow",
-        "flow": ["ImportJob", "DataVersion", "RawRows", "ModuleProjection", "AlertEvent", "WeightSignal", "DecisionTask", "AgentReport", "ApprovalFlow", "ExecutionFeedback", "ReviewLog", "RagMemoryCandidate"],
-    }
-    plan["taskRepositoryWritePath"] = {
-        "version": AGENT_REGISTRY_VERSION,
-        "service": "src/services/task_repository_write_service.py",
-        "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。",
-    }
+    plan["v95RagIsolation"] = {"service": "src/services/v95_rag_namespace_isolation_service.py", "architectureEndpoint": "/api/architecture/v9/rag-isolation"}
+    plan["v94TierIsolation"] = {"service": "src/services/v94_tier_isolation_contract_service.py", "architectureEndpoint": "/api/architecture/v9/tier-isolation"}
+    plan["v93FrontendModules"] = {"service": "src/services/v93_frontend_module_contract_service.py", "architectureEndpoint": "/api/architecture/v9/frontend-modules"}
+    plan["v92BackendFlow"] = {"service": "src/services/v92_backend_flow_service.py", "architectureEndpoint": "/api/architecture/v9/backend-flow"}
+    plan["taskRepositoryWritePath"] = {"version": AGENT_REGISTRY_VERSION, "service": "src/services/task_repository_write_service.py", "rule": "Agent 入池任务通过 TaskRepository 写路径持久化。"}
     return plan
 
 
