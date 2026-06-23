@@ -11,16 +11,20 @@
     "data-check",
     "feedback-flywheel",
     "business-report",
+    "system-status",
     "accounts",
   ];
 
   const FEEDBACK_ROLES = new Set(["owner", "manager"]);
+  const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
 
   function visibleModulesFor(account) {
     const role = account?.currentUser?.roleId;
     const base = role === "manager" ? MANAGER_NAV : (account?.currentUser?.visibleModules || []);
-    if (FEEDBACK_ROLES.has(role)) return Array.from(new Set([...base, "feedback-flywheel"]));
-    return base;
+    const next = [...base];
+    if (FEEDBACK_ROLES.has(role)) next.push("feedback-flywheel");
+    if (SYSTEM_STATUS_ROLES.has(role)) next.push("system-status");
+    return Array.from(new Set(next));
   }
 
   const pages = [
@@ -32,6 +36,7 @@
     window.ReviewAuditPage,
     window.AccountPage,
     window.RoleConsolePage,
+    window.SystemStatusPage,
     window.ManagerTasksPage,
     window.ManagerDispatchPage,
     window.ManagerReviewPage,
