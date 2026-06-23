@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from src.core.context import UserContext, get_current_context
+from src.services.security_status_service import security_status
 from src.services.system_service import clear_runtime_data as clear_runtime_store
 from src.services.system_service import get_db_status, reset_legacy_runtime_once
 
@@ -16,6 +18,12 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 def db_status() -> Dict[str, Any]:
     """Return SQLite database file and table status."""
     return get_db_status()
+
+
+@router.get("/security")
+def system_security(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return deployment security, rate limit, worker, LLM, and log redaction status."""
+    return security_status(ctx)
 
 
 def _clear_runtime_data(confirm: bool, include_audit_logs: bool, reason: str = "manual_reset") -> Dict[str, Any]:
