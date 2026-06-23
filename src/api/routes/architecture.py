@@ -19,6 +19,7 @@ from src.services.v82_weight_rag_gate_service import generate_weight_rag_hits, w
 from src.services.v83_linked_metric_relation_service import generate_linked_metric_relations, linked_relation_summary
 from src.services.v84_weight_score_service import generate_weight_scores, weight_score_summary
 from src.services.v85_context_weight_adjustment_service import generate_context_weight_adjustments, context_weight_summary
+from src.services.v86_cross_validation_service import generate_cross_validations, cross_validation_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -153,6 +154,16 @@ async def v85_context_weights(object_type: str | None = Query(default=None), tas
 @router.post("/v8/context-weights/generate")
 async def v85_generate_context_weights(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return generate_context_weight_adjustments(ctx)
+
+
+@router.get("/v8/cross-validations")
+async def v86_cross_validations(object_type: str | None = Query(default=None), validation_status: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return cross_validation_summary(ctx, object_type=object_type, validation_status=validation_status, limit=limit)
+
+
+@router.post("/v8/cross-validations/generate")
+async def v86_generate_cross_validations(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_cross_validations(ctx)
 
 
 @router.get("/context")
