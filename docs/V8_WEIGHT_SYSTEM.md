@@ -1,4 +1,4 @@
-# V8.1 权重数据波动任务系统
+# V8.2 权重数据波动任务系统
 
 V6-V7 是增长数据趋势任务系统，核心是发现增长机会、生成经营任务，并通过 SaaS 控制面完成权限、审批、执行、复盘和发布治理。V8 是权重数据波动任务系统，核心不再只是哪里增长，而是资源权重是否应该重新分配。
 
@@ -14,7 +14,7 @@ V8：权重数据波动任务系统
 基于商品、店铺、运营三类对象的多周期指标波动，结合环比、同比、多周期均值、波动率、RAG 标准线、联动比对和上下文权重修正，进行交叉验证，并生成升权、降权、限权、修复、止损、复核等交叉任务组。
 ```
 
-## 2. V8.1 本次边界
+## 2. V8.2 本次边界
 
 V8.0 已完成：
 
@@ -22,16 +22,21 @@ V8.0 已完成：
 商品 / 店铺 / 运营 → 权重指标快照
 ```
 
-V8.1 新增：
+V8.1 已完成：
 
 ```text
 权重指标快照 → 环比 / 多周期均值 / 波动率 / 可用同比
 ```
 
-V8.1 仍然不做以下动作：
+V8.2 新增：
 
 ```text
-不接 RAG 标准线
+权重指标快照 + 周期比较 → RAG 标准线命中
+```
+
+V8.2 仍然不做以下动作：
+
+```text
 不做联动比对
 不做权重评分
 不做升降权
@@ -73,81 +78,76 @@ RAG 标准线命中
 资源调度看板
 ```
 
-## 4. V8.0 / V8.1 数据表
+## 4. V8.0 / V8.1 / V8.2 数据表
 
 ```text
 weight_metric_snapshots_v8
 weight_metric_comparisons_v8
+weight_rag_standard_hits_v8
 ```
 
-`weight_metric_comparisons_v8` 记录：
+`weight_rag_standard_hits_v8` 记录：
 
 ```text
-comparison_id
+hit_id
 tenant_id
 org_id
 object_type
 object_id
 metric_name
-comparison_type
+standard_line
 current_value
-reference_value
-change_value
-change_rate
-direction
-confidence
+operator
+hit_status
+severity
+consecutive_low_count
+rule_id
+domain
 snapshot_version
-reference_snapshot_version
+comparison_direction
 payload
 created_at
 ```
 
-## 5. V8.1 支持的比较方式
+## 5. V8.2 标准线命中
+
+标准线状态：
 
 ```text
-period_over_period      环比 / 本次对上次
-multi_period_average    多周期均值
-volatility              波动率
-year_over_year          可用同比 / 年度周期
+within_standard      达标
+below_standard       低于标准线
+above_risk_line      高于风险线
 ```
 
-注意：同比需要有接近一年周期的历史快照；demo 阶段主要验证结构，正式接 ERP / CRM 长周期数据后才会稳定产生同比。
-
-## 6. V8.1 输出方向
+风险等级：
 
 ```text
-up
-stable
-down
-insufficient_reference
+正常
+低
+中
+高
+观察
 ```
 
-V8.1 的输出只回答：
+当前覆盖三类对象：
 
 ```text
-指标相对上次如何变化？
-指标相对近几次均值如何变化？
-指标是否波动过大？
-是否存在可用同比参考？
+商品：ROI、点击率、转化率、毛利率、售后率、好评率
+店铺：店铺 ROI、好评率、自然流量、点击率、商品健康率
+运营：任务完成率、准时率、复盘质量分、证据完整度
 ```
 
-不回答：
+运营对象的标准线命中只作为复核依据，不自动处罚、不自动降权、不自动变更权限。
 
-```text
-是否应该升权？
-是否应该降权？
-是否应该生成任务？
-```
-
-这些从 V8.2 / V8.3 / V8.4 开始再做。
-
-## 7. 当前接口
+## 6. 当前接口
 
 ```text
 GET  /api/architecture/v8/weight-snapshots
 POST /api/architecture/v8/weight-snapshots/generate
 GET  /api/architecture/v8/weight-comparisons
 POST /api/architecture/v8/weight-comparisons/generate
+GET  /api/architecture/v8/weight-rag-hits
+POST /api/architecture/v8/weight-rag-hits/generate
 ```
 
 前端入口：
@@ -156,7 +156,7 @@ POST /api/architecture/v8/weight-comparisons/generate
 权重中心
 ```
 
-## 8. V8 后续节奏
+## 7. V8 后续节奏
 
 ```text
 V8.0 权重指标快照层
@@ -172,7 +172,7 @@ V8.9 执行回写与调整后复盘
 V8.10 权重资源调度看板
 ```
 
-## 9. V8 核心边界
+## 8. V8 核心边界
 
 ```text
 系统可以建议升权 / 降权；
