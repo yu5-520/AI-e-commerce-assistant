@@ -10,11 +10,11 @@ from src.repositories.sqlite_repository import connect, dumps, init_db, loads
 from src.services.data_alert_repository_mirror_service import mirror_data_alerts_to_production
 from src.services.import_worker_repository_mirror_service import mirror_import_job_to_production
 from src.services.projection_repository_mirror_service import mirror_projection_job_to_production
-from src.services.report_task_repository_sync_service import sync_report_tasks
+from src.services.report_task_repository_sync_service import sync_report_import_tasks_to_repository
 from src.services.task_state_machine_service import task_persistence_summary
 from src.services.trace_audit_service import resolve_trace_id, write_audit_log
 
-IMPORT_JOB_VERSION = "5.3.6"
+IMPORT_JOB_VERSION = "5.3.7"
 
 
 def _job_id(prefix: str) -> str:
@@ -126,7 +126,7 @@ def run_import_job(ctx: UserContext, *, dataset_name: str, source_type: str, pay
     job = _insert_import_job(ctx, dataset_name=dataset_name, source_type=source_type, payload={**payload, "traceId": trace_id}, trace_id=trace_id)
     try:
         result = runner()
-        synced_result = sync_report_tasks(result, ctx)
+        synced_result = sync_report_import_tasks_to_repository(result, ctx)
         task_sync = synced_result.get("taskRepositorySync") or {}
         data_alert_mirror = mirror_data_alerts_to_production(ctx, synced_result, trace_id=trace_id, import_job_id=job["importJobId"], source_type=source_type, action="data_alert.import_completed")
         projections = [_insert_projection_job(ctx, job["importJobId"], "module_projection_refresh", synced_result, trace_id), _insert_projection_job(ctx, job["importJobId"], "alert_task_repository_sync", task_sync, trace_id)]
