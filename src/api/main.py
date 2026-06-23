@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, worker_jobs
 from src.repositories.task_repository import bootstrap_task_repository
 from src.services import module_task_service
+from src.services.llm_gateway_service import ensure_llm_gateway_tables
 from src.services.system_service import reset_legacy_runtime_once
 from src.services.task_state_machine_service import load_task_snapshots
 from src.services.tech_log_service import ensure_tech_log_tables
@@ -21,12 +22,12 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.2.7"
+API_VERSION = "5.2.8"
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.2.7 runtime with JSON TechLog and sensitive data redaction, trace_id and audit_logs across Task, Evidence, RAG staging, ImportJob, WorkerJob, WorkerTaskResult, ARQ dispatch fallback, UserContext, and architecture APIs.",
+    description="V5.2.8 runtime with LLM Gateway quota, rate limit, cache, circuit breaker, schema validation, JSON TechLog redaction, trace_id audit chain, ARQ dispatch fallback, UserContext, and architecture APIs.",
 )
 
 app.add_middleware(
@@ -49,6 +50,7 @@ def apply_v5_runtime_cleanup() -> None:
     ensure_worker_queue_tables()
     ensure_trace_audit_tables()
     ensure_tech_log_tables()
+    ensure_llm_gateway_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
         if snapshots:
