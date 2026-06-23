@@ -31,6 +31,7 @@ from src.services.report_schema_service import (
     normalize_rows_with_mapping,
     preview_report_dataset,
 )
+from src.services.risk_task_service import generate_risk_tasks_for_signals
 from src.services.trend_signal_service import ingest_product_trends
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
@@ -51,13 +52,15 @@ def require_rollback_permission(user_id: str) -> None:
         raise HTTPException(status_code=403, detail="当前账号无权回滚全局数据版本")
 
 
-def _attach_v61_trend_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    """Generate product snapshots, metric trends, and business signals after import."""
+def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
+    """Generate product snapshots, metric trends, business signals, and risk tasks after import."""
     if not isinstance(rows, list):
-        result["trendSync"] = {"version": "6.1.0", "skipped": True, "reason": "rows is not a list"}
+        result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
+    risk_summaries: List[Dict[str, Any]] = []
     for item in import_results:
         if not isinstance(item, dict):
             continue
@@ -73,10 +76,13 @@ def _attach_v61_trend_sync(result: Dict[str, Any], rows: Any, source_system: str
             rows=routed_rows,
             source_system=source_system or result.get("sourceSystem"),
         )
+        risk_summary = generate_risk_tasks_for_signals(data_version=str(data_version))
         item["trendSync"] = trend_summary
+        item["riskTaskSync"] = risk_summary
         summaries.append(trend_summary)
+        risk_summaries.append(risk_summary)
     result["trendSync"] = {
-        "version": "6.1.0",
+        "version": "6.2.0",
         "mode": "product_snapshot_metric_trend_signal_sync",
         "datasetCount": len(summaries),
         "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries),
@@ -84,7 +90,17 @@ def _attach_v61_trend_sync(result: Dict[str, Any], rows: Any, source_system: str
         "signalCount": sum(item.get("signalCount", 0) for item in summaries),
         "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries),
         "summaries": summaries,
-        "rule": "V6.1 导入后生成商品时间快照、指标变化和经营信号；V6.2 再接风险分级任务。",
+        "rule": "V6.2 导入后生成商品快照、指标趋势、经营信号，并把信号升级为风险分级任务。",
+    }
+    result["riskTaskSync"] = {
+        "version": "6.2.0",
+        "mode": "risk_graded_signal_task_generation",
+        "datasetCount": len(risk_summaries),
+        "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries),
+        "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries),
+        "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries),
+        "summaries": risk_summaries,
+        "rule": "低风险直接生成观察任务；中风险生成带指标边界的修复任务；高风险只生成复核候选，不直接扩大投产。",
     }
     return result
 
@@ -199,7 +215,7 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
 
 @router.post("/import/confirm")
 def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Confirm a previewed report import, then trigger scoped alerts/tasks and V6.1 trends."""
+    """Confirm a previewed report import, then trigger scoped alerts/tasks, trends, and V6.2 risk tasks."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -212,7 +228,7 @@ def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
             auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
             source_system=source_system,
         )
-        return _attach_v61_trend_sync(result, body.get("rows"), source_system=source_system)
+        return _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -229,7 +245,7 @@ def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str
             rows=body.get("rows"),
             auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
         )
-        return _attach_v61_trend_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        return _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -254,7 +270,7 @@ def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str
 def latest_version() -> Dict[str, Any]:
     """Return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "6.1.0", "message": "No data snapshot has been imported yet."}
+    return latest or {"version": "6.2.0", "message": "No data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
