@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, trends, worker_jobs
 from src.middleware.api_rate_limit import api_rate_limit_middleware
 from src.middleware.security_headers import security_headers_middleware
 from src.repositories.task_repository import bootstrap_task_repository
@@ -21,17 +21,18 @@ from src.services.system_service import reset_legacy_runtime_once
 from src.services.task_state_machine_service import load_task_snapshots
 from src.services.tech_log_service import ensure_tech_log_tables
 from src.services.trace_audit_service import ensure_trace_audit_tables
+from src.services.trend_signal_service import ensure_trend_tables
 from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "6.0.0"
+API_VERSION = "6.1.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V6.0 runtime: unified ERP/CRM/platform report input with backend field classification and module routing.",
+    description="V6.1 runtime: unified report input plus product snapshots, metric trends, and business signals.",
 )
 
 app.middleware("http")(security_headers_middleware)
@@ -50,7 +51,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v6_runtime_cleanup() -> None:
+def apply_v61_runtime_cleanup() -> None:
     """Initialize demo cleanup and hydrate task runtime from persisted snapshots."""
     reset_legacy_runtime_once()
     bootstrap_task_repository()
@@ -58,6 +59,7 @@ def apply_v6_runtime_cleanup() -> None:
     ensure_trace_audit_tables()
     ensure_tech_log_tables()
     ensure_llm_gateway_tables()
+    ensure_trend_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
         if snapshots:
@@ -83,5 +85,6 @@ app.include_router(system.router)
 app.include_router(architecture.router)
 app.include_router(task_persistence.router)
 app.include_router(report_task_sync.router)
+app.include_router(trends.router)
 app.include_router(worker_jobs.router)
 app.include_router(audit.router)
