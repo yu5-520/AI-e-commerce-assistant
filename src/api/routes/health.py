@@ -10,7 +10,7 @@ from src.services.llm_provider_service import llm_status
 from src.services.mcp_adapter_service import mcp_adapter_summary
 from src.services.tool_gateway_service import tool_gateway_summary
 
-API_VERSION = "4.5.3"
+API_VERSION = "9.2.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -22,10 +22,11 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v453_llm_rag_enrichment",
+        "mode": "v920_backend_flow_consistency",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "llm_entry": "/api/llm/status",
+        "architecture_entry": "/api/architecture/v9/backend-flow",
         "safety": {
             "auto_scheduled_platform_action": False,
             "auto_ad_account_operation": False,
@@ -37,6 +38,11 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "v920_backend_flow_consistency": True,
+        "v920_backend_flow_endpoint": "/api/architecture/v9/backend-flow",
+        "v920_backend_flow_service": "src/services/v92_backend_flow_service.py",
+        "v920_backend_flow_stages": ["ImportJob", "DataVersion", "RawRows", "ModuleProjection", "AlertEvent", "WeightSignal", "DecisionTask", "AgentReport", "ApprovalFlow", "ExecutionFeedback", "ReviewLog", "RagMemoryCandidate"],
+        "v920_backend_flow_rule": "V8 权重能力作为后端增强层补强原模块，不新增前端主模块。",
         "v453_llm_rag_enrichment": True,
         "agent_llm_enrichment_service": "src/services/agent_llm_enrichment_service.py",
         "module_agent_llm_enrichment": True,
