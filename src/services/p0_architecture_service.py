@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.8"
+P0_ARCHITECTURE_VERSION = "5.2.9"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -84,10 +84,10 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-9",
         "name": "Nginx 前后端分离部署",
-        "status": "planned",
+        "status": "deployment_security_gateway_scaffolded",
         "target": "Nginx 服务静态前端，/api 反代 FastAPI，HTTPS/CORS/限流/安全头统一配置。",
-        "currentGap": "当前 FastAPI 仍直接挂载 web_demo 静态目录。",
-        "mustNot": ["生产用 FastAPI 直接托管全部前端资源", "CORS 全开放"],
+        "currentGap": "新增 Nginx 配置模板、部署说明、.env.example、Security Headers、FastAPI API RateLimit 和 /api/system/security；HTTPS 证书和生产域名仍需部署时配置。",
+        "mustNot": ["生产用 FastAPI 直接托管全部前端资源", "CORS 全开放", "公网直接暴露 Uvicorn 端口"],
     },
 ]
 
@@ -114,7 +114,8 @@ IMPLEMENTATION_SEQUENCE = [
     "Task / Evidence / RAG Memory trace：任务写路径、证据提交复核、RAG 暂存已接入 trace_id",
     "TechLog JSON：tech_log_service、tech_logs、敏感信息递归脱敏、audit 同步技术日志",
     "LLM Gateway：llm_gateway_service、配额、限流、缓存、熔断、Schema 校验",
-    "下一步：Nginx 前后端分离、HTTPS、安全头、API 限流",
+    "部署安全网关：Nginx 模板、Security Headers、API RateLimit、/api/system/security、.env.example",
+    "下一步：PostgreSQL / Alembic 生产数据模型，或前端系统状态页展示架构成熟度",
 ]
 
 
@@ -123,7 +124,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "llm_gateway_controls_scaffolded",
+        "runtimeMode": "deployment_security_gateway_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
@@ -139,5 +140,6 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
             "报表导入形成 ImportJob / DataVersion / AlertEvent / Task / AuditLog 全链路追踪。",
             "LLM 不可用时核心链路不受影响，AgentReport 使用规则模板降级。",
             "生产环境禁止 SQLite、Mock 密码、全局 fallback 假数据、无审计硬删除。",
+            "生产流量应通过 Nginx / HTTPS / 安全头 / 限流进入 FastAPI。",
         ],
     }
