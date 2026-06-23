@@ -7,13 +7,14 @@ from uuid import uuid4
 
 from src.core.context import UserContext
 from src.repositories.sqlite_repository import connect, dumps, init_db, loads
+from src.services.data_alert_repository_mirror_service import mirror_data_alerts_to_production
 from src.services.import_worker_repository_mirror_service import mirror_import_job_to_production
 from src.services.projection_repository_mirror_service import mirror_projection_job_to_production
 from src.services.report_task_repository_sync_service import sync_report_tasks
 from src.services.task_state_machine_service import task_persistence_summary
 from src.services.trace_audit_service import resolve_trace_id, write_audit_log
 
-IMPORT_JOB_VERSION = "5.3.5"
+IMPORT_JOB_VERSION = "5.3.6"
 
 
 def _job_id(prefix: str) -> str:
@@ -127,9 +128,10 @@ def run_import_job(ctx: UserContext, *, dataset_name: str, source_type: str, pay
         result = runner()
         synced_result = sync_report_tasks(result, ctx)
         task_sync = synced_result.get("taskRepositorySync") or {}
+        data_alert_mirror = mirror_data_alerts_to_production(ctx, synced_result, trace_id=trace_id, import_job_id=job["importJobId"], source_type=source_type, action="data_alert.import_completed")
         projections = [_insert_projection_job(ctx, job["importJobId"], "module_projection_refresh", synced_result, trace_id), _insert_projection_job(ctx, job["importJobId"], "alert_task_repository_sync", task_sync, trace_id)]
         updated_job = _update_import_job(ctx, job["importJobId"], trace_id=trace_id, status="completed", result=synced_result)
-        return {"version": IMPORT_JOB_VERSION, "traceId": trace_id, "importJob": updated_job, "productionMirror": {"created": job.get("productionMirror"), "completed": updated_job.get("productionMirror"), "projectionJobs": [item.get("productionMirror") for item in projections]}, "projectionJobs": projections, "result": synced_result, "taskPersistence": task_persistence_summary(), "rule": "ImportJob / ProjectionJob 已写入 trace_id 和 audit_logs，并支持 SQLite-first PostgreSQL mirror。"}
+        return {"version": IMPORT_JOB_VERSION, "traceId": trace_id, "importJob": updated_job, "productionMirror": {"created": job.get("productionMirror"), "completed": updated_job.get("productionMirror"), "projectionJobs": [item.get("productionMirror") for item in projections], "dataAlert": data_alert_mirror}, "projectionJobs": projections, "result": synced_result, "taskPersistence": task_persistence_summary(), "rule": "ImportJob / ProjectionJob / DataVersion / AlertEvent 支持 SQLite-first PostgreSQL mirror。"}
     except Exception as exc:  # noqa: BLE001
         _update_import_job(ctx, job["importJobId"], trace_id=trace_id, status="failed", error=str(exc))
         _insert_projection_job(ctx, job["importJobId"], "import_failed", {"error": str(exc)}, trace_id)
