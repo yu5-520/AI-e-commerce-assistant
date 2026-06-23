@@ -16,7 +16,7 @@ from src.repositories.task_repository import TaskRepository
 from src.services import module_task_service
 from src.services.task_state_machine_service import mirror_all
 
-REPORT_TASK_SYNC_VERSION = "5.1.5"
+REPORT_TASK_SYNC_VERSION = "5.1.6"
 
 
 def _alert_task_ids(result: Dict[str, Any]) -> list[str]:
@@ -58,3 +58,9 @@ def sync_report_import_tasks_to_repository(result: Dict[str, Any], ctx: UserCont
         "rule": "报表预警仍负责生成任务草案；导入确认后立即同步到 TaskRepository，保持报表入库和总览刷新稳定。",
     }
     return output
+
+
+def sync_report_tasks(result: Dict[str, Any], ctx: UserContext) -> Dict[str, Any]:
+    """Backward-compatible alias for older import and worker callers."""
+
+    return sync_report_import_tasks_to_repository(result, ctx)
