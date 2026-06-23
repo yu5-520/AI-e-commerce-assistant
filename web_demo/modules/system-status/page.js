@@ -3,13 +3,7 @@
 
   async function loadJson(path, fallback = null) {
     try {
-      const response = await fetch(path, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          "X-Mock-User-Id": window.AppApi?.getCurrentUserId?.() || "U001",
-        },
-      });
+      const response = await fetch(path, { method: "GET", headers: { Accept: "application/json", "X-Mock-User-Id": window.AppApi?.getCurrentUserId?.() || "U001" } });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       return await response.json();
     } catch (error) {
@@ -18,53 +12,51 @@
     }
   }
 
-  function pill(text, tone = "neutral") {
-    return `<span class="system-pill ${tone}">${s(text)}</span>`;
-  }
+  function pill(text, tone = "neutral") { return `<span class="system-pill ${tone}">${s(text)}</span>`; }
+  function boolTone(value) { return value ? "good" : "muted"; }
 
-  function boolTone(value) {
-    return value ? "good" : "muted";
+  function statusTone(status) {
+    if (status === "pass") return "good";
+    if (status === "warn") return "warn";
+    if (status === "blocked") return "danger";
+    return "neutral";
   }
 
   function mirrorCard(title, mirror) {
     const enabled = !!mirror?.enabled;
     const mode = mirror?.mode || "sqlite";
     const resources = Array.isArray(mirror?.resources) ? mirror.resources : (mirror?.mirroredResources || []);
-    return `<article class="system-card mirror-card">
-      <div class="system-card-head"><h3>${s(title)}</h3>${pill(enabled ? "可镜像" : "默认跳过", enabled ? "good" : "muted")}</div>
-      <strong>${s(mode)}</strong>
-      <p>${s(resources.join(" / ") || "未配置资源")}</p>
-    </article>`;
+    return `<article class="system-card mirror-card"><div class="system-card-head"><h3>${s(title)}</h3>${pill(enabled ? "可镜像" : "默认跳过", enabled ? "good" : "muted")}</div><strong>${s(mode)}</strong><p>${s(resources.join(" / ") || "未配置资源")}</p></article>`;
   }
 
-  function metric(label, value, tone = "neutral") {
-    return `<article class="system-metric"><span>${s(label)}</span><strong>${s(value)}</strong>${pill(tone === "good" ? "正常" : tone === "warn" ? "关注" : "状态", tone)}</article>`;
-  }
+  function metric(label, value, tone = "neutral") { return `<article class="system-metric"><span>${s(label)}</span><strong>${s(value)}</strong>${pill(tone === "good" ? "正常" : tone === "warn" ? "关注" : tone === "danger" ? "阻断" : "状态", tone)}</article>`; }
 
   function layerRow(layer) {
-    return `<article class="system-layer-row">
-      <div><strong>${s(layer?.name)}</strong><span>${s(layer?.target)}</span></div>
-      ${pill(layer?.status || "unknown", "neutral")}
-    </article>`;
+    return `<article class="system-layer-row"><div><strong>${s(layer?.name)}</strong><span>${s(layer?.target)}</span></div>${pill(layer?.status || "unknown", "neutral")}</article>`;
   }
 
-  function safeVersion(security, repository, architecture) {
-    return security?.apiVersion || repository?.version || architecture?.version || "V5.3.7";
+  function cutoverRow(item) {
+    return `<article class="system-layer-row cutover-row"><div><strong>${s(item?.name)}</strong><span>${s(item?.evidence)}${item?.nextAction ? ` · ${s(item.nextAction)}` : ""}</span></div>${pill(item?.status || "unknown", statusTone(item?.status))}</article>`;
   }
+
+  function safeVersion(security, repository, architecture) { return security?.apiVersion || repository?.version || architecture?.version || "V5.3.9"; }
 
   window.SystemStatusPage = {
     route: "system-status",
     title: "系统状态",
     async render() {
-      const [security, repository, architecture] = await Promise.all([
+      const [security, repository, architecture, cutover] = await Promise.all([
         loadJson("/api/system/security", {}),
         loadJson("/api/system/repositories", {}),
         loadJson("/api/architecture/p0", {}),
+        loadJson("/api/system/postgres-cutover-check", {}),
       ]);
 
-      const activeMode = repository?.activeMode || "sqlite";
+      const activeMode = repository?.activeMode || cutover?.mode || "sqlite";
       const apiVersion = safeVersion(security, repository, architecture);
       const layers = Array.isArray(architecture?.layers) ? architecture.layers : [];
+      const cutoverItems = Array.isArray(cutover?.items) ? cutover.items : [];
+      const cutoverSummary = cutover?.summary || {};
       const mirrorBlocks = [
         ["任务", repository?.taskHybridMirror],
         ["导入与队列", repository?.importWorkerHybridMirror],
@@ -73,19 +65,23 @@
         ["数据版本与预警", repository?.dataAlertWriteMirror],
       ];
 
-      return `<section class="system-hero">
-        <div><p class="eyebrow">SYSTEM STATUS · V5.3.7</p><h2>系统状态</h2><p>这里集中查看部署、数据库、Repository Mirror、P0 架构和运行模式。</p></div>
-        <div class="system-hero-side"><span>当前模式</span><strong>${s(activeMode)}</strong><small>${s(apiVersion)}</small></div>
-      </section>
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V5.3.9</p><h2>系统状态</h2><p>集中查看部署、数据库、Repository Mirror、P0 架构和主写切换检查。</p></div><div class="system-hero-side"><span>当前模式</span><strong>${s(activeMode)}</strong><small>${s(apiVersion)}</small></div></section>
 
       <section class="system-metric-grid">
         ${metric("API 版本", apiVersion, "good")}
         ${metric("Repository 模式", activeMode, activeMode === "sqlite" ? "warn" : "good")}
         ${metric("PostgreSQL Repository", repository?.postgresRepositoryEnabled ? "启用" : "未启用", boolTone(repository?.postgresRepositoryEnabled))}
-        ${metric("运行态", architecture?.runtimeMode || "system-status", "neutral")}
+        ${metric("切主写阻断项", cutoverSummary.blocked ?? 0, (cutoverSummary.blocked || 0) > 0 ? "danger" : "good")}
       </section>
 
       <section class="page-section system-section"><div class="section-header"><h3>Repository Mirror</h3><button type="button" data-system-refresh>刷新</button></div><div class="system-card-grid">${mirrorBlocks.map(([title, mirror]) => mirrorCard(title, mirror)).join("")}</div></section>
+
+      <section class="page-section system-section"><div class="section-header"><h3>PostgreSQL 主写切换检查</h3>${pill(cutover?.readyForPostgresPrimary ? "可进入主写" : "暂不切主写", cutover?.readyForPostgresPrimary ? "good" : "warn")}</div><div class="system-metric-grid">
+        ${metric("通过", cutoverSummary.pass ?? 0, "good")}
+        ${metric("关注", cutoverSummary.warn ?? 0, "warn")}
+        ${metric("阻断", cutoverSummary.blocked ?? 0, (cutoverSummary.blocked || 0) > 0 ? "danger" : "good")}
+        ${metric("建议", cutover?.readyForHybridValidation ? "可做 hybrid 对账" : "先补检查项", cutover?.readyForHybridValidation ? "good" : "warn")}
+      </div><div class="system-layer-list">${cutoverItems.map(cutoverRow).join("") || "<p>暂无检查项。</p>"}</div></section>
 
       <section class="page-section system-section"><div class="section-header"><h3>运行边界</h3>${pill(security?.deploymentMode || "demo", "neutral")}</div><div class="system-card-grid">
         ${mirrorCard("安全响应头", { enabled: security?.securityHeaders?.enabled !== false, mode: security?.securityHeaders?.version || "enabled", resources: ["Security Headers"] })}
@@ -96,8 +92,6 @@
 
       <section class="page-section system-section"><div class="section-header"><h3>P0 架构层</h3>${pill(architecture?.runtimeMode || "runtime", "neutral")}</div><div class="system-layer-list">${layers.map(layerRow).join("") || "<p>暂无架构层数据。</p>"}</div></section>`;
     },
-    mount(ctx) {
-      ctx.delegate("[data-system-refresh]", "click", () => AppRouter.schedule("system-status-refresh"));
-    },
+    mount(ctx) { ctx.delegate("[data-system-refresh]", "click", () => AppRouter.schedule("system-status-refresh")); },
   };
 })();
