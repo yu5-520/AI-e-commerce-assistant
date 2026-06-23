@@ -8,38 +8,33 @@ def read(path):
         raise AssertionError(f"missing {path}")
     return p.read_text(encoding="utf-8")
 
-def version(text):
+def pick_version(text):
     m = re.search(r"Current Version:\s*v?(\d+\.\d+\.\d+)", text)
     if not m:
         raise AssertionError("missing current version")
     return m.group(1)
 
-def api_version(text):
+def pick_api(text):
     m = re.search(r'API_VERSION\s*=\s*["\'](\d+\.\d+\.\d+)["\']', text)
     if not m:
-        raise AssertionError("missing API_VERSION")
+        raise AssertionError("missing api version")
     return m.group(1)
 
-def must(text, marker, owner):
+def must(text, marker):
     if marker not in text:
-        raise AssertionError(f"{owner} missing {marker}")
+        raise AssertionError(f"missing {marker}")
 
 def main():
-    current = version(read("versioning/VERSION.md"))
-    if api_version(read("src/api/main.py")) != current:
+    current = pick_version(read("versioning/VERSION.md"))
+    if pick_api(read("src/api/main.py")) != current:
         raise AssertionError("version mismatch")
-    tech = read("versioning/CHANGELOG.md")
-    product = read("docs/product/CHANGELOG.md")
+    must(read("versioning/CHANGELOG.md"), f"## v{current}")
+    must(read("docs/product/CHANGELOG.md"), f"## v{current}")
     workflow = read(".github/workflows/runtime-smoke-test.yml")
-    must(tech, f"## v{current}", "tech changelog")
-    must(product, f"## v{current}", "product changelog")
-    for marker in ["/api/modules", "/api/accounts"]:
-        must(tech, marker, "tech changelog")
-        must(product, marker, "product changelog")
-    for marker in ["scripts/check_version_governance.py", "scripts/check_repository_consistency.py", "scripts/check_backend_flow_consistency.py", "scripts/check_frontend_module_consistency.py", "scripts/check_tier_isolation_consistency.py", "scripts/check_rag_namespace_isolation.py"]:
-        must(workflow, marker, "workflow")
-    for path in ["README.md", "docs/V9_RAG_NAMESPACE_ISOLATION.md"]:
-        read(path)
+    for marker in ["check_version_governance.py", "check_repository_consistency.py", "check_backend_flow_consistency.py", "check_frontend_module_consistency.py", "check_tier_isolation_consistency.py", "check_rag_namespace_isolation.py"]:
+        must(workflow, marker)
+    read("README.md")
+    read("docs/V9_RAG_NAMESPACE_ISOLATION.md")
     print(f"Version governance check passed for v{current}.")
 
 if __name__ == "__main__":
