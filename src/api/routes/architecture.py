@@ -21,6 +21,7 @@ from src.services.v84_weight_score_service import generate_weight_scores, weight
 from src.services.v85_context_weight_adjustment_service import generate_context_weight_adjustments, context_weight_summary
 from src.services.v86_cross_validation_service import generate_cross_validations, cross_validation_summary
 from src.services.v87_weight_task_group_service import generate_weight_task_groups, weight_task_group_summary
+from src.services.v88_weight_approval_service import decide_weight_approval, generate_weight_approvals, weight_approval_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -175,6 +176,26 @@ async def v87_weight_task_groups(object_type: str | None = Query(default=None), 
 @router.post("/v8/weight-task-groups/generate")
 async def v87_generate_weight_task_groups(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return generate_weight_task_groups(ctx)
+
+
+@router.get("/v8/weight-approvals")
+async def v88_weight_approvals(approval_status: str | None = Query(default=None), object_type: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return weight_approval_summary(ctx, approval_status=approval_status, object_type=object_type, limit=limit)
+
+
+@router.post("/v8/weight-approvals/generate")
+async def v88_generate_weight_approvals(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_weight_approvals(ctx)
+
+
+@router.post("/v8/weight-approvals/{approval_id}/decide")
+async def v88_decide_weight_approval(approval_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    try:
+        return decide_weight_approval(approval_id, body or {}, ctx)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/context")
