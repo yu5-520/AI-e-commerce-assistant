@@ -1,5 +1,27 @@
 # Product Changelog
 
+## v9.1.0 - 2026-06-24
+
+### Product Decision
+- V9.1 定位为仓库结构一致性版本，不新增前端主模块，不改变业务链路。
+- 本次更新把仓库目录、文档入口、脚本职责、CI 检查和前端缓存统一到 V9.1，避免后续更新被旧 Demo 文件、旧入口和旧文档带偏。
+- V9.1 为 V9.2 后端主流程一致性做准备：先让仓库主线清楚，再把 V8 权重能力接进导入、投影、任务、Agent 和复盘主链路。
+
+### Changed
+- `README.md` 当前版本升级为 `V9.1.0`，加入 V9.1 Repository Guard 主链路和 `docs/V9_REPOSITORY_CONSISTENCY.md` 文档入口。
+- `versioning/VERSION.md` 当前版本升级为 `v9.1.0`。
+- `src/api/main.py` 升级到 `9.1.0`。
+- 新增 `docs/V9_REPOSITORY_CONSISTENCY.md`，明确目录职责、必需入口、禁止旧路径、文档职责、脚本职责和 CI 检查顺序。
+- 新增 `scripts/check_repository_consistency.py`。
+- `.github/workflows/runtime-smoke-test.yml` 新增 Repository consistency check。
+- `web_demo/index.html` 前端资源缓存统一升级到 `9.1.0`。
+
+### Product Boundary
+- V9.1 只治理仓库结构，不引入新业务功能。
+- 旧阶段入口不得回流到当前主干。
+- `/api/modules` 仍是前端产品模块主入口；`/api/accounts` 仍是账号、角色、店铺归属和可见范围入口。
+- V9.2 才进入后端主流程一致性，把权重能力更深接入报表导入后的自动链路。
+
 ## v9.0.0 - 2026-06-24
 
 ### Product Decision
