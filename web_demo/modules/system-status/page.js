@@ -39,7 +39,7 @@
     return `<article class="system-layer-row cutover-row"><div><strong>${s(item?.name)}</strong><span>${s(item?.evidence)}${item?.nextAction ? ` · ${s(item.nextAction)}` : ""}</span></div>${pill(item?.status || "unknown", statusTone(item?.status))}</article>`;
   }
 
-  function safeVersion(security, repository, architecture) { return security?.apiVersion || repository?.version || architecture?.version || "V5.3.9"; }
+  function safeVersion(security, repository, architecture) { return security?.apiVersion || repository?.version || architecture?.version || "V5.4.0"; }
 
   window.SystemStatusPage = {
     route: "system-status",
@@ -65,7 +65,7 @@
         ["数据版本与预警", repository?.dataAlertWriteMirror],
       ];
 
-      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V5.3.9</p><h2>系统状态</h2><p>集中查看部署、数据库、Repository Mirror、P0 架构和主写切换检查。</p></div><div class="system-hero-side"><span>当前模式</span><strong>${s(activeMode)}</strong><small>${s(apiVersion)}</small></div></section>
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V5.4.0</p><h2>系统状态</h2><p>集中查看部署、数据库、Repository Mirror、P0 架构和主写切换检查。</p></div><div class="system-hero-side"><span>当前模式</span><strong>${s(activeMode)}</strong><small>${s(apiVersion)}</small></div></section>
 
       <section class="system-metric-grid">
         ${metric("API 版本", apiVersion, "good")}
