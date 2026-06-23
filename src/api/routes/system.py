@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.core.context import UserContext, get_current_context
+from src.services.repository_runtime_service import repository_health_check, repository_runtime_summary
 from src.services.security_status_service import security_status
 from src.services.system_service import clear_runtime_data as clear_runtime_store
 from src.services.system_service import get_db_status, reset_legacy_runtime_once
@@ -24,6 +25,14 @@ def db_status() -> Dict[str, Any]:
 def system_security(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     """Return deployment security, rate limit, worker, LLM, and log redaction status."""
     return security_status(ctx)
+
+
+@router.get("/repositories")
+async def repository_runtime(check: bool = Query(default=False), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return repository transition mode and optionally check PostgreSQL connectivity."""
+    if check:
+        return await repository_health_check(ctx)
+    return repository_runtime_summary(ctx)
 
 
 def _clear_runtime_data(confirm: bool, include_audit_logs: bool, reason: str = "manual_reset") -> Dict[str, Any]:
