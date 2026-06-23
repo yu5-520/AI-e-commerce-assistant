@@ -1,6 +1,6 @@
-# V7.4 SaaS 大厂体系架构基底
+# V7.5 SaaS 大厂体系架构基底
 
-V7 的目标不是继续堆功能，而是把 V6 的动态经营闭环收束成可交付、可审计、可迁移、可扩展的 SaaS 系统基底。V7.4 在 V7.3 的配置审计、对比和回滚之上，增加发布治理看板：功能开关启用率、灰度覆盖、角色覆盖、审计量和回滚风险都可度量。
+V7 的目标不是继续堆功能，而是把 V6 的动态经营闭环收束成可交付、可审计、可迁移、可扩展的 SaaS 系统基底。V7.5 在 V7.4 的发布治理看板之上，增加发布治理告警：灰度比例异常、回滚次数过多、功能启用但无灰度规则、角色覆盖不符合预期时，自动形成发布治理预警，并可生成治理任务。
 
 ## 1. 产品定位
 
@@ -16,37 +16,19 @@ V7 完成：
 业务闭环 → SaaS 控制面 → 多租户交付 → 组织权限治理 → 标准流程编排 → 审计可观测 → 生产迁移路径
 ```
 
-V7.1 完成：
+V7.5 完成：
 
 ```text
-SaaS 控制面 → 租户配置 → 功能开关 → 角色可见 → 灰度开放 → 配置审计
-```
-
-V7.2 完成：
-
-```text
-配置审计能力 → 配置中心前端 → 启用 / 暂停 → 灰度比例 → 角色范围 → 操作审计
-```
-
-V7.3 完成：
-
-```text
-配置审计记录 → 搜索筛选 → 变更对比 → 回滚配置 → 回滚再审计
-```
-
-V7.4 完成：
-
-```text
-功能开关 → 灰度规则 → 角色覆盖 → 审计量 → 回滚次数 → 发布状态看板
+发布治理看板 → 发布异常识别 → 发布预警 → 治理任务 → 复核关闭
 ```
 
 一句话定义：
 
 ```text
-V7.4 是 AI 电商经营系统的 SaaS 发布治理版本。
+V7.5 是 AI 电商经营系统的 SaaS 发布治理告警版本。
 ```
 
-## 2. V7.4 十层控制面
+## 2. V7.5 十层控制面
 
 1. 租户与组织控制面：tenant / org / store / user / role / data scope。
 2. 数据接入与契约中心：ERP、CRM、平台报表统一入口，后台字段识别与商品匹配。
@@ -56,8 +38,8 @@ V7.4 是 AI 电商经营系统的 SaaS 发布治理版本。
 6. 权限额度与审批中心：运营申请、总管审批、老板审批、额度校验和审批事件。
 7. 执行回写与复盘中心：执行结果、实际花费、采购金额、证据、复盘案例和 RAG 沉淀。
 8. 审计、日志与可观测中心：业务审计、技术日志、worker、LLM gateway、数据版本、回滚记录。
-9. SaaS 交付治理中心：版本、租户配置、功能开关、灰度、发布看板、运行模式、SLA 检查。
-10. 租户配置与功能开关中心：tenant config、feature flag、rollout、role gating、config audit、console actions、compare、rollback、release dashboard。
+9. SaaS 交付治理中心：版本、租户配置、功能开关、灰度、发布看板、发布告警、治理任务。
+10. 租户配置与功能开关中心：tenant config、feature flag、rollout、audit、compare、rollback、release alert。
 
 ## 3. 主业务流程
 
@@ -73,7 +55,8 @@ V7.4 是 AI 电商经营系统的 SaaS 发布治理版本。
 → 执行复盘与 RAG 案例沉淀
 → 租户配置中心前端操作
 → 配置审计、对比、回滚
-→ 发布治理看板与交付观测
+→ 发布治理看板
+→ 发布异常预警与治理任务
 ```
 
 ## 4. SaaS 必须守住的边界
@@ -86,67 +69,57 @@ V7.4 是 AI 电商经营系统的 SaaS 发布治理版本。
 - RAG 沉淀只保存案例，不自动改写公司规则。
 - 所有关键动作必须可审计、可回滚、可追踪。
 - SaaS 能力必须经过租户配置、角色权限和灰度规则开放，不能硬编码成全租户可用。
-- 功能开关前端操作必须限制在老板 / 总管，灰度规则只允许老板操作。
 - 配置回滚必须以审计记录为依据，且回滚动作本身必须再次写入审计。
 - 发布状态必须可度量，不能只看“开关是否打开”。
+- 发布异常必须形成显性预警，必要时生成治理任务。
 
-## 5. V7.4 发布治理能力
+## 5. V7.5 发布治理告警能力
 
-发布治理看板聚合：
-
-```text
-featureCount
-→ enabledCount
-→ rolloutRuleCount
-→ enabledForContextCount
-→ statusCounts
-→ stageCounts
-→ roleCoverage
-→ rollbackCount
-```
-
-单个功能开关的发布状态：
+发布治理预警类型：
 
 ```text
-paused
-full_release
-gray_release
-rollback_watch
 enabled_without_rollout
+rollback_watch
+missing_role_coverage
+near_full_rollout
+high_audit_churn
 ```
 
-## 6. 当前 V7.4 实现入口
+预警处理链路：
+
+```text
+发布治理看板
+→ 扫描功能发布状态
+→ 生成 release_governance_alerts_v7
+→ 高 / 中风险预警可生成治理任务
+→ 任务进入任务中心
+→ 总管/老板复核关闭
+```
+
+## 6. 当前 V7.5 实现入口
 
 ```text
 GET  /api/architecture/v7
-GET  /api/architecture/v7/tenant-config
-POST /api/architecture/v7/feature-flags/{flag_key}
-POST /api/architecture/v7/feature-flags/{flag_key}/rollout
-GET  /api/architecture/v7/config-audits
-GET  /api/architecture/v7/config-audits/{audit_id}/compare
-POST /api/architecture/v7/config-audits/{audit_id}/rollback
 GET  /api/architecture/v7/release-governance
+GET  /api/architecture/v7/release-alerts
+POST /api/architecture/v7/release-alerts/generate
 ```
 
 前端入口：
 
 ```text
-配置中心
-配置审计
 发布治理
+发布预警
 ```
 
 ## 7. 验收标准
 
-V7.4 完成后，系统至少能回答：
+V7.5 完成后，系统至少能回答：
 
-- 当前账号属于哪个租户、组织、店铺和角色？
-- 当前租户启用了哪些模块和功能？
-- 当前角色可见哪些功能开关？
-- 当前功能是否命中灰度规则？
-- 当前功能为什么可用或不可用？
-- 配置变更是否进入审计？
-- 某次配置变更和上一版差异是什么？
-- 是否可以按审计记录回滚，并留下回滚记录？
-- 每个功能是暂停、灰度、全量还是回滚观察？
-- 当前功能发布覆盖了哪些角色、多少灰度比例、发生过几次回滚？
+- 每个功能是暂停、灰度、全量、待配置还是回滚观察？
+- 哪些功能启用但没有有效灰度规则？
+- 哪些功能发生过回滚，需要观察？
+- 哪些功能缺少角色覆盖？
+- 哪些功能配置变更过于频繁？
+- 哪些预警应生成治理任务？
+- 治理任务是否进入任务中心并按角色可见？
