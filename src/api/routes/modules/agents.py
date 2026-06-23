@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "9.6.0"
+AGENT_REGISTRY_VERSION = "9.7.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,18 +28,10 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "v960_rag_write_memory"
-    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；RAG 候选记忆进入正式记忆库必须经过质量检查、人工复核、审批和审计。"
-    plan["v96RagWriteMemory"] = {
-        "service": "src/services/v96_rag_write_memory_service.py",
-        "architectureEndpoint": "/api/architecture/v9/rag-write-memory",
-        "lifecycle": ["rag_memory_candidate", "quality_check", "namespace_policy_check", "human_review", "approval_decision", "promoted_memory", "audit_record"],
-    }
-    plan["v95RagIsolation"] = {"service": "src/services/v95_rag_namespace_isolation_service.py", "architectureEndpoint": "/api/architecture/v9/rag-isolation"}
-    plan["v94TierIsolation"] = {"service": "src/services/v94_tier_isolation_contract_service.py", "architectureEndpoint": "/api/architecture/v9/tier-isolation"}
-    plan["v93FrontendModules"] = {"service": "src/services/v93_frontend_module_contract_service.py", "architectureEndpoint": "/api/architecture/v9/frontend-modules"}
-    plan["v92BackendFlow"] = {"service": "src/services/v92_backend_flow_service.py", "architectureEndpoint": "/api/architecture/v9/backend-flow"}
-    plan["taskRepositoryWritePath"] = {"version": AGENT_REGISTRY_VERSION, "service": "src/services/task_repository_write_service.py", "rule": "Agent 入池任务通过 TaskRepository 写路径持久化。"}
+    plan["mode"] = "v970_audit_guard"
+    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；V9.7 固定审计复核和责任报告边界。"
+    plan["v97AuditGuard"] = {"version": AGENT_REGISTRY_VERSION, "entry": "/api/architecture/v9/rag-audit-rollback"}
+    plan["taskRepositoryWritePath"] = {"version": AGENT_REGISTRY_VERSION, "service": "src/services/task_repository_write_service.py"}
     return plan
 
 
@@ -64,7 +56,7 @@ def _merge_decision_payload(draft: Dict[str, Any], body: Dict[str, Any]) -> Dict
     item["autoAccepted"] = True
     item["acceptedFrom"] = "decision_draft_confirmed"
     item["taskLayer"] = item.get("taskLayer") or "operator_execution"
-    item["agentJudgment"] = {**(item.get("agentJudgment") or {}), "status": "decision_path_auto_accepted", "selectedPathId": selected_path_id, "operatorSupplementKeys": list(supplement.keys()), "boundary": "已选路径直接进入处理中；待办只提交执行证据和等待复盘。"}
+    item["agentJudgment"] = {**(item.get("agentJudgment") or {}), "status": "decision_path_auto_accepted", "selectedPathId": selected_path_id, "operatorSupplementKeys": list(supplement.keys())}
     return item
 
 
