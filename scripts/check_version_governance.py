@@ -22,6 +22,7 @@ ACTIVE_DOCS = [
     "README.md",
     "docs/V9_SAAS_CONSISTENCY_BASE.md",
     "docs/V9_REPOSITORY_CONSISTENCY.md",
+    "docs/V9_BACKEND_FLOW_CONSISTENCY.md",
     "docs/server-deploy.md",
     "docs/product/README.md",
     "docs/product/mvp-scope.md",
@@ -149,6 +150,7 @@ def main() -> None:
     required_workflow_refs = [
         "scripts/check_version_governance.py",
         "scripts/check_repository_consistency.py",
+        "scripts/check_backend_flow_consistency.py",
         "scripts/smoke_test_runtime.py",
         "scripts/smoke_test_api.py",
     ]
