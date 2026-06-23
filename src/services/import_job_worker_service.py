@@ -12,7 +12,7 @@ from src.services.report_schema_service import confirm_report_import
 from src.services.trace_audit_service import resolve_trace_id
 from src.services.worker_queue_service import claim_next_worker_job, complete_worker_job, enqueue_worker_job, fail_worker_job
 
-IMPORT_JOB_WORKER_VERSION = "5.2.5"
+IMPORT_JOB_WORKER_VERSION = "5.3.3"
 IMPORT_QUEUE_NAME = "import"
 
 
@@ -30,12 +30,8 @@ def enqueue_import_worker_job(ctx: UserContext, *, dataset_name: str, source_typ
     queued = enqueue_worker_job(ctx, worker_payload)
     worker_job = queued.get("job") or {}
     trace_id = worker_job.get("traceId") or trace_id
-    dispatch = dispatch_arq_or_fallback(
-        ctx,
-        "import_report",
-        {"traceId": trace_id, "workerJobId": worker_job.get("workerJobId"), "workerId": "arq-import-worker", "queueName": IMPORT_QUEUE_NAME, "sourceType": source_type, "datasetName": dataset_name},
-    )
-    return {"version": IMPORT_JOB_WORKER_VERSION, "traceId": trace_id, "mode": "import_job_enqueue", "importQueued": True, "workerJob": worker_job, "created": queued.get("created"), "arqDispatch": dispatch, "rule": "enqueue=true writes worker_jobs first; Redis / ARQ dispatch is optional and falls back to SQLite."}
+    dispatch = dispatch_arq_or_fallback(ctx, "import_report", {"traceId": trace_id, "workerJobId": worker_job.get("workerJobId"), "workerId": "arq-import-worker", "queueName": IMPORT_QUEUE_NAME, "sourceType": source_type, "datasetName": dataset_name})
+    return {"version": IMPORT_JOB_WORKER_VERSION, "traceId": trace_id, "mode": "import_job_enqueue", "importQueued": True, "workerJob": worker_job, "created": queued.get("created"), "productionMirror": queued.get("productionMirror"), "arqDispatch": dispatch, "rule": "enqueue=true writes worker_jobs first; Redis / ARQ dispatch is optional and falls back to SQLite."}
 
 
 def _run_import_payload(ctx: UserContext, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -44,30 +40,9 @@ def _run_import_payload(ctx: UserContext, payload: Dict[str, Any]) -> Dict[str, 
     source_type = payload.get("sourceType") or payload.get("source_type") or "confirm_report_import"
     body = {**(payload.get("body") or {}), "traceId": trace_id}
     if source_type == "confirm_report_import":
-        return run_import_job(
-            ctx,
-            dataset_name=str(dataset_name),
-            source_type=source_type,
-            payload=body,
-            runner=lambda: confirm_report_import(
-                str(dataset_name),
-                rows=body.get("rows"),
-                field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
-                auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
-            ),
-        )
+        return run_import_job(ctx, dataset_name=str(dataset_name), source_type=source_type, payload=body, runner=lambda: confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False))
     if source_type == "import_report_dataset":
-        return run_import_job(
-            ctx,
-            dataset_name=str(dataset_name),
-            source_type=source_type,
-            payload=body,
-            runner=lambda: import_report_dataset(
-                str(dataset_name),
-                rows=body.get("rows"),
-                auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
-            ),
-        )
+        return run_import_job(ctx, dataset_name=str(dataset_name), source_type=source_type, payload=body, runner=lambda: import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False))
     if source_type == "run_v3_mock_imports":
         dataset_names = body.get("dataset_names") or body.get("datasetNames")
         return run_import_job(ctx, dataset_name="mock-alerts", source_type=source_type, payload=body, runner=lambda: run_v3_mock_imports(dataset_names=dataset_names))
@@ -82,7 +57,7 @@ def execute_next_import_worker_job(ctx: UserContext, *, worker_id: str = "import
     try:
         result = _run_import_payload(ctx, job.get("payload") or {})
         completed = complete_worker_job(ctx, job["workerJobId"], result=result)
-        return {"version": IMPORT_JOB_WORKER_VERSION, "traceId": job.get("traceId"), "mode": "import_worker_execute_next", "workerJob": completed.get("job") if completed else job, "importResult": result}
+        return {"version": IMPORT_JOB_WORKER_VERSION, "traceId": job.get("traceId"), "mode": "import_worker_execute_next", "workerJob": completed.get("job") if completed else job, "productionMirror": {"claimed": claimed.get("productionMirror"), "completed": (completed or {}).get("productionMirror")}, "importResult": result}
     except Exception as exc:  # noqa: BLE001
         failed = fail_worker_job(ctx, job["workerJobId"], error_message=str(exc), retry=True)
-        return {"version": IMPORT_JOB_WORKER_VERSION, "traceId": job.get("traceId"), "mode": "import_worker_execute_next", "workerJob": failed.get("job") if failed else job, "error": str(exc)}
+        return {"version": IMPORT_JOB_WORKER_VERSION, "traceId": job.get("traceId"), "mode": "import_worker_execute_next", "workerJob": failed.get("job") if failed else job, "productionMirror": {"claimed": claimed.get("productionMirror"), "failed": (failed or {}).get("productionMirror")}, "error": str(exc)}
