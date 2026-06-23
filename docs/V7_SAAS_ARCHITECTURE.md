@@ -1,6 +1,6 @@
-# V7.2 SaaS 大厂体系架构基底
+# V7.3 SaaS 大厂体系架构基底
 
-V7 的目标不是继续堆功能，而是把 V6 的动态经营闭环收束成可交付、可审计、可迁移、可扩展的 SaaS 系统基底。V7.2 在 V7.1 的租户配置、功能开关和灰度规则之上，增加配置中心前端操作能力，让老板 / 总管能直接在产品里启用、暂停和灰度开放功能。
+V7 的目标不是继续堆功能，而是把 V6 的动态经营闭环收束成可交付、可审计、可迁移、可扩展的 SaaS 系统基底。V7.3 在 V7.2 的配置中心前端操作之上，增加配置审计中心：配置变更可搜索、可对比、可回滚，回滚本身也进入审计。
 
 ## 1. 产品定位
 
@@ -28,13 +28,19 @@ V7.2 完成：
 配置审计能力 → 配置中心前端 → 启用 / 暂停 → 灰度比例 → 角色范围 → 操作审计
 ```
 
+V7.3 完成：
+
+```text
+配置审计记录 → 搜索筛选 → 变更对比 → 回滚配置 → 回滚再审计
+```
+
 一句话定义：
 
 ```text
-V7.2 是 AI 电商经营系统的 SaaS 配置中心可操作版本。
+V7.3 是 AI 电商经营系统的 SaaS 配置审计治理版本。
 ```
 
-## 2. V7.2 十层控制面
+## 2. V7.3 十层控制面
 
 1. 租户与组织控制面：tenant / org / store / user / role / data scope。
 2. 数据接入与契约中心：ERP、CRM、平台报表统一入口，后台字段识别与商品匹配。
@@ -45,7 +51,7 @@ V7.2 是 AI 电商经营系统的 SaaS 配置中心可操作版本。
 7. 执行回写与复盘中心：执行结果、实际花费、采购金额、证据、复盘案例和 RAG 沉淀。
 8. 审计、日志与可观测中心：业务审计、技术日志、worker、LLM gateway、数据版本、回滚记录。
 9. SaaS 交付治理中心：版本、租户配置、功能开关、灰度、运行模式、SLA 检查。
-10. 租户配置与功能开关中心：tenant config、feature flag、rollout、role gating、config audit、console actions。
+10. 租户配置与功能开关中心：tenant config、feature flag、rollout、role gating、config audit、console actions、compare、rollback。
 
 ## 3. 主业务流程
 
@@ -59,7 +65,8 @@ V7.2 是 AI 电商经营系统的 SaaS 配置中心可操作版本。
 → 权限额度与审批生命周期
 → 执行任务与结果回写
 → 执行复盘与 RAG 案例沉淀
-→ 租户配置中心前端操作、功能开关、灰度与交付治理
+→ 租户配置中心前端操作
+→ 配置审计、对比、回滚与交付治理
 ```
 
 ## 4. SaaS 必须守住的边界
@@ -73,8 +80,11 @@ V7.2 是 AI 电商经营系统的 SaaS 配置中心可操作版本。
 - 所有关键动作必须可审计、可回滚、可追踪。
 - SaaS 能力必须经过租户配置、角色权限和灰度规则开放，不能硬编码成全租户可用。
 - 功能开关前端操作必须限制在老板 / 总管，灰度规则只允许老板操作。
+- 配置回滚必须以审计记录为依据，且回滚动作本身必须再次写入审计。
 
-## 5. V7.2 配置中心数据结构
+## 5. V7.3 配置审计能力
+
+配置中心数据结构：
 
 ```text
 tenant_configs_v7
@@ -83,45 +93,39 @@ feature_rollout_rules_v7
 tenant_config_audit_v7
 ```
 
-功能开关的判断顺序：
+配置审计中心能力：
 
 ```text
-feature enabled
-→ allowed roles
-→ tenant / org rollout rule
-→ rollout percentage
-→ enabledForContext
+搜索审计记录
+→ 按 action 筛选
+→ 按 target_key 筛选
+→ 对比当前变更与前一个版本
+→ 回滚到前一个审计版本
+→ 写入 rollback_config_change 审计记录
 ```
 
-前端操作链路：
-
-```text
-配置中心
-→ 启用 / 暂停功能开关
-→ 修改阶段 stable / beta / internal
-→ 设置灰度比例 0-100
-→ 设置开放角色
-→ 写入 tenant_config_audit_v7
-```
-
-## 6. 当前 V7.2 实现入口
+## 6. 当前 V7.3 实现入口
 
 ```text
 GET  /api/architecture/v7
 GET  /api/architecture/v7/tenant-config
 POST /api/architecture/v7/feature-flags/{flag_key}
 POST /api/architecture/v7/feature-flags/{flag_key}/rollout
+GET  /api/architecture/v7/config-audits
+GET  /api/architecture/v7/config-audits/{audit_id}/compare
+POST /api/architecture/v7/config-audits/{audit_id}/rollback
 ```
 
 前端入口：
 
 ```text
 配置中心
+配置审计
 ```
 
 ## 7. 验收标准
 
-V7.2 完成后，系统至少能回答：
+V7.3 完成后，系统至少能回答：
 
 - 当前账号属于哪个租户、组织、店铺和角色？
 - 当前租户启用了哪些模块和功能？
@@ -131,3 +135,5 @@ V7.2 完成后，系统至少能回答：
 - 老板 / 总管是否能在前端启用或暂停功能？
 - 老板是否能在前端调整灰度比例和开放角色？
 - 配置变更是否进入审计？
+- 某次配置变更和上一版差异是什么？
+- 是否可以按审计记录回滚，并留下回滚记录？
