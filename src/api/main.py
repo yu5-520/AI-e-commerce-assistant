@@ -40,14 +40,15 @@ from src.services.v84_weight_score_service import ensure_weight_score_tables
 from src.services.v85_context_weight_adjustment_service import ensure_context_weight_tables
 from src.services.v86_cross_validation_service import ensure_cross_validation_tables
 from src.services.v87_weight_task_group_service import ensure_weight_task_group_tables
+from src.services.v88_weight_approval_service import ensure_weight_approval_tables
 from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "8.7.0"
+API_VERSION = "8.8.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
-app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V8.7 runtime: cross-generated weight task group drafts before approval.")
+app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V8.8 runtime: approval flow and execution gate for weight task groups.")
 app.middleware("http")(security_headers_middleware)
 app.middleware("http")(api_rate_limit_middleware)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "DELETE"], allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"])
@@ -57,7 +58,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v87_runtime_cleanup() -> None:
+def apply_v88_runtime_cleanup() -> None:
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
@@ -82,6 +83,7 @@ def apply_v87_runtime_cleanup() -> None:
     ensure_context_weight_tables()
     ensure_cross_validation_tables()
     ensure_weight_task_group_tables()
+    ensure_weight_approval_tables()
     ensure_risk_task_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
