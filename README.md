@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.3.0。新增 PostgreSQL / Alembic 生产数据模型骨架：`src/db/session.py`、`src/db/base.py`、`src/db/models.py`、`alembic.ini`、`alembic/env.py`、初始 P0 schema migration 和 `docs/POSTGRESQL_ALEMBIC.md`。当前不替换 SQLite Demo 运行链路。
+> 当前版本：V5.3.1。新增 SQLAlchemy Repository 过渡层：`src/db/repositories.py`、`src/services/repository_runtime_service.py`、`GET /api/system/repositories` 和 `DB_REPOSITORY_MODE=sqlite|hybrid|postgres`。当前默认仍是 SQLite Demo，PostgreSQL Repository 先进入可检查、可逐步迁移状态。
 
 ## 当前主链路
 
@@ -13,9 +13,11 @@ FastAPI：Security Headers + API RateLimit + CORS Allowlist
 ↓
 UserContext：tenant / org / user / role / store scope
 ↓
-SQLite Demo Runtime：ImportJob / WorkerJob / Task / Evidence / Audit / LLM Gateway 继续可运行
+Repository Runtime：DB_REPOSITORY_MODE=sqlite | hybrid | postgres
 ↓
-PostgreSQL Production Target：SQLAlchemy AsyncSession + Alembic + TenantScopedMixin + SoftDeleteMixin + TraceAuditMixin
+SQLite Demo Runtime：继续承接现有 ImportJob / WorkerJob / Task / Evidence / Audit / LLM Gateway
+↓
+PostgreSQL Production Target：SQLAlchemy AsyncSession + Alembic + Production Repositories
 ↓
 TraceId：贯穿 ImportJob / ProjectionJob / WorkerJob / WorkerTaskResult / Task / Evidence / RAG Staging / AuditLog / TechLog / LLM Gateway
 ↓
@@ -24,62 +26,45 @@ ModuleProjection / DashboardSummary / AlertEvent / Module Agent / DecisionTaskDr
 
 核心规则：**首页展示经营摘要，不展示工程代号；报表确认导入就是自动入库；商品、报表、总览必须随导入同步刷新；当前任务按优先级、截止时间和风险域排序；Demo 阶段可删除单条导入记录。**
 
-## V5.3.0 新增
+## V5.3.1 新增
 
 ```text
-src/db/session.py                               Async SQLAlchemy engine / session factory
-src/db/base.py                                  Declarative Base + Timestamp / Tenant / SoftDelete / Trace / Actor mixins
-src/db/models.py                                P0 production model registry
-alembic.ini                                     Alembic config，DATABASE_URL 可覆盖
-alembic/env.py                                  asyncpg migration env
-alembic/script.py.mako                          migration template
-alembic/versions/20260623_530_initial_p0_schema.py initial P0 schema scaffold
-docs/POSTGRESQL_ALEMBIC.md                     PostgreSQL / Alembic 迁移说明
+src/db/repositories.py                         SQLAlchemy Repository 过渡层
+src/services/repository_runtime_service.py     Repository Runtime 模式与 PostgreSQL health check
+src/api/routes/system.py                       新增 GET /api/system/repositories
+.env.example                                   新增 DB_REPOSITORY_MODE=sqlite|hybrid|postgres
 ```
 
-## 生产模型范围
+## Repository 过渡层
 
 ```text
-tenants
-organizations
-users
-stores
-import_jobs
-projection_jobs
-decision_tasks
-task_events
-task_evidence
-worker_jobs
-audit_logs
-tech_logs
-llm_gateway_events
+ProductionTaskRepository        list / get / upsert / soft_delete decision_tasks
+ProductionImportJobRepository   list / get import_jobs
+ProductionWorkerJobRepository   list worker_jobs by queue/status
+ProductionAuditRepository       trace timeline from audit_logs
 ```
 
-## 常用接口
+每个查询统一走：
 
 ```text
-GET    /api/health
-GET    /api/system/db-status
-GET    /api/system/security
-GET    /api/architecture/p0
-GET    /api/llm/status
-GET    /api/llm/gateway
-POST   /api/llm/generate
-GET    /api/audit/traces/{trace_id}
-GET    /api/audit/tech-logs
-GET    /api/audit/tech-logs/summary
-POST   /api/audit/tech-logs/test-redaction
-GET    /api/worker/jobs/runtime
-GET    /api/worker/jobs/results
-GET    /api/worker/jobs/results?trace_id=<TRACE_ID>
-GET    /api/worker/jobs/summary
-POST   /api/data/import-jobs/confirm
-POST   /api/data/import-jobs/report
-POST   /api/data/import-jobs/mock-alerts
-POST   /api/data/import-jobs/worker/execute-next
-POST   /api/modules/todo/{task_id}/submit-evidence
-POST   /api/modules/todo/{task_id}/review-evidence
-POST   /api/system/reset-runtime-data?confirm=true
+tenant_id = current_tenant
+org_id = current_org
+deleted_at IS NULL
+```
+
+## 运行模式
+
+```text
+DB_REPOSITORY_MODE=sqlite    默认模式，现有 Demo 稳定运行
+DB_REPOSITORY_MODE=hybrid    用于测试 PostgreSQL Repository，同时保留 SQLite fallback
+DB_REPOSITORY_MODE=postgres  未来生产切换模式
+```
+
+检查接口：
+
+```text
+GET /api/system/repositories
+GET /api/system/repositories?check=true
 ```
 
 ## Alembic 迁移命令
@@ -89,51 +74,36 @@ export DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/ai_ecommer
 alembic upgrade head
 ```
 
-生成新迁移：
-
-```bash
-alembic revision --autogenerate -m "describe change"
-alembic upgrade head
-```
-
-## Worker 启动方式
-
-```bash
-# Demo 默认：不配置 Redis，API 使用 SQLite worker_jobs fallback
-export WORKER_RUNTIME=sqlite
-
-# Redis / ARQ 模式
-export WORKER_RUNTIME=arq
-export REDIS_URL=redis://127.0.0.1:6379/0
-arq src.workers.arq_worker.WorkerSettings
-```
-
-## Nginx 部署入口
-
-```bash
-sudo cp deploy/nginx/ai-erp.conf /etc/nginx/conf.d/ai-erp.conf
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-## P0 下一步实施顺序
+## 常用接口
 
 ```text
-1. 已完成：Async SQLAlchemy / Alembic / TenantScopedMixin / SoftDeleteMixin
-2. 已完成：生产模型 Tenant / User / Store / ImportJob / Task / Worker / Audit / TechLog / LLMGatewayEvent
-3. 下一步：SQLAlchemy Repository 逐步替换 SQLite Runtime Repository
-4. UserContext：从 Demo Header 过渡到 JWT / Session
-5. TaskRepository 生产实现：decision_tasks / task_events / task_evidence
-6. ImportJob 生产实现：import_jobs / projection_jobs / data_version / imported_rows
-7. WorkerJob 生产实现：worker_jobs 幂等、重试、认领
-8. Audit / TechLog 生产实现：audit_logs / tech_logs / trace_id
-9. 前端系统状态页：展示 /api/system/security、/api/architecture/p0、/api/llm/gateway
+GET    /api/health
+GET    /api/system/db-status
+GET    /api/system/security
+GET    /api/system/repositories
+GET    /api/system/repositories?check=true
+GET    /api/architecture/p0
+GET    /api/llm/status
+GET    /api/llm/gateway
+POST   /api/llm/generate
+GET    /api/audit/traces/{trace_id}
+GET    /api/worker/jobs/runtime
+POST   /api/data/import-jobs/confirm
+POST   /api/modules/todo/{task_id}/submit-evidence
+POST   /api/system/reset-runtime-data?confirm=true
 ```
 
 ## 当前真实状态
 
 ```text
-已完成：PostgreSQL / Alembic 生产数据模型骨架。
-仍待完成：真实 PostgreSQL 实例、alembic upgrade head 实机执行、SQLAlchemy Repository 替换 SQLite Demo Repository、生产 JWT / Session。
+已完成：PostgreSQL / Alembic 生产模型、SQLAlchemy Repository 过渡层、Repository Runtime 状态接口。
+仍待完成：真实 PostgreSQL 实例、alembic upgrade head 实机执行、hybrid 双写、生产 JWT / Session。
 保留不变：当前 SQLite Demo 运行链路、导入测试、任务测试、删除记录测试。
+```
+
+## 下一步
+
+```text
+A. V5.3.2：TaskRepository hybrid 双写，把任务创建/流转同时写 SQLite 和 PostgreSQL
+B. V5.3.2：前端系统状态页，把 /api/system/security、/api/system/repositories、/api/architecture/p0 可视化
 ```
