@@ -28,8 +28,10 @@ from src.services.report_alert_service import (
 from src.services.report_schema_service import (
     confirm_report_import,
     get_report_templates,
+    normalize_rows_with_mapping,
     preview_report_dataset,
 )
+from src.services.trend_signal_service import ingest_product_trends
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
@@ -47,6 +49,44 @@ def can_rollback(user_id: str) -> bool:
 def require_rollback_permission(user_id: str) -> None:
     if not can_rollback(user_id):
         raise HTTPException(status_code=403, detail="当前账号无权回滚全局数据版本")
+
+
+def _attach_v61_trend_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
+    """Generate product snapshots, metric trends, and business signals after import."""
+    if not isinstance(rows, list):
+        result["trendSync"] = {"version": "6.1.0", "skipped": True, "reason": "rows is not a list"}
+        return result
+    import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
+    summaries: List[Dict[str, Any]] = []
+    for item in import_results:
+        if not isinstance(item, dict):
+            continue
+        dataset_name = item.get("datasetName")
+        data_version = item.get("dataVersion")
+        if not dataset_name or not data_version:
+            continue
+        field_mapping = (item.get("schemaPreview") or {}).get("fieldMapping") or {}
+        routed_rows = normalize_rows_with_mapping(rows, field_mapping) if isinstance(field_mapping, dict) else rows
+        trend_summary = ingest_product_trends(
+            dataset_name=str(dataset_name),
+            data_version=str(data_version),
+            rows=routed_rows,
+            source_system=source_system or result.get("sourceSystem"),
+        )
+        item["trendSync"] = trend_summary
+        summaries.append(trend_summary)
+    result["trendSync"] = {
+        "version": "6.1.0",
+        "mode": "product_snapshot_metric_trend_signal_sync",
+        "datasetCount": len(summaries),
+        "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries),
+        "trendCount": sum(item.get("trendCount", 0) for item in summaries),
+        "signalCount": sum(item.get("signalCount", 0) for item in summaries),
+        "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries),
+        "summaries": summaries,
+        "rule": "V6.1 导入后生成商品时间快照、指标变化和经营信号；V6.2 再接风险分级任务。",
+    }
+    return result
 
 
 @router.get("/sources")
@@ -159,18 +199,20 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
 
 @router.post("/import/confirm")
 def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Confirm a previewed report import, then trigger scoped alerts/tasks."""
+    """Confirm a previewed report import, then trigger scoped alerts/tasks and V6.1 trends."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
+    source_system = body.get("source_system") or body.get("sourceSystem")
     try:
-        return confirm_report_import(
+        result = confirm_report_import(
             str(dataset_name),
             rows=body.get("rows"),
             field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
             auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
-            source_system=body.get("source_system") or body.get("sourceSystem"),
+            source_system=source_system,
         )
+        return _attach_v61_trend_sync(result, body.get("rows"), source_system=source_system)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -182,11 +224,12 @@ def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
-        return import_report_dataset(
+        result = import_report_dataset(
             str(dataset_name),
             rows=body.get("rows"),
             auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
         )
+        return _attach_v61_trend_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -211,7 +254,7 @@ def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str
 def latest_version() -> Dict[str, Any]:
     """Return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "6.0.0", "message": "No data snapshot has been imported yet."}
+    return latest or {"version": "6.1.0", "message": "No data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
