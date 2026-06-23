@@ -8,10 +8,11 @@ from typing import Any, Dict
 from sqlalchemy import text
 
 from src.core.context import UserContext
+from src.db.projection_repositories import projection_repository_summary
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
 
-REPOSITORY_RUNTIME_VERSION = "5.3.4"
+REPOSITORY_RUNTIME_VERSION = "5.3.5"
 SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
 
 
@@ -34,11 +35,13 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "taskHybridMirror": _mirror_summary(mode, name="taskHybridMirror", resources=["DecisionTask"]),
         "importWorkerHybridMirror": _mirror_summary(mode, name="importWorkerHybridMirror", resources=["ImportJob", "WorkerJob"]),
         "auditTechHybridMirror": _mirror_summary(mode, name="auditTechHybridMirror", resources=["AuditLog", "TechLog"]),
+        "projectionDataHybridMirror": _mirror_summary(mode, name="projectionDataHybridMirror", resources=["ProjectionJob", "DataVersion", "AlertEvent"]),
         "currentContext": ctx.to_dict(),
         "database": database_runtime_summary(),
         "productionRepositories": production_repository_summary(),
+        "projectionRepositories": projection_repository_summary(),
         "switchEnv": {"DB_REPOSITORY_MODE": "sqlite | hybrid | postgres", "current": mode, "safeDefault": "sqlite"},
-        "rule": "Task, ImportJob, WorkerJob, AuditLog, and TechLog writes are SQLite-first and optionally mirrored to PostgreSQL in hybrid/postgres mode.",
+        "rule": "Task, ImportJob, WorkerJob, AuditLog, TechLog, and ProjectionJob writes are SQLite-first and optionally mirrored to PostgreSQL in hybrid/postgres mode.",
     }
 
 
