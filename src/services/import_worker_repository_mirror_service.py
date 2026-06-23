@@ -1,34 +1,16 @@
-"""ImportJob and WorkerJob PostgreSQL mirror service.
-
-SQLite Demo remains the source of truth in V5.3.3. This service mirrors successful
-ImportJob and WorkerJob writes into production SQLAlchemy repositories when
-DB_REPOSITORY_MODE is hybrid or postgres.
-"""
+"""ImportJob and WorkerJob PostgreSQL mirror service."""
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Dict
 
 from src.core.context import UserContext
 from src.db.repositories import ProductionImportJobRepository, ProductionWorkerJobRepository
 from src.db.session import get_session_factory
-from src.services.repository_runtime_service import repository_mode
+from src.services.repository_mirror_base_service import mirror_enabled, mirror_failed, mirror_skipped, mirror_summary, repository_mode, run_mirror
 from src.services.trace_audit_service import write_audit_log
 
-IMPORT_WORKER_MIRROR_VERSION = "5.3.3"
-
-
-def _skipped(action: str, reason: str = "DB_REPOSITORY_MODE=sqlite") -> Dict[str, Any]:
-    return {"version": IMPORT_WORKER_MIRROR_VERSION, "action": action, "mode": repository_mode(), "mirrored": False, "status": "skipped", "reason": reason}
-
-
-def _run(coro: Any, action: str) -> Dict[str, Any]:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    return {"version": IMPORT_WORKER_MIRROR_VERSION, "action": action, "mirrored": False, "status": "skipped", "reason": "event_loop_running; use async mirror path later"}
+IMPORT_WORKER_MIRROR_VERSION = "5.3.8"
 
 
 async def _mirror_import_async(ctx: UserContext, job: Dict[str, Any], action: str) -> Dict[str, Any]:
@@ -50,29 +32,26 @@ async def _mirror_worker_async(ctx: UserContext, job: Dict[str, Any], action: st
 
 
 def mirror_import_job_to_production(ctx: UserContext, job: Dict[str, Any] | None, *, action: str) -> Dict[str, Any]:
-    mode = repository_mode()
-    if mode == "sqlite":
-        return _skipped(action)
+    if not mirror_enabled():
+        return mirror_skipped(action, version=IMPORT_WORKER_MIRROR_VERSION)
     if not job:
-        return _skipped(action, "import job is empty")
+        return mirror_skipped(action, reason="import job is empty", version=IMPORT_WORKER_MIRROR_VERSION)
     try:
-        return _run(_mirror_import_async(ctx, job, action), action)
+        return run_mirror(_mirror_import_async(ctx, job, action), action, version=IMPORT_WORKER_MIRROR_VERSION)
     except Exception as exc:  # noqa: BLE001
-        return {"version": IMPORT_WORKER_MIRROR_VERSION, "action": action, "mode": mode, "mirrored": False, "status": "failed", "error": str(exc), "fallback": mode == "hybrid"}
+        return mirror_failed(action, exc, version=IMPORT_WORKER_MIRROR_VERSION)
 
 
 def mirror_worker_job_to_production(ctx: UserContext, job: Dict[str, Any] | None, *, action: str) -> Dict[str, Any]:
-    mode = repository_mode()
-    if mode == "sqlite":
-        return _skipped(action)
+    if not mirror_enabled():
+        return mirror_skipped(action, version=IMPORT_WORKER_MIRROR_VERSION)
     if not job:
-        return _skipped(action, "worker job is empty")
+        return mirror_skipped(action, reason="worker job is empty", version=IMPORT_WORKER_MIRROR_VERSION)
     try:
-        return _run(_mirror_worker_async(ctx, job, action), action)
+        return run_mirror(_mirror_worker_async(ctx, job, action), action, version=IMPORT_WORKER_MIRROR_VERSION)
     except Exception as exc:  # noqa: BLE001
-        return {"version": IMPORT_WORKER_MIRROR_VERSION, "action": action, "mode": mode, "mirrored": False, "status": "failed", "error": str(exc), "fallback": mode == "hybrid"}
+        return mirror_failed(action, exc, version=IMPORT_WORKER_MIRROR_VERSION)
 
 
 def import_worker_mirror_summary() -> Dict[str, Any]:
-    mode = repository_mode()
-    return {"version": IMPORT_WORKER_MIRROR_VERSION, "mode": mode, "enabled": mode in {"hybrid", "postgres"}, "sqliteFirst": True, "mirroredResources": ["ImportJob", "WorkerJob"], "rule": "ImportJob and WorkerJob writes succeed in SQLite first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode."}
+    return mirror_summary(name="importWorkerHybridMirror", resources=["ImportJob", "WorkerJob"], version=IMPORT_WORKER_MIRROR_VERSION, extra={"mirroredResources": ["ImportJob", "WorkerJob"]})
