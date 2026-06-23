@@ -1,9 +1,10 @@
 # Version
 
-Current Version: v9.1.0
+Current Version: v9.2.0
 
 ## Version History
 
+- v9.2.0: Added backend main-flow consistency. V9.2 defines the ImportJob -> DataVersion -> RawRows -> ModuleProjection -> AlertEvent -> WeightSignal -> DecisionTask -> AgentReport -> ApprovalFlow -> ExecutionFeedback -> ReviewLog -> RagMemoryCandidate contract. It adds `docs/V9_BACKEND_FLOW_CONSISTENCY.md`, `src/services/v92_backend_flow_service.py`, `/api/architecture/v9/backend-flow`, and `scripts/check_backend_flow_consistency.py`, and aligns FastAPI, health, and Agent registry versions.
 - v9.1.0: Added repository structure consistency governance. V9.1 defines directory responsibilities, active documentation entrypoints, required runtime/scripts/workflow files, and forbidden legacy paths. It adds `docs/V9_REPOSITORY_CONSISTENCY.md`, `scripts/check_repository_consistency.py`, and wires the new repository consistency check into GitHub Actions.
 - v9.0.0: Established the SaaS enterprise consistency baseline. V9 does not add new frontend business modules or extend V8 algorithms; it consolidates repository, frontend, backend, pricing-tier isolation, RAG isolation, permissions, audit, deployment, and smoke-test governance. The active product trunk keeps `/api/modules` and `/api/accounts` as stable product entrypoints while V8 weight capabilities are treated as backend enhancement layers for operating-unit, product, task, Agent evidence, and review flows.
 - v8.9.0: Added weight execution feedback and after-action review. Approved weight task groups can create execution feedback records, collect manual execution evidence, generate reviews, and mark RAG memory candidates without directly calling platform APIs or changing spend, products, permissions, or RAG standards.
