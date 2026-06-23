@@ -1,4 +1,4 @@
-"""V6.6 Trend Center routes."""
+"""V6.7 Trend Center routes."""
 
 from __future__ import annotations
 
@@ -20,14 +20,22 @@ router = APIRouter(prefix="/api/trends", tags=["trends"])
 @router.get("/summary")
 def trends_summary(request: Request, limit: int = Query(default=30, ge=1, le=200)) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
+    user = current_user(user_id)
     summary = trend_center_summary(user_id=user_id, limit=limit)
     summary["riskTaskSummary"] = risk_task_summary(limit=limit)
     summary["indicatorRuleSummary"] = indicator_rule_summary(limit=limit)
     summary["highRiskGateSummary"] = high_risk_gate_summary(limit=limit)
     summary["permissionBudgetSummary"] = permission_budget_summary(limit=limit)
     summary["approvalLifecycleSummary"] = approval_lifecycle_summary(limit=limit)
-    summary["version"] = "6.6.0"
-    summary["rule"] = "V6.6 增加审批生命周期：申请、分级审批、通过后生成执行任务。"
+    summary["approvalActionContext"] = {
+        "version": "6.7.0",
+        "currentRoleId": user.get("roleId"),
+        "canApprove": user.get("roleId") in {"manager", "owner", "finance"},
+        "canReject": user.get("roleId") in {"manager", "owner", "finance"},
+        "rule": "V6.7 前端可直接审批或驳回；审批通过后仍由后端生成独立执行任务。",
+    }
+    summary["version"] = "6.7.0"
+    summary["rule"] = "V6.7 增加审批中心前端操作：通过、驳回、刷新审批状态。"
     return summary
 
 
@@ -69,7 +77,7 @@ def approve_approval_flow(request: Request, flow_id: str, body: Dict[str, Any] |
     body = body or {}
     role_id = body.get("approverRoleId") or body.get("approver_role_id") or current_user(user_id_from_headers(request.headers)).get("roleId") or "manager"
     try:
-        return approve_flow(flow_id, str(role_id), note=body.get("note"))
+        return approve_flow(flow_id, str(role_id), note=body.get("note") or "前端审批通过。")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -79,6 +87,6 @@ def reject_approval_flow(request: Request, flow_id: str, body: Dict[str, Any] | 
     body = body or {}
     role_id = body.get("approverRoleId") or body.get("approver_role_id") or current_user(user_id_from_headers(request.headers)).get("roleId") or "manager"
     try:
-        return reject_flow(flow_id, str(role_id), note=body.get("note"))
+        return reject_flow(flow_id, str(role_id), note=body.get("note") or "前端审批驳回。")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
