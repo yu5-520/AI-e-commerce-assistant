@@ -22,6 +22,7 @@ from src.services.v85_context_weight_adjustment_service import generate_context_
 from src.services.v86_cross_validation_service import generate_cross_validations, cross_validation_summary
 from src.services.v87_weight_task_group_service import generate_weight_task_groups, weight_task_group_summary
 from src.services.v88_weight_approval_service import decide_weight_approval, generate_weight_approvals, weight_approval_summary
+from src.services.v89_weight_execution_review_service import generate_weight_execution_reviews, generate_weight_executions, submit_weight_execution_feedback, weight_execution_review_summary, weight_execution_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -196,6 +197,34 @@ async def v88_decide_weight_approval(approval_id: str, body: Dict[str, Any] | No
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/v8/weight-executions")
+async def v89_weight_executions(execution_status: str | None = Query(default=None), object_type: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return weight_execution_summary(ctx, execution_status=execution_status, object_type=object_type, limit=limit)
+
+
+@router.post("/v8/weight-executions/generate")
+async def v89_generate_weight_executions(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_weight_executions(ctx)
+
+
+@router.post("/v8/weight-executions/{execution_id}/feedback")
+async def v89_submit_weight_execution_feedback(execution_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    try:
+        return submit_weight_execution_feedback(execution_id, body or {}, ctx)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/v8/weight-execution-reviews")
+async def v89_weight_execution_reviews(effectiveness: str | None = Query(default=None), object_type: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return weight_execution_review_summary(ctx, effectiveness=effectiveness, object_type=object_type, limit=limit)
+
+
+@router.post("/v8/weight-execution-reviews/generate")
+async def v89_generate_weight_execution_reviews(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_weight_execution_reviews(ctx)
 
 
 @router.get("/context")
