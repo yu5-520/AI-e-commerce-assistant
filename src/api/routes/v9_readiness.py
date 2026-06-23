@@ -26,7 +26,7 @@ async def v99_delivery_readiness(ctx: UserContext = Depends(get_current_context)
 @router.get("/v9/readiness")
 async def v99_readiness_index(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return {
-        "version": "9.9.1",
+        "version": "9.9.0",
         "entries": {
             "opsAuthorization": "/api/architecture/v9/ops-authorization",
             "deliveryReadiness": "/api/architecture/v9/delivery-readiness",
