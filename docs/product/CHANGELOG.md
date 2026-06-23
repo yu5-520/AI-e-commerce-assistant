@@ -1,5 +1,28 @@
 # Product Changelog
 
+## v9.2.0 - 2026-06-24
+
+### Product Decision
+- V9.2 定位为后端主流程一致性版本，不新增前端主模块。
+- 本次更新固定导入、数据版本、模块投影、预警、权重、任务、Agent、审批、回写、复盘和 RAG 候选之间的后端契约。
+- V8 权重能力继续作为后端增强层补强经营单元、商品、任务详情、Agent 报告和日志复盘。
+
+### Changed
+- `README.md` 当前版本升级为 `V9.2.0`，加入 V9.2 Backend Flow Guard 主链路。
+- `versioning/VERSION.md` 当前版本升级为 `v9.2.0`。
+- `src/api/main.py`、`src/api/routes/health.py`、`src/api/routes/modules/agents.py` 统一升级到 `9.2.0`。
+- 新增 `docs/V9_BACKEND_FLOW_CONSISTENCY.md`。
+- 新增 `src/services/v92_backend_flow_service.py`。
+- 新增 `/api/architecture/v9/backend-flow`。
+- 新增 `scripts/check_backend_flow_consistency.py`，并接入 GitHub Actions。
+- `web_demo/index.html` 前端资源缓存统一升级到 `9.2.0`。
+
+### Product Boundary
+- V9.2 只治理后端主流程契约，不新增前端主模块。
+- `/api/modules` 仍是前端产品模块主入口；`/api/accounts` 仍是账号、角色、店铺归属和可见范围入口。
+- `/api/architecture/v9/backend-flow` 只输出主流程契约，不处理具体经营动作。
+- V9.3 才进入前端模块一致性，把权重摘要按套餐深度补强到原模块展示。
+
 ## v9.1.0 - 2026-06-24
 
 ### Product Decision
@@ -79,15 +102,3 @@
 - DataVersion 是追溯字段，不是首页主内容。
 - 首页展示经营摘要，不展示工程代号。
 - 当前任务列表按优先级、时限和风险域组织。
-
-## v5.0.7 - 2026-06-22
-
-### Product Decision
-- 路径选择卡改为“行动顺序优先”：路径标题和经营目标只是小标签，动作步骤是视觉重点。
-- 复盘指标不再展示在路径卡里；待办提交时本来就要提供截图、链接、处理结果和数据支撑，复盘指标保留在后端 `reviewPlan` 和待办证据流。
-- 报表上传确认后就是自动入库、自动刷新报表 / 总览 / 商品等模块；Agent 不再生成“确认入库”路径，只生成已入库后的数据质量修正任务。
-
-### Changed
-- `web_demo/modules/task-report/decision-runtime.js`：路径卡改为小标签 + 大动作步骤，不显示复盘列。
-- `web_demo/decision-task.css`：新增 action-sequence-first 布局，步骤块成为主视觉。
-- `src/services/action_plan_service.py`：`ACTION_PLAN_VERSION` 升级到 `5.0.7`；清空前端用 `commonActions`；报表异常路径改为字段补传修正、归属映射修正、版本回滚、异常标记观察。
