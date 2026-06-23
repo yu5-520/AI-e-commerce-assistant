@@ -25,13 +25,13 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.3.7"
+API_VERSION = "5.3.8"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.3.7 runtime with frontend system status page for security, repository, and P0 architecture visibility.",
+    description="V5.3.8 runtime with shared repository mirror base service and frontend system status visibility.",
 )
 
 app.middleware("http")(security_headers_middleware)
