@@ -1,42 +1,23 @@
-# PostgreSQL / Alembic / Repository 过渡层
+# PostgreSQL / Alembic / Repository 迁移说明
 
-当前版本：V5.3.9。
+> 当前版本：V5.4.0。本文件只记录数据库模型、迁移、Repository 范围和主写切换前检查。版本流水账请看 `docs/CHANGELOG.md`。
 
-本阶段新增 PostgreSQL 主写切换前检查清单。该能力只做 readiness 评估，不会修改 `DB_REPOSITORY_MODE`，也不会切换写路径。
-
-## 当前链路
+## 运行模式
 
 ```text
-SQLite Demo Runtime
-↓
-核心写路径 SQLite-first
-↓
-repository_mirror_base_service
-↓
-PostgreSQL Mirror
-↓
-/api/system/postgres-cutover-check
-↓
-主写切换前检查项：连接、迁移、mirror、回退、身份、回滚
+DB_REPOSITORY_MODE=sqlite    默认：只写 SQLite Demo，mirror skipped
+DB_REPOSITORY_MODE=hybrid    过渡：SQLite 成功后尝试 PostgreSQL mirror，失败不影响 Demo
+DB_REPOSITORY_MODE=postgres  目标：未来主写模式，当前仍需 cutover check 通过后再进入
 ```
 
-## 新增文件
+## 迁移文件
 
 ```text
-src/services/postgres_cutover_check_service.py  PostgreSQL 主写切换前检查服务
-src/api/routes/system.py                        GET /api/system/postgres-cutover-check
-web_demo/modules/system-status/page.js          前端展示 pass / warn / blocked
+alembic/versions/20260623_530_initial_p0_schema.py
+alembic/versions/20260623_535_data_version_alert_event.py
 ```
 
-## 检查接口
-
-```text
-GET /api/system/repositories
-GET /api/system/repositories?check=true
-GET /api/system/postgres-cutover-check
-```
-
-## 当前 Production Repository 范围
+## Production Repository 范围
 
 ```text
 ProductionTaskRepository           decision_tasks list / get / upsert / soft_delete
@@ -47,6 +28,14 @@ ProductionAlertEventRepository     alert_events upsert
 ProductionWorkerJobRepository      worker_jobs list / upsert by queue/status
 ProductionAuditRepository          audit_logs trace timeline / upsert
 ProductionTechLogRepository        tech_logs upsert
+```
+
+## 检查接口
+
+```text
+GET /api/system/repositories
+GET /api/system/repositories?check=true
+GET /api/system/postgres-cutover-check
 ```
 
 ## Cutover 检查项
@@ -67,19 +56,23 @@ projectionDataHybridMirror
 dataAlertWriteMirror
 ```
 
-## 重要边界
-
-1. 当前 Demo 服务仍先使用 SQLite runtime 表。
-2. `hybrid` 模式会尝试 mirror，但 mirror 失败不会阻断 Demo。
-3. `postgres` 模式目前还不是完全主写，只是 readiness 目标状态。
-4. 主写切换前必须先看 `/api/system/postgres-cutover-check` 的 blocked 项。
-
-## 后续迁移顺序
+## 主写切换顺序
 
 ```text
-1. DB_REPOSITORY_MODE=hybrid
-2. /api/system/postgres-cutover-check 消除 blocked
-3. 核心链路抽样对账
-4. 写入 rollback runbook
-5. 再考虑 postgres 主写切换
+1. 保持 DB_REPOSITORY_MODE=sqlite，保证 Demo 稳定
+2. 配置 DATABASE_URL
+3. 执行 Alembic 迁移
+4. 切 DB_REPOSITORY_MODE=hybrid
+5. 查看 /api/system/postgres-cutover-check
+6. 消除 blocked 项
+7. 做核心链路抽样对账
+8. 写入 rollback runbook
+9. 再考虑 DB_REPOSITORY_MODE=postgres
 ```
+
+## 边界
+
+- 当前 Demo 服务仍先使用 SQLite runtime 表。
+- `hybrid` 模式会尝试 mirror，但 mirror 失败不会阻断 Demo。
+- `postgres` 模式目前仍是目标状态，不应绕过 cutover check 直接切换。
+- 生产身份体系、JWT / Session、权限审计仍需后续接入。
