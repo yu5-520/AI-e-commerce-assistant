@@ -15,6 +15,7 @@ from src.services.v74_release_governance_service import release_governance_summa
 from src.services.v75_release_alert_service import generate_release_alerts, release_alert_summary
 from src.services.v80_weight_snapshot_service import generate_weight_snapshots, weight_snapshot_summary
 from src.services.v81_weight_comparison_service import generate_weight_comparisons, weight_comparison_summary
+from src.services.v82_weight_rag_gate_service import generate_weight_rag_hits, weight_rag_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -109,6 +110,16 @@ async def v81_weight_comparisons(object_type: str | None = Query(default=None), 
 @router.post("/v8/weight-comparisons/generate")
 async def v81_generate_weight_comparisons(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return generate_weight_comparisons(ctx)
+
+
+@router.get("/v8/weight-rag-hits")
+async def v82_weight_rag_hits(object_type: str | None = Query(default=None), hit_status: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return weight_rag_summary(ctx, object_type=object_type, hit_status=hit_status, limit=limit)
+
+
+@router.post("/v8/weight-rag-hits/generate")
+async def v82_generate_weight_rag_hits(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_weight_rag_hits(ctx)
 
 
 @router.get("/context")
