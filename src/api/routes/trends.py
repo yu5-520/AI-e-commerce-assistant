@@ -1,4 +1,4 @@
-"""V6.7 Trend Center routes."""
+"""V6.8 Trend Center routes."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from src.services.account_service import current_user, user_id_from_headers
 from src.services.approval_lifecycle_service import approval_lifecycle_summary, approve_flow, reject_flow
+from src.services.execution_feedback_service import execution_feedback_summary, submit_execution_result
 from src.services.high_risk_trend_gate_service import high_risk_gate_summary
 from src.services.indicator_rag_service import indicator_rule_summary
 from src.services.permission_budget_service import permission_budget_summary
@@ -27,15 +28,17 @@ def trends_summary(request: Request, limit: int = Query(default=30, ge=1, le=200
     summary["highRiskGateSummary"] = high_risk_gate_summary(limit=limit)
     summary["permissionBudgetSummary"] = permission_budget_summary(limit=limit)
     summary["approvalLifecycleSummary"] = approval_lifecycle_summary(limit=limit)
+    summary["executionFeedbackSummary"] = execution_feedback_summary(limit=limit)
     summary["approvalActionContext"] = {
-        "version": "6.7.0",
+        "version": "6.8.0",
         "currentRoleId": user.get("roleId"),
         "canApprove": user.get("roleId") in {"manager", "owner", "finance"},
         "canReject": user.get("roleId") in {"manager", "owner", "finance"},
-        "rule": "V6.7 前端可直接审批或驳回；审批通过后仍由后端生成独立执行任务。",
+        "canSubmitExecution": user.get("roleId") in {"operator", "manager", "owner"},
+        "rule": "V6.8 前端可审批、驳回，并对审批通过后的执行任务提交结果回写。",
     }
-    summary["version"] = "6.7.0"
-    summary["rule"] = "V6.7 增加审批中心前端操作：通过、驳回、刷新审批状态。"
+    summary["version"] = "6.8.0"
+    summary["rule"] = "V6.8 增加执行结果回写：审批通过后，执行任务需要提交实际花费、采购金额和证据。"
     return summary
 
 
@@ -90,3 +93,15 @@ def reject_approval_flow(request: Request, flow_id: str, body: Dict[str, Any] | 
         return reject_flow(flow_id, str(role_id), note=body.get("note") or "前端审批驳回。")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/execution-results")
+def execution_results(limit: int = Query(default=50, ge=1, le=200)) -> Dict[str, Any]:
+    return execution_feedback_summary(limit=limit)
+
+
+@router.post("/execution-results")
+def submit_execution_feedback(request: Request, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    role_id = current_user(user_id_from_headers(request.headers)).get("roleId") or "operator"
+    return submit_execution_result(body, actor_role_id=str(role_id))
