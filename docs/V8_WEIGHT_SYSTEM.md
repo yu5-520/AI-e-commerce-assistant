@@ -1,6 +1,6 @@
-# V8.0 权重数据波动任务系统
+# V8.1 权重数据波动任务系统
 
-V6-V7 是增长数据趋势任务系统，核心是发现增长机会、生成经营任务，并通过 SaaS 控制面完成权限、审批、执行、复盘和发布治理。V8 开始进入权重数据波动任务系统，核心不再只是哪里增长，而是资源权重是否应该重新分配。
+V6-V7 是增长数据趋势任务系统，核心是发现增长机会、生成经营任务，并通过 SaaS 控制面完成权限、审批、执行、复盘和发布治理。V8 是权重数据波动任务系统，核心不再只是哪里增长，而是资源权重是否应该重新分配。
 
 ## 1. V8 总定位
 
@@ -14,24 +14,29 @@ V8：权重数据波动任务系统
 基于商品、店铺、运营三类对象的多周期指标波动，结合环比、同比、多周期均值、波动率、RAG 标准线、联动比对和上下文权重修正，进行交叉验证，并生成升权、降权、限权、修复、止损、复核等交叉任务组。
 ```
 
-## 2. V8.0 本次边界
+## 2. V8.1 本次边界
 
-V8.0 只做权重指标快照层，不做以下动作：
+V8.0 已完成：
 
 ```text
-不做环比
-不做同比
+商品 / 店铺 / 运营 → 权重指标快照
+```
+
+V8.1 新增：
+
+```text
+权重指标快照 → 环比 / 多周期均值 / 波动率 / 可用同比
+```
+
+V8.1 仍然不做以下动作：
+
+```text
+不接 RAG 标准线
 不做联动比对
 不做权重评分
 不做升降权
 不生成权重任务
 不自动处罚运营
-```
-
-V8.0 的目标是：
-
-```text
-商品、店铺、运营都变成可计算的权重对象。
 ```
 
 ## 3. V8 主链路
@@ -68,75 +73,81 @@ RAG 标准线命中
 资源调度看板
 ```
 
-## 4. V8.0 数据表
+## 4. V8.0 / V8.1 数据表
 
 ```text
 weight_metric_snapshots_v8
+weight_metric_comparisons_v8
 ```
 
-字段重点：
+`weight_metric_comparisons_v8` 记录：
 
 ```text
-snapshot_id
+comparison_id
 tenant_id
 org_id
-object_type      product / store / operator
+object_type
 object_id
-object_name
-parent_type
-parent_id
+metric_name
+comparison_type
+current_value
+reference_value
+change_value
+change_rate
+direction
+confidence
 snapshot_version
-snapshot_at
-metrics
-dimensions
+reference_snapshot_version
 payload
 created_at
 ```
 
-## 5. 三类权重对象
-
-### 商品权重快照
+## 5. V8.1 支持的比较方式
 
 ```text
-ROI
-流量
-点击率
-转化率
-毛利率
-库存
-售后率
-好评率
+period_over_period      环比 / 本次对上次
+multi_period_average    多周期均值
+volatility              波动率
+year_over_year          可用同比 / 年度周期
 ```
 
-### 店铺权重快照
+注意：同比需要有接近一年周期的历史快照；demo 阶段主要验证结构，正式接 ERP / CRM 长周期数据后才会稳定产生同比。
+
+## 6. V8.1 输出方向
 
 ```text
-店铺 ROI
-好评率
-自然流量
-点击率
-商品健康率
-商品数量
-店铺角色标签
+up
+stable
+down
+insufficient_reference
 ```
 
-### 运营权重快照
+V8.1 的输出只回答：
 
 ```text
-任务完成率
-准时率
-复盘质量分
-证据完整度
-店铺维护分
-提交任务数
-负责店铺数
+指标相对上次如何变化？
+指标相对近几次均值如何变化？
+指标是否波动过大？
+是否存在可用同比参考？
 ```
 
-## 6. V8.0 接口
+不回答：
+
+```text
+是否应该升权？
+是否应该降权？
+是否应该生成任务？
+```
+
+这些从 V8.2 / V8.3 / V8.4 开始再做。
+
+## 7. 当前接口
 
 ```text
 GET  /api/architecture/v8/weight-snapshots
 POST /api/architecture/v8/weight-snapshots/generate
+GET  /api/architecture/v8/weight-comparisons
+POST /api/architecture/v8/weight-comparisons/generate
 ```
 
 前端入口：
@@ -145,7 +156,7 @@ POST /api/architecture/v8/weight-snapshots/generate
 权重中心
 ```
 
-## 7. V8 后续节奏
+## 8. V8 后续节奏
 
 ```text
 V8.0 权重指标快照层
@@ -161,7 +172,7 @@ V8.9 执行回写与调整后复盘
 V8.10 权重资源调度看板
 ```
 
-## 8. V8 核心边界
+## 9. V8 核心边界
 
 ```text
 系统可以建议升权 / 降权；
