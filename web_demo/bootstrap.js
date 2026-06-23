@@ -1,23 +1,5 @@
 (async function () {
-  const MANAGER_NAV = [
-    "dashboard",
-    "manager-tasks",
-    "manager-dispatch",
-    "manager-review",
-    "manager-modules",
-    "manager-retrospective",
-    "manager-reports",
-    "operating-unit",
-    "data-check",
-    "trend-center",
-    "tenant-config",
-    "config-audit",
-    "release-governance",
-    "feedback-flywheel",
-    "business-report",
-    "system-status",
-    "accounts",
-  ];
+  const MANAGER_NAV = ["dashboard", "manager-tasks", "manager-dispatch", "manager-review", "manager-modules", "manager-retrospective", "manager-reports", "operating-unit", "data-check", "trend-center", "tenant-config", "config-audit", "release-governance", "release-alerts", "feedback-flywheel", "business-report", "system-status", "accounts"];
 
   const FEEDBACK_ROLES = new Set(["owner", "manager"]);
   const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
@@ -33,65 +15,26 @@
     if (TREND_ROLES.has(role)) next.push("trend-center");
     if (TENANT_CONFIG_ROLES.has(role)) next.push("tenant-config");
     if (CONFIG_AUDIT_ROLES.has(role)) next.push("config-audit");
-    if (RELEASE_GOVERNANCE_ROLES.has(role)) next.push("release-governance");
+    if (RELEASE_GOVERNANCE_ROLES.has(role)) next.push("release-governance", "release-alerts");
     if (FEEDBACK_ROLES.has(role)) next.push("feedback-flywheel");
     if (SYSTEM_STATUS_ROLES.has(role)) next.push("system-status");
     return Array.from(new Set(next));
   }
 
-  const pages = [
-    window.DashboardPage,
-    window.StoreOverviewPage,
-    window.TaskCommandPage,
-    window.ProfitBudgetPage,
-    window.OrgEfficiencyPage,
-    window.ReviewAuditPage,
-    window.AccountPage,
-    window.RoleConsolePage,
-    window.SystemStatusPage,
-    window.TenantConfigPage,
-    window.ConfigAuditPage,
-    window.ReleaseGovernancePage,
-    window.ManagerTasksPage,
-    window.ManagerDispatchPage,
-    window.ManagerReviewPage,
-    window.ManagerTaskDetailPage,
-    window.ManagerModulesPage,
-    window.ManagerRetrospectivePage,
-    window.ManagerReportsPage,
-    window.OperatingUnitPage,
-    window.ReportPage,
-    window.DataVersionDetailPage,
-    window.TrendCenterPage,
-    window.ProductPage,
-    window.CompetitorPage,
-    window.ListingPage,
-    window.TrafficPage,
-    window.InventoryCenterPage,
-    window.ServiceCenterPage,
-    window.TodoPage,
-    window.LogPage,
-    window.FeedbackFlywheelPage,
-    window.TaskReportPage,
-  ];
+  const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.LogPage, window.FeedbackFlywheelPage, window.TaskReportPage];
 
   pages.filter(Boolean).forEach((page) => AppRouter.register(page));
 
   function applyNavigationScope(account) {
     const visible = new Set(visibleModulesFor(account));
-    document.querySelectorAll(".nav a[data-route]").forEach((link) => {
-      const allowed = !visible.size || visible.has(link.dataset.route);
-      link.hidden = !allowed;
-    });
+    document.querySelectorAll(".nav a[data-route]").forEach((link) => { link.hidden = !!visible.size && !visible.has(link.dataset.route); });
   }
 
   function renderAccountSwitcher(account) {
     const select = document.getElementById("accountSwitcher");
     if (!select || !account?.users) return;
     const currentId = account.currentUser?.id || AppApi.getCurrentUserId();
-    select.innerHTML = account.users
-      .map((user) => `<option value="${AppShell.escape(user.id)}" ${user.id === currentId ? "selected" : ""}>${AppShell.escape(user.name)} · ${AppShell.escape(user.roleName)}</option>`)
-      .join("");
+    select.innerHTML = account.users.map((user) => `<option value="${AppShell.escape(user.id)}" ${user.id === currentId ? "selected" : ""}>${AppShell.escape(user.name)} · ${AppShell.escape(user.roleName)}</option>`).join("");
     applyNavigationScope(account);
     select.onchange = async () => {
       select.disabled = true;
