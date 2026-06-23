@@ -1,8 +1,4 @@
-"""Repository runtime transition service.
-
-V5.3.1 keeps SQLite as the default Demo runtime while exposing PostgreSQL
-repository readiness and switch controls through DB_REPOSITORY_MODE.
-"""
+"""Repository runtime transition service."""
 
 from __future__ import annotations
 
@@ -14,8 +10,9 @@ from sqlalchemy import text
 from src.core.context import UserContext
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
+from src.services.task_repository_mirror_service import task_repository_mirror_summary
 
-REPOSITORY_RUNTIME_VERSION = "5.3.1"
+REPOSITORY_RUNTIME_VERSION = "5.3.2"
 SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
 
 
@@ -31,15 +28,12 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "activeMode": mode,
         "sqliteDemoFallback": mode in {"sqlite", "hybrid"},
         "postgresRepositoryEnabled": mode in {"postgres", "hybrid"},
+        "taskHybridMirror": task_repository_mirror_summary(),
         "currentContext": ctx.to_dict(),
         "database": database_runtime_summary(),
         "productionRepositories": production_repository_summary(),
-        "switchEnv": {
-            "DB_REPOSITORY_MODE": "sqlite | hybrid | postgres",
-            "current": mode,
-            "safeDefault": "sqlite",
-        },
-        "rule": "Routes remain on SQLite Demo unless explicitly migrated; production repositories can be tested through health checks first.",
+        "switchEnv": {"DB_REPOSITORY_MODE": "sqlite | hybrid | postgres", "current": mode, "safeDefault": "sqlite"},
+        "rule": "Task writes are SQLite-first and optionally mirrored to PostgreSQL in hybrid/postgres mode.",
     }
 
 
