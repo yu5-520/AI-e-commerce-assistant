@@ -11,7 +11,6 @@ from src.core.context import UserContext
 from src.db.projection_repositories import projection_repository_summary
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
-from src.services.data_alert_repository_mirror_service import data_alert_mirror_summary
 
 REPOSITORY_RUNTIME_VERSION = "5.3.6"
 SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
@@ -37,7 +36,7 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "importWorkerHybridMirror": _mirror_summary(mode, name="importWorkerHybridMirror", resources=["ImportJob", "WorkerJob"]),
         "auditTechHybridMirror": _mirror_summary(mode, name="auditTechHybridMirror", resources=["AuditLog", "TechLog"]),
         "projectionDataHybridMirror": _mirror_summary(mode, name="projectionDataHybridMirror", resources=["ProjectionJob", "DataVersion", "AlertEvent"]),
-        "dataAlertWriteMirror": data_alert_mirror_summary(),
+        "dataAlertWriteMirror": _mirror_summary(mode, name="dataAlertWriteMirror", resources=["DataVersion", "AlertEvent"]),
         "currentContext": ctx.to_dict(),
         "database": database_runtime_summary(),
         "productionRepositories": production_repository_summary(),
