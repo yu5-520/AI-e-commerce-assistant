@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.2.7。新增 TechLog JSON 与敏感信息脱敏：新增 `tech_log_service.py`、`tech_logs`、递归脱敏策略和 `/api/audit/tech-logs/*`；`write_audit_log` 会先清洗 payload，再同步写入业务审计与技术日志，避免 Token、密码、Key、Cookie 等敏感信息进入日志。
+> 当前版本：V5.2.8。新增 LLM Gateway 控制层：新增 `llm_gateway_service.py`、`llm_gateway_events`、`llm_gateway_cache`、`llm_circuit_breakers`；`/api/llm/generate` 已接入租户配额、分钟限流、缓存、熔断、Schema 校验、Trace Audit 和 TechLog 脱敏。
 
 ## 当前主链路
 
@@ -11,7 +11,7 @@
 ↓
 确认导入后自动入库
 ↓
-TraceId：贯穿 ImportJob / ProjectionJob / WorkerJob / WorkerTaskResult / Task / Evidence / RAG Staging / AuditLog / TechLog
+TraceId：贯穿 ImportJob / ProjectionJob / WorkerJob / WorkerTaskResult / Task / Evidence / RAG Staging / AuditLog / TechLog / LLM Gateway
 ↓
 ImportJob：记录导入请求、结果、异常和数据版本；支持同步执行或 enqueue 入队
 ↓
@@ -25,7 +25,9 @@ TaskRepository：任务创建、流转、重置进入 trace audit
 ↓
 TaskEvidence：运营提交证据、总管复核证据进入 trace audit
 ↓
-AuditLog：按 trace_id 串联导入、投影、队列、任务、证据、RAG 暂存
+LLM Gateway：配额、限流、缓存、熔断、Schema 校验，失败时规则模板降级
+↓
+AuditLog：按 trace_id 串联导入、投影、队列、任务、证据、RAG 暂存、LLM 调用
 ↓
 TechLog：JSON 技术日志，写入前递归脱敏 token / password / secret / key / cookie
 ↓
@@ -77,7 +79,9 @@ src/services/arq_dispatch_service.py           ARQ 投递助手，失败回退 S
 src/services/worker_task_handlers_service.py   Worker 可执行任务与 worker_task_results，RAG 暂存已接 trace audit
 src/services/trace_audit_service.py            trace_id / audit_logs / audit timeline，写入前会脱敏
 src/services/tech_log_service.py               JSON TechLog / tech_logs / 敏感信息递归脱敏
+src/services/llm_gateway_service.py            LLM 控制层：配额 / 限流 / 缓存 / 熔断 / Schema 校验
 src/api/routes/audit.py                        /api/audit/traces/{trace_id} 与 /api/audit/tech-logs/*
+src/api/routes/llm.py                          /api/llm/generate 已走 LLM Gateway 控制层
 src/workers/task_registry.py                   Worker 任务注册表
 src/workers/arq_worker.py                      ARQ WorkerSettings 启动入口
 src/api/routes/worker_jobs.py                  /api/worker/jobs/*、runtime、results，results 支持 trace_id
@@ -107,16 +111,16 @@ FastAPI 模块化单体
 + TechLog JSON 技术日志
 + 敏感信息脱敏
 + TaskEvidence / RAG Staging 追溯
-+ LLM Gateway 熔断降级
++ LLM Gateway 熔断 / 限流 / 配额 / 缓存 / Schema 校验
 + Nginx 前后端分离
 ```
 
-当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池、待办核心生命周期动作、报表导入前端同步、创意 Agent 入池和证据提交审计入库。报表导入已新增 ImportJob / ProjectionJob 运行记录，Worker Queue 已支持入队与重试，ImportJob 已支持 enqueue=true。Redis / ARQ 配置层、任务注册表、WorkerSettings 和 ARQ Dispatch 已补齐。projection_refresh、alert_generation、agent_analysis、rag_memory_write 已成为可执行 Worker 任务。Trace / AuditLog 已接入 ImportJob、ProjectionJob、WorkerJob、WorkerTaskResult、TaskRepository 写路径、TaskEvidence、RAG 暂存。TechLog JSON 与敏感信息脱敏已接入。下一步是 LLM Gateway 熔断、限流、配额、缓存和 Schema 校验。**
+当前 P0 进度：**任务系统已具备 SQLite mirror、TaskRepository scoped reads、启动快照恢复、写路径过渡 API，并已接入 Agent 入池、待办核心生命周期动作、报表导入前端同步、创意 Agent 入池和证据提交审计入库。报表导入已新增 ImportJob / ProjectionJob 运行记录，Worker Queue 已支持入队与重试，ImportJob 已支持 enqueue=true。Redis / ARQ 配置层、任务注册表、WorkerSettings 和 ARQ Dispatch 已补齐。projection_refresh、alert_generation、agent_analysis、rag_memory_write 已成为可执行 Worker 任务。Trace / AuditLog 已接入 ImportJob、ProjectionJob、WorkerJob、WorkerTaskResult、TaskRepository 写路径、TaskEvidence、RAG 暂存。TechLog JSON 与敏感信息脱敏已接入。LLM Gateway 已接入配额、限流、缓存、熔断和 Schema 校验。下一步是 Nginx 前后端分离、HTTPS、安全头和 API 限流。**
 
 ## 关键目录
 
 ```text
-src/api/main.py                                 FastAPI 入口，版本 5.2.7
+src/api/main.py                                 FastAPI 入口，版本 5.2.8
 src/core/context.py                             SaaS UserContext 依赖注入骨架
 src/repositories/scoped_repository.py           多租户 / 软删除 / 数据范围统一查询约束
 src/repositories/task_repository.py             任务 Repository：按 tenant / store / deleted_at 过滤读取与 upsert
@@ -137,7 +141,9 @@ src/services/arq_dispatch_service.py            ARQ Dispatch 与 SQLite fallback
 src/services/worker_task_handlers_service.py    Worker 可执行任务与结果表，RAG 暂存已写 trace audit
 src/services/trace_audit_service.py             Trace / AuditLog 服务，已接 payload 脱敏和 TechLog 镜像
 src/services/tech_log_service.py                JSON TechLog 与敏感信息脱敏
+src/services/llm_gateway_service.py             LLM Gateway 控制层
 src/api/routes/audit.py                         Trace / TechLog 查询 API
+src/api/routes/llm.py                           LLM 状态 / 生成 / 网关接口
 src/workers/task_registry.py                    Worker 任务注册表
 src/workers/arq_worker.py                       ARQ Worker 启动入口
 src/api/routes/worker_jobs.py                   Worker 队列、Runtime 与 Results API
@@ -196,6 +202,9 @@ GET    /api/audit/traces/{trace_id}
 GET    /api/audit/tech-logs
 GET    /api/audit/tech-logs/summary
 POST   /api/audit/tech-logs/test-redaction
+GET    /api/llm/status
+GET    /api/llm/gateway
+POST   /api/llm/generate
 POST   /api/modules/agents/{module}/{entity_id}/tasks
 POST   /api/modules/agents/creative/{product_id}/tasks
 POST   /api/modules/todo/{task_id}/accept
@@ -249,6 +258,6 @@ arq src.workers.arq_worker.WorkerSettings
 18. Trace / AuditLog：trace_audit_service、audit_logs、ImportJob / WorkerJob / WorkerResult 关联
 19. Task / Evidence / RAG Memory trace：任务写路径、证据提交复核、RAG 暂存已接入 trace_id
 20. TechLog JSON：tech_log_service、tech_logs、敏感信息递归脱敏、audit 同步技术日志
-21. 下一步：LLM Gateway 熔断、限流、配额、缓存、Schema 校验
-22. Nginx：前后端分离、HTTPS、限流、安全头
+21. LLM Gateway：llm_gateway_service、配额、限流、缓存、熔断、Schema 校验
+22. 下一步：Nginx 前后端分离、HTTPS、安全头、API 限流
 ```
