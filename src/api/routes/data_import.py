@@ -151,6 +151,7 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
             str(dataset_name),
             rows=body.get("rows"),
             field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
+            source_system=body.get("source_system") or body.get("sourceSystem"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -168,6 +169,7 @@ def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
             rows=body.get("rows"),
             field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
             auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
+            source_system=body.get("source_system") or body.get("sourceSystem"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -209,7 +211,7 @@ def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str
 def latest_version() -> Dict[str, Any]:
     """Return the latest data version used by global warning refresh."""
     latest = latest_data_version()
-    return latest or {"version": "5.0.9", "message": "No data snapshot has been imported yet."}
+    return latest or {"version": "6.0.0", "message": "No data snapshot has been imported yet."}
 
 
 @router.get("/alerts")
