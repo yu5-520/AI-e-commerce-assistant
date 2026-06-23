@@ -10,7 +10,7 @@ from src.services.llm_provider_service import llm_status
 from src.services.mcp_adapter_service import mcp_adapter_summary
 from src.services.tool_gateway_service import tool_gateway_summary
 
-API_VERSION = "9.2.0"
+API_VERSION = "9.3.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -22,11 +22,12 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v920_backend_flow_consistency",
+        "mode": "v930_frontend_module_consistency",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "llm_entry": "/api/llm/status",
         "architecture_entry": "/api/architecture/v9/backend-flow",
+        "frontend_module_entry": "/api/architecture/v9/frontend-modules",
         "safety": {
             "auto_scheduled_platform_action": False,
             "auto_ad_account_operation": False,
@@ -38,6 +39,11 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "v930_frontend_module_consistency": True,
+        "v930_frontend_module_endpoint": "/api/architecture/v9/frontend-modules",
+        "v930_frontend_module_service": "src/services/v93_frontend_module_contract_service.py",
+        "v930_frontend_module_rule": "前端主模块保持稳定，店铺权重、商品权重、交叉验证、执行回写和 RAG 证据只作为原模块增强字段。",
+        "v930_stable_modules": ["dashboard", "operating-unit", "product", "competitor", "listing", "traffic", "report", "todo", "log", "system-status", "accounts"],
         "v920_backend_flow_consistency": True,
         "v920_backend_flow_endpoint": "/api/architecture/v9/backend-flow",
         "v920_backend_flow_service": "src/services/v92_backend_flow_service.py",
