@@ -16,14 +16,14 @@ from src.services.repository_runtime_service import repository_runtime_summary
 from src.services.tech_log_service import tech_log_summary
 from src.services.worker_runtime_config_service import worker_runtime_summary
 
-SECURITY_STATUS_VERSION = "5.3.4"
+SECURITY_STATUS_VERSION = "5.3.5"
 
 
 def security_status(ctx: UserContext) -> Dict[str, Any]:
     cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000")
     return {
         "version": SECURITY_STATUS_VERSION,
-        "apiVersion": "5.3.4",
+        "apiVersion": "5.3.5",
         "securityHeaders": security_headers_summary(),
         "apiRateLimit": api_rate_limit_summary(),
         "cors": {"allowOrigins": [item.strip() for item in cors_origins.split(",") if item.strip()]},
