@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, trends, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, trends, v9_readiness, worker_jobs
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
@@ -38,6 +38,7 @@ app.include_router(import_jobs.router)
 app.include_router(approvals.router)
 app.include_router(system.router)
 app.include_router(architecture.router)
+app.include_router(v9_readiness.router)
 app.include_router(task_persistence.router)
 app.include_router(report_task_sync.router)
 app.include_router(trends.router)
