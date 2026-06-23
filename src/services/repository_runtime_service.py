@@ -11,8 +11,9 @@ from src.core.context import UserContext
 from src.db.projection_repositories import projection_repository_summary
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
+from src.services.repository_mirror_base_service import REPOSITORY_MIRROR_BASE_VERSION
 
-REPOSITORY_RUNTIME_VERSION = "5.3.6"
+REPOSITORY_RUNTIME_VERSION = "5.3.8"
 SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
 
 
@@ -22,7 +23,7 @@ def repository_mode() -> str:
 
 
 def _mirror_summary(mode: str, *, name: str, resources: list[str]) -> Dict[str, Any]:
-    return {"version": REPOSITORY_RUNTIME_VERSION, "name": name, "mode": mode, "enabled": mode in {"hybrid", "postgres"}, "sqliteFirst": True, "resources": resources, "rule": "SQLite write succeeds first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode."}
+    return {"version": REPOSITORY_RUNTIME_VERSION, "name": name, "mode": mode, "enabled": mode in {"hybrid", "postgres"}, "sqliteFirst": True, "resources": resources, "control": "repository_mirror_base_service", "rule": "SQLite write succeeds first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode."}
 
 
 def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
@@ -32,6 +33,7 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "activeMode": mode,
         "sqliteDemoFallback": mode in {"sqlite", "hybrid"},
         "postgresRepositoryEnabled": mode in {"postgres", "hybrid"},
+        "mirrorBase": {"version": REPOSITORY_MIRROR_BASE_VERSION, "enabled": True, "scope": "skipped / failed / event-loop guard / summary shape"},
         "taskHybridMirror": _mirror_summary(mode, name="taskHybridMirror", resources=["DecisionTask"]),
         "importWorkerHybridMirror": _mirror_summary(mode, name="importWorkerHybridMirror", resources=["ImportJob", "WorkerJob"]),
         "auditTechHybridMirror": _mirror_summary(mode, name="auditTechHybridMirror", resources=["AuditLog", "TechLog"]),
@@ -42,7 +44,7 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "productionRepositories": production_repository_summary(),
         "projectionRepositories": projection_repository_summary(),
         "switchEnv": {"DB_REPOSITORY_MODE": "sqlite | hybrid | postgres", "current": mode, "safeDefault": "sqlite"},
-        "rule": "Task, ImportJob, WorkerJob, AuditLog, TechLog, ProjectionJob, DataVersion, and AlertEvent writes are SQLite-first and optionally mirrored to PostgreSQL in hybrid/postgres mode.",
+        "rule": "All mirror services now share repository_mirror_base_service while keeping domain-specific repository adapters.",
     }
 
 
