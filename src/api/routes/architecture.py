@@ -1,4 +1,4 @@
-"""Architecture visibility routes for the P0 SaaS upgrade."""
+"""Architecture visibility routes for SaaS governance."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from src.core.context import UserContext, get_current_context
 from src.services.p0_architecture_service import p0_architecture_summary
+from src.services.v7_saas_control_plane_service import v7_saas_architecture_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -17,6 +18,13 @@ async def p0_architecture(ctx: UserContext = Depends(get_current_context)) -> Di
     """Return the P0 SaaS architecture decomposition and current scope plan."""
 
     return p0_architecture_summary(ctx)
+
+
+@router.get("/v7")
+async def v7_saas_architecture(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return the V7 SaaS control-plane architecture and workflow governance baseline."""
+
+    return v7_saas_architecture_summary(ctx)
 
 
 @router.get("/context")
