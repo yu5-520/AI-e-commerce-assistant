@@ -124,11 +124,15 @@ def generate_release_alerts(ctx: UserContext, create_tasks: bool = False) -> Dic
     raw_alerts = _build_alerts_from_release(release)
     alerts = [_upsert_alert(item) for item in raw_alerts]
     created_tasks = []
+    permission_note = "allowed"
+    if create_tasks and ctx.role_id not in {"owner", "manager"}:
+        create_tasks = False
+        permission_note = "current role cannot create governance tasks"
     if create_tasks:
         for alert in alerts:
             if alert.get("severity") in {"高", "中"}:
                 created_tasks.append(module_task_service.create_task(_task_payload(alert)))
-    return {"version": V75_RELEASE_ALERT_VERSION, "generatedCount": len(alerts), "createdTaskCount": len(created_tasks), "alerts": alerts, "createdTasks": created_tasks, "rule": "V7.5 将发布治理异常转成预警；可选择生成治理任务。"}
+    return {"version": V75_RELEASE_ALERT_VERSION, "roleId": ctx.role_id, "generatedCount": len(alerts), "createdTaskCount": len(created_tasks), "alerts": alerts, "createdTasks": created_tasks, "permissionNote": permission_note, "rule": "V7.5 将发布治理异常转成预警；老板/总管可生成治理任务。"}
 
 
 def release_alert_summary(ctx: UserContext, limit: int = 100) -> Dict[str, Any]:
@@ -141,4 +145,4 @@ def release_alert_summary(ctx: UserContext, limit: int = 100) -> Dict[str, Any]:
     for alert in alerts:
         by_severity[str(alert.get("severity") or "unknown")] += 1
         by_type[str(alert.get("alertType") or "unknown")] += 1
-    return {"version": V75_RELEASE_ALERT_VERSION, "alertCount": len(alerts), "bySeverity": dict(by_severity), "byType": dict(by_type), "alerts": alerts, "canGenerateTasks": ctx.role_id in {"owner", "manager"}, "rule": "发布治理预警用于发现灰度、回滚、角色覆盖和频繁变更问题。"}
+    return {"version": V75_RELEASE_ALERT_VERSION, "roleId": ctx.role_id, "alertCount": len(alerts), "bySeverity": dict(by_severity), "byType": dict(by_type), "alerts": alerts, "canGenerateTasks": ctx.role_id in {"owner", "manager"}, "rule": "发布治理预警用于发现灰度、回滚、角色覆盖和频繁变更问题。"}
