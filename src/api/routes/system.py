@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.core.context import UserContext, get_current_context
+from src.services.postgres_cutover_check_service import postgres_cutover_check
 from src.services.repository_runtime_service import repository_health_check, repository_runtime_summary
 from src.services.security_status_service import security_status
 from src.services.system_service import clear_runtime_data as clear_runtime_store
@@ -33,6 +34,12 @@ async def repository_runtime(check: bool = Query(default=False), ctx: UserContex
     if check:
         return await repository_health_check(ctx)
     return repository_runtime_summary(ctx)
+
+
+@router.get("/postgres-cutover-check")
+async def postgres_cutover(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return read-only PostgreSQL primary-write cutover readiness checks."""
+    return await postgres_cutover_check(ctx)
 
 
 def _clear_runtime_data(confirm: bool, include_audit_logs: bool, reason: str = "manual_reset") -> Dict[str, Any]:
