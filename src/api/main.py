@@ -35,13 +35,13 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "7.1.0"
+API_VERSION = "7.2.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V7.1 runtime: SaaS tenant config center, feature flags, rollout rules, and control-plane governance.",
+    description="V7.2 runtime: SaaS tenant config console, feature-flag operations, rollout rules, and control-plane governance.",
 )
 
 app.middleware("http")(security_headers_middleware)
@@ -60,8 +60,8 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v71_runtime_cleanup() -> None:
-    """Initialize SaaS control plane, tenant config, and task runtime."""
+def apply_v72_runtime_cleanup() -> None:
+    """Initialize SaaS control plane, tenant config console, and task runtime."""
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
