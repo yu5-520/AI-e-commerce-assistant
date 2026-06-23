@@ -10,7 +10,7 @@ from src.services.llm_provider_service import llm_status
 from src.services.mcp_adapter_service import mcp_adapter_summary
 from src.services.tool_gateway_service import tool_gateway_summary
 
-API_VERSION = "9.3.0"
+API_VERSION = "9.4.0"
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -22,12 +22,13 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v930_frontend_module_consistency",
+        "mode": "v940_tier_isolation_consistency",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
         "llm_entry": "/api/llm/status",
         "architecture_entry": "/api/architecture/v9/backend-flow",
         "frontend_module_entry": "/api/architecture/v9/frontend-modules",
+        "tier_isolation_entry": "/api/architecture/v9/tier-isolation",
         "safety": {
             "auto_scheduled_platform_action": False,
             "auto_ad_account_operation": False,
@@ -39,6 +40,12 @@ def health() -> Dict[str, Any]:
             "auto_customer_message_blast": False,
             "marketplace_api_connected": False,
         },
+        "v940_tier_isolation_consistency": True,
+        "v940_tier_isolation_endpoint": "/api/architecture/v9/tier-isolation",
+        "v940_tier_isolation_service": "src/services/v94_tier_isolation_contract_service.py",
+        "v940_tier_rule": "Starter、Professional、Enterprise 的能力边界必须同时受后端能力、RAG namespace、数据范围、部署模式和审计深度控制。",
+        "v940_tiers": ["starter", "professional", "enterprise"],
+        "v940_rag_namespaces": ["shared_desensitized_rag", "tenant_isolated_rag", "private_customer_rag"],
         "v930_frontend_module_consistency": True,
         "v930_frontend_module_endpoint": "/api/architecture/v9/frontend-modules",
         "v930_frontend_module_service": "src/services/v93_frontend_module_contract_service.py",
