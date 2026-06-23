@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.7"
+P0_ARCHITECTURE_VERSION = "5.2.8"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -68,9 +68,9 @@ P0_LAYERS: list[dict[str, Any]] = [
     {
         "id": "P0-7",
         "name": "LLM Gateway 熔断降级与配额",
-        "status": "partial",
+        "status": "llm_gateway_controls_scaffolded",
         "target": "熔断、限流、租户配额、结果缓存、Schema 校验、规则模板降级。",
-        "currentGap": "已有 LLM 边界与 fallback，但缺少生产级熔断和租户级配额。下一步进入 LLM Gateway。",
+        "currentGap": "新增 llm_gateway_service、llm_gateway_events、llm_gateway_cache、llm_circuit_breakers；/api/llm/generate 已走控制网关。下一步扩展 provider 级熔断冷却和成本计量。",
         "mustNot": ["LLM 不可用导致核心链路中断", "AI 输出绕过 Schema 写业务库"],
     },
     {
@@ -113,8 +113,8 @@ IMPLEMENTATION_SEQUENCE = [
     "Trace / AuditLog：trace_audit_service、audit_logs、ImportJob / WorkerJob / WorkerResult 关联",
     "Task / Evidence / RAG Memory trace：任务写路径、证据提交复核、RAG 暂存已接入 trace_id",
     "TechLog JSON：tech_log_service、tech_logs、敏感信息递归脱敏、audit 同步技术日志",
-    "下一步：LLM Gateway 熔断、限流、配额、缓存、Schema 校验",
-    "Nginx：前后端分离、HTTPS、限流、安全头",
+    "LLM Gateway：llm_gateway_service、配额、限流、缓存、熔断、Schema 校验",
+    "下一步：Nginx 前后端分离、HTTPS、安全头、API 限流",
 ]
 
 
@@ -123,7 +123,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "techlog_redaction_scaffolded",
+        "runtimeMode": "llm_gateway_controls_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
