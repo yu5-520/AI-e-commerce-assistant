@@ -18,11 +18,13 @@
 
   const FEEDBACK_ROLES = new Set(["owner", "manager"]);
   const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
+  const TREND_ROLES = new Set(["owner", "manager", "operator", "finance"]);
 
   function visibleModulesFor(account) {
     const role = account?.currentUser?.roleId;
     const base = role === "manager" ? MANAGER_NAV : (account?.currentUser?.visibleModules || []);
     const next = [...base];
+    if (TREND_ROLES.has(role)) next.push("trend-center");
     if (FEEDBACK_ROLES.has(role)) next.push("feedback-flywheel");
     if (SYSTEM_STATUS_ROLES.has(role)) next.push("system-status");
     return Array.from(new Set(next));
