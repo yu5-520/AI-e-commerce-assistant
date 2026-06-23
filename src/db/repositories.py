@@ -7,13 +7,13 @@ repositories until DB_REPOSITORY_MODE is explicitly switched in later versions.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.context import UserContext
-from src.db.models import AuditLog, DecisionTask, ImportJob, TaskEvidence, TaskEvent, TechLog, WorkerJob
+from src.db.models import AuditLog, DecisionTask, ImportJob, WorkerJob
 
 REPOSITORY_LAYER_VERSION = "5.3.1"
 
@@ -149,7 +149,7 @@ class ProductionTaskRepository:
         result = await self.session.execute(
             update(DecisionTask)
             .where(DecisionTask.tenant_id == self.scope.tenant_id, DecisionTask.org_id == self.scope.org_id, DecisionTask.deleted_at.is_(None))
-            .values(delete_reason=reason, deleted_by=self.scope.user_id)
+            .values(deleted_at=func.now(), delete_reason=reason, deleted_by=self.scope.user_id, updated_by=self.scope.user_id)
         )
         return int(result.rowcount or 0)
 
