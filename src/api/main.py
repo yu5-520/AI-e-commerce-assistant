@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, worker_jobs
+from src.middleware.api_rate_limit import api_rate_limit_middleware
+from src.middleware.security_headers import security_headers_middleware
 from src.repositories.task_repository import bootstrap_task_repository
 from src.services import module_task_service
 from src.services.llm_gateway_service import ensure_llm_gateway_tables
@@ -22,20 +25,24 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "5.2.8"
+API_VERSION = "5.2.9"
+CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V5.2.8 runtime with LLM Gateway quota, rate limit, cache, circuit breaker, schema validation, JSON TechLog redaction, trace_id audit chain, ARQ dispatch fallback, UserContext, and architecture APIs.",
+    description="V5.2.9 runtime with Nginx deployment templates, security headers, API rate limit, LLM Gateway controls, JSON TechLog redaction, trace_id audit chain, ARQ dispatch fallback, UserContext, and architecture APIs.",
 )
+
+app.middleware("http")(security_headers_middleware)
+app.middleware("http")(api_rate_limit_middleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "DELETE"],
-    allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id"],
+    allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"],
 )
 
 if WEB_DEMO_DIR.exists():
