@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from src.core.context import UserContext, get_current_context
 from src.services.p0_architecture_service import p0_architecture_summary
 from src.services.v7_saas_control_plane_service import v7_saas_architecture_summary
+from src.services.v71_tenant_config_service import tenant_config_summary, upsert_feature_flag
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -22,9 +23,25 @@ async def p0_architecture(ctx: UserContext = Depends(get_current_context)) -> Di
 
 @router.get("/v7")
 async def v7_saas_architecture(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Return the V7 SaaS control-plane architecture and workflow governance baseline."""
+    """Return the V7.1 SaaS control-plane architecture and workflow governance baseline."""
 
     return v7_saas_architecture_summary(ctx)
+
+
+@router.get("/v7/tenant-config")
+async def v71_tenant_config(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return tenant configuration, feature flags, and rollout evaluation for current context."""
+
+    return tenant_config_summary(ctx)
+
+
+@router.post("/v7/feature-flags/{flag_key}")
+async def v71_upsert_feature_flag(flag_key: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Create or update a V7.1 feature flag. Owner / manager only in demo mode."""
+
+    if ctx.role_id not in {"owner", "manager"}:
+        raise HTTPException(status_code=403, detail="Only owner or manager can change feature flags.")
+    return upsert_feature_flag(flag_key, body or {}, ctx)
 
 
 @router.get("/context")
