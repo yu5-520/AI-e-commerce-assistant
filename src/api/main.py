@@ -17,6 +17,7 @@ from src.middleware.security_headers import security_headers_middleware
 from src.repositories.task_repository import bootstrap_task_repository
 from src.services import module_task_service
 from src.services.llm_gateway_service import ensure_llm_gateway_tables
+from src.services.risk_task_service import ensure_risk_task_tables
 from src.services.system_service import reset_legacy_runtime_once
 from src.services.task_state_machine_service import load_task_snapshots
 from src.services.tech_log_service import ensure_tech_log_tables
@@ -26,13 +27,13 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "6.1.0"
+API_VERSION = "6.2.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V6.1 runtime: unified report input plus product snapshots, metric trends, and business signals.",
+    description="V6.2 runtime: unified report input, product trends, business signals, and risk-graded task generation.",
 )
 
 app.middleware("http")(security_headers_middleware)
@@ -51,7 +52,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v61_runtime_cleanup() -> None:
+def apply_v62_runtime_cleanup() -> None:
     """Initialize demo cleanup and hydrate task runtime from persisted snapshots."""
     reset_legacy_runtime_once()
     bootstrap_task_repository()
@@ -60,6 +61,7 @@ def apply_v61_runtime_cleanup() -> None:
     ensure_tech_log_tables()
     ensure_llm_gateway_tables()
     ensure_trend_tables()
+    ensure_risk_task_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
         if snapshots:
