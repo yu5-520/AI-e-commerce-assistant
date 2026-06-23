@@ -20,6 +20,7 @@ from src.services.v83_linked_metric_relation_service import generate_linked_metr
 from src.services.v84_weight_score_service import generate_weight_scores, weight_score_summary
 from src.services.v85_context_weight_adjustment_service import generate_context_weight_adjustments, context_weight_summary
 from src.services.v86_cross_validation_service import generate_cross_validations, cross_validation_summary
+from src.services.v87_weight_task_group_service import generate_weight_task_groups, weight_task_group_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -164,6 +165,16 @@ async def v86_cross_validations(object_type: str | None = Query(default=None), v
 @router.post("/v8/cross-validations/generate")
 async def v86_generate_cross_validations(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return generate_cross_validations(ctx)
+
+
+@router.get("/v8/weight-task-groups")
+async def v87_weight_task_groups(object_type: str | None = Query(default=None), group_status: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return weight_task_group_summary(ctx, object_type=object_type, group_status=group_status, limit=limit)
+
+
+@router.post("/v8/weight-task-groups/generate")
+async def v87_generate_weight_task_groups(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_weight_task_groups(ctx)
 
 
 @router.get("/context")
