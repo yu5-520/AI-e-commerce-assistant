@@ -14,12 +14,12 @@
   const directionText = (value) => value === "up" ? "上涨" : value === "down" ? "下滑" : "稳定";
   const riskClass = (value) => value === "高" ? "danger" : value === "中" ? "warning" : "good";
 
-  function metricCards(summary = {}) {
+  function metricCards(summary = {}, riskSummary = {}) {
     return `<section class="kpi-grid report-metrics">${[
       ["商品快照", summary.snapshotCount || 0, "导入后生成"],
       ["趋势指标", summary.trendCount || 0, "同品对比"],
       ["经营信号", summary.signalCount || 0, "趋势触发"],
-      ["任务候选", summary.taskCandidateSignalCount || 0, "V6.2 接入"]
+      ["风险任务", riskSummary.total || 0, "V6.2 生成"]
     ].map(([a,b,c]) => AppShell.metricCard(a,b,c)).join("")}</section>`;
   }
 
@@ -36,7 +36,13 @@
   }
 
   function signalList(items = []) {
-    return `<section class="page-section report-section"><div class="section-header"><h3>经营信号</h3><span class="status-badge">${s(items.length)} 条</span></div><div class="report-card-list">${items.length ? items.map((item) => `<article class="report-card"><div><h3>${s(item.signalType)}</h3><p>${s(item.productId)} · ${s(item.metricLabel || item.sourceMetric)} · ${s(directionText(item.trendDirection))}</p><div class="report-meta"><span class="status-badge ${riskClass(item.riskLevel)}">${s(item.riskLevel)}风险</span><span>${s(item.taskCandidate ? "任务候选" : "观察信号")}</span><span>${pct(item.changeRate)}</span></div><p>${s(item.reason || "趋势中心记录该信号，后续接入风险分级任务。")}</p></div><div class="report-actions"><span class="status-badge">V6.1</span></div></article>`).join("") : `<div class="log-empty">暂无经营信号。导入新的同商品数据后会自动生成。</div>`}</div></section>`;
+    return `<section class="page-section report-section"><div class="section-header"><h3>经营信号</h3><span class="status-badge">${s(items.length)} 条</span></div><div class="report-card-list">${items.length ? items.map((item) => `<article class="report-card"><div><h3>${s(item.signalType)}</h3><p>${s(item.productId)} · ${s(item.metricLabel || item.sourceMetric)} · ${s(directionText(item.trendDirection))}</p><div class="report-meta"><span class="status-badge ${riskClass(item.riskLevel)}">${s(item.riskLevel)}风险</span><span>${s(item.taskCandidate ? "任务候选" : "观察信号")}</span><span>${pct(item.changeRate)}</span></div><p>${s(item.reason || "趋势中心记录该信号，并由 V6.2 风险分级生成任务。")}</p></div><div class="report-actions"><span class="status-badge">V6.2</span></div></article>`).join("") : `<div class="log-empty">暂无经营信号。导入新的同商品数据后会自动生成。</div>`}</div></section>`;
+  }
+
+  function riskTaskList(summary = {}) {
+    const plans = summary.latestPlans || [];
+    const levels = summary.byLevel || {};
+    return `<section class="page-section report-section"><div class="section-header"><div><h3>风险分级任务</h3><p>低风险可直接观察；中风险带指标边界；高风险只生成复核候选。</p></div><div class="report-meta"><span>高 ${s(levels["高"] || 0)}</span><span>中 ${s(levels["中"] || 0)}</span><span>低 ${s(levels["低"] || 0)}</span></div></div><div class="report-card-list">${plans.length ? plans.map((plan) => { const task = plan.payload?.task || {}; return `<article class="report-card"><div><h3>${s(task.title || plan.taskType)}</h3><p>${s(plan.productId)} · ${s(task.riskDomain || "趋势")} · ${s(task.deadline || "待定")}</p><div class="report-meta"><span class="status-badge ${riskClass(plan.riskLevel)}">${s(plan.riskLevel)}风险</span><span>${s(plan.taskType)}</span><span>${s(task.status || "已生成")}</span></div><p>${s(task.riskPolicy?.rule || "风险分级任务已进入任务池。")}</p></div><div class="report-actions"><button type="button" data-open-task="${s(plan.taskId)}">查看待办</button></div></article>`; }).join("") : `<div class="log-empty">暂无风险分级任务。导入同一商品的第二份报表并形成信号后，系统会生成任务。</div>`}</div></section>`;
   }
 
   window.TrendCenterPage = {
@@ -45,9 +51,11 @@
     async render() {
       trendData = await AppApi.trendCenter(50);
       const summary = trendData?.summary || {};
-      return `<section class="report-hero report-hero-clean"><div><p class="eyebrow">TREND CENTER · V6.1</p><h2>动态数据趋势中心</h2></div><div class="report-hero-side"><span>当前阶段</span><strong>快照与信号</strong><small>V6.2 接风险分级任务</small></div></section>${metricCards(summary)}<section class="report-preview-grid">${compactList("总店铺趋势", trendData?.storeTrends || [])}${compactList("平台趋势", trendData?.platformTrends || [])}${compactList("平台类目趋势", trendData?.categoryTrends || [])}</section>${productList(trendData?.latestProducts || [])}${trendList(trendData?.latestTrends || [])}${signalList(trendData?.latestSignals || [])}`;
+      const riskSummary = trendData?.riskTaskSummary || {};
+      return `<section class="report-hero report-hero-clean"><div><p class="eyebrow">TREND CENTER · V6.2</p><h2>动态数据趋势中心</h2></div><div class="report-hero-side"><span>当前阶段</span><strong>风险分级任务</strong><small>V6.3 接 RAG 指标</small></div></section>${metricCards(summary, riskSummary)}<section class="report-preview-grid">${compactList("总店铺趋势", trendData?.storeTrends || [])}${compactList("平台趋势", trendData?.platformTrends || [])}${compactList("平台类目趋势", trendData?.categoryTrends || [])}</section>${riskTaskList(riskSummary)}${productList(trendData?.latestProducts || [])}${trendList(trendData?.latestTrends || [])}${signalList(trendData?.latestSignals || [])}`;
     },
     mount(ctx) {
+      ctx.delegate("[data-open-task]", "click", (_, node) => AppTaskActions.openTodoTask(node.dataset.openTask));
       ctx.onRefresh = async () => {
         trendData = await AppApi.trendCenter(50);
         AppRouter.schedule("trend-refresh");
