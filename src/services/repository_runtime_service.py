@@ -10,7 +10,6 @@ from sqlalchemy import text
 from src.core.context import UserContext
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
-from src.services.task_repository_mirror_service import task_repository_mirror_summary
 
 REPOSITORY_RUNTIME_VERSION = "5.3.2"
 SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
@@ -21,6 +20,16 @@ def repository_mode() -> str:
     return mode if mode in SUPPORTED_MODES else "sqlite"
 
 
+def _task_mirror_summary(mode: str) -> Dict[str, Any]:
+    return {
+        "version": REPOSITORY_RUNTIME_VERSION,
+        "mode": mode,
+        "enabled": mode in {"hybrid", "postgres"},
+        "sqliteFirst": True,
+        "rule": "Task writes succeed in SQLite first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode.",
+    }
+
+
 def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
     mode = repository_mode()
     return {
@@ -28,7 +37,7 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "activeMode": mode,
         "sqliteDemoFallback": mode in {"sqlite", "hybrid"},
         "postgresRepositoryEnabled": mode in {"postgres", "hybrid"},
-        "taskHybridMirror": task_repository_mirror_summary(),
+        "taskHybridMirror": _task_mirror_summary(mode),
         "currentContext": ctx.to_dict(),
         "database": database_runtime_summary(),
         "productionRepositories": production_repository_summary(),
