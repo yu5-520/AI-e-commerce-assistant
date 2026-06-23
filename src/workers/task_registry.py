@@ -6,10 +6,10 @@ from typing import Any, Awaitable, Callable, Dict
 
 from src.core.context import UserContext
 from src.services.import_job_worker_service import execute_next_import_worker_job
-from src.services.report_task_repository_sync_service import sync_report_tasks
+from src.services.report_task_repository_sync_service import sync_report_import_tasks_to_repository
 from src.services.worker_task_handlers_service import run_agent_analysis, run_alert_generation, run_projection_refresh, run_rag_memory_write
 
-WORKER_REGISTRY_VERSION = "5.2.4"
+WORKER_REGISTRY_VERSION = "5.2.5"
 WorkerHandler = Callable[[UserContext, Dict[str, Any]], Dict[str, Any] | Awaitable[Dict[str, Any]]]
 
 
@@ -18,7 +18,7 @@ def run_import_worker(ctx: UserContext, payload: Dict[str, Any]) -> Dict[str, An
 
 
 def run_report_task_sync(ctx: UserContext, payload: Dict[str, Any]) -> Dict[str, Any]:
-    return sync_report_tasks(payload.get("result") or {}, ctx)
+    return sync_report_import_tasks_to_repository(payload.get("result") or {}, ctx)
 
 
 WORKER_TASK_REGISTRY: Dict[str, WorkerHandler] = {
