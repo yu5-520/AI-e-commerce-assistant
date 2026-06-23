@@ -11,7 +11,7 @@ from src.core.context import UserContext
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
 
-REPOSITORY_RUNTIME_VERSION = "5.3.2"
+REPOSITORY_RUNTIME_VERSION = "5.3.3"
 SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
 
 
@@ -20,14 +20,8 @@ def repository_mode() -> str:
     return mode if mode in SUPPORTED_MODES else "sqlite"
 
 
-def _task_mirror_summary(mode: str) -> Dict[str, Any]:
-    return {
-        "version": REPOSITORY_RUNTIME_VERSION,
-        "mode": mode,
-        "enabled": mode in {"hybrid", "postgres"},
-        "sqliteFirst": True,
-        "rule": "Task writes succeed in SQLite first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode.",
-    }
+def _mirror_summary(mode: str, *, name: str, resources: list[str]) -> Dict[str, Any]:
+    return {"version": REPOSITORY_RUNTIME_VERSION, "name": name, "mode": mode, "enabled": mode in {"hybrid", "postgres"}, "sqliteFirst": True, "resources": resources, "rule": "SQLite write succeeds first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode."}
 
 
 def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
@@ -37,12 +31,13 @@ def repository_runtime_summary(ctx: UserContext) -> Dict[str, Any]:
         "activeMode": mode,
         "sqliteDemoFallback": mode in {"sqlite", "hybrid"},
         "postgresRepositoryEnabled": mode in {"postgres", "hybrid"},
-        "taskHybridMirror": _task_mirror_summary(mode),
+        "taskHybridMirror": _mirror_summary(mode, name="taskHybridMirror", resources=["DecisionTask"]),
+        "importWorkerHybridMirror": _mirror_summary(mode, name="importWorkerHybridMirror", resources=["ImportJob", "WorkerJob"]),
         "currentContext": ctx.to_dict(),
         "database": database_runtime_summary(),
         "productionRepositories": production_repository_summary(),
         "switchEnv": {"DB_REPOSITORY_MODE": "sqlite | hybrid | postgres", "current": mode, "safeDefault": "sqlite"},
-        "rule": "Task writes are SQLite-first and optionally mirrored to PostgreSQL in hybrid/postgres mode.",
+        "rule": "Task, ImportJob, and WorkerJob writes are SQLite-first and optionally mirrored to PostgreSQL in hybrid/postgres mode.",
     }
 
 
