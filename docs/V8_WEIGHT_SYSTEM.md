@@ -1,4 +1,4 @@
-# V8.5 权重数据波动任务系统
+# V8.6 权重数据波动任务系统
 
 V6-V7 是增长数据趋势任务系统，核心是发现增长机会、生成经营任务，并通过 SaaS 控制面完成权限、审批、执行、复盘和发布治理。V8 是权重数据波动任务系统，核心不再只是哪里增长，而是资源权重是否应该重新分配。
 
@@ -11,10 +11,10 @@ V8：权重数据波动任务系统
 完整定义：
 
 ```text
-基于商品、店铺、运营三类对象的多周期指标波动，结合环比、同比、多周期均值、波动率、RAG 标准线、联动比对和上下文权重修正，进行交叉验证，并生成升权、降权、限权、修复、止损、复核等交叉任务组。
+基于商品、店铺、运营三类对象的多周期指标波动，结合环比、同比、多周期均值、波动率、RAG 标准线、联动比对、上下文权重修正和交叉验证，生成升权、降权、限权、修复、止损、复核等交叉任务组。
 ```
 
-## 2. V8.5 本次边界
+## 2. V8.6 本次边界
 
 V8.0 已完成：
 
@@ -46,16 +46,21 @@ V8.4 已完成：
 联动关系 + 标准线命中 + 周期比较 → 对象权重评分与状态
 ```
 
-V8.5 新增：
+V8.5 已完成：
 
 ```text
 对象权重评分 + 店铺角色 + 店铺权重 + 商品拖累 + 运营责任 → 上下文权重修正与任务强度提示
 ```
 
-V8.5 仍然不做以下动作：
+V8.6 新增：
 
 ```text
-不做交叉验证
+上下文修正 + 商品 / 店铺 / 运营交叉证据 + 标准线 / 联动 / 评分证据 → 交叉验证与任务组准备度
+```
+
+V8.6 仍然不做以下动作：
+
+```text
 不真正生成权重任务
 不执行升降权
 不自动下架商品
@@ -98,7 +103,7 @@ RAG 标准线命中
 资源调度看板
 ```
 
-## 4. V8.0 - V8.5 数据表
+## 4. V8.0 - V8.6 数据表
 
 ```text
 weight_metric_snapshots_v8
@@ -107,86 +112,116 @@ weight_rag_standard_hits_v8
 linked_metric_relations_v8
 weight_scores_v8
 context_weight_adjustments_v8
+weight_cross_validations_v8
 ```
 
-`context_weight_adjustments_v8` 记录：
+`weight_cross_validations_v8` 记录：
 
 ```text
-adjustment_id
+validation_id
 tenant_id
 org_id
 object_type
 object_id
 parent_type
 parent_id
-base_score
-adjusted_score
-base_state
-adjusted_state
-adjusted_label
-risk_level
-task_intensity_level
-task_intensity_label
-context_type
-context_summary
-context_factors
-related_score_id
+validation_status
+validation_label
+readiness
+confidence
+final_intensity_level
+final_intensity_label
+cross_score
+evidence_count
+conflict_count
+related_adjustment_ids
+related_score_ids
+cross_factors
+conclusion
 payload
 created_at
 ```
 
-## 5. V8.5 上下文修正规则
-
-商品上下文：
+## 5. V8.6 交叉验证状态
 
 ```text
-高权重保护型店铺 + 商品低分 → 放大处理强度
-品牌主店 / 利润核心店 / 流量核心店 → 保护店铺资产优先
-测试店 / 低权重店 + 商品低分 → 增加试错缓冲
-成长店 + 短期波动 → 谨慎修正，避免打断增长
-商品流量占比高 + 低分 + 高权重店铺 → 提示拖累店铺资产风险
+confirmed             交叉确认
+protected_confirmed   保护型确认
+conflict              存在冲突
+buffered              缓冲观察
+needs_review          需要复核
+human_review_only     仅人工复核
+insufficient_evidence 证据不足
 ```
 
-店铺上下文：
+准备度：
 
 ```text
-保护型店铺高分 → 高权重经营资产
-保护型店铺低分 → 更快总管介入
-测试型店铺低分 → 允许更长测试周期
+ready_for_task_group  可进入任务组候选
+not_ready             暂不进入任务组
+human_review_only     只进入人工复核
 ```
 
-运营上下文：
+注意：V8.6 只判断“准备度”，真实任务组从 V8.7 开始生成。
+
+## 6. 商品交叉验证
+
+商品不再只看自己的分数，而是交叉看：
 
 ```text
-运营权重只用于复核和建议
-多店铺责任下的低分需要结合店铺难度复核
-高分运营可形成升权建议证据
-任何运营相关修正都不能自动处罚或自动改权限
+商品上下文修正状态
+商品负向联动数量
+商品 RAG 标准线异常数量
+商品所在店铺权重
+商品所在店铺角色
+商品是否拖累高权重店铺
 ```
 
-## 6. V8.5 任务强度提示
-
-商品 / 店铺强度：
+典型规则：
 
 ```text
-L1 观察
-L2 修复
-L3 降权候选
-L4 强降权候选
-L5 止损复核
+高权重店铺 + 商品强降权提示 + 商品负向证据一致 → 保护型确认
+商品强动作 + 店铺本身低权重低分 → 存在冲突，不直接归因单品
+商品有正向联动或标准线大体达标 → 缓冲观察
+证据不足 → 等待更多周期数据
 ```
 
-运营强度：
+## 7. 店铺交叉验证
+
+店铺不再只看自己的分数，而是交叉看：
 
 ```text
-H1 人工复核依据
-H2 辅导观察
-H3 权限调整复核
+店铺上下文修正状态
+店铺标准线异常
+店铺联动关系
+店铺下属商品异常数量
+店铺下属商品强动作数量
 ```
 
-注意：V8.5 只输出“任务强度提示”，不生成真实任务。真实任务组从 V8.7 开始。
+典型规则：
 
-## 7. 当前接口
+```text
+店铺资源限制候选 + 多个商品同步异常 → 交叉确认
+店铺低分但商品侧未同步异常 → 存在冲突
+店铺整体健康但存在拖累单品 → 任务方向应指向商品，而不是店铺降权
+```
+
+## 8. 运营交叉验证
+
+运营对象永远不自动处罚、不自动降权、不自动改权限。
+
+运营交叉验证只输出：
+
+```text
+人工复核依据
+辅导观察依据
+升权建议依据
+权限调整复核依据
+```
+
+所有运营相关结论都必须由总管或老板确认。
+
+## 9. 当前接口
 
 ```text
 GET  /api/architecture/v8/weight-snapshots
@@ -201,6 +236,8 @@ GET  /api/architecture/v8/weight-scores
 POST /api/architecture/v8/weight-scores/generate
 GET  /api/architecture/v8/context-weights
 POST /api/architecture/v8/context-weights/generate
+GET  /api/architecture/v8/cross-validations
+POST /api/architecture/v8/cross-validations/generate
 ```
 
 前端入口：
@@ -209,7 +246,7 @@ POST /api/architecture/v8/context-weights/generate
 权重中心
 ```
 
-## 8. V8 后续节奏
+## 10. V8 后续节奏
 
 ```text
 V8.0 权重指标快照层
@@ -225,7 +262,7 @@ V8.9 执行回写与调整后复盘
 V8.10 权重资源调度看板
 ```
 
-## 9. V8 核心边界
+## 11. V8 核心边界
 
 ```text
 系统可以建议升权 / 降权；
