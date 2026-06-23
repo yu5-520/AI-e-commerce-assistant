@@ -16,8 +16,11 @@ from src.middleware.api_rate_limit import api_rate_limit_middleware
 from src.middleware.security_headers import security_headers_middleware
 from src.repositories.task_repository import bootstrap_task_repository
 from src.services import module_task_service
+from src.services.approval_lifecycle_service import ensure_approval_lifecycle_tables
+from src.services.high_risk_trend_gate_service import ensure_high_risk_gate_tables
 from src.services.indicator_rag_service import ensure_indicator_rag_tables
 from src.services.llm_gateway_service import ensure_llm_gateway_tables
+from src.services.permission_budget_service import ensure_permission_budget_tables
 from src.services.risk_task_service import ensure_risk_task_tables
 from src.services.system_service import reset_legacy_runtime_once
 from src.services.task_state_machine_service import load_task_snapshots
@@ -28,13 +31,13 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "6.3.0"
+API_VERSION = "6.6.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V6.3 runtime: unified report input, product trends, business signals, risk tasks, and RAG indicator constraints.",
+    description="V6.6 runtime: approval lifecycle after risk, indicator, trend, and budget gates.",
 )
 
 app.middleware("http")(security_headers_middleware)
@@ -53,7 +56,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v63_runtime_cleanup() -> None:
+def apply_v66_runtime_cleanup() -> None:
     """Initialize demo cleanup and hydrate task runtime from persisted snapshots."""
     reset_legacy_runtime_once()
     bootstrap_task_repository()
@@ -63,6 +66,9 @@ def apply_v63_runtime_cleanup() -> None:
     ensure_llm_gateway_tables()
     ensure_trend_tables()
     ensure_indicator_rag_tables()
+    ensure_high_risk_gate_tables()
+    ensure_permission_budget_tables()
+    ensure_approval_lifecycle_tables()
     ensure_risk_task_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
