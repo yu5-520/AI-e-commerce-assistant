@@ -28,6 +28,7 @@ from src.services.v93_frontend_module_contract_service import frontend_module_co
 from src.services.v94_tier_isolation_contract_service import tier_isolation_contract_summary
 from src.services.v95_rag_namespace_isolation_service import rag_namespace_isolation_summary
 from src.services.v96_rag_write_memory_service import rag_write_memory_summary
+from src.services.v97_rag_audit_rollback_service import rag_audit_rollback_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -255,6 +256,11 @@ async def v95_rag_isolation(ctx: UserContext = Depends(get_current_context)) -> 
 @router.get("/v9/rag-write-memory")
 async def v96_rag_write_memory(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return rag_write_memory_summary(ctx)
+
+
+@router.get("/v9/rag-audit-rollback")
+async def v97_rag_audit_rollback(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return rag_audit_rollback_summary(ctx)
 
 
 @router.get("/context")
