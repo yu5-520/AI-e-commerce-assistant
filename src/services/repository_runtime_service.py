@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Dict
 
 from sqlalchemy import text
@@ -11,15 +10,10 @@ from src.core.context import UserContext
 from src.db.projection_repositories import projection_repository_summary
 from src.db.repositories import production_repository_summary
 from src.db.session import database_runtime_summary, get_session_factory
-from src.services.repository_mirror_base_service import REPOSITORY_MIRROR_BASE_VERSION
+from src.services.repository_mirror_base_service import REPOSITORY_MIRROR_BASE_VERSION, SUPPORTED_REPOSITORY_MODES, repository_mode
 
 REPOSITORY_RUNTIME_VERSION = "5.3.8"
-SUPPORTED_MODES = {"sqlite", "postgres", "hybrid"}
-
-
-def repository_mode() -> str:
-    mode = os.getenv("DB_REPOSITORY_MODE", "sqlite").lower()
-    return mode if mode in SUPPORTED_MODES else "sqlite"
+SUPPORTED_MODES = SUPPORTED_REPOSITORY_MODES
 
 
 def _mirror_summary(mode: str, *, name: str, resources: list[str]) -> Dict[str, Any]:
