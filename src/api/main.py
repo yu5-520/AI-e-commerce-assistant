@@ -32,14 +32,15 @@ from src.services.trend_signal_service import ensure_trend_tables
 from src.services.v7_saas_control_plane_service import ensure_v7_saas_control_plane_tables
 from src.services.v71_tenant_config_service import ensure_v71_tenant_config_tables
 from src.services.v75_release_alert_service import ensure_release_alert_tables
+from src.services.v80_weight_snapshot_service import ensure_weight_snapshot_tables
 from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "7.5.0"
+API_VERSION = "8.0.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
-app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V7.5 runtime: SaaS release governance alerts and governance tasks.")
+app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V8.0 runtime: weight-data fluctuation system foundation with product, store, and operator metric snapshots.")
 app.middleware("http")(security_headers_middleware)
 app.middleware("http")(api_rate_limit_middleware)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "DELETE"], allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"])
@@ -49,7 +50,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v75_runtime_cleanup() -> None:
+def apply_v80_runtime_cleanup() -> None:
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
@@ -66,6 +67,7 @@ def apply_v75_runtime_cleanup() -> None:
     ensure_v7_saas_control_plane_tables()
     ensure_v71_tenant_config_tables()
     ensure_release_alert_tables()
+    ensure_weight_snapshot_tables()
     ensure_risk_task_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
