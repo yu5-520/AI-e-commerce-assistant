@@ -31,13 +31,13 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "6.6.0"
+API_VERSION = "6.7.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
 app = FastAPI(
     title="AI ERP Operating Advisor API",
     version=API_VERSION,
-    description="V6.6 runtime: approval lifecycle after risk, indicator, trend, and budget gates.",
+    description="V6.7 runtime: approval center frontend actions for approve, reject, and execution handoff.",
 )
 
 app.middleware("http")(security_headers_middleware)
@@ -56,7 +56,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v66_runtime_cleanup() -> None:
+def apply_v67_runtime_cleanup() -> None:
     """Initialize demo cleanup and hydrate task runtime from persisted snapshots."""
     reset_legacy_runtime_once()
     bootstrap_task_repository()
