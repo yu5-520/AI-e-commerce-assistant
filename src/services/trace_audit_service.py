@@ -7,8 +7,9 @@ from uuid import uuid4
 
 from src.core.context import UserContext
 from src.repositories.sqlite_repository import connect, dumps, init_db, loads
+from src.services.tech_log_service import redact_sensitive_payload, write_tech_log
 
-TRACE_AUDIT_VERSION = "5.2.5"
+TRACE_AUDIT_VERSION = "5.2.7"
 
 
 def make_trace_id(prefix: str = "TRACE") -> str:
@@ -71,6 +72,7 @@ def write_audit_log(
 ) -> Dict[str, Any]:
     ensure_trace_audit_tables()
     audit_id = make_audit_id()
+    safe_payload = redact_sensitive_payload(payload or {})
     with connect() as conn:
         conn.execute(
             """
@@ -79,10 +81,11 @@ def write_audit_log(
                 resource_type, resource_id, action, status, payload, created_at, deleted_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), NULL)
             """,
-            (audit_id, trace_id, ctx.tenant_id, ctx.org_id, ctx.user_id, event_type, resource_type, resource_id, action, status, dumps(payload or {})),
+            (audit_id, trace_id, ctx.tenant_id, ctx.org_id, ctx.user_id, event_type, resource_type, resource_id, action, status, dumps(safe_payload)),
         )
         conn.commit()
-    return {"version": TRACE_AUDIT_VERSION, "auditId": audit_id, "traceId": trace_id, "eventType": event_type, "status": status}
+    tech = write_tech_log(ctx, trace_id=trace_id, level="info", logger="audit", event_type=f"audit.{event_type}", message="business audit event persisted", payload={"auditId": audit_id, "resourceType": resource_type, "resourceId": resource_id, "action": action, "status": status, "payload": safe_payload})
+    return {"version": TRACE_AUDIT_VERSION, "auditId": audit_id, "traceId": trace_id, "eventType": event_type, "status": status, "techLog": tech}
 
 
 def set_resource_trace(table: str, id_column: str, resource_id: str, trace_id: str, tenant_id: str | None = None) -> None:
