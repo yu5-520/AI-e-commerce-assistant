@@ -18,6 +18,7 @@ from src.services.v81_weight_comparison_service import generate_weight_compariso
 from src.services.v82_weight_rag_gate_service import generate_weight_rag_hits, weight_rag_summary
 from src.services.v83_linked_metric_relation_service import generate_linked_metric_relations, linked_relation_summary
 from src.services.v84_weight_score_service import generate_weight_scores, weight_score_summary
+from src.services.v85_context_weight_adjustment_service import generate_context_weight_adjustments, context_weight_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -142,6 +143,16 @@ async def v84_weight_scores(object_type: str | None = Query(default=None), weigh
 @router.post("/v8/weight-scores/generate")
 async def v84_generate_weight_scores(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return generate_weight_scores(ctx)
+
+
+@router.get("/v8/context-weights")
+async def v85_context_weights(object_type: str | None = Query(default=None), task_intensity_level: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=800), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return context_weight_summary(ctx, object_type=object_type, task_intensity_level=task_intensity_level, limit=limit)
+
+
+@router.post("/v8/context-weights/generate")
+async def v85_generate_context_weights(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return generate_context_weight_adjustments(ctx)
 
 
 @router.get("/context")
