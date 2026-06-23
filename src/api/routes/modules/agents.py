@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "9.3.0"
+AGENT_REGISTRY_VERSION = "9.4.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,8 +28,14 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "v930_frontend_module_consistency"
-    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；V8 权重、RAG、审批和复盘信息作为后端证据链补强，不新增前端主模块。"
+    plan["mode"] = "v940_tier_isolation_consistency"
+    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；套餐隔离、RAG namespace、权重算法和审计深度由后端契约控制。"
+    plan["v94TierIsolation"] = {
+        "service": "src/services/v94_tier_isolation_contract_service.py",
+        "architectureEndpoint": "/api/architecture/v9/tier-isolation",
+        "tiers": ["starter", "professional", "enterprise"],
+        "rule": "Starter、Professional、Enterprise 的能力边界必须通过后端能力开关、RAG namespace、数据范围、部署模式和审计深度共同控制。",
+    }
     plan["v93FrontendModules"] = {
         "service": "src/services/v93_frontend_module_contract_service.py",
         "architectureEndpoint": "/api/architecture/v9/frontend-modules",
