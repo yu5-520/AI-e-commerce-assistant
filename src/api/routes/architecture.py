@@ -1,4 +1,4 @@
-"""Architecture visibility routes for SaaS governance and V8 weight system."""
+"""Architecture visibility routes for SaaS governance and V8/V9 consistency."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from src.services.v86_cross_validation_service import generate_cross_validations
 from src.services.v87_weight_task_group_service import generate_weight_task_groups, weight_task_group_summary
 from src.services.v88_weight_approval_service import decide_weight_approval, generate_weight_approvals, weight_approval_summary
 from src.services.v89_weight_execution_review_service import generate_weight_execution_reviews, generate_weight_executions, submit_weight_execution_feedback, weight_execution_review_summary, weight_execution_summary
+from src.services.v92_backend_flow_service import backend_flow_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -225,6 +226,11 @@ async def v89_weight_execution_reviews(effectiveness: str | None = Query(default
 @router.post("/v8/weight-execution-reviews/generate")
 async def v89_generate_weight_execution_reviews(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return generate_weight_execution_reviews(ctx)
+
+
+@router.get("/v9/backend-flow")
+async def v92_backend_flow(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return backend_flow_summary(ctx)
 
 
 @router.get("/context")
