@@ -8,11 +8,12 @@ from uuid import uuid4
 from src.core.context import UserContext
 from src.repositories.sqlite_repository import connect, dumps, init_db, loads
 from src.services.import_worker_repository_mirror_service import mirror_import_job_to_production
+from src.services.projection_repository_mirror_service import mirror_projection_job_to_production
 from src.services.report_task_repository_sync_service import sync_report_tasks
 from src.services.task_state_machine_service import task_persistence_summary
 from src.services.trace_audit_service import resolve_trace_id, write_audit_log
 
-IMPORT_JOB_VERSION = "5.3.3"
+IMPORT_JOB_VERSION = "5.3.5"
 
 
 def _job_id(prefix: str) -> str:
@@ -105,16 +106,18 @@ def _update_import_job(ctx: UserContext, job_id: str, *, trace_id: str, status: 
 def _insert_projection_job(ctx: UserContext, job_id: str, projection_type: str, result: Dict[str, Any], trace_id: str) -> Dict[str, Any]:
     projection_job_id = _job_id("PROJECTIONJOB")
     status = "completed" if not result.get("error") else "failed"
+    input_snapshot = {"importJobId": job_id, "traceId": trace_id}
     with connect() as conn:
         conn.execute(f"""
             INSERT INTO projection_jobs (
                 projection_job_id, import_job_id, tenant_id, org_id, projection_type,
                 status, input_snapshot, output_snapshot, error_message, trace_id, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, {_now_expr()}, {_now_expr()})
-        """, (projection_job_id, job_id, ctx.tenant_id, ctx.org_id, projection_type, status, dumps({"importJobId": job_id, "traceId": trace_id}), dumps(result), result.get("error"), trace_id))
+        """, (projection_job_id, job_id, ctx.tenant_id, ctx.org_id, projection_type, status, dumps(input_snapshot), dumps(result), result.get("error"), trace_id))
         conn.commit()
     write_audit_log(ctx, trace_id=trace_id, event_type="projection_job.created", resource_type="projection_job", resource_id=projection_job_id, action=projection_type, status=status, payload={"importJobId": job_id})
-    return {"projectionJobId": projection_job_id, "traceId": trace_id, "projectionType": projection_type, "status": status}
+    projection = {"projectionJobId": projection_job_id, "traceId": trace_id, "importJobId": job_id, "tenantId": ctx.tenant_id, "orgId": ctx.org_id, "projectionType": projection_type, "status": status, "inputSnapshot": input_snapshot, "outputSnapshot": result, "errorMessage": result.get("error")}
+    return {**projection, "productionMirror": mirror_projection_job_to_production(ctx, projection, action="projection_job.created")}
 
 
 def run_import_job(ctx: UserContext, *, dataset_name: str, source_type: str, payload: Dict[str, Any], runner: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
@@ -126,9 +129,9 @@ def run_import_job(ctx: UserContext, *, dataset_name: str, source_type: str, pay
         task_sync = synced_result.get("taskRepositorySync") or {}
         projections = [_insert_projection_job(ctx, job["importJobId"], "module_projection_refresh", synced_result, trace_id), _insert_projection_job(ctx, job["importJobId"], "alert_task_repository_sync", task_sync, trace_id)]
         updated_job = _update_import_job(ctx, job["importJobId"], trace_id=trace_id, status="completed", result=synced_result)
-        return {"version": IMPORT_JOB_VERSION, "traceId": trace_id, "importJob": updated_job, "productionMirror": {"created": job.get("productionMirror"), "completed": updated_job.get("productionMirror")}, "projectionJobs": projections, "result": synced_result, "taskPersistence": task_persistence_summary(), "rule": "ImportJob / ProjectionJob 已写入 trace_id 和 audit_logs；ImportJob 支持 SQLite-first PostgreSQL mirror。"}
+        return {"version": IMPORT_JOB_VERSION, "traceId": trace_id, "importJob": updated_job, "productionMirror": {"created": job.get("productionMirror"), "completed": updated_job.get("productionMirror"), "projectionJobs": [item.get("productionMirror") for item in projections]}, "projectionJobs": projections, "result": synced_result, "taskPersistence": task_persistence_summary(), "rule": "ImportJob / ProjectionJob 已写入 trace_id 和 audit_logs，并支持 SQLite-first PostgreSQL mirror。"}
     except Exception as exc:  # noqa: BLE001
-        failed_job = _update_import_job(ctx, job["importJobId"], trace_id=trace_id, status="failed", error=str(exc))
+        _update_import_job(ctx, job["importJobId"], trace_id=trace_id, status="failed", error=str(exc))
         _insert_projection_job(ctx, job["importJobId"], "import_failed", {"error": str(exc)}, trace_id)
         raise
 
