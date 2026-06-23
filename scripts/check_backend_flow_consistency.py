@@ -1,6 +1,6 @@
-"""Backend main-flow consistency guard for V9.2.
+"""Backend main-flow consistency guard.
 
-This check keeps the V9.2 backend contract aligned across docs, runtime,
+This check keeps the V9 backend-flow contract aligned across docs, runtime,
 architecture routes, health, Agent registry, and CI.
 """
 
@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "9.2.0"
+EXPECTED_VERSION = "9.3.0"
 
 REQUIRED_FILES = [
     "docs/V9_BACKEND_FLOW_CONSISTENCY.md",
@@ -23,58 +23,10 @@ REQUIRED_FILES = [
     "web_demo/index.html",
 ]
 
-FLOW_TERMS = [
-    "ImportJob",
-    "DataVersion",
-    "RawRows",
-    "ModuleProjection",
-    "AlertEvent",
-    "WeightSignal",
-    "DecisionTask",
-    "AgentReport",
-    "ApprovalFlow",
-    "ExecutionFeedback",
-    "ReviewLog",
-    "RagMemoryCandidate",
-]
-
-DATA_IMPORT_REQUIRED = [
-    "@router.post(\"/preview\")",
-    "@router.post(\"/import/confirm\")",
-    "@router.post(\"/import/report\")",
-    "_attach_v62_trend_and_risk_sync",
-    "ingest_product_trends",
-    "generate_risk_tasks_for_signals",
-]
-
-MODULE_ROUTER_REQUIRED = [
-    "dashboard.router",
-    "operating_unit.router",
-    "product.router",
-    "report.router",
-    "task_report.router",
-    "agents.router",
-    "rag_memory.router",
-    "feedback_flywheel.router",
-    "todo.router",
-    "log.router",
-]
-
-ARCHITECTURE_REQUIRED = [
-    "backend_flow_summary",
-    "@router.get(\"/v9/backend-flow\")",
-    "weight_snapshot_summary",
-    "weight_comparison_summary",
-    "weight_rag_summary",
-    "linked_relation_summary",
-    "weight_score_summary",
-    "context_weight_summary",
-    "cross_validation_summary",
-    "weight_task_group_summary",
-    "weight_approval_summary",
-    "weight_execution_summary",
-    "weight_execution_review_summary",
-]
+FLOW_TERMS = ["ImportJob", "DataVersion", "RawRows", "ModuleProjection", "AlertEvent", "WeightSignal", "DecisionTask", "AgentReport", "ApprovalFlow", "ExecutionFeedback", "ReviewLog", "RagMemoryCandidate"]
+DATA_IMPORT_REQUIRED = ["@router.post(\"/preview\")", "@router.post(\"/import/confirm\")", "@router.post(\"/import/report\")", "_attach_v62_trend_and_risk_sync", "ingest_product_trends", "generate_risk_tasks_for_signals"]
+MODULE_ROUTER_REQUIRED = ["dashboard.router", "operating_unit.router", "product.router", "report.router", "task_report.router", "agents.router", "rag_memory.router", "feedback_flywheel.router", "todo.router", "log.router"]
+ARCHITECTURE_REQUIRED = ["backend_flow_summary", "@router.get(\"/v9/backend-flow\")", "weight_snapshot_summary", "weight_comparison_summary", "weight_rag_summary", "linked_relation_summary", "weight_score_summary", "context_weight_summary", "cross_validation_summary", "weight_task_group_summary", "weight_approval_summary", "weight_execution_summary", "weight_execution_review_summary"]
 
 
 def read(path_text: str) -> str:
@@ -115,16 +67,15 @@ def main() -> None:
 
     assert_contains(version, f"Current Version: v{EXPECTED_VERSION}", "versioning/VERSION.md")
     if extract_assignment(main_py, "API_VERSION", "src/api/main.py") != EXPECTED_VERSION:
-        raise AssertionError("src/api/main.py API_VERSION must be 9.2.0")
+        raise AssertionError("src/api/main.py API_VERSION must match the current V9 trunk")
     if extract_assignment(health, "API_VERSION", "src/api/routes/health.py") != EXPECTED_VERSION:
-        raise AssertionError("src/api/routes/health.py API_VERSION must be 9.2.0")
+        raise AssertionError("src/api/routes/health.py API_VERSION must match the current V9 trunk")
     if extract_assignment(agents, "AGENT_REGISTRY_VERSION", "src/api/routes/modules/agents.py") != EXPECTED_VERSION:
-        raise AssertionError("src/api/routes/modules/agents.py AGENT_REGISTRY_VERSION must be 9.2.0")
+        raise AssertionError("src/api/routes/modules/agents.py AGENT_REGISTRY_VERSION must match the current V9 trunk")
 
     for term in FLOW_TERMS:
         assert_contains(docs, term, "docs/V9_BACKEND_FLOW_CONSISTENCY.md")
         assert_contains(service, term, "src/services/v92_backend_flow_service.py")
-
     for snippet in DATA_IMPORT_REQUIRED:
         assert_contains(data_import, snippet, "src/api/routes/data_import.py")
     for snippet in MODULE_ROUTER_REQUIRED:
@@ -133,9 +84,9 @@ def main() -> None:
         assert_contains(architecture, snippet, "src/api/routes/architecture.py")
 
     assert_contains(workflow, "scripts/check_backend_flow_consistency.py", "runtime-smoke-test.yml")
-    assert_contains(index_html, "?v=9.2.0", "web_demo/index.html")
+    assert_contains(index_html, f"?v={EXPECTED_VERSION}", "web_demo/index.html")
 
-    print("Backend flow consistency check passed for V9.2.")
+    print("Backend flow consistency check passed for current V9 trunk.")
 
 
 if __name__ == "__main__":
