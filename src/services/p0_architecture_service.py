@@ -13,7 +13,7 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import query_plan_for_context
 from src.services.task_state_machine_service import task_persistence_summary
 
-P0_ARCHITECTURE_VERSION = "5.2.6"
+P0_ARCHITECTURE_VERSION = "5.2.7"
 
 
 P0_LAYERS: list[dict[str, Any]] = [
@@ -70,15 +70,15 @@ P0_LAYERS: list[dict[str, Any]] = [
         "name": "LLM Gateway 熔断降级与配额",
         "status": "partial",
         "target": "熔断、限流、租户配额、结果缓存、Schema 校验、规则模板降级。",
-        "currentGap": "已有 LLM 边界与 fallback，但缺少生产级熔断和租户级配额。",
+        "currentGap": "已有 LLM 边界与 fallback，但缺少生产级熔断和租户级配额。下一步进入 LLM Gateway。",
         "mustNot": ["LLM 不可用导致核心链路中断", "AI 输出绕过 Schema 写业务库"],
     },
     {
         "id": "P0-8",
         "name": "Audit / Logs 双层体系",
-        "status": "trace_audit_extended",
+        "status": "techlog_redaction_scaffolded",
         "target": "AuditLog 存业务审计，TechLog 输出 JSON，两者通过 trace_id 关联。",
-        "currentGap": "audit_logs 已覆盖 ImportJob / ProjectionJob / WorkerJob / WorkerResult / Task / Evidence / RAG 暂存；下一步补 TechLog JSON 与敏感信息脱敏。",
+        "currentGap": "新增 tech_log_service、tech_logs、递归敏感信息脱敏、/api/audit/tech-logs；write_audit_log 会脱敏 audit payload 并同步 TechLog。",
         "mustNot": ["日志输出明文 Token/密码", "业务审计与技术日志混在一起"],
     },
     {
@@ -112,7 +112,8 @@ IMPLEMENTATION_SEQUENCE = [
     "Worker 任务扩展：projection_refresh、alert_generation、agent_analysis、rag_memory_write 已注册",
     "Trace / AuditLog：trace_audit_service、audit_logs、ImportJob / WorkerJob / WorkerResult 关联",
     "Task / Evidence / RAG Memory trace：任务写路径、证据提交复核、RAG 暂存已接入 trace_id",
-    "下一步：TechLog JSON、敏感信息脱敏、LLM Gateway 熔断配额",
+    "TechLog JSON：tech_log_service、tech_logs、敏感信息递归脱敏、audit 同步技术日志",
+    "下一步：LLM Gateway 熔断、限流、配额、缓存、Schema 校验",
     "Nginx：前后端分离、HTTPS、限流、安全头",
 ]
 
@@ -122,7 +123,7 @@ def p0_architecture_summary(ctx: UserContext) -> dict[str, Any]:
     return {
         "version": P0_ARCHITECTURE_VERSION,
         "title": "互联网大厂 SaaS P0 架构拆解",
-        "runtimeMode": "task_evidence_rag_trace_audit",
+        "runtimeMode": "techlog_redaction_scaffolded",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {
             "where": query_plan.where,
