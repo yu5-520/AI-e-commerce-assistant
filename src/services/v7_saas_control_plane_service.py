@@ -1,4 +1,4 @@
-"""V7.2 SaaS control plane and enterprise architecture baseline."""
+"""V7.3 SaaS control plane and enterprise architecture baseline."""
 
 from __future__ import annotations
 
@@ -11,8 +11,9 @@ from src.repositories.scoped_repository import query_plan_for_context
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services.v71_tenant_config_service import ensure_v71_tenant_config_tables
 from src.services.v72_tenant_config_console_service import tenant_config_console_summary
+from src.services.v73_config_audit_service import config_audit_summary
 
-V7_SAAS_VERSION = "7.2.0"
+V7_SAAS_VERSION = "7.3.0"
 
 CONTROL_PLANE_LAYERS: List[Dict[str, Any]] = [
     {"layerId": "V7-L1", "name": "租户与组织控制面", "domain": "Identity", "status": "baseline_ready", "capability": "tenant / org / store / user / role / data-scope", "boundary": "所有业务查询必须先拿 UserContext，再进入 scoped repository。"},
@@ -24,7 +25,7 @@ CONTROL_PLANE_LAYERS: List[Dict[str, Any]] = [
     {"layerId": "V7-L7", "name": "执行回写与复盘中心", "domain": "Feedback", "status": "baseline_ready", "capability": "执行结果、实际花费、采购金额、证据、复盘案例、RAG 沉淀", "boundary": "执行回写只记录结果和证据，不自动改写经营数据或公司规则。"},
     {"layerId": "V7-L8", "name": "审计、日志与可观测中心", "domain": "Observability", "status": "baseline_ready", "capability": "业务审计、技术日志、worker、LLM gateway、数据版本、回滚记录", "boundary": "所有关键动作必须可追踪：谁、何时、基于什么数据、做了什么决定。"},
     {"layerId": "V7-L9", "name": "SaaS 交付治理中心", "domain": "Delivery", "status": "baseline_ready", "capability": "版本、租户配置、功能开关、灰度、运行模式、SLA 检查", "boundary": "Demo 能跑不等于 SaaS 可交付；V7 以可配置、可审计、可迁移为交付边界。"},
-    {"layerId": "V7-L10", "name": "租户配置与功能开关中心", "domain": "Config", "status": "v7_2_ready", "capability": "tenant config / feature flag / rollout / role gating / config audit / console actions", "boundary": "SaaS 能力按租户、角色和灰度规则开放，并可由配置中心前端操作。"},
+    {"layerId": "V7-L10", "name": "租户配置与功能开关中心", "domain": "Config", "status": "v7_3_ready", "capability": "tenant config / feature flag / rollout / role gating / config audit / console actions / compare / rollback", "boundary": "配置可操作、可对比、可回滚，且回滚必须再次进入审计。"},
 ]
 
 PROCESS_REGISTRY: List[Dict[str, Any]] = [
@@ -32,7 +33,7 @@ PROCESS_REGISTRY: List[Dict[str, Any]] = [
     {"processId": "V7-P2", "name": "高风险投产治理流程", "entry": "趋势中心高风险候选", "stages": ["RAG 指标门控", "7/30天趋势门控", "权限额度校验", "审批流", "执行任务", "执行回写", "超预算复盘"], "ownerRole": "owner", "status": "standardized"},
     {"processId": "V7-P3", "name": "数据版本与回滚流程", "entry": "报表导入记录", "stages": ["导入记录", "数据版本", "任务影响", "复核", "回滚/删除", "审计日志"], "ownerRole": "manager", "status": "standardized"},
     {"processId": "V7-P4", "name": "RAG 规则治理流程", "entry": "复盘案例 / 人工规则", "stages": ["案例生成", "规则候选", "人工复核", "启用规则", "任务引用", "效果复盘"], "ownerRole": "owner", "status": "planned_next"},
-    {"processId": "V7-P5", "name": "租户灰度发布流程", "entry": "配置中心 / 功能开关", "stages": ["创建功能开关", "绑定租户", "绑定角色", "设置灰度比例", "前端操作", "观察审计", "全量开放或回滚"], "ownerRole": "owner", "status": "v7_2_ready"},
+    {"processId": "V7-P5", "name": "租户灰度发布流程", "entry": "配置中心 / 功能开关", "stages": ["创建功能开关", "绑定租户", "绑定角色", "设置灰度比例", "前端操作", "配置审计", "对比", "回滚", "全量开放或回滚"], "ownerRole": "owner", "status": "v7_3_ready"},
 ]
 
 GOVERNANCE_CHECKS: List[Dict[str, Any]] = [
@@ -42,7 +43,7 @@ GOVERNANCE_CHECKS: List[Dict[str, Any]] = [
     {"checkId": "V7-G4", "name": "Agent 指标不可胡编", "required": True, "status": "ready", "evidence": "indicator_rag_service + ragIndicatorConstraints"},
     {"checkId": "V7-G5", "name": "关键动作可审计", "required": True, "status": "scaffolded", "evidence": "approval events + execution results + review cases + audit logs"},
     {"checkId": "V7-G6", "name": "SaaS 可迁移", "required": True, "status": "hybrid", "evidence": "SQLite demo runtime + repository mirror / PostgreSQL cutover docs"},
-    {"checkId": "V7-G7", "name": "功能不可无配置开放", "required": True, "status": "v7_2_ready", "evidence": "tenant config console + feature flags + rollout rules + config audit"},
+    {"checkId": "V7-G7", "name": "配置变更可审计可回滚", "required": True, "status": "v7_3_ready", "evidence": "tenant_config_audit_v7 + compare + rollback_config_change"},
 ]
 
 
@@ -78,20 +79,22 @@ def _read_seeded_rows() -> Dict[str, List[Dict[str, Any]]]:
 def v7_saas_architecture_summary(ctx: UserContext) -> Dict[str, Any]:
     rows = _read_seeded_rows()
     config_summary = tenant_config_console_summary(ctx)
+    audit_summary = config_audit_summary(ctx, limit=20)
     query_plan = query_plan_for_context(ctx, table_alias="resource")
     by_domain: Dict[str, int] = defaultdict(int)
     for layer in rows["layers"]:
         by_domain[layer["domain"]] += 1
     return {
         "version": V7_SAAS_VERSION,
-        "title": "V7.2 SaaS 大厂体系架构基底",
-        "positioning": "把 V6 经营闭环收束成 SaaS 控制面，并通过 V7.2 配置中心前端完成启用、暂停、灰度和审计。",
+        "title": "V7.3 SaaS 大厂体系架构基底",
+        "positioning": "把 V6 经营闭环收束成 SaaS 控制面，并通过 V7.3 配置审计中心完成搜索、对比和回滚。",
         "currentContext": ctx.to_dict(),
         "mandatoryScopePlan": {"where": query_plan.where, "params": query_plan.params, "rule": query_plan.rule},
         "controlPlane": {"layerCount": len(rows["layers"]), "domainCount": dict(by_domain), "layers": rows["layers"]},
         "tenantConfig": config_summary,
+        "configAudit": audit_summary,
         "processRegistry": rows["processes"],
         "governanceChecks": rows["checks"],
-        "mainWorkflow": ["报表/API/RPA 数据接入", "字段识别与商品匹配", "商品快照与指标趋势", "经营信号聚合", "RAG 指标约束", "风险分级任务", "权限额度与审批生命周期", "执行任务与结果回写", "执行复盘与 RAG 案例沉淀", "租户配置中心前端操作、功能开关、灰度与交付治理"],
-        "definitionOfDone": ["所有业务动作可归属到租户、组织、店铺、角色和数据范围。", "所有关键流程有标准状态机、审计事件和回滚边界。", "所有中高风险任务有 RAG 指标、历史趋势、权限额度和审批链路。", "审批与执行分离，执行结果回写后进入复盘和 RAG 案例记忆。", "老板/总管可在前端配置中心操作功能开关，老板可调整灰度规则。"],
+        "mainWorkflow": ["报表/API/RPA 数据接入", "字段识别与商品匹配", "商品快照与指标趋势", "经营信号聚合", "RAG 指标约束", "风险分级任务", "权限额度与审批生命周期", "执行任务与结果回写", "执行复盘与 RAG 案例沉淀", "租户配置中心前端操作", "配置审计、对比、回滚与交付治理"],
+        "definitionOfDone": ["所有业务动作可归属到租户、组织、店铺、角色和数据范围。", "所有关键流程有标准状态机、审计事件和回滚边界。", "所有中高风险任务有 RAG 指标、历史趋势、权限额度和审批链路。", "老板/总管可在前端配置中心操作功能开关，老板可调整灰度规则。", "配置变更可搜索、可对比、可回滚，回滚本身也必须留痕。"],
     }
