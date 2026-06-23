@@ -1,5 +1,11 @@
 # Changelog
 
+## v9.4.0
+
+V9.4 tier isolation consistency.
+Stable entries: /api/modules and /api/accounts.
+Architecture entry: /api/architecture/v9/tier-isolation.
+
 ## v9.3.0
 
 V9.3 frontend module consistency.
