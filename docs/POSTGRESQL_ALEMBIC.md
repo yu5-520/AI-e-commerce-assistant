@@ -1,8 +1,8 @@
 # PostgreSQL / Alembic / Repository 过渡层
 
-当前版本：V5.3.1。
+当前版本：V5.3.2。
 
-本阶段新增 SQLAlchemy Repository 过渡层，但默认不替换当前 SQLite Demo 链路。
+本阶段新增 TaskRepository hybrid mirror：当前 SQLite Demo 写路径先成功，再按 `DB_REPOSITORY_MODE` 尝试镜像到 PostgreSQL ProductionTaskRepository。
 
 ## 目标
 
@@ -10,37 +10,29 @@
 SQLite Demo Runtime
 ↓
 继续承接当前导入、任务、证据、审计、删除记录测试
-
-PostgreSQL Production Target
 ↓
-SQLAlchemy AsyncSession
-Alembic migration
-TenantScopedMixin
-SoftDeleteMixin
-TraceAuditMixin
-Production Repositories
+TaskRepository 写路径：create / transition / reset
+↓
+PostgreSQL Production Mirror
+↓
+ProductionTaskRepository.upsert / soft_delete_visible
 ```
 
 ## 新增文件
 
 ```text
-src/db/session.py                               Async SQLAlchemy engine / session factory
-src/db/base.py                                  Declarative Base + Tenant / SoftDelete / Trace mixins
-src/db/models.py                                P0 production model registry
+src/services/task_repository_mirror_service.py  TaskRepository mirror 服务
+src/services/task_repository_write_service.py   写路径返回 productionMirror
+src/services/repository_runtime_service.py      taskHybridMirror 状态
 src/db/repositories.py                          SQLAlchemy Repository 过渡层
-src/services/repository_runtime_service.py      DB_REPOSITORY_MODE 与 health check
-alembic.ini                                     Alembic config
-alembic/env.py                                  asyncpg migration env
-alembic/script.py.mako                          migration template
-alembic/versions/20260623_530_initial_p0_schema.py initial P0 schema scaffold
 ```
 
 ## 运行模式
 
 ```text
-DB_REPOSITORY_MODE=sqlite    默认模式：所有现有路由继续走 SQLite Demo
-DB_REPOSITORY_MODE=hybrid    过渡模式：允许检查 PostgreSQL Repository，同时保留 SQLite fallback
-DB_REPOSITORY_MODE=postgres  未来生产模式：逐步切换到 SQLAlchemy Repository
+DB_REPOSITORY_MODE=sqlite    默认：只写 SQLite Demo，mirror skipped
+DB_REPOSITORY_MODE=hybrid    过渡：SQLite 成功后尝试 PostgreSQL mirror，失败不影响 Demo
+DB_REPOSITORY_MODE=postgres  未来：当前仍 SQLite-first，后续再提升 PostgreSQL 为主写路径
 ```
 
 检查接口：
@@ -48,20 +40,6 @@ DB_REPOSITORY_MODE=postgres  未来生产模式：逐步切换到 SQLAlchemy Rep
 ```text
 GET /api/system/repositories
 GET /api/system/repositories?check=true
-```
-
-## 迁移命令
-
-```bash
-export DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/ai_ecommerce
-alembic upgrade head
-```
-
-生成新迁移：
-
-```bash
-alembic revision --autogenerate -m "describe change"
-alembic upgrade head
 ```
 
 ## 当前 Production Repository 范围
@@ -83,17 +61,16 @@ deleted_at IS NULL
 
 ## 重要边界
 
-1. 当前 Demo 服务仍使用 SQLite runtime 表，不会因为新增 Repository 自动迁移到 PostgreSQL。
-2. 生产表统一使用 tenant_id / org_id / deleted_at / trace_id。
-3. `hybrid` 模式用于验证 PostgreSQL Repository，不代表正式切换。
-4. 下一步才应该做任务写路径 hybrid 双写。
+1. 当前 Demo 服务仍先使用 SQLite runtime 表。
+2. `hybrid` 模式会尝试 mirror，但 mirror 失败不会阻断 Demo。
+3. `postgres` 模式目前还不是完全主写，只是启用 mirror，后续版本再提升为主写路径。
+4. ImportJob / WorkerJob / AuditLog 还没有写路径双写。
 
 ## 后续迁移顺序
 
 ```text
-1. 确认 PostgreSQL 连接和 alembic upgrade head 可运行
-2. 使用 /api/system/repositories?check=true 检查连接
-3. TaskRepository 写路径增加 hybrid 双写
-4. ImportJob / WorkerJob / AuditLog 写路径逐步双写
-5. 前端系统状态页展示 DB / Repository / Worker / LLM / Audit 状态
+1. 使用 /api/system/repositories?check=true 检查连接
+2. 验证 TaskRepository create / transition / reset 的 productionMirror 字段
+3. ImportJob / WorkerJob / AuditLog 写路径逐步双写
+4. 前端系统状态页展示 DB / Repository / Worker / LLM / Audit 状态
 ```
