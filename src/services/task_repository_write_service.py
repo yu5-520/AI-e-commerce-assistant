@@ -1,4 +1,4 @@
-"""TaskRepository write-path transition service with trace audit."""
+"""TaskRepository write-path transition service with trace audit and hybrid mirror."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ from typing import Any, Dict
 from src.core.context import UserContext
 from src.repositories.task_repository import TaskRepository
 from src.services import module_task_service
+from src.services.task_repository_mirror_service import mirror_task_reset_to_production, mirror_task_to_production
 from src.services.task_state_machine_service import ACTION_TARGET_STATUS, assert_transition_allowed, mirror_all
 from src.services.trace_audit_service import resolve_trace_id, write_audit_log
 
-TASK_WRITE_VERSION = "5.2.6"
+TASK_WRITE_VERSION = "5.3.2"
 
 
 def _task_id(task: Dict[str, Any] | None) -> str | None:
@@ -19,7 +20,15 @@ def _task_id(task: Dict[str, Any] | None) -> str | None:
     return task.get("id") or task.get("taskId") or task.get("task_id")
 
 
-def _repository_response(ctx: UserContext, task: Dict[str, Any] | None, *, action: str, message: str, trace_id: str | None = None) -> Dict[str, Any]:
+def _repository_response(
+    ctx: UserContext,
+    task: Dict[str, Any] | None,
+    *,
+    action: str,
+    message: str,
+    trace_id: str | None = None,
+    production_mirror: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     repo = TaskRepository(ctx)
     return {
         "version": TASK_WRITE_VERSION,
@@ -28,17 +37,18 @@ def _repository_response(ctx: UserContext, task: Dict[str, Any] | None, *, actio
         "message": message,
         "task": task,
         "repository": repo.summary(),
+        "productionMirror": production_mirror or {"status": "not_attempted"},
         "source": {
             "inMemoryTasks": len(module_task_service.TASKS),
             "inMemoryEvents": len(module_task_service.TASK_EVENTS),
             "inMemoryLogs": len(module_task_service.LOGS),
         },
-        "nextStep": "Task / Evidence / RAG Memory are being linked into trace_id audit chain.",
+        "nextStep": "TaskRepository write path now supports SQLite-first PostgreSQL mirror in hybrid/postgres mode.",
     }
 
 
 def create_task_with_repository(payload: Dict[str, Any], ctx: UserContext) -> Dict[str, Any]:
-    """Create/merge a task through current runtime and persist the result."""
+    """Create/merge a task through current runtime and mirror to production repository when enabled."""
 
     trace_id = resolve_trace_id(payload, "TASKTRACE")
     task_payload = {**dict(payload), "traceId": trace_id}
@@ -47,15 +57,18 @@ def create_task_with_repository(payload: Dict[str, Any], ctx: UserContext) -> Di
     task = module_task_service.create_task(task_payload)
     if isinstance(task, dict):
         task["traceId"] = task.get("traceId") or trace_id
+        task.setdefault("tenantId", ctx.tenant_id)
+        task.setdefault("orgId", ctx.org_id)
     repo = TaskRepository(ctx)
     repo.upsert(task)
     mirror_all(module_task_service.TASKS, module_task_service.TASK_EVENTS, module_task_service.LOGS)
     write_audit_log(ctx, trace_id=trace_id, event_type="task.created", resource_type="task", resource_id=_task_id(task), action="create_task", status=(task or {}).get("status"), payload={"sourceModule": (task or {}).get("sourceModule"), "title": (task or {}).get("title")})
-    return _repository_response(ctx, task, action="create_task", message="任务已通过 TaskRepository 写路径过渡层创建并写入 trace audit。", trace_id=trace_id)
+    production_mirror = mirror_task_to_production(ctx, task, action="create_task")
+    return _repository_response(ctx, task, action="create_task", message="任务已写入 SQLite Demo，并按配置尝试镜像到 PostgreSQL Repository。", trace_id=trace_id, production_mirror=production_mirror)
 
 
 def transition_task_with_repository(task_id: str, action: str, payload: Dict[str, Any] | None, ctx: UserContext) -> Dict[str, Any]:
-    """Transition a task with state validation and repository persistence."""
+    """Transition a task with state validation, SQLite persistence, and optional production mirror."""
 
     payload = payload or {}
     existing = module_task_service.find_task(task_id) or TaskRepository(ctx).get(task_id)
@@ -71,27 +84,32 @@ def transition_task_with_repository(task_id: str, action: str, payload: Dict[str
         write_audit_log(ctx, trace_id=trace_id, event_type="task.transition_failed", resource_type="task", resource_id=task_id, action=action, status="failed", payload={"fromStatus": from_status, "targetStatus": target_status})
         return _repository_response(ctx, None, action=action, message="任务流转失败。", trace_id=trace_id)
     task["traceId"] = task.get("traceId") or trace_id
+    task.setdefault("tenantId", ctx.tenant_id)
+    task.setdefault("orgId", ctx.org_id)
     repo = TaskRepository(ctx)
     repo.upsert(task)
     mirror_all(module_task_service.TASKS, module_task_service.TASK_EVENTS, module_task_service.LOGS)
     write_audit_log(ctx, trace_id=trace_id, event_type="task.transitioned", resource_type="task", resource_id=task_id, action=action, status=task.get("status"), payload={"fromStatus": from_status, "targetStatus": target_status})
-    return _repository_response(ctx, task, action=action, message="任务状态已通过 TaskRepository 写路径过渡层流转并写入 trace audit。", trace_id=trace_id)
+    production_mirror = mirror_task_to_production(ctx, task, action=action)
+    return _repository_response(ctx, task, action=action, message="任务状态已写入 SQLite Demo，并按配置尝试镜像到 PostgreSQL Repository。", trace_id=trace_id, production_mirror=production_mirror)
 
 
 def reset_tasks_with_repository(ctx: UserContext, *, reason: str = "demo reset") -> Dict[str, Any]:
-    """Reset runtime tasks and soft-delete visible repository tasks."""
+    """Reset runtime tasks and soft-delete visible repository tasks; mirror reset when enabled."""
 
     trace_id = resolve_trace_id({"reason": reason}, "TASKRESET")
     repo = TaskRepository(ctx)
     deleted = repo.soft_delete_all_visible(deleted_by=ctx.user_id, reason=reason)
     module_task_service.reset_tasks(ctx.user_id)
-    write_audit_log(ctx, trace_id=trace_id, event_type="task.reset", resource_type="task", resource_id="visible_tasks", action="reset_tasks", status="completed", payload={"reason": reason, "softDeletedTasks": deleted})
+    production_mirror = mirror_task_reset_to_production(ctx, reason=reason)
+    write_audit_log(ctx, trace_id=trace_id, event_type="task.reset", resource_type="task", resource_id="visible_tasks", action="reset_tasks", status="completed", payload={"reason": reason, "softDeletedTasks": deleted, "productionMirror": production_mirror})
     return {
         "version": TASK_WRITE_VERSION,
         "traceId": trace_id,
         "action": "reset_tasks",
-        "message": "当前可见任务已软删除，Demo 内存任务池已清空，并写入 trace audit。",
+        "message": "当前可见任务已软删除，Demo 内存任务池已清空，并按配置尝试镜像重置到 PostgreSQL Repository。",
         "softDeletedTasks": deleted,
+        "productionMirror": production_mirror,
         "repository": repo.summary(),
         "source": {
             "inMemoryTasks": len(module_task_service.TASKS),
