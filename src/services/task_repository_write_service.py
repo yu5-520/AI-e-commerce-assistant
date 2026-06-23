@@ -20,15 +20,7 @@ def _task_id(task: Dict[str, Any] | None) -> str | None:
     return task.get("id") or task.get("taskId") or task.get("task_id")
 
 
-def _repository_response(
-    ctx: UserContext,
-    task: Dict[str, Any] | None,
-    *,
-    action: str,
-    message: str,
-    trace_id: str | None = None,
-    production_mirror: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+def _repository_response(ctx: UserContext, task: Dict[str, Any] | None, *, action: str, message: str, trace_id: str | None = None, production_mirror: Dict[str, Any] | None = None) -> Dict[str, Any]:
     repo = TaskRepository(ctx)
     return {
         "version": TASK_WRITE_VERSION,
@@ -38,18 +30,12 @@ def _repository_response(
         "task": task,
         "repository": repo.summary(),
         "productionMirror": production_mirror or {"status": "not_attempted"},
-        "source": {
-            "inMemoryTasks": len(module_task_service.TASKS),
-            "inMemoryEvents": len(module_task_service.TASK_EVENTS),
-            "inMemoryLogs": len(module_task_service.LOGS),
-        },
+        "source": {"inMemoryTasks": len(module_task_service.TASKS), "inMemoryEvents": len(module_task_service.TASK_EVENTS), "inMemoryLogs": len(module_task_service.LOGS)},
         "nextStep": "TaskRepository write path now supports SQLite-first PostgreSQL mirror in hybrid/postgres mode.",
     }
 
 
 def create_task_with_repository(payload: Dict[str, Any], ctx: UserContext) -> Dict[str, Any]:
-    """Create/merge a task through current runtime and mirror to production repository when enabled."""
-
     trace_id = resolve_trace_id(payload, "TASKTRACE")
     task_payload = {**dict(payload), "traceId": trace_id}
     task_payload.setdefault("tenantId", ctx.tenant_id)
@@ -68,8 +54,6 @@ def create_task_with_repository(payload: Dict[str, Any], ctx: UserContext) -> Di
 
 
 def transition_task_with_repository(task_id: str, action: str, payload: Dict[str, Any] | None, ctx: UserContext) -> Dict[str, Any]:
-    """Transition a task with state validation, SQLite persistence, and optional production mirror."""
-
     payload = payload or {}
     existing = module_task_service.find_task(task_id) or TaskRepository(ctx).get(task_id)
     trace_id = resolve_trace_id(payload or existing or {"taskId": task_id}, "TASKTRACE")
@@ -95,25 +79,10 @@ def transition_task_with_repository(task_id: str, action: str, payload: Dict[str
 
 
 def reset_tasks_with_repository(ctx: UserContext, *, reason: str = "demo reset") -> Dict[str, Any]:
-    """Reset runtime tasks and soft-delete visible repository tasks; mirror reset when enabled."""
-
     trace_id = resolve_trace_id({"reason": reason}, "TASKRESET")
     repo = TaskRepository(ctx)
     deleted = repo.soft_delete_all_visible(deleted_by=ctx.user_id, reason=reason)
     module_task_service.reset_tasks(ctx.user_id)
-    production_mirror = mirror_task_reset_to_production(ctx, reason=reason)
+    production_mirror = mirror_task_reset_to_production(ctx, reason=reason, trace_id=trace_id)
     write_audit_log(ctx, trace_id=trace_id, event_type="task.reset", resource_type="task", resource_id="visible_tasks", action="reset_tasks", status="completed", payload={"reason": reason, "softDeletedTasks": deleted, "productionMirror": production_mirror})
-    return {
-        "version": TASK_WRITE_VERSION,
-        "traceId": trace_id,
-        "action": "reset_tasks",
-        "message": "当前可见任务已软删除，Demo 内存任务池已清空，并按配置尝试镜像重置到 PostgreSQL Repository。",
-        "softDeletedTasks": deleted,
-        "productionMirror": production_mirror,
-        "repository": repo.summary(),
-        "source": {
-            "inMemoryTasks": len(module_task_service.TASKS),
-            "inMemoryEvents": len(module_task_service.TASK_EVENTS),
-            "inMemoryLogs": len(module_task_service.LOGS),
-        },
-    }
+    return {"version": TASK_WRITE_VERSION, "traceId": trace_id, "action": "reset_tasks", "message": "当前可见任务已软删除，Demo 内存任务池已清空，并按配置尝试镜像重置到 PostgreSQL Repository。", "softDeletedTasks": deleted, "productionMirror": production_mirror, "repository": repo.summary(), "source": {"inMemoryTasks": len(module_task_service.TASKS), "inMemoryEvents": len(module_task_service.TASK_EVENTS), "inMemoryLogs": len(module_task_service.LOGS)}}
