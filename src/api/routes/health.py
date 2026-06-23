@@ -8,7 +8,7 @@ from fastapi import APIRouter
 
 from src.services.llm_provider_service import llm_status
 
-API_VERSION = "9.5.0"
+API_VERSION = "9.6.0"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -19,22 +19,21 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "version": API_VERSION,
         "product": "AI ERP Operating Advisor",
-        "mode": "v950_rag_namespace_isolation",
+        "mode": "v960_rag_write_memory",
         "api_entry": "/api/modules/*",
         "account_entry": "/api/accounts",
-        "architecture_entry": "/api/architecture/v9/backend-flow",
-        "frontend_module_entry": "/api/architecture/v9/frontend-modules",
-        "tier_isolation_entry": "/api/architecture/v9/tier-isolation",
+        "rag_write_memory_entry": "/api/architecture/v9/rag-write-memory",
         "rag_isolation_entry": "/api/architecture/v9/rag-isolation",
+        "tier_isolation_entry": "/api/architecture/v9/tier-isolation",
         "safety": {
             "auto_platform_action": False,
             "auto_erp_crm_write": False,
-            "marketplace_api_connected": False,
+            "auto_memory_promotion": False,
         },
+        "v960_rag_write_memory": True,
+        "v960_rag_write_service": "src/services/v96_rag_write_memory_service.py",
+        "v960_memory_lifecycle": ["rag_memory_candidate", "quality_check", "namespace_policy_check", "human_review", "approval_decision", "promoted_memory", "audit_record"],
         "v950_rag_namespace_isolation": True,
-        "v950_rag_isolation_service": "src/services/v95_rag_namespace_isolation_service.py",
-        "v950_namespaces": ["shared_desensitized_rag", "tenant_isolated_rag", "private_customer_rag"],
-        "v950_access_gates": ["namespaceResolver", "ingestionGate", "retrievalGate", "writeGate", "templateMaintenanceGate", "deletionGate"],
         "v940_tier_isolation_consistency": True,
         "v930_frontend_module_consistency": True,
         "v920_backend_flow_consistency": True,
