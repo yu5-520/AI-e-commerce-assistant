@@ -1,9 +1,20 @@
 # Version
 
-Current Version: v5.0.9
+Current Version: v9.0.0
 
 ## Version History
 
+- v9.0.0: Established the SaaS enterprise consistency baseline. V9 does not add new frontend business modules or extend V8 algorithms; it consolidates repository, frontend, backend, pricing-tier isolation, RAG isolation, permissions, audit, deployment, and smoke-test governance. The active product trunk keeps `/api/modules` and `/api/accounts` as stable product entrypoints while V8 weight capabilities are treated as backend enhancement layers for operating-unit, product, task, Agent evidence, and review flows.
+- v8.9.0: Added weight execution feedback and after-action review. Approved weight task groups can create execution feedback records, collect manual execution evidence, generate reviews, and mark RAG memory candidates without directly calling platform APIs or changing spend, products, permissions, or RAG standards.
+- v8.8.0: Added weight approval flow and execution gates for cross-generated task groups. Approval can unlock task groups for the later execution layer, but no automatic weight action is executed.
+- v8.7.0: Added cross task-group draft generation from validated weight conclusions. Product, store, and operator conclusions are converted into structured task-group drafts with approval roles and evidence references.
+- v8.6.0: Added cross validation for weight conclusions across product, store, operator, upstream score, linked relations, RAG hits, and period comparison evidence.
+- v8.5.0: Added context-corrected weight states and task-intensity hints.
+- v8.4.0: Added object weight scoring.
+- v8.3.0: Added linked metric relation comparison.
+- v8.2.0: Added RAG standard-line hits for weight signals.
+- v8.1.0: Added period comparison for MoM, YoY, multi-period mean, and volatility.
+- v8.0.0: Added product, store, and operator weight metric snapshot foundation.
 - v5.0.9: Added demo-stage delete for import records. Report import history rows now show a delete action, and the backend exposes `DELETE /api/data/versions/{data_version}?confirm=true` to remove one data snapshot, full imported rows, metrics, alerts, rollback rows, and archive linked active tasks so repeated demo imports do not stack stale records.
 - v5.0.8: Productized the dashboard into an operating summary. The dashboard hides long data-version codes, reads `/api/modules/dashboard`, shows latest import summary, report rows, product count, task count, and a priority/time-sorted current task queue with differentiated product/risk/deadline labels. Unscoped imports now refresh operator projections so report uploads update dashboard and product views.
 - v5.0.7: Path cards are now action-sequence first. The path title and business goal are small tags; ordered actions are the primary visual content; review metrics stay in backend reviewPlan / todo evidence flow and are not shown on the path selection card. Report anomaly paths no longer include “confirm import”; report upload/import is deterministic and auto-refreshes report, dashboard, and module projections, while Agent only creates post-import data-quality repair paths.
