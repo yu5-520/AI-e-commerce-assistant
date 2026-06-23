@@ -1,6 +1,19 @@
 # CHANGELOG
 
-本文件记录版本变化。README 只保留项目入口；V9 起，企业级一致性底座、数据库迁移、P0 架构、V8 权重系统分别进入独立文档。
+本文件记录版本变化。README 只保留项目入口；V9 起，企业级一致性底座、仓库结构一致性、数据库迁移、P0 架构、V8 权重系统分别进入独立文档。
+
+## V9.1.0
+
+仓库结构一致性：
+
+- `versioning/VERSION.md` 统一当前版本为 `v9.1.0`。
+- `src/api/main.py` 升级到 `9.1.0`，描述为 V9.1 repository consistency baseline。
+- 新增 `docs/V9_REPOSITORY_CONSISTENCY.md`，定义目录职责、必需入口、禁止旧路径、文档职责、脚本职责和 CI 检查顺序。
+- 新增 `scripts/check_repository_consistency.py`，检查 V9.1 必需目录、必需文件、README 入口、workflow 入口、前端缓存版本和旧路径回流。
+- `.github/workflows/runtime-smoke-test.yml` 新增 Repository consistency check，并把新脚本加入 Python syntax check。
+- `scripts/check_version_governance.py` 扩展 active docs 与 required workflow refs，要求 workflow 跑仓库一致性检查。
+- `web_demo/index.html` 前端资源缓存统一升级到 `9.1.0`。
+- README 更新为 V9.1 仓库结构一致性入口，并加入 `docs/V9_REPOSITORY_CONSISTENCY.md` 文档入口。
 
 ## V9.0.0
 
