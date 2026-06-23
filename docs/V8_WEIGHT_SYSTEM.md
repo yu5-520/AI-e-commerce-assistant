@@ -1,4 +1,4 @@
-# V8.4 权重数据波动任务系统
+# V8.5 权重数据波动任务系统
 
 V6-V7 是增长数据趋势任务系统，核心是发现增长机会、生成经营任务，并通过 SaaS 控制面完成权限、审批、执行、复盘和发布治理。V8 是权重数据波动任务系统，核心不再只是哪里增长，而是资源权重是否应该重新分配。
 
@@ -14,7 +14,7 @@ V8：权重数据波动任务系统
 基于商品、店铺、运营三类对象的多周期指标波动，结合环比、同比、多周期均值、波动率、RAG 标准线、联动比对和上下文权重修正，进行交叉验证，并生成升权、降权、限权、修复、止损、复核等交叉任务组。
 ```
 
-## 2. V8.4 本次边界
+## 2. V8.5 本次边界
 
 V8.0 已完成：
 
@@ -40,21 +40,28 @@ V8.3 已完成：
 周期比较 + RAG 标准线 + 多指标组合 → 联动比对解释
 ```
 
-V8.4 新增：
+V8.4 已完成：
 
 ```text
 联动关系 + 标准线命中 + 周期比较 → 对象权重评分与状态
 ```
 
-V8.4 仍然不做以下动作：
+V8.5 新增：
 
 ```text
-不做上下文权重修正
+对象权重评分 + 店铺角色 + 店铺权重 + 商品拖累 + 运营责任 → 上下文权重修正与任务强度提示
+```
+
+V8.5 仍然不做以下动作：
+
+```text
 不做交叉验证
-不做升降权
-不生成权重任务
-不生成交叉任务组
+不真正生成权重任务
+不执行升降权
+不自动下架商品
+不自动调整投产
 不自动处罚运营
+不自动改变人员权限
 ```
 
 ## 3. V8 主链路
@@ -91,7 +98,7 @@ RAG 标准线命中
 资源调度看板
 ```
 
-## 4. V8.0 - V8.4 数据表
+## 4. V8.0 - V8.5 数据表
 
 ```text
 weight_metric_snapshots_v8
@@ -99,83 +106,85 @@ weight_metric_comparisons_v8
 weight_rag_standard_hits_v8
 linked_metric_relations_v8
 weight_scores_v8
+context_weight_adjustments_v8
 ```
 
-`weight_scores_v8` 记录：
+`context_weight_adjustments_v8` 记录：
 
 ```text
-score_id
+adjustment_id
 tenant_id
 org_id
 object_type
 object_id
-weight_score
-weight_state
-state_label
+parent_type
+parent_id
+base_score
+adjusted_score
+base_state
+adjusted_state
+adjusted_label
 risk_level
-score_direction
-positive_count
-neutral_count
-negative_count
-evidence_count
-related_relation_ids
-related_hit_ids
-related_comparison_ids
+task_intensity_level
+task_intensity_label
+context_type
+context_summary
+context_factors
+related_score_id
 payload
 created_at
 ```
 
-## 5. V8.4 权重状态
+## 5. V8.5 上下文修正规则
 
-商品状态：
-
-```text
-升权候选
-维持
-观察
-修复
-降权候选
-止损复核
-```
-
-店铺状态：
+商品上下文：
 
 ```text
-扩权候选
-维持
-观察
-限制资源候选
-降权复核
-总管介入
+高权重保护型店铺 + 商品低分 → 放大处理强度
+品牌主店 / 利润核心店 / 流量核心店 → 保护店铺资产优先
+测试店 / 低权重店 + 商品低分 → 增加试错缓冲
+成长店 + 短期波动 → 谨慎修正，避免打断增长
+商品流量占比高 + 低分 + 高权重店铺 → 提示拖累店铺资产风险
 ```
 
-运营状态：
+店铺上下文：
 
 ```text
-升权建议
-维持
-辅导观察
-降权复核
-权限调整复核
+保护型店铺高分 → 高权重经营资产
+保护型店铺低分 → 更快总管介入
+测试型店铺低分 → 允许更长测试周期
 ```
 
-运营权重只用于复核和建议，不能自动处罚、不能自动剥夺权限、不能自动改变组织关系。
-
-## 6. V8.4 评分来源
+运营上下文：
 
 ```text
-联动关系分：正向联动加分，负向联动扣分
-标准线分：达标轻微加分，低标/高风险线扣分
-周期比较分：核心指标上升加分，下降扣分，稳定轻微加分
+运营权重只用于复核和建议
+多店铺责任下的低分需要结合店铺难度复核
+高分运营可形成升权建议证据
+任何运营相关修正都不能自动处罚或自动改权限
 ```
 
-V8.4 输出的是对象当前状态，不输出最终动作。最终动作要等：
+## 6. V8.5 任务强度提示
+
+商品 / 店铺强度：
 
 ```text
-V8.5 上下文权重修正
-V8.6 交叉验证
-V8.7 交叉任务组生成
+L1 观察
+L2 修复
+L3 降权候选
+L4 强降权候选
+L5 止损复核
 ```
+
+运营强度：
+
+```text
+H1 人工复核依据
+H2 辅导观察
+H3 权限调整复核
+```
+
+注意：V8.5 只输出“任务强度提示”，不生成真实任务。真实任务组从 V8.7 开始。
 
 ## 7. 当前接口
 
@@ -190,6 +199,8 @@ GET  /api/architecture/v8/linked-relations
 POST /api/architecture/v8/linked-relations/generate
 GET  /api/architecture/v8/weight-scores
 POST /api/architecture/v8/weight-scores/generate
+GET  /api/architecture/v8/context-weights
+POST /api/architecture/v8/context-weights/generate
 ```
 
 前端入口：
