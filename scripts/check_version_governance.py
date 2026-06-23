@@ -1,9 +1,4 @@
-"""Version governance guard for the active product trunk.
-
-This script is intentionally lightweight and dependency-free so it can run in
-GitHub Actions before smoke tests. It prevents future AI or manual edits from
-bypassing the repository's version memory again.
-"""
+"""Version governance guard for the active product trunk."""
 
 from __future__ import annotations
 
@@ -23,6 +18,7 @@ ACTIVE_DOCS = [
     "docs/V9_SAAS_CONSISTENCY_BASE.md",
     "docs/V9_REPOSITORY_CONSISTENCY.md",
     "docs/V9_BACKEND_FLOW_CONSISTENCY.md",
+    "docs/V9_FRONTEND_MODULE_CONSISTENCY.md",
     "docs/server-deploy.md",
     "docs/product/README.md",
     "docs/product/mvp-scope.md",
@@ -53,36 +49,8 @@ REMOVED_ACTIVE_PATHS = [
     "docs/product/domain-model.md",
 ]
 
-REMOVED_ROUTE_PREFIXES = [
-    "/api/demo",
-    "/api/products",
-    "/api/customers",
-    "/api/diagnosis",
-    "/api/tasks",
-    "/api/reports",
-    "/api/evals",
-    "/api/logs",
-]
-
-FORBIDDEN_DOC_SNIPPETS = [
-    "python -m src.run_demo",
-    "/api/demo/run",
-    "暴露 Evals 结果",
-    "frontend/app.js",
-    "frontend/material-sampler.js",
-    "scripts/material_observer.py::",
-    "runtime/agent_registry.json",
-    "runtime/module_chain.json",
-    "generate_demo_report.py",
-    "demo_report.md",
-    "modules/operation_modes",
-    "modules/platforms",
-    "data-import.css",
-    "web_demo/app-v2.js",
-    "当前 v1.0.2",
-    "GET  /api/business/today",
-    "GET  /api/business/products",
-]
+REMOVED_ROUTE_PREFIXES = ["/api/demo", "/api/products", "/api/customers", "/api/diagnosis", "/api/tasks", "/api/reports", "/api/evals", "/api/logs"]
+FORBIDDEN_DOC_SNIPPETS = ["python -m src.run_demo", "/api/demo/run", "暴露 Evals 结果", "frontend/app.js", "frontend/material-sampler.js", "scripts/material_observer.py::", "runtime/agent_registry.json", "runtime/module_chain.json", "generate_demo_report.py", "demo_report.md", "modules/operation_modes", "modules/platforms", "data-import.css", "web_demo/app-v2.js", "当前 v1.0.2", "GET  /api/business/today", "GET  /api/business/products"]
 
 
 def read(path: Path) -> str:
@@ -123,37 +91,22 @@ def main() -> None:
     current_version = extract_current_version(version_text)
     api_version = extract_api_version(api_text)
     if current_version != api_version:
-        raise AssertionError(
-            f"Version mismatch: VERSION.md has v{current_version}, src/api/main.py has {api_version}."
-        )
+        raise AssertionError(f"Version mismatch: VERSION.md has v{current_version}, src/api/main.py has {api_version}.")
 
     version_header = f"## v{current_version}"
     assert_contains(changelog_text, version_header, "versioning/CHANGELOG.md")
     assert_contains(product_changelog_text, version_header, "docs/product/CHANGELOG.md")
-
     assert_contains(changelog_text, "/api/modules", "versioning/CHANGELOG.md")
     assert_contains(product_changelog_text, "/api/modules", "docs/product/CHANGELOG.md")
     assert_contains(changelog_text, "/api/accounts", "versioning/CHANGELOG.md")
     assert_contains(product_changelog_text, "/api/accounts", "docs/product/CHANGELOG.md")
 
-    forbidden_workflow_refs = [
-        "src/run_demo.py",
-        "evals/run_evals.py",
-        "python evals/run_evals.py",
-        "python -m src.run_demo",
-        "backend/server.py",
-    ]
+    forbidden_workflow_refs = ["src/run_demo.py", "evals/run_evals.py", "python evals/run_evals.py", "python -m src.run_demo", "backend/server.py"]
     for ref in forbidden_workflow_refs:
         if ref in workflow_text:
             raise AssertionError(f"GitHub Actions workflow still references removed or legacy entrypoint: {ref}")
 
-    required_workflow_refs = [
-        "scripts/check_version_governance.py",
-        "scripts/check_repository_consistency.py",
-        "scripts/check_backend_flow_consistency.py",
-        "scripts/smoke_test_runtime.py",
-        "scripts/smoke_test_api.py",
-    ]
+    required_workflow_refs = ["scripts/check_version_governance.py", "scripts/check_repository_consistency.py", "scripts/check_backend_flow_consistency.py", "scripts/check_frontend_module_consistency.py", "scripts/smoke_test_runtime.py", "scripts/smoke_test_api.py"]
     for ref in required_workflow_refs:
         assert_contains(workflow_text, ref, "runtime-smoke-test.yml")
 
@@ -161,11 +114,9 @@ def main() -> None:
         path = ROOT / path_text
         if path.exists():
             raise AssertionError(f"Removed legacy path still exists in active trunk: {path_text}")
-
     for route_prefix in REMOVED_ROUTE_PREFIXES:
         if route_prefix in api_text:
             raise AssertionError(f"src/api/main.py should not mount removed route prefix: {route_prefix}")
-
     for doc_path_text in ACTIVE_DOCS:
         doc_text = read(ROOT / doc_path_text)
         for snippet in FORBIDDEN_DOC_SNIPPETS:
