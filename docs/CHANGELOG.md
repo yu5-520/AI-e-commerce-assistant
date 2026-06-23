@@ -1,6 +1,17 @@
 # CHANGELOG
 
-本文件记录版本变化。README 只保留项目入口，数据库、部署、P0 架构分别进入独立文档。
+本文件记录版本变化。README 只保留项目入口；V9 起，企业级一致性底座、数据库迁移、P0 架构、V8 权重系统分别进入独立文档。
+
+## V9.0.0
+
+SaaS 企业级一致性底座：
+
+- README 从 V5 PostgreSQL mirror 入口升级为 V9 SaaS 企业级一致性底座入口。
+- `versioning/VERSION.md` 统一当前版本为 `v9.0.0`。
+- `src/api/main.py` 升级到 `9.0.0`，保持 `/api/modules`、`/api/accounts`、`/api/data`、`/api/architecture`、`/api/system` 等主入口。
+- 新增 `docs/V9_SAAS_CONSISTENCY_BASE.md`，定义仓库一致性、前端一致性、后端一致性、三层套餐隔离、RAG 隔离、权限审计、受托运维、部署模式和测试验收节奏。
+- `scripts/check_version_governance.py` 改为优先识别 `API_VERSION = "X.Y.Z"`，避免版本治理脚本与变量式 FastAPI 版本声明冲突。
+- V9 明确规则：不新增前端主模块，不继续扩展 V8 算法；V8 权重能力作为后端增强层补强经营单元、商品、任务、Agent 证据链和复盘日志。
 
 ## V5.4.0
 
