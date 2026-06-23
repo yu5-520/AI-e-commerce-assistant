@@ -1,5 +1,21 @@
 # Changelog
 
+## v9.1.0 - 2026-06-24
+
+### Added
+- Added `docs/V9_REPOSITORY_CONSISTENCY.md` for V9.1 repository structure governance.
+- Added `scripts/check_repository_consistency.py` to validate required directories, required files, README entrypoints, workflow refs, frontend cache version, and forbidden legacy paths.
+- Added Repository consistency check to `.github/workflows/runtime-smoke-test.yml` after version governance and before smoke tests.
+
+### Changed
+- FastAPI runtime is bumped to `9.1.0` through the `API_VERSION` constant.
+- README is bumped to V9.1.0 and now references the repository consistency guard and document.
+- `web_demo/index.html` asset cache strings are bumped to `9.1.0`.
+- `scripts/check_version_governance.py` now treats `docs/V9_SAAS_CONSISTENCY_BASE.md` and `docs/V9_REPOSITORY_CONSISTENCY.md` as active docs and requires the new repository consistency script in workflow refs.
+
+### Product Engineering Rule
+- V9.1 does not change the business runtime flow. It makes repository structure, docs, scripts, workflow, and active entrypoints explicit before V9.2 begins backend main-flow consistency work. `/api/modules` and `/api/accounts` remain stable product entrypoints.
+
 ## v9.0.0 - 2026-06-24
 
 ### Added
