@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from src.core.context import UserContext, get_current_context
 from src.services.p0_architecture_service import p0_architecture_summary
 from src.services.v7_saas_control_plane_service import v7_saas_architecture_summary
-from src.services.v71_tenant_config_service import tenant_config_summary, upsert_feature_flag
+from src.services.v72_tenant_config_console_service import set_feature_flag_status, tenant_config_console_summary, upsert_rollout_rule
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -17,35 +17,40 @@ router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 @router.get("/p0")
 async def p0_architecture(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     """Return the P0 SaaS architecture decomposition and current scope plan."""
-
     return p0_architecture_summary(ctx)
 
 
 @router.get("/v7")
 async def v7_saas_architecture(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Return the V7.1 SaaS control-plane architecture and workflow governance baseline."""
-
+    """Return the V7.2 SaaS control-plane architecture and workflow governance baseline."""
     return v7_saas_architecture_summary(ctx)
 
 
 @router.get("/v7/tenant-config")
-async def v71_tenant_config(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Return tenant configuration, feature flags, and rollout evaluation for current context."""
-
-    return tenant_config_summary(ctx)
+async def v72_tenant_config(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return tenant configuration, feature flags, rollout evaluation, and console permissions."""
+    return tenant_config_console_summary(ctx)
 
 
 @router.post("/v7/feature-flags/{flag_key}")
-async def v71_upsert_feature_flag(flag_key: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    """Create or update a V7.1 feature flag. Owner / manager only in demo mode."""
+async def v72_upsert_feature_flag(flag_key: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Create or update a V7.2 feature flag from the console."""
+    try:
+        return set_feature_flag_status(flag_key, body or {}, ctx)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    if ctx.role_id not in {"owner", "manager"}:
-        raise HTTPException(status_code=403, detail="Only owner or manager can change feature flags.")
-    return upsert_feature_flag(flag_key, body or {}, ctx)
+
+@router.post("/v7/feature-flags/{flag_key}/rollout")
+async def v72_upsert_rollout_rule(flag_key: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Create or update a V7.2 rollout rule from the console."""
+    try:
+        return upsert_rollout_rule(flag_key, body or {}, ctx)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @router.get("/context")
 async def current_context(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     """Expose current demo UserContext for permission-scope verification."""
-
     return {"context": ctx.to_dict(), "auditMeta": ctx.audit_meta()}
