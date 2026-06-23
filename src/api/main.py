@@ -35,14 +35,15 @@ from src.services.v75_release_alert_service import ensure_release_alert_tables
 from src.services.v80_weight_snapshot_service import ensure_weight_snapshot_tables
 from src.services.v81_weight_comparison_service import ensure_weight_comparison_tables
 from src.services.v82_weight_rag_gate_service import ensure_weight_rag_tables
+from src.services.v83_linked_metric_relation_service import ensure_linked_relation_tables
 from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "8.2.0"
+API_VERSION = "8.3.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
-app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V8.2 runtime: weight metric RAG standard-line hits for product, store, and operator snapshots.")
+app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V8.3 runtime: linked metric relations for product, store, and operator weight fluctuation.")
 app.middleware("http")(security_headers_middleware)
 app.middleware("http")(api_rate_limit_middleware)
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "DELETE"], allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"])
@@ -52,7 +53,7 @@ if WEB_DEMO_DIR.exists():
 
 
 @app.on_event("startup")
-def apply_v82_runtime_cleanup() -> None:
+def apply_v83_runtime_cleanup() -> None:
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
@@ -72,6 +73,7 @@ def apply_v82_runtime_cleanup() -> None:
     ensure_weight_snapshot_tables()
     ensure_weight_comparison_tables()
     ensure_weight_rag_tables()
+    ensure_linked_relation_tables()
     ensure_risk_task_tables()
     if not module_task_service.TASKS:
         snapshots = load_task_snapshots()
