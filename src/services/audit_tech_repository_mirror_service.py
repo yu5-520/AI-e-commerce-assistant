@@ -6,27 +6,14 @@ It intentionally does not write additional audit records to avoid recursive audi
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Dict
 
 from src.core.context import UserContext
 from src.db.repositories import ProductionAuditRepository, ProductionTechLogRepository
 from src.db.session import get_session_factory
-from src.services.repository_runtime_service import repository_mode
+from src.services.repository_mirror_base_service import mirror_enabled, mirror_failed, mirror_skipped, mirror_summary, repository_mode, run_mirror
 
-AUDIT_TECH_MIRROR_VERSION = "5.3.4"
-
-
-def _skipped(action: str, reason: str = "DB_REPOSITORY_MODE=sqlite") -> Dict[str, Any]:
-    return {"version": AUDIT_TECH_MIRROR_VERSION, "action": action, "mode": repository_mode(), "mirrored": False, "status": "skipped", "reason": reason}
-
-
-def _run(coro: Any, action: str) -> Dict[str, Any]:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    return {"version": AUDIT_TECH_MIRROR_VERSION, "action": action, "mirrored": False, "status": "skipped", "reason": "event_loop_running; use async mirror path later"}
+AUDIT_TECH_MIRROR_VERSION = "5.3.8"
 
 
 async def _mirror_audit_async(ctx: UserContext, payload: Dict[str, Any], action: str) -> Dict[str, Any]:
@@ -46,29 +33,26 @@ async def _mirror_tech_async(ctx: UserContext, payload: Dict[str, Any], action: 
 
 
 def mirror_audit_log_to_production(ctx: UserContext, payload: Dict[str, Any] | None, *, action: str = "audit_log.write") -> Dict[str, Any]:
-    mode = repository_mode()
-    if mode == "sqlite":
-        return _skipped(action)
+    if not mirror_enabled():
+        return mirror_skipped(action, version=AUDIT_TECH_MIRROR_VERSION)
     if not payload:
-        return _skipped(action, "audit payload is empty")
+        return mirror_skipped(action, reason="audit payload is empty", version=AUDIT_TECH_MIRROR_VERSION)
     try:
-        return _run(_mirror_audit_async(ctx, payload, action), action)
+        return run_mirror(_mirror_audit_async(ctx, payload, action), action, version=AUDIT_TECH_MIRROR_VERSION)
     except Exception as exc:  # noqa: BLE001
-        return {"version": AUDIT_TECH_MIRROR_VERSION, "action": action, "mode": mode, "mirrored": False, "status": "failed", "error": str(exc), "fallback": mode == "hybrid"}
+        return mirror_failed(action, exc, version=AUDIT_TECH_MIRROR_VERSION)
 
 
 def mirror_tech_log_to_production(ctx: UserContext, payload: Dict[str, Any] | None, *, action: str = "tech_log.write") -> Dict[str, Any]:
-    mode = repository_mode()
-    if mode == "sqlite":
-        return _skipped(action)
+    if not mirror_enabled():
+        return mirror_skipped(action, version=AUDIT_TECH_MIRROR_VERSION)
     if not payload:
-        return _skipped(action, "tech payload is empty")
+        return mirror_skipped(action, reason="tech payload is empty", version=AUDIT_TECH_MIRROR_VERSION)
     try:
-        return _run(_mirror_tech_async(ctx, payload, action), action)
+        return run_mirror(_mirror_tech_async(ctx, payload, action), action, version=AUDIT_TECH_MIRROR_VERSION)
     except Exception as exc:  # noqa: BLE001
-        return {"version": AUDIT_TECH_MIRROR_VERSION, "action": action, "mode": mode, "mirrored": False, "status": "failed", "error": str(exc), "fallback": mode == "hybrid"}
+        return mirror_failed(action, exc, version=AUDIT_TECH_MIRROR_VERSION)
 
 
 def audit_tech_mirror_summary() -> Dict[str, Any]:
-    mode = repository_mode()
-    return {"version": AUDIT_TECH_MIRROR_VERSION, "mode": mode, "enabled": mode in {"hybrid", "postgres"}, "sqliteFirst": True, "mirroredResources": ["AuditLog", "TechLog"], "rule": "AuditLog and TechLog write to SQLite first; PostgreSQL mirror failure never breaks Demo runtime in hybrid mode."}
+    return mirror_summary(name="auditTechHybridMirror", resources=["AuditLog", "TechLog"], version=AUDIT_TECH_MIRROR_VERSION, extra={"mirroredResources": ["AuditLog", "TechLog"]})
