@@ -1,5 +1,25 @@
 # Product Changelog
 
+## v9.0.0 - 2026-06-24
+
+### Product Decision
+- V9 定位为 SaaS 企业级一致性底座版本，不新增前端主模块，不继续扩展 V8 权重算法。
+- V8 权重系统沉入后端能力层，用来补强经营单元、商品、任务详情、Agent 报告和复盘日志，而不是在前端堆新的“权重中心”主模块。
+- 基础版、专业版、企业版按能力、RAG、算法、部署模式和审计深度做系统级隔离。
+
+### Changed
+- `README.md` 改为 V9 SaaS 企业级一致性底座入口。
+- `versioning/VERSION.md` 当前版本升级为 `v9.0.0`。
+- `src/api/main.py` 升级到 `9.0.0`，保留 `/api/modules` 与 `/api/accounts` 作为稳定产品入口。
+- `scripts/check_version_governance.py` 改为优先读取 `API_VERSION`，避免版本治理脚本与 FastAPI 变量式版本声明冲突。
+- 新增 `docs/V9_SAAS_CONSISTENCY_BASE.md`，定义仓库一致性、前端一致性、后端一致性、三层隔离一致性、RAG 隔离、权限审计、受托运维和测试验收节奏。
+
+### Product Boundary
+- 基础版只开放报表分析、商品问题识别、商品任务生成和共享脱敏 RAG。
+- 专业版开放租户隔离 RAG、商品权重、店铺权重、平台趋势、活动趋势和 Agent 证据链增强。
+- 企业版开放私有化部署、客户侧 RAG / 数据库、完整权重系统、受托运维、高层审批门控和审计留痕。
+- `/api/modules` 保持前端产品主入口；`/api/accounts` 保持账号、角色、店铺归属和可见范围入口。
+
 ## v5.0.9 - 2026-06-22
 
 ### Product Decision
