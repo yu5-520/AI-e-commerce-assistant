@@ -11,6 +11,7 @@
     "data-check",
     "trend-center",
     "tenant-config",
+    "config-audit",
     "feedback-flywheel",
     "business-report",
     "system-status",
@@ -20,6 +21,7 @@
   const FEEDBACK_ROLES = new Set(["owner", "manager"]);
   const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
   const TENANT_CONFIG_ROLES = new Set(["owner", "manager"]);
+  const CONFIG_AUDIT_ROLES = new Set(["owner", "manager", "finance"]);
   const TREND_ROLES = new Set(["owner", "manager", "operator", "finance"]);
 
   function visibleModulesFor(account) {
@@ -28,6 +30,7 @@
     const next = [...base];
     if (TREND_ROLES.has(role)) next.push("trend-center");
     if (TENANT_CONFIG_ROLES.has(role)) next.push("tenant-config");
+    if (CONFIG_AUDIT_ROLES.has(role)) next.push("config-audit");
     if (FEEDBACK_ROLES.has(role)) next.push("feedback-flywheel");
     if (SYSTEM_STATUS_ROLES.has(role)) next.push("system-status");
     return Array.from(new Set(next));
@@ -44,6 +47,7 @@
     window.RoleConsolePage,
     window.SystemStatusPage,
     window.TenantConfigPage,
+    window.ConfigAuditPage,
     window.ManagerTasksPage,
     window.ManagerDispatchPage,
     window.ManagerReviewPage,
