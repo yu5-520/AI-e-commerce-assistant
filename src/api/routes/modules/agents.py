@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "9.7.0"
+AGENT_REGISTRY_VERSION = "9.9.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,9 +28,10 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "v970_audit_guard"
-    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；V9.7 固定审计复核和责任报告边界。"
-    plan["v97AuditGuard"] = {"version": AGENT_REGISTRY_VERSION, "entry": "/api/architecture/v9/rag-audit-rollback"}
+    plan["mode"] = "v990_delivery_readiness"
+    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；V9.9 固定企业交付验收、受托运维边界和最终 readiness 证据链。"
+    plan["v98OpsAuthorization"] = {"version": AGENT_REGISTRY_VERSION, "entry": "/api/architecture/v9/ops-authorization", "service": "src/services/v98_ops_authorization_service.py"}
+    plan["v99DeliveryReadiness"] = {"version": AGENT_REGISTRY_VERSION, "entry": "/api/architecture/v9/delivery-readiness", "service": "src/services/v99_delivery_readiness_service.py"}
     plan["taskRepositoryWritePath"] = {"version": AGENT_REGISTRY_VERSION, "service": "src/services/task_repository_write_service.py"}
     return plan
 
