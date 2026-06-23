@@ -1,4 +1,4 @@
-"""V5 module Agent routes."""
+"""V9 module Agent routes."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from src.services.task_agent_service import generate_task_candidates, task_playb
 from src.services.task_repository_write_service import create_task_with_repository
 
 router = APIRouter()
-AGENT_REGISTRY_VERSION = "5.1.7"
+AGENT_REGISTRY_VERSION = "9.2.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -28,15 +28,21 @@ def request_user_id(request: Request) -> str:
 def current_agent_plan() -> Dict[str, Any]:
     plan = get_agent_plan()
     plan["version"] = AGENT_REGISTRY_VERSION
-    plan["mode"] = "action_sequence_decision_flow"
-    plan["principle"] = "路径标题只是小标签；详情页以行动顺序为主，复盘指标留在待办提交和后端复盘链路。"
+    plan["mode"] = "v920_backend_flow_consistency"
+    plan["principle"] = "Agent 输出仍在原模块和任务详情中呈现；V8 权重、RAG、审批和复盘信息作为后端证据链补强，不新增前端主模块。"
+    plan["v92BackendFlow"] = {
+        "service": "src/services/v92_backend_flow_service.py",
+        "architectureEndpoint": "/api/architecture/v9/backend-flow",
+        "flow": ["ImportJob", "DataVersion", "RawRows", "ModuleProjection", "AlertEvent", "WeightSignal", "DecisionTask", "AgentReport", "ApprovalFlow", "ExecutionFeedback", "ReviewLog", "RagMemoryCandidate"],
+        "rule": "Agent 任务生成读取模块数据、权重上下文、RAG 证据和 ActionPlan；不按模块套同一模板。",
+    }
     plan["decisionTaskDraft"] = {
         "service": "src/services/action_plan_service.py",
         "outputs": ["readonlyEvidence", "supplementSchema", "decisionPaths", "selectedPathId", "operatorSupplement", "reviewPlan"],
         "uiRule": "前端展示路径小标签和行动顺序；选择路径后直接进入处理中。",
     }
     plan["taskRepositoryWritePath"] = {
-        "version": "5.1.7",
+        "version": AGENT_REGISTRY_VERSION,
         "service": "src/services/task_repository_write_service.py",
         "rule": "Agent 入池任务通过 TaskRepository 写路径持久化，保留旧 Demo 返回结构。创意 Agent 入池也同步到 TaskRepository。",
     }
@@ -138,32 +144,18 @@ def cycle_agent(request: Request, target: str = "日报") -> Dict[str, Any]:
 def module_agent(request: Request, module: str, entity_id: str, mode: str = Query(default="analysis")) -> Dict[str, Any]:
     result = run_module_agent(module, entity_id, mode=mode, user_id=request_user_id(request))
     if not result:
-        raise HTTPException(status_code=404, detail="module agent result not found")
+        raise HTTPException(status_code=404, detail="agent entity not found")
     return enrich_module_agent_result(result)
 
 
 @router.post("/agents/{module}/{entity_id}/tasks")
-def module_agent_task(
-    request: Request,
-    module: str,
-    entity_id: str,
-    body: Dict[str, Any] | None = Body(default=None),
-    ctx: UserContext = Depends(get_current_context),
-) -> Dict[str, Any]:
-    body = body or {}
-    agent_result = run_module_agent(module, entity_id, mode=body.get("mode") or "analysis", user_id=request_user_id(request))
-    if not agent_result:
-        raise HTTPException(status_code=400, detail="cannot create task from module agent draft")
-    drafts = agent_result.get("taskDrafts") or []
-    draft_index = int(body.get("draftIndex", body.get("draft_index", 0)) or 0)
-    if draft_index < 0 or draft_index >= len(drafts):
-        raise HTTPException(status_code=400, detail="task draft not found")
-    draft = _merge_decision_payload(drafts[draft_index], body)
-    write_result = create_task_with_repository(draft, ctx)
-    task = write_result.get("task") or {}
-    task["repositoryWrite"] = {
-        "version": write_result.get("version"),
-        "action": write_result.get("action"),
-        "repository": write_result.get("repository"),
-    }
-    return {"agent": enrich_module_agent_result(agent_result), "task": task, "message": "经营路径已确认，任务进入处理中，并已持久化到 TaskRepository。"}
+def module_agent_task(request: Request, module: str, entity_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    result = run_module_agent(module, entity_id, mode="task", user_id=request_user_id(request))
+    if not result:
+        raise HTTPException(status_code=404, detail="agent entity not found")
+    draft = (result.get("taskDrafts") or [{}])[0]
+    task = _merge_decision_payload(draft, body or {})
+    created = create_task_with_repository(task, ctx=ctx)
+    created["agent"] = enrich_module_agent_result(result)
+    created["message"] = "Agent 任务已进入统一任务池，并已同步到 TaskRepository。"
+    return created
