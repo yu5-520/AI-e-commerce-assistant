@@ -24,7 +24,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Python syntax check
-        run: python -m py_compile src/api/main.py scripts/check_version_governance.py scripts/check_repository_consistency.py scripts/check_backend_flow_consistency.py scripts/check_frontend_module_consistency.py scripts/smoke_test_runtime.py scripts/smoke_test_api.py
+        run: python -m py_compile src/api/main.py scripts/check_version_governance.py scripts/check_repository_consistency.py scripts/check_backend_flow_consistency.py scripts/check_frontend_module_consistency.py scripts/check_tier_isolation_consistency.py scripts/smoke_test_runtime.py scripts/smoke_test_api.py
 
       - name: Version governance check
         run: python scripts/check_version_governance.py
@@ -37,6 +37,9 @@ jobs:
 
       - name: Frontend module consistency check
         run: python scripts/check_frontend_module_consistency.py
+
+      - name: Tier isolation consistency check
+        run: python scripts/check_tier_isolation_consistency.py
 
       - name: Runtime workflow smoke test
         run: python scripts/smoke_test_runtime.py
