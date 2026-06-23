@@ -1,5 +1,20 @@
 # Changelog
 
+## v9.0.0 - 2026-06-24
+
+### Added
+- Added V9 SaaS enterprise consistency baseline as the active product trunk.
+- Added `docs/V9_SAAS_CONSISTENCY_BASE.md` to define repository, frontend, backend, three-tier isolation, RAG isolation, permissions, audit, deployment, and smoke-test governance.
+- Kept `/api/modules` and `/api/accounts` as stable product entrypoints for frontend modules and account scope.
+
+### Changed
+- FastAPI runtime is bumped to `9.0.0` through the `API_VERSION` constant.
+- README is rewritten from the V5 PostgreSQL mirror entrypoint into the V9 SaaS enterprise baseline entrypoint.
+- `scripts/check_version_governance.py` now reads `API_VERSION = "X.Y.Z"` as the primary runtime version source and still supports literal FastAPI `version="X.Y.Z"` fallback.
+
+### Product Engineering Rule
+- V9 does not add new frontend business modules and does not extend V8 algorithms. V9 consolidates V1-V8 capabilities into a SaaS enterprise foundation: repository consistency, frontend consistency, backend consistency, pricing-tier isolation, RAG isolation, permission/audit governance, deployment-mode governance, and test acceptance consistency.
+
 ## v4.5.3 - 2026-06-21
 
 ### Added
@@ -54,7 +69,7 @@
 - Added `src/services/creative_llm_enrichment_service.py` and connected creative Agent responses to LLM enrichment with fallback.
 
 ### Changed
-- FastAPI app version and frontend cache query strings are bumped to `4.5.0`.
+- FastAPI app version and frontend asset cache query strings are bumped to `4.5.0`.
 - `src/api/routes/modules/agents.py` now registers LLM Gateway, Tool Gateway, and MCP Adapter boundary in the Agent registry.
 - `.env.example` now includes V4.5 LLM Gateway settings: `LLM_ENABLED`, `LLM_MOCK_MODE`, `LLM_TRACE_ENABLED`, provider, model, base URL, key, timeout, temperature, and max tokens.
 - `scripts/smoke_test_api.py` now validates LLM Gateway status, manual generation fallback, Tool Gateway safe / blocked tools, MCP boundary, and creative LLM enrichment.
