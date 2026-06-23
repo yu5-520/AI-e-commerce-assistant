@@ -24,6 +24,7 @@ from src.services.v87_weight_task_group_service import generate_weight_task_grou
 from src.services.v88_weight_approval_service import decide_weight_approval, generate_weight_approvals, weight_approval_summary
 from src.services.v89_weight_execution_review_service import generate_weight_execution_reviews, generate_weight_executions, submit_weight_execution_feedback, weight_execution_review_summary, weight_execution_summary
 from src.services.v92_backend_flow_service import backend_flow_summary
+from src.services.v93_frontend_module_contract_service import frontend_module_contract_summary
 
 router = APIRouter(prefix="/api/architecture", tags=["architecture"])
 
@@ -231,6 +232,11 @@ async def v89_generate_weight_execution_reviews(ctx: UserContext = Depends(get_c
 @router.get("/v9/backend-flow")
 async def v92_backend_flow(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     return backend_flow_summary(ctx)
+
+
+@router.get("/v9/frontend-modules")
+async def v93_frontend_modules(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    return frontend_module_contract_summary(ctx)
 
 
 @router.get("/context")
