@@ -31,10 +31,10 @@ def main():
     must(read("versioning/CHANGELOG.md"), f"## v{current}")
     must(read("docs/product/CHANGELOG.md"), f"## v{current}")
     workflow = read(".github/workflows/runtime-smoke-test.yml")
-    for marker in ["check_version_governance.py", "check_repository_consistency.py", "check_backend_flow_consistency.py", "check_frontend_module_consistency.py", "check_tier_isolation_consistency.py", "check_rag_namespace_isolation.py"]:
+    for marker in ["check_version_governance.py", "check_repository_consistency.py", "check_backend_flow_consistency.py", "check_frontend_module_consistency.py", "check_tier_isolation_consistency.py", "check_rag_namespace_isolation.py", "check_rag_write_memory_consistency.py"]:
         must(workflow, marker)
     read("README.md")
-    read("docs/V9_RAG_NAMESPACE_ISOLATION.md")
+    read("docs/V9_RAG_WRITE_MEMORY_CONSISTENCY.md")
     print(f"Version governance check passed for v{current}.")
 
 if __name__ == "__main__":
