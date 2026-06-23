@@ -35,33 +35,20 @@ from src.services.worker_queue_service import ensure_worker_queue_tables
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "7.3.0"
+API_VERSION = "7.4.0"
 CORS_ORIGINS = [item.strip() for item in os.getenv("CORS_ALLOW_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",") if item.strip()]
 
-app = FastAPI(
-    title="AI ERP Operating Advisor API",
-    version=API_VERSION,
-    description="V7.3 runtime: SaaS config audit center with search, compare, rollback, and control-plane governance.",
-)
-
+app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION, description="V7.4 runtime: SaaS release governance dashboard.")
 app.middleware("http")(security_headers_middleware)
 app.middleware("http")(api_rate_limit_middleware)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "DELETE"],
-    allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS", "DELETE"], allow_headers=["Accept", "Content-Type", "X-Mock-User-Id", "X-Tenant-Id", "X-Org-Id", "Authorization"])
 
 if WEB_DEMO_DIR.exists():
     app.mount("/web_demo", StaticFiles(directory=WEB_DEMO_DIR), name="web_demo")
 
 
 @app.on_event("startup")
-def apply_v73_runtime_cleanup() -> None:
-    """Initialize SaaS control plane, tenant config audit center, and task runtime."""
+def apply_v74_runtime_cleanup() -> None:
     reset_legacy_runtime_once()
     bootstrap_task_repository()
     ensure_worker_queue_tables()
