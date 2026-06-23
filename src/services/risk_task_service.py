@@ -1,10 +1,10 @@
-"""V6.3 risk-graded task generation service with RAG indicator constraints.
+"""V6.4 risk-graded task generation with RAG indicators and high-risk trend gate.
 
-V6.2 introduced risk-graded task generation. V6.3 adds the company rule/RAG
-indicator layer: medium/high-risk tasks must carry concrete boundaries such as
-stock safety lines, ROI floors, CTR/CVR ranges, gross-margin floors, and stop or
-review gates. High-risk tasks remain review-only until historical trend and
-permission gates are added.
+V6.3 added concrete RAG indicator boundaries. V6.4 adds the high-risk historical
+trend gate: application tasks for expanding inventory/ad budget can only be
+created when at least four key indicators are stable-positive and there are no
+hard blockers. Even when passed, the task is an application/approval task, not an
+automatic execution task.
 """
 
 from __future__ import annotations
@@ -16,10 +16,13 @@ from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services import module_task_service
+from src.services.high_risk_trend_gate_service import evaluate_high_risk_trend_gate
 from src.services.indicator_rag_service import resolve_indicator_constraints
 
-RISK_TASK_VERSION = "6.3.0"
+RISK_TASK_VERSION = "6.4.0"
 RISK_RANK = {"高": 1, "中": 2, "低": 3}
+INVESTMENT_POSITIVE_METRICS = {"roi", "traffic", "clicks", "ctr", "conversion_rate", "gross_margin", "sales_volume", "quantity", "revenue", "actual_paid", "good_review_rate"}
+INVESTMENT_BLOCKER_METRICS = {"refund_rate", "refund_amount", "refund_count", "bad_review_rate"}
 
 
 def now_iso() -> str:
@@ -93,7 +96,32 @@ def _dominant_risk(signals: Iterable[Dict[str, Any]]) -> str:
     return sorted(risks, key=lambda item: RISK_RANK.get(item, 9))[0] if risks else "低"
 
 
-def _risk_domain(signals: List[Dict[str, Any]]) -> str:
+def _investment_signal_count(signals: Iterable[Dict[str, Any]]) -> int:
+    metrics = set()
+    for item in signals:
+        metric = str(item.get("sourceMetric") or "")
+        direction = item.get("trendDirection")
+        if metric in INVESTMENT_POSITIVE_METRICS and direction == "up":
+            metrics.add(metric)
+        if metric in INVESTMENT_BLOCKER_METRICS and direction == "down":
+            metrics.add(metric)
+    return len(metrics)
+
+
+def _has_investment_blocker(signals: Iterable[Dict[str, Any]]) -> bool:
+    for item in signals:
+        metric = str(item.get("sourceMetric") or "")
+        direction = item.get("trendDirection")
+        if metric in INVESTMENT_BLOCKER_METRICS and direction == "up":
+            return True
+        if metric in {"roi", "ctr", "conversion_rate", "gross_margin"} and direction == "down":
+            return True
+    return False
+
+
+def _risk_domain(signals: List[Dict[str, Any]], *, opportunity_mode: bool = False) -> str:
+    if opportunity_mode:
+        return "趋势"
     text = " ".join(str(item.get("signalType") or "") + " " + str(item.get("sourceMetric") or "") for item in signals)
     if any(word in text for word in ["库存", "stock", "available_stock"]):
         return "库存"
@@ -106,10 +134,12 @@ def _risk_domain(signals: List[Dict[str, Any]]) -> str:
     return "趋势"
 
 
-def _task_type(risk_level: str, domain: str, signals: List[Dict[str, Any]]) -> str:
+def _task_type(risk_level: str, domain: str, signals: List[Dict[str, Any]], high_risk_gate: Dict[str, Any] | None = None, *, opportunity_mode: bool = False) -> str:
     signal_names = " ".join(str(item.get("signalType") or "") for item in signals)
     if risk_level == "高":
-        return "高风险指标门控复核任务"
+        if opportunity_mode and high_risk_gate and high_risk_gate.get("applicationAllowed"):
+            return "高风险加大投产申请任务"
+        return "高风险趋势门控复核任务"
     if "库存" in domain:
         return "中风险库存指标任务" if risk_level == "中" else "低风险库存趋势观察"
     if "流量" in domain:
@@ -146,7 +176,7 @@ def _visible_roles_for(risk_level: str, domain: str) -> List[str]:
     return ["manager", "operator"]
 
 
-def _execution_policy(risk_level: str, signals: List[Dict[str, Any]], constraints: Dict[str, Any]) -> Dict[str, Any]:
+def _execution_policy(risk_level: str, signals: List[Dict[str, Any]], constraints: Dict[str, Any], high_risk_gate: Dict[str, Any] | None = None, *, opportunity_mode: bool = False) -> Dict[str, Any]:
     metrics = [item.get("metricLabel") or item.get("sourceMetric") for item in signals]
     matched = constraints.get("status") == "matched"
     if risk_level == "低":
@@ -169,20 +199,23 @@ def _execution_policy(risk_level: str, signals: List[Dict[str, Any]], constraint
             "indicatorLines": constraints.get("executionLines") or [],
             "rule": "中风险任务必须带库存、ROI、点击率、转化率、毛利率等具体指标边界；缺失指标时不允许输出执行型动作。",
         }
+    application_allowed = bool(high_risk_gate and high_risk_gate.get("applicationAllowed"))
     return {
-        "riskMode": "rag_review_gate_only",
-        "allowedAction": "只能生成复核 / 审批候选，不允许直接加库存、加投放或扩大预算",
+        "riskMode": "high_risk_application_gate_passed" if application_allowed else "high_risk_gate_blocked_review_only",
+        "allowedAction": "可生成加库存/加投放申请任务，仍需审批，不能自动执行" if application_allowed else "只能生成复核 / 观察任务，不允许申请扩大投产",
         "requiresRagMetrics": True,
         "ragMatched": matched,
+        "requiresTrendGate": True,
+        "trendGatePassed": application_allowed,
         "requiresApproval": True,
         "metricPlaceholders": metrics,
         "indicatorLines": constraints.get("executionLines") or [],
-        "trendGate": constraints.get("trendGate") or {},
-        "rule": "高风险任务涉及扩大投产，必须通过 RAG 指标和历史趋势门控；V6.3 只生成复核候选。",
+        "highRiskTrendGate": high_risk_gate or {},
+        "rule": "高风险投产必须同时通过 RAG 指标和历史趋势门控；通过后也只能生成申请/审批任务，不能直接执行。",
     }
 
 
-def _indicator_actions(risk_level: str, domain: str, constraints: Dict[str, Any]) -> List[str]:
+def _indicator_actions(risk_level: str, domain: str, constraints: Dict[str, Any], high_risk_gate: Dict[str, Any] | None = None) -> List[str]:
     targets = constraints.get("targets") or {}
     lines = constraints.get("executionLines") or []
     actions: List[str] = []
@@ -201,27 +234,36 @@ def _indicator_actions(risk_level: str, domain: str, constraints: Dict[str, Any]
     if targets.get("maxBadReviewRate") is not None:
         actions.append(f"差评率不得高于 {targets['maxBadReviewRate'] * 100:.1f}%。")
     if risk_level == "高":
-        gate = constraints.get("trendGate") or {}
-        actions.append(f"高风险动作仅进入复核：当前稳定向好指标 {gate.get('positiveMetricCount', 0)} 项，需满足公司规则后才可申请扩大投产。")
+        gate = high_risk_gate or constraints.get("trendGate") or {}
+        positive = gate.get("positiveMetricCount", 0)
+        required = gate.get("requiredPositiveMetricCount") or targets.get("minPositiveMetricCount") or 4
+        if gate.get("applicationAllowed"):
+            actions.append(f"高风险申请已通过趋势门控：稳定向好指标 {positive}/{required} 项，可提交加库存/加投放申请，但必须走审批。")
+        else:
+            actions.append(f"高风险动作未通过趋势门控：稳定向好指标 {positive}/{required} 项，只能复核，不能扩大投产。")
     return actions or lines or [constraints.get("gateConclusion") or "缺少可执行指标，转人工复核。"]
 
 
-def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_version: str | None) -> Dict[str, Any]:
-    risk_level = _dominant_risk(signals)
-    domain = _risk_domain(signals)
-    task_type = _task_type(risk_level, domain, signals)
+def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_version: str | None, *, forced_risk_level: str | None = None, opportunity_mode: bool = False) -> Dict[str, Any]:
+    risk_level = forced_risk_level or _dominant_risk(signals)
+    domain = _risk_domain(signals, opportunity_mode=opportunity_mode)
     product_id = product.get("productId") or signals[0].get("productId")
     store_id = product.get("storeId") or signals[0].get("storeId")
     signal_labels = [f"{item.get('signalType')} / {item.get('metricLabel') or item.get('sourceMetric')} / {item.get('trendDirection')}" for item in signals]
     constraints = resolve_indicator_constraints(product, domain, risk_level, signals, data_version=data_version)
-    policy = _execution_policy(risk_level, signals, constraints)
+    high_risk_gate = evaluate_high_risk_trend_gate(product, signals, constraints, data_version=data_version) if risk_level == "高" else None
+    task_type = _task_type(risk_level, domain, signals, high_risk_gate, opportunity_mode=opportunity_mode)
+    policy = _execution_policy(risk_level, signals, constraints, high_risk_gate, opportunity_mode=opportunity_mode)
     deadline = _deadline_for(risk_level, constraints)
-    if risk_level == "高":
-        title = f"{product.get('title') or product_id} · 高风险指标门控复核"
+    if risk_level == "高" and high_risk_gate and high_risk_gate.get("applicationAllowed"):
+        title = f"{product.get('title') or product_id} · 加大投产申请"
+    elif risk_level == "高":
+        title = f"{product.get('title') or product_id} · 高风险趋势门控复核"
     elif risk_level == "中":
         title = f"{product.get('title') or product_id} · {domain}指标修复任务"
     else:
         title = f"{product.get('title') or product_id} · 趋势观察任务"
+    execution_requirements = _indicator_actions(risk_level, domain, constraints, high_risk_gate)
     return {
         "id": make_id("RISK"),
         "title": title,
@@ -243,15 +285,17 @@ def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_v
         "platform": product.get("platform") or "未知平台",
         "category": product.get("category") or "未分类",
         "riskDomain": domain,
-        "actionType": "复核" if risk_level == "高" else "修复" if risk_level == "中" else "观察",
+        "actionType": "申请" if risk_level == "高" and high_risk_gate and high_risk_gate.get("applicationAllowed") else "复核" if risk_level == "高" else "修复" if risk_level == "中" else "观察",
         "taskLayer": _task_layer_for(risk_level, domain),
         "visibleRoleIds": _visible_roles_for(risk_level, domain),
-        "sourceEvent": f"V6.3:{data_version or 'latest'}:{product_id}:{domain}:{risk_level}",
+        "sourceEvent": f"V6.4:{data_version or 'latest'}:{product_id}:{domain}:{risk_level}:{'application' if opportunity_mode else 'risk'}",
         "riskGrade": risk_level,
         "riskPolicy": policy,
         "ragIndicatorConstraints": constraints,
-        "executionRequirements": _indicator_actions(risk_level, domain, constraints),
-        "judgmentTags": ["V6.3RAG指标", f"{risk_level}风险", domain, *[str(item.get("signalType")) for item in signals[:3]]],
+        "highRiskTrendGate": high_risk_gate,
+        "investmentApplicationAllowed": bool(high_risk_gate and high_risk_gate.get("applicationAllowed")),
+        "executionRequirements": execution_requirements,
+        "judgmentTags": ["V6.4高风险趋势门控", f"{risk_level}风险", domain, *[str(item.get("signalType")) for item in signals[:3]]],
         "evidence": [
             {
                 "type": "trend_signal",
@@ -271,20 +315,29 @@ def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_v
                 "dataVersion": data_version,
             }
             for source in constraints.get("ragSources", [])
-        ],
+        ] + ([
+            {
+                "type": "high_risk_trend_gate",
+                "title": "高风险历史趋势门控",
+                "metric": f"稳定向好 {high_risk_gate.get('positiveMetricCount', 0)}/{high_risk_gate.get('requiredPositiveMetricCount', 4)} 项",
+                "reason": high_risk_gate.get("decision"),
+                "dataVersion": data_version,
+            }
+        ] if high_risk_gate else []),
         "reason": "；".join(item.get("reason") or item.get("signalType") or "趋势信号" for item in signals[:4]),
         "agentJudgment": {
-            "status": "v6_3_rag_indicator_task",
+            "status": "v6_4_high_risk_trend_gate_task",
             "riskLevel": risk_level,
-            "summary": f"系统基于 {len(signals)} 条经营信号和 {len(constraints.get('ruleIds') or [])} 条RAG指标规则生成{risk_level}风险任务。",
+            "summary": f"系统基于 {len(signals)} 条经营信号、{len(constraints.get('ruleIds') or [])} 条RAG指标规则和高风险趋势门控生成任务。",
             "policy": policy,
             "signals": signal_labels,
             "indicatorConstraints": constraints,
-            "executionRequirements": _indicator_actions(risk_level, domain, constraints),
-            "boundary": "Agent 不允许自造中高风险指标；缺少RAG指标时只能生成复核或数据补全任务。",
-            "nextVersionBoundary": "V6.4 将接入高风险历史趋势门控：7天/30天窗口至少4项稳定向好，才允许生成扩大投产申请。",
+            "highRiskTrendGate": high_risk_gate,
+            "executionRequirements": execution_requirements,
+            "boundary": "高风险任务只能生成申请/审批或复核任务，不能直接执行加库存、加投放、扩大预算。",
+            "nextVersionBoundary": "V6.5 将接入账号权限额度和审批链路，决定当前账号能申请多少预算/采购额度。",
         },
-        "sourceTrail": ["报表中心", "趋势中心", "RAG指标门控", "风险分级任务"],
+        "sourceTrail": ["报表中心", "趋势中心", "RAG指标门控", "高风险趋势门控", "风险分级任务"],
     }
 
 
@@ -315,7 +368,7 @@ def _save_plan(product_id: str, store_id: str | None, data_version: str | None, 
 
 
 def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int = 200) -> Dict[str, Any]:
-    """Generate low / medium / high risk tasks from V6.1 business signals with V6.3 indicators."""
+    """Generate low / medium / high risk tasks from business signals with V6.4 gates."""
     ensure_risk_task_tables()
     signals = _load_signals(data_version=data_version, limit=limit)
     groups: Dict[tuple[str, str | None, str | None], List[Dict[str, Any]]] = defaultdict(list)
@@ -328,31 +381,38 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
     created_tasks: List[Dict[str, Any]] = []
     plans: List[Dict[str, Any]] = []
     skipped = 0
+    application_candidates = 0
     for (product_id, store_id, version), items in groups.items():
         dominant = _dominant_risk(items)
+        positive_count = _investment_signal_count(items)
+        opportunity_mode = positive_count >= 4 and not _has_investment_blocker(items)
+        risk_for_task = "高" if opportunity_mode else dominant
         task_candidates = [item for item in items if item.get("taskCandidate")]
-        if dominant == "低" and len(items) < 2:
+        if not opportunity_mode and risk_for_task == "低" and len(items) < 2:
             skipped += 1
             continue
-        if dominant in {"中", "高"} and not task_candidates:
+        if not opportunity_mode and risk_for_task in {"中", "高"} and not task_candidates:
             skipped += 1
             continue
         product = _product_context(product_id, store_id)
-        payload = _task_payload(product, items, version)
+        payload = _task_payload(product, items, version, forced_risk_level=risk_for_task, opportunity_mode=opportunity_mode)
+        if opportunity_mode:
+            application_candidates += 1
         task = module_task_service.create_task(payload)
         created_tasks.append(task)
-        plans.append(_save_plan(product_id, store_id, version, payload["riskGrade"], payload["taskType"], task.get("id"), "created", {"task": task, "signals": items, "indicatorConstraints": payload.get("ragIndicatorConstraints")}))
+        plans.append(_save_plan(product_id, store_id, version, payload["riskGrade"], payload["taskType"], task.get("id"), "created", {"task": task, "signals": items, "indicatorConstraints": payload.get("ragIndicatorConstraints"), "highRiskTrendGate": payload.get("highRiskTrendGate")}))
     return {
         "version": RISK_TASK_VERSION,
-        "mode": "rag_indicator_risk_task_generation",
+        "mode": "high_risk_trend_gate_task_generation",
         "dataVersion": data_version,
         "signalCount": len(signals),
         "groupCount": len(groups),
         "createdTaskCount": len(created_tasks),
         "skippedGroupCount": skipped,
+        "investmentApplicationCandidateCount": application_candidates,
         "tasks": created_tasks,
         "plans": plans,
-        "rule": "低风险可直接生成；中风险必须带RAG指标边界；高风险只生成复核/审批候选，不直接扩大投产。",
+        "rule": "低风险可直接生成；中风险必须带RAG指标边界；高风险必须通过历史趋势门控，最多生成申请/审批任务，不直接扩大投产。",
     }
 
 
@@ -363,15 +423,24 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
     plans = [loads(row["payload"]) for row in rows]
     by_level: Dict[str, int] = defaultdict(int)
     rag_matched = 0
+    application_allowed = 0
+    gate_passed = 0
     for plan in plans:
         by_level[str(plan.get("riskLevel") or "低")] += 1
         task = (plan.get("payload") or {}).get("task") or {}
         if (task.get("ragIndicatorConstraints") or {}).get("status") == "matched":
             rag_matched += 1
+        gate = task.get("highRiskTrendGate") or {}
+        if gate.get("gateStatus") == "passed":
+            gate_passed += 1
+        if task.get("investmentApplicationAllowed"):
+            application_allowed += 1
     return {
         "version": RISK_TASK_VERSION,
         "total": len(plans),
         "byLevel": dict(by_level),
         "ragMatchedCount": rag_matched,
+        "highRiskGatePassedCount": gate_passed,
+        "investmentApplicationAllowedCount": application_allowed,
         "latestPlans": plans,
     }
