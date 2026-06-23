@@ -8,11 +8,16 @@ response, failed response, and summary shape.
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Awaitable, Dict, List
 
-from src.services.repository_runtime_service import repository_mode
-
 REPOSITORY_MIRROR_BASE_VERSION = "5.3.8"
+SUPPORTED_REPOSITORY_MODES = {"sqlite", "postgres", "hybrid"}
+
+
+def repository_mode() -> str:
+    mode = os.getenv("DB_REPOSITORY_MODE", "sqlite").lower()
+    return mode if mode in SUPPORTED_REPOSITORY_MODES else "sqlite"
 
 
 def mirror_enabled() -> bool:
