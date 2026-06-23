@@ -1,53 +1,39 @@
 # PostgreSQL / Alembic / Repository 过渡层
 
-当前版本：V5.3.8。
+当前版本：V5.3.9。
 
-本阶段新增 `repository_mirror_base_service`：统一 SQLite-first PostgreSQL mirror 的控制流，业务服务只保留各自 Production Repository 适配。
+本阶段新增 PostgreSQL 主写切换前检查清单。该能力只做 readiness 评估，不会修改 `DB_REPOSITORY_MODE`，也不会切换写路径。
 
-## 目标
+## 当前链路
 
 ```text
 SQLite Demo Runtime
 ↓
-Task / ImportJob / ProjectionJob / DataVersion / AlertEvent / WorkerJob / AuditLog / TechLog 写路径
+核心写路径 SQLite-first
 ↓
 repository_mirror_base_service
 ↓
-PostgreSQL Production Mirror
+PostgreSQL Mirror
 ↓
-Production Repositories
+/api/system/postgres-cutover-check
+↓
+主写切换前检查项：连接、迁移、mirror、回退、身份、回滚
 ```
 
 ## 新增文件
 
 ```text
-src/services/repository_mirror_base_service.py  Mirror 公共控制层
-src/services/repository_runtime_service.py      mirrorBase 状态
+src/services/postgres_cutover_check_service.py  PostgreSQL 主写切换前检查服务
+src/api/routes/system.py                        GET /api/system/postgres-cutover-check
+web_demo/modules/system-status/page.js          前端展示 pass / warn / blocked
 ```
 
-## 已接入 base 的 mirror service
-
-```text
-src/services/task_repository_mirror_service.py
-src/services/import_worker_repository_mirror_service.py
-src/services/audit_tech_repository_mirror_service.py
-src/services/projection_repository_mirror_service.py
-src/services/data_alert_repository_mirror_service.py
-```
-
-## 运行模式
-
-```text
-DB_REPOSITORY_MODE=sqlite    默认：只写 SQLite Demo，mirror skipped
-DB_REPOSITORY_MODE=hybrid    过渡：SQLite 成功后尝试 PostgreSQL mirror，失败不影响 Demo
-DB_REPOSITORY_MODE=postgres  未来：当前仍 SQLite-first，后续再提升 PostgreSQL 为主写路径
-```
-
-检查接口：
+## 检查接口
 
 ```text
 GET /api/system/repositories
 GET /api/system/repositories?check=true
+GET /api/system/postgres-cutover-check
 ```
 
 ## 当前 Production Repository 范围
@@ -63,18 +49,37 @@ ProductionAuditRepository          audit_logs trace timeline / upsert
 ProductionTechLogRepository        tech_logs upsert
 ```
 
+## Cutover 检查项
+
+```text
+repository_mode
+postgres_connection
+alembic_files
+mirror_base
+production_models
+demo_fallback
+auth_boundary
+rollback_plan
+taskHybridMirror
+importWorkerHybridMirror
+auditTechHybridMirror
+projectionDataHybridMirror
+dataAlertWriteMirror
+```
+
 ## 重要边界
 
 1. 当前 Demo 服务仍先使用 SQLite runtime 表。
 2. `hybrid` 模式会尝试 mirror，但 mirror 失败不会阻断 Demo。
-3. mirror 控制流已经统一到 `repository_mirror_base_service`。
-4. `postgres` 模式目前还不是完全主写，只是启用 mirror，后续版本再提升 PostgreSQL 为主写路径。
+3. `postgres` 模式目前还不是完全主写，只是 readiness 目标状态。
+4. 主写切换前必须先看 `/api/system/postgres-cutover-check` 的 blocked 项。
 
 ## 后续迁移顺序
 
 ```text
-1. 使用 /api/system/repositories?check=true 检查连接
-2. 验证 productionMirror 字段和 mirrorBase 状态
-3. PostgreSQL 主写切换前检查清单
-4. README / docs / CHANGELOG 拆分，降低文档重复
+1. DB_REPOSITORY_MODE=hybrid
+2. /api/system/postgres-cutover-check 消除 blocked
+3. 核心链路抽样对账
+4. 写入 rollback runbook
+5. 再考虑 postgres 主写切换
 ```
