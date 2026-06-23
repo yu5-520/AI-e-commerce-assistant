@@ -96,10 +96,13 @@ def extract_current_version(version_text: str) -> str:
 
 
 def extract_api_version(api_text: str) -> str:
-    match = re.search(r'version="(\d+\.\d+\.\d+)"', api_text)
-    if not match:
-        raise AssertionError("src/api/main.py FastAPI app must declare version=\"X.Y.Z\".")
-    return match.group(1)
+    constant_match = re.search(r'API_VERSION\s*=\s*["\'](\d+\.\d+\.\d+)["\']', api_text)
+    if constant_match:
+        return constant_match.group(1)
+    literal_match = re.search(r'version=["\'](\d+\.\d+\.\d+)["\']', api_text)
+    if literal_match:
+        return literal_match.group(1)
+    raise AssertionError("src/api/main.py must declare API_VERSION = \"X.Y.Z\" or FastAPI version=\"X.Y.Z\".")
 
 
 def assert_contains(text: str, needle: str, owner: str) -> None:
