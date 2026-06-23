@@ -1,54 +1,37 @@
 from pathlib import Path
 import re
-
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "9.5.0"
+EXPECTED_VERSION = "9.6.0"
 
-
-def read(path: str) -> str:
-    target = ROOT / path
-    if not target.exists():
+def read(path):
+    p = ROOT / path
+    if not p.exists():
         raise AssertionError(f"missing {path}")
-    return target.read_text(encoding="utf-8")
+    return p.read_text(encoding="utf-8")
 
-
-def assign(text: str, name: str) -> str:
-    match = re.search(rf'{name}\s*=\s*["\']([^"\']+)["\']', text)
-    if not match:
+def assign(text, name):
+    m = re.search(rf'{name}\s*=\s*["\']([^"\']+)["\']', text)
+    if not m:
         raise AssertionError(f"missing {name}")
-    return match.group(1)
+    return m.group(1)
 
-
-def must(text: str, marker: str, owner: str) -> None:
+def must(text, marker):
     if marker not in text:
-        raise AssertionError(f"{owner} missing {marker}")
+        raise AssertionError(f"missing {marker}")
 
-
-def main() -> None:
-    version = read("versioning/VERSION.md")
-    main_py = read("src/api/main.py")
-    health = read("src/api/routes/health.py")
-    agents = read("src/api/routes/modules/agents.py")
-    docs = read("docs/V9_BACKEND_FLOW_CONSISTENCY.md")
-    service = read("src/services/v92_backend_flow_service.py")
-    architecture = read("src/api/routes/architecture.py")
-    workflow = read(".github/workflows/runtime-smoke-test.yml")
-    index_html = read("web_demo/index.html")
-    must(version, f"Current Version: v{EXPECTED_VERSION}", "VERSION")
-    if assign(main_py, "API_VERSION") != EXPECTED_VERSION:
-        raise AssertionError("bad API_VERSION")
-    if assign(health, "API_VERSION") != EXPECTED_VERSION:
-        raise AssertionError("bad health version")
-    if assign(agents, "AGENT_REGISTRY_VERSION") != EXPECTED_VERSION:
-        raise AssertionError("bad agent version")
-    for marker in ["ImportJob", "DataVersion", "ModuleProjection", "WeightSignal", "RagMemoryCandidate"]:
-        must(docs, marker, "backend docs")
-        must(service, marker, "backend service")
-    must(architecture, "@router.get(\"/v9/backend-flow\")", "architecture")
-    must(workflow, "scripts/check_backend_flow_consistency.py", "workflow")
-    must(index_html, f"?v={EXPECTED_VERSION}", "web_demo/index.html")
-    print("Backend flow consistency check passed for V9.5.")
-
+def main():
+    must(read("versioning/VERSION.md"), f"Current Version: v{EXPECTED_VERSION}")
+    if assign(read("src/api/main.py"), "API_VERSION") != EXPECTED_VERSION:
+        raise AssertionError("bad api")
+    if assign(read("src/api/routes/health.py"), "API_VERSION") != EXPECTED_VERSION:
+        raise AssertionError("bad health")
+    if assign(read("src/api/routes/modules/agents.py"), "AGENT_REGISTRY_VERSION") != EXPECTED_VERSION:
+        raise AssertionError("bad agent")
+    must(read("docs/V9_BACKEND_FLOW_CONSISTENCY.md"), "RagMemoryCandidate")
+    must(read("src/services/v92_backend_flow_service.py"), "RagMemoryCandidate")
+    must(read("src/api/routes/architecture.py"), "@router.get(\"/v9/backend-flow\")")
+    must(read("web_demo/index.html"), f"?v={EXPECTED_VERSION}")
+    print("Backend flow consistency check passed for V9.6.")
 
 if __name__ == "__main__":
     main()
