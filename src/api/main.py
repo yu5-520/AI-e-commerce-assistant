@@ -9,11 +9,11 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, trends, worker_jobs
+from src.api.routes import accounts, architecture, data_import, health, llm, modules, system
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "9.8.0"
+API_VERSION = "9.9.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 
@@ -34,12 +34,5 @@ app.include_router(accounts.router)
 app.include_router(health.router)
 app.include_router(llm.router)
 app.include_router(data_import.router)
-app.include_router(import_jobs.router)
-app.include_router(approvals.router)
 app.include_router(system.router)
 app.include_router(architecture.router)
-app.include_router(task_persistence.router)
-app.include_router(report_task_sync.router)
-app.include_router(trends.router)
-app.include_router(worker_jobs.router)
-app.include_router(audit.router)
