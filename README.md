@@ -1,6 +1,6 @@
 # AI ERP 经营单元电商协同系统 MVP
 
-> 当前版本：V5.2.9。新增部署安全网关层：Nginx 配置模板、部署说明、Security Headers、FastAPI API RateLimit、`.env.example` 和 `/api/system/security`。当前目标是让系统从“本地工程 Demo”进入“可控部署 MVP”。
+> 当前版本：V5.3.0。新增 PostgreSQL / Alembic 生产数据模型骨架：`src/db/session.py`、`src/db/base.py`、`src/db/models.py`、`alembic.ini`、`alembic/env.py`、初始 P0 schema migration 和 `docs/POSTGRESQL_ALEMBIC.md`。当前不替换 SQLite Demo 运行链路。
 
 ## 当前主链路
 
@@ -13,45 +13,46 @@ FastAPI：Security Headers + API RateLimit + CORS Allowlist
 ↓
 UserContext：tenant / org / user / role / store scope
 ↓
-ImportJob / WorkerJob / ARQ Dispatch / SQLite fallback
+SQLite Demo Runtime：ImportJob / WorkerJob / Task / Evidence / Audit / LLM Gateway 继续可运行
+↓
+PostgreSQL Production Target：SQLAlchemy AsyncSession + Alembic + TenantScopedMixin + SoftDeleteMixin + TraceAuditMixin
 ↓
 TraceId：贯穿 ImportJob / ProjectionJob / WorkerJob / WorkerTaskResult / Task / Evidence / RAG Staging / AuditLog / TechLog / LLM Gateway
-↓
-TaskRepository：任务创建、流转、重置进入 trace audit
-↓
-TaskEvidence：运营提交证据、总管复核证据进入 trace audit
-↓
-LLM Gateway：配额、限流、缓存、熔断、Schema 校验，失败时规则模板降级
-↓
-AuditLog：按 trace_id 串联导入、投影、队列、任务、证据、RAG 暂存、LLM 调用
-↓
-TechLog：JSON 技术日志，写入前递归脱敏 token / password / secret / key / cookie
 ↓
 ModuleProjection / DashboardSummary / AlertEvent / Module Agent / DecisionTaskDraft
 ```
 
 核心规则：**首页展示经营摘要，不展示工程代号；报表确认导入就是自动入库；商品、报表、总览必须随导入同步刷新；当前任务按优先级、截止时间和风险域排序；Demo 阶段可删除单条导入记录。**
 
-## V5.2.x P0 SaaS 架构新增
+## V5.3.0 新增
 
 ```text
-src/middleware/security_headers.py             FastAPI 安全响应头
-src/middleware/api_rate_limit.py               FastAPI 轻量 API 限流
-src/services/security_status_service.py        /api/system/security 状态聚合
-deploy/nginx/ai-erp.conf                       Nginx 反代 / 静态资源 / 限流模板
-deploy/README_DEPLOY.md                        ECS / Nginx / Worker 部署说明
-.env.example                                   环境变量样例
-src/services/llm_gateway_service.py            LLM 控制层：配额 / 限流 / 缓存 / 熔断 / Schema 校验
-src/services/tech_log_service.py               JSON TechLog / tech_logs / 敏感信息递归脱敏
-src/services/trace_audit_service.py            trace_id / audit_logs / audit timeline，写入前会脱敏
-src/services/worker_queue_service.py           WorkerJob 队列表 / 幂等 / 重试 / 认领，已接 trace_id / audit_logs
-src/services/import_job_service.py             ImportJob / ProjectionJob 运行记录服务，已接 trace_id / audit_logs
-src/services/task_repository_write_service.py  TaskRepository 写路径过渡服务，已接 trace_id / audit_logs
-src/services/task_evidence_audit_service.py    证据提交 / 复核写入 task_evidence 与 task_logs，已接 trace audit
-src/workers/arq_worker.py                      ARQ WorkerSettings 启动入口
-src/api/routes/system.py                       /api/system/db-status 与 /api/system/security
-src/api/routes/audit.py                        /api/audit/traces/{trace_id} 与 /api/audit/tech-logs/*
-src/api/routes/llm.py                          /api/llm/generate 已走 LLM Gateway 控制层
+src/db/session.py                               Async SQLAlchemy engine / session factory
+src/db/base.py                                  Declarative Base + Timestamp / Tenant / SoftDelete / Trace / Actor mixins
+src/db/models.py                                P0 production model registry
+alembic.ini                                     Alembic config，DATABASE_URL 可覆盖
+alembic/env.py                                  asyncpg migration env
+alembic/script.py.mako                          migration template
+alembic/versions/20260623_530_initial_p0_schema.py initial P0 schema scaffold
+docs/POSTGRESQL_ALEMBIC.md                     PostgreSQL / Alembic 迁移说明
+```
+
+## 生产模型范围
+
+```text
+tenants
+organizations
+users
+stores
+import_jobs
+projection_jobs
+decision_tasks
+task_events
+task_evidence
+worker_jobs
+audit_logs
+tech_logs
+llm_gateway_events
 ```
 
 ## 常用接口
@@ -81,6 +82,20 @@ POST   /api/modules/todo/{task_id}/review-evidence
 POST   /api/system/reset-runtime-data?confirm=true
 ```
 
+## Alembic 迁移命令
+
+```bash
+export DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/ai_ecommerce
+alembic upgrade head
+```
+
+生成新迁移：
+
+```bash
+alembic revision --autogenerate -m "describe change"
+alembic upgrade head
+```
+
 ## Worker 启动方式
 
 ```bash
@@ -101,36 +116,24 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-生产时需要替换：
-
-```text
-server_name example.com
-root /opt/ai-ecommerce-assistant/web_demo
-proxy_pass http://127.0.0.1:8000/api/
-```
-
 ## P0 下一步实施顺序
 
 ```text
-1. 数据库基础层：Async SQLAlchemy / Alembic / TenantScopedMixin / SoftDeleteMixin
-2. UserContext：从 Demo Header 过渡到 JWT / Session
-3. ScopedRepository：所有业务查询统一 tenant / store / deleted_at 过滤
-4. Task 持久化镜像：task_status、task_events、task_logs、task_evidence + 状态机约束
-5. TaskRepository Scoped Reads：通过 UserContext 读取可见任务并支持启动快照恢复
-6. TaskRepository 写路径过渡：create / transition / reset repository API
-7. 正式任务 API 切换：Agent 入池、待办接收 / 提交 / 复核 / 完成 / 重置
-8. 报表任务同步桥：report_task_repository_sync_service 与 /api/data/report-tasks/sync-current
-9. ImportJob / ProjectionJob / WorkerJob / ARQ / SQLite fallback
-10. Worker 任务扩展：projection_refresh、alert_generation、agent_analysis、rag_memory_write
-11. Trace / AuditLog / TechLog / 敏感信息脱敏
-12. LLM Gateway：配额、限流、缓存、熔断、Schema 校验
-13. 部署安全网关：Nginx 模板、Security Headers、API RateLimit、/api/system/security、.env.example
-14. 下一步：PostgreSQL / Alembic 生产数据模型，或前端系统状态页展示架构成熟度
+1. 已完成：Async SQLAlchemy / Alembic / TenantScopedMixin / SoftDeleteMixin
+2. 已完成：生产模型 Tenant / User / Store / ImportJob / Task / Worker / Audit / TechLog / LLMGatewayEvent
+3. 下一步：SQLAlchemy Repository 逐步替换 SQLite Runtime Repository
+4. UserContext：从 Demo Header 过渡到 JWT / Session
+5. TaskRepository 生产实现：decision_tasks / task_events / task_evidence
+6. ImportJob 生产实现：import_jobs / projection_jobs / data_version / imported_rows
+7. WorkerJob 生产实现：worker_jobs 幂等、重试、认领
+8. Audit / TechLog 生产实现：audit_logs / tech_logs / trace_id
+9. 前端系统状态页：展示 /api/system/security、/api/architecture/p0、/api/llm/gateway
 ```
 
 ## 当前真实状态
 
 ```text
-已完成：部署安全网关骨架、API 应用层限流、安全响应头、Nginx 模板、环境变量样例、系统安全状态接口。
-仍待完成：真实 HTTPS 证书、真实域名、Nginx 实机启用、PostgreSQL / Alembic 迁移、生产 JWT / Session。
+已完成：PostgreSQL / Alembic 生产数据模型骨架。
+仍待完成：真实 PostgreSQL 实例、alembic upgrade head 实机执行、SQLAlchemy Repository 替换 SQLite Demo Repository、生产 JWT / Session。
+保留不变：当前 SQLite Demo 运行链路、导入测试、任务测试、删除记录测试。
 ```
