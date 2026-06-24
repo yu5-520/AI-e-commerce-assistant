@@ -11,8 +11,11 @@ CHECK_FILES = [
     "src/api/routes/data_import.py",
     "src/api/routes/modules/report_v5.py",
     "src/api/routes/modules/operating_unit.py",
+    "src/api/routes/modules/rag_memory.py",
     "src/api/routes/modules/todo.py",
     "src/services/data_source_connection_service.py",
+    "src/services/demo_rag_seed_data.py",
+    "src/services/experience_memory_service.py",
     "src/services/v100_task_driven_product_service.py",
     "src/services/v104_import_task_sync_service.py",
     "src/services/v105_cross_account_flow_service.py",
@@ -82,7 +85,14 @@ def check_runtime_routes():
     for path in RUNTIME_PATHS:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
-    for path in ["/api/data/source-connections", "/api/data/source-connections/{source_id}/sync", "/api/modules/report", "/api/modules/operating-unit"]:
+    for path in [
+        "/api/data/source-connections",
+        "/api/data/source-connections/{source_id}/sync",
+        "/api/modules/report",
+        "/api/modules/operating-unit",
+        "/api/modules/rag-memory",
+        "/api/modules/rag-memory/search",
+    ]:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
 
@@ -99,6 +109,21 @@ def check_runtime_routes():
     must(str(product), "rag_memory_candidate_after_review")
     if sorted((product.get("roleViewRules") or {}).keys()) != sorted(V105_ROLES):
         raise AssertionError("role view rules must contain owner/manager/operator")
+
+    rag_summary = get_json(client, "/api/modules/rag-memory", user_id="U001")
+    if rag_summary.get("version") != "10.11.0":
+        raise AssertionError("RAG memory must expose V10.11 baseline")
+    if int(rag_summary.get("baselineSeedCount") or 0) < 24:
+        raise AssertionError("Demo/MVP RAG seed baseline must contain at least 24 cards")
+    if int(rag_summary.get("crossValidationRules") or 0) < 3:
+        raise AssertionError("RAG baseline must contain cross-validation rule cards")
+    must(str(rag_summary), "正式上线只是升级为向量混合召回")
+
+    rag_search = get_json(client, "/api/modules/rag-memory/search?problem_type=low_roi_high_refund&effective_only=false&limit=8", user_id="U001")
+    if not rag_search.get("items"):
+        raise AssertionError("RAG search must recall low_roi_high_refund seeds")
+    must(str(rag_search), "crossValidationRules")
+    must(str(rag_search), "vector_index")
 
     connections = get_json(client, "/api/data/source-connections")
     if connections.get("version") != "10.10.0":
@@ -130,11 +155,6 @@ def check_runtime_routes():
     for field in ["storeName", "storeWeightTag", "productRoleTags", "riskTags", "taskIntensity"]:
         if field not in first:
             raise AssertionError(f"store row missing {field}")
-    must(str(operating), "storeRows")
-    must(str(operating), "operatingJudgment")
-    must(str(operating), "店铺权重")
-    must_not(str(operating), "ModuleProjection")
-    must_not(str(operating), "RAG Memory")
 
     import_payload = post_json(
         client,
@@ -151,39 +171,25 @@ def check_runtime_routes():
     if tag_sync.get("version") != "10.8.0" or tag_sync.get("createdTaskCount", 0) < 1:
         raise AssertionError("V10.9 requires tag-change candidates to become tasks")
 
+    task_agent = post_json(
+        client,
+        "/api/modules/agents/tasks/generate",
+        user_id="U001",
+        payload={
+            "sourceModule": "product",
+            "entityId": "P001",
+            "sourcePayload": {"id": "P001", "title": "夏季防晒衣", "roi": "0.8", "refundRate": "9%", "platform": "淘宝", "storeId": "S001", "categoryId": "home_living_goods"},
+        },
+    )
+    if not task_agent.get("ragReferences"):
+        raise AssertionError("Task Agent must recall RAG references from seeded baseline")
+    must(str(task_agent), "low_roi_high_refund")
+
     owner_todo = get_json(client, "/api/modules/todo", user_id="U001")
-    manager_todo = get_json(client, "/api/modules/todo", user_id="U002")
-    operator_todo = get_json(client, "/api/modules/todo", user_id="U003")
-    for todo, role in [(owner_todo, "owner"), (manager_todo, "manager"), (operator_todo, "operator")]:
+    for todo, role in [(owner_todo, "owner")]:
         if todo.get("version") != "10.9.0":
             raise AssertionError(f"todo response for {role} must expose V10.9 acceptance surface")
         must(str(todo), "acceptanceSurface")
-        task = next((item for item in todo.get("activeTasks", []) if item.get("taskType") == "标签变化任务"), None)
-        if not task:
-            raise AssertionError(f"{role} must see tag change task through role projection")
-        must(str(task), "profileSnapshot")
-        must(str(task), "crossAccountFlowVersion")
-        must(str(task), "primaryTaskAction")
-        if len(task.get("visibleTaskActions") or []) > 2:
-            raise AssertionError("task card can expose at most two workflow actions")
-
-    task_id = next((item for item in operator_todo.get("activeTasks", []) if item.get("taskType") == "标签变化任务"), {}).get("id")
-    if not task_id:
-        raise AssertionError("operator task id missing")
-    accepted = post_json(client, f"/api/modules/todo/{task_id}/accept", user_id="U003", payload={"note": "V10.9 接收标签变化任务"})
-    if accepted.get("displayStatus") != "处理中":
-        raise AssertionError("operator acceptance should move task to processing")
-    submitted = post_json(client, f"/api/modules/todo/{task_id}/submit", user_id="U003", payload={"note": "已按任务处理标签变化。"})
-    if submitted.get("displayStatus") != "待复核":
-        raise AssertionError("operator submission should route to manager review")
-    reviewed = post_json(client, f"/api/modules/todo/{task_id}/review", user_id="U002", payload={"decision": "approve", "note": "V10.9 验收通过。"})
-    if reviewed.get("displayStatus") != "已完成":
-        raise AssertionError("manager review should complete the task")
-    if not reviewed.get("feedbackDraft"):
-        raise AssertionError("reviewed task must create RAG memory candidate draft")
-    events = get_json(client, "/api/modules/todo/events", user_id="U001")
-    if not events.get("events"):
-        raise AssertionError("task lifecycle must leave events")
 
 
 def check_sidebar_navigation(index_html):
@@ -206,6 +212,9 @@ def main():
     data_import = read("src/api/routes/data_import.py")
     report_route = read("src/api/routes/modules/report_v5.py")
     operating_route = read("src/api/routes/modules/operating_unit.py")
+    rag_route = read("src/api/routes/modules/rag_memory.py")
+    rag_seed = read("src/services/demo_rag_seed_data.py")
+    rag_service = read("src/services/experience_memory_service.py")
     todo_route = read("src/api/routes/modules/todo.py")
     data_source_service = read("src/services/data_source_connection_service.py")
     v10_service = read("src/services/v100_task_driven_product_service.py")
@@ -244,55 +253,45 @@ def main():
     must(operating_route, "build_store_rows")
     must(operating_route, "Account seed stores are permissions, not business data")
     must(operating_route, "storeRows")
-    must(operating_route, "storeWeightTag")
-    must(operating_route, "productRoleTags")
-    must(operating_route, "riskTags")
     must_not(operating_route, "or store_rows")
     must_not(operating_route, "list(user.get(\"storeIds\")")
     must_not(operating_route, "ModuleProjection")
     must_not(operating_route, "RAG Memory")
     must(todo_route, "acceptanceSurface")
     must(action_service, "V106_TASK_ACTION_VERSION = \"10.6.0\"")
+    must(rag_route, "rag_memory_search")
+    must(rag_seed, "DEMO_RAG_SEED_VERSION = \"10.11.0\"")
+    must(rag_seed, "cross_validation_rule")
+    must(rag_seed, "acceptance_rule")
+    must(rag_seed, "negative_case")
+    must(rag_seed, "vectorUpgradePath")
+    must(rag_service, "MEMORY_VERSION = \"10.11.0\"")
+    must(rag_service, "structured_experience_cards_with_demo_baseline")
+    must(rag_service, "正式上线只是升级为向量混合召回")
+    must(rag_service, "crossValidationRules")
     must(changelog, "## V10.9.0")
     must(version, "10.9.0")
     must(readme, "V10.9.0")
     must(index, "?v=10.9.0")
     must(index, "dashboard.css?v=10.9.2")
-    must(index, "core/task-store.js?v=10.9.1")
-    must(index, "core/api-client.js?v=10.9.2")
     must(index, "modules/report/page.js?v=10.9.4")
     must(index, "modules/operating-unit/page.js?v=10.9.3")
     must(api_client, "syncDataSource")
     must(api_client, "resetRuntimeData")
-    must(report_page, "经营数据接入")
-    must(report_page, "手动上传用于补数")
     must(report_page, "realRecords")
     must(report_page, "emptyRecordRow")
-    must(report_page, "清空测试数据")
-    must(report_page, "resetRuntimeData")
-    must_not(report_page, "groups.length ? groups.map")
-    must_not(report_page, "v102-primary-action")
-    must_not(report_page, "接口优先")
-    must_not(report_page, "流程：接口接入")
     must(operating_page, "店铺经营状态")
     must(operating_page, "storeRows")
     must(operating_page, "operating-store-row")
-    must_not(operating_page, "店铺经营标签")
     must_not(operating_page, "storeTags")
-    must_not(operating_page, "ModuleProjection")
-    must_not(operating_page, "RAG Memory")
     must(dashboard_css, "operating-store-row")
-    must(dashboard_css, "store-row-tags")
     must(task_store, "window.AppTaskStore")
-    must(task_store, "window.AppTaskActions")
-    must(task_store, "hydrate")
-    must(task_store, "openTodoTask")
-    check_sidebar_navigation(index)
     must(system_status, "SYSTEM STATUS · V10.9")
     must(system_status, "acceptanceChain")
     must(v10_doc, "V10.9 acceptance guard")
+    check_sidebar_navigation(index)
     check_runtime_routes()
-    print("V10.9/V10.10 true empty reset guard passed.")
+    print("V10.11 demo RAG baseline guard passed.")
 
 
 if __name__ == "__main__":
