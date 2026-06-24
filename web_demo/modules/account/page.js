@@ -1,6 +1,15 @@
 (function () {
   const s = (value) => AppShell.escape(value ?? "");
 
+  function ensureAccountCss() {
+    if (document.querySelector('link[data-account-ui="1"]')) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/web_demo/account-ui.css?v=10.9.1";
+    link.dataset.accountUi = "1";
+    document.head.appendChild(link);
+  }
+
   const accountProfile = {
     avatar: "参",
     nickname: "经营参谋账号",
@@ -53,6 +62,7 @@
     route: "accounts",
     title: "账号",
     async render() {
+      ensureAccountCss();
       const payload = await AppApi.accounts();
       const current = payload?.currentUser || {};
       const roleName = current.roleName || "模拟账号";
@@ -90,6 +100,7 @@
     route: "role-console",
     title: "权限入口",
     async render() {
+      ensureAccountCss();
       return `<section class="report-hero"><div><h2>入口已迁移</h2><p>账号页只保留登录、安全、绑定和通知。权限与店铺归属在系统权限中管理。</p></div><div class="report-hero-side"><strong>兼容入口</strong></div></section><section class="page-section"><div class="section-header"><h3>权限治理</h3><button type="button" data-system-status>进入系统</button></div></section>`;
     },
     mount(ctx) {
