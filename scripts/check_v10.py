@@ -9,6 +9,7 @@ CHECK_FILES = [
     "src/api/routes/health.py",
     "src/api/routes/v10_product.py",
     "src/api/routes/data_import.py",
+    "src/api/routes/modules/report_v5.py",
     "src/api/routes/modules/operating_unit.py",
     "src/api/routes/modules/todo.py",
     "src/services/data_source_connection_service.py",
@@ -81,7 +82,7 @@ def check_runtime_routes():
     for path in RUNTIME_PATHS:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
-    for path in ["/api/data/source-connections", "/api/data/source-connections/{source_id}/sync", "/api/modules/operating-unit"]:
+    for path in ["/api/data/source-connections", "/api/data/source-connections/{source_id}/sync", "/api/modules/report", "/api/modules/operating-unit"]:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
 
@@ -105,6 +106,7 @@ def check_runtime_routes():
     must(str(connections), "api_sources_primary_manual_upload_backup")
     if "erp" not in (connections.get("primarySourceIds") or []) or "manual_upload" not in (connections.get("backupSourceIds") or []):
         raise AssertionError("ERP/CRM/API sources must be primary and manual upload must be backup")
+
     source_sync = post_json(client, "/api/data/source-connections/erp/sync", user_id="U001")
     source_contract = source_sync.get("sourceConnection") or {}
     if source_contract.get("priority") != "primary" or source_contract.get("sourceId") != "erp":
@@ -112,12 +114,18 @@ def check_runtime_routes():
     if (source_sync.get("v104ImportTaskSync") or {}).get("source") != "erp_api_sync":
         raise AssertionError("ERP source sync must still refresh V10.4 module sync contract")
 
+    report = get_json(client, "/api/modules/report", user_id="U001")
+    if report.get("version") != "5.2.1":
+        raise AssertionError("report module must expose true-empty V5.2.1 contract")
+    must(str(report), "syncRecords")
+    must(str(report), "hasData")
+
     operating = get_json(client, "/api/modules/operating-unit", user_id="U001")
-    if operating.get("version") != "5.2.0":
-        raise AssertionError("operating unit must expose store-row V5.2 contract")
+    if operating.get("version") != "5.2.1":
+        raise AssertionError("operating unit must expose true-empty store-row V5.2.1 contract")
     rows = operating.get("storeRows") or []
     if not rows:
-        raise AssertionError("operating unit must return storeRows")
+        raise AssertionError("operating unit must return storeRows after data sync")
     first = rows[0]
     for field in ["storeName", "storeWeightTag", "productRoleTags", "riskTags", "taskIntensity"]:
         if field not in first:
@@ -196,6 +204,7 @@ def main():
     health = read("src/api/routes/health.py")
     v10_route = read("src/api/routes/v10_product.py")
     data_import = read("src/api/routes/data_import.py")
+    report_route = read("src/api/routes/modules/report_v5.py")
     operating_route = read("src/api/routes/modules/operating_unit.py")
     todo_route = read("src/api/routes/modules/todo.py")
     data_source_service = read("src/services/data_source_connection_service.py")
@@ -229,11 +238,17 @@ def main():
     must(data_source_service, "api_sources_primary_manual_upload_backup")
     must(data_import, "source_connections")
     must(data_import, "sync_source_connection")
+    must(report_route, "syncRecords")
+    must(report_route, "hasData")
+    must(report_route, "_real_sync_records")
     must(operating_route, "build_store_rows")
+    must(operating_route, "Account seed stores are permissions, not business data")
     must(operating_route, "storeRows")
     must(operating_route, "storeWeightTag")
     must(operating_route, "productRoleTags")
     must(operating_route, "riskTags")
+    must_not(operating_route, "or store_rows")
+    must_not(operating_route, "list(user.get(\"storeIds\")")
     must_not(operating_route, "ModuleProjection")
     must_not(operating_route, "RAG Memory")
     must(todo_route, "acceptanceSurface")
@@ -245,14 +260,17 @@ def main():
     must(index, "dashboard.css?v=10.9.2")
     must(index, "core/task-store.js?v=10.9.1")
     must(index, "core/api-client.js?v=10.9.2")
-    must(index, "modules/report/page.js?v=10.9.3")
-    must(index, "modules/operating-unit/page.js?v=10.9.2")
+    must(index, "modules/report/page.js?v=10.9.4")
+    must(index, "modules/operating-unit/page.js?v=10.9.3")
     must(api_client, "syncDataSource")
     must(api_client, "resetRuntimeData")
     must(report_page, "经营数据接入")
     must(report_page, "手动上传用于补数")
+    must(report_page, "realRecords")
+    must(report_page, "emptyRecordRow")
     must(report_page, "清空测试数据")
     must(report_page, "resetRuntimeData")
+    must_not(report_page, "groups.length ? groups.map")
     must_not(report_page, "v102-primary-action")
     must_not(report_page, "接口优先")
     must_not(report_page, "流程：接口接入")
@@ -274,7 +292,7 @@ def main():
     must(system_status, "acceptanceChain")
     must(v10_doc, "V10.9 acceptance guard")
     check_runtime_routes()
-    print("V10.9/V10.10 store-row operating guard passed.")
+    print("V10.9/V10.10 true empty reset guard passed.")
 
 
 if __name__ == "__main__":
