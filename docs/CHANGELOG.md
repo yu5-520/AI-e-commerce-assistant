@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## V10.7.0
+
+Agent 自动标签与经营档案。
+
+- 新增 `src/services/v107_operating_profile_service.py`，导入店铺 / 商品信息后自动生成 Agent 经营档案。
+- 导入接口在 `v104ImportTaskSync` 外额外返回 `v107OperatingProfile`，包含店铺档案、商品档案、自动标签和标签变化任务候选。
+- 自动标签覆盖垂直类目、店铺权重、商品角色、风险和任务强度。
+- 标签是 Agent 的工作语言，`userConfirmationRequired=false`；用户默认不确认标签，只保留修改权。
+- 商品或店铺数据持续走低时，系统生成 `tag_change_task` 候选，让用户以任务形式介入。
+- V10 readiness 增加 `operatingProfileRules`、`operatingProfileTagTypes` 和 `operatingProfileSurfaces`。
+- 系统状态页展示 V10.7 Agent 经营档案规则。
+- V10 守卫增加经营档案服务、导入返回经营档案、无需用户确认标签和标签变化任务候选检查。
+
 ## V10.6.0
 
 任务操作极简化。
