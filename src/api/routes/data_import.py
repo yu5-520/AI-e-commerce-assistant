@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from src.core.context import context_from_headers
 from src.services.account_service import current_user, user_id_from_headers
 from src.services.data_import_service import import_mock_data, list_import_records, list_import_sources, validate_all_imports
+from src.services.data_source_connection_service import build_source_sync_summary, get_data_source_connection, list_data_source_connections
 from src.services.data_version_service import delete_data_version, get_data_version_detail
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
@@ -78,6 +79,25 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
 @router.get("/sources")
 def data_sources() -> List[Dict[str, Any]]:
     return list_import_sources()
+
+
+@router.get("/source-connections")
+def source_connections() -> Dict[str, Any]:
+    return list_data_source_connections()
+
+
+@router.post("/source-connections/{source_id}/sync")
+def sync_source_connection(request: Request, source_id: str) -> Dict[str, Any]:
+    try:
+        source = get_data_source_connection(source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if source.get("priority") == "backup":
+        raise HTTPException(status_code=400, detail="手动上传是备用入口，请使用 /api/data/import/confirm 或前端文件上传。")
+    result = run_v3_mock_imports(dataset_names=source.get("datasetNames") or None)
+    result["sourceConnection"] = build_source_sync_summary(source_id, result)
+    result["dataSourceSync"] = result["sourceConnection"]
+    return _attach_import_product_contracts(request, result, result.get("rows"), source=f"{source_id}_api_sync")
 
 
 @router.post("/validate")
