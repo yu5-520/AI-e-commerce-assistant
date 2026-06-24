@@ -57,6 +57,15 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 高风险、报表结果、待复核、完成进度作为辅助判断，不抢主任务区。
 ```
 
+## V10.4 report import drives tasks
+
+```text
+报表上传后不是“上传成功”结束，而是驱动总览、经营、任务、报表、日志同步刷新。
+导入接口统一返回 v104ImportTaskSync。
+前端只展示“已更新，生成 X 个任务”。
+导入流程、趋势同步、风险任务生成等复杂链路进入系统状态和日志，不占主页面。
+```
+
 ## User actions
 
 ```text
