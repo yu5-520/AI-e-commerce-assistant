@@ -1,4 +1,4 @@
-"""V10.5 task-driven product contract."""
+"""V10.6 task-driven product contract."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from src.core.context import UserContext
 
-V100_TASK_PRODUCT_VERSION = "10.5.0"
+V100_TASK_PRODUCT_VERSION = "10.6.0"
 
 TASK_DRIVEN_PRINCIPLES = [
     "all user intervention must appear as a task",
@@ -66,28 +66,24 @@ V104_IMPORT_REFRESH_CONTRACT = {
     "dataFlowDisplay": "collapsed_status_line",
 }
 
-V105_CROSS_ACCOUNT_FLOW = [
-    "one_task_id_multiple_role_views",
-    "operator_submit_routes_to_manager_review",
-    "manager_review_routes_to_owner_progress",
-    "role_views_sync_after_each_transition",
-    "events_and_logs_keep_full_trace",
-]
-
+V105_CROSS_ACCOUNT_FLOW = ["one_task_id_multiple_role_views", "operator_submit_routes_to_manager_review", "manager_review_routes_to_owner_progress", "role_views_sync_after_each_transition", "events_and_logs_keep_full_trace"]
 V105_ROLE_VIEW_RULES = {
     "owner": {"surface": "progress", "actions": ["view", "follow", "confirm"]},
     "manager": {"surface": "dispatch_review", "actions": ["dispatch", "approve", "reject"]},
     "operator": {"surface": "execution", "actions": ["accept", "submit", "supplement"]},
 }
 
-TASK_FLOW_STAGES = ["data_uploaded", "agent_understands_context", "task_created", "role_view_synced", "user_action_submitted", "review_synced", "task_archived", "audit_written"]
-NAVIGATION_COMPRESSION_RULES = [
-    "sidebar keeps only seven product-level entries",
-    "product, competitor, listing and traffic are collapsed under operation",
-    "old module routes remain registered for internal jumps and detail links",
-    "role scope maps to the compressed navigation before hiding links",
-    "system complexity stays in system status, not daily operation views",
+V106_TASK_ACTION_RULES = [
+    "one_primary_action_per_task_card",
+    "one_secondary_action_allowed",
+    "owner_view_follow_confirm",
+    "manager_dispatch_approve_reject",
+    "operator_accept_submit_supplement",
+    "backend_keeps_full_events_and_logs",
 ]
+
+TASK_FLOW_STAGES = ["data_uploaded", "agent_understands_context", "task_created", "role_view_synced", "user_action_submitted", "review_synced", "task_archived", "audit_written"]
+NAVIGATION_COMPRESSION_RULES = ["sidebar keeps only seven product-level entries", "product, competitor, listing and traffic are collapsed under operation", "old module routes remain registered for internal jumps and detail links", "role scope maps to the compressed navigation before hiding links", "system complexity stays in system status, not daily operation views"]
 
 
 def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
@@ -113,13 +109,9 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
         "importRefreshContract": V104_IMPORT_REFRESH_CONTRACT,
         "crossAccountFlow": V105_CROSS_ACCOUNT_FLOW,
         "roleViewRules": V105_ROLE_VIEW_RULES,
+        "taskActionRules": V106_TASK_ACTION_RULES,
         "taskFlowStages": TASK_FLOW_STAGES,
-        "nonGoals": [
-            "不让用户默认确认标签",
-            "不让用户手动维护分类作为主流程",
-            "不把复杂流程节点暴露到经营界面",
-            "不让用户手动选择跨账号流程节点",
-        ],
+        "nonGoals": ["不让用户默认确认标签", "不让用户手动维护分类作为主流程", "不把复杂流程节点暴露到经营界面", "不让用户手动选择跨账号流程节点", "不让任务卡堆满低频按钮"],
         "context": ctx.to_dict(),
         "auditMeta": ctx.audit_meta(),
     }
