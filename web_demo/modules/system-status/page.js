@@ -22,7 +22,7 @@
     route: "system-status",
     title: "系统状态",
     async render() {
-      const [health, security, repository, architecture, v7, v98, v99, v9] = await Promise.all([
+      const [health, security, repository, architecture, v7, v98, v99, v9, v10, v10Ready] = await Promise.all([
         loadJson("/api/health", {}),
         loadJson("/api/system/security", {}),
         loadJson("/api/system/repositories", {}),
@@ -31,34 +31,48 @@
         loadJson("/api/architecture/v9/ops-authorization", {}),
         loadJson("/api/architecture/v9/delivery-readiness", {}),
         loadJson("/api/architecture/v9/readiness", {}),
+        loadJson("/api/architecture/v10/task-driven-product", {}),
+        loadJson("/api/architecture/v10/readiness", {}),
       ]);
       const activeMode = repository?.activeMode || "sqlite";
-      const apiVersion = health?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "9.9.0";
+      const apiVersion = health?.version || v10Ready?.version || v10?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "10.0.0";
       const layers = v7?.controlPlane?.layers || architecture?.layers || [];
       const flags = v7?.tenantConfig?.featureFlags || [];
       const enabledFlags = flags.filter((flag) => flag.enabledForContext);
       const config = v7?.tenantConfig?.config || {};
+      const v10Entries = v10Ready?.entries || { taskDrivenProduct: health?.v100Entry, readiness: health?.v100ReadinessEntry };
+      const taskTypes = v10?.taskTypes || v10Ready?.taskTypes || [];
+      const principles = v10?.principles || [];
+      const minimalNav = v10?.minimalNavigation || v10Ready?.minimalNavigation || [];
       const entries = v9?.entries || { opsAuthorization: health?.v98Entry, deliveryReadiness: health?.v99Entry };
       const readinessAreas = Object.entries(v99?.readinessAreas || {});
       const deliveryStages = v99?.deliveryStages || [];
       const opsRoles = Object.keys(v98?.roles || {});
       const separationRules = v98?.separationRules || [];
-      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V9.9</p><h2>系统状态</h2><p>集中查看运行版本、V9 交付验收、受托运维边界和 SaaS 控制面。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v9?.status || "readiness")}</small></div></section>
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V10</p><h2>系统状态</h2><p>集中查看任务驱动产品原则、运行版本、V9 交付验收和 SaaS 控制面。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v10Ready?.status || "task-driven")}</small></div></section>
       <section class="system-metric-grid">
-        ${metric("API 版本", apiVersion, apiVersion === "9.9.0" ? "good" : "warn")}
-        ${metric("Repository 模式", activeMode, activeMode === "sqlite" ? "warn" : "good")}
-        ${metric("V9 入口", Object.keys(entries || {}).length, "good")}
-        ${metric("交付阶段", deliveryStages.length, "good")}
+        ${metric("API 版本", apiVersion, apiVersion === "10.0.0" ? "good" : "warn")}
+        ${metric("任务类型", taskTypes.length, "good")}
+        ${metric("主导航", minimalNav.length, "good")}
+        ${metric("V10 入口", Object.keys(v10Entries || {}).length, "good")}
       </section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10 任务驱动产品</h3>${pill(v10?.version || "10.0.0", "good")}</div><div class="system-layer-list">
+        ${principles.map((item, index) => textRow(`原则 ${index + 1}`, item, "已固定")).join("") || "<p>暂无 V10 产品原则。</p>"}
+        ${taskTypes.map((item) => textRow(item, "需要用户介入时以任务出现", "已固定")).join("")}
+      </div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10 readiness 入口</h3>${pill(v10Ready?.status || "mounted", "good")}</div><div class="system-layer-list">
+        ${Object.entries(v10Entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V10 入口。</p>"}
+      </div></section>
       <section class="page-section system-section"><div class="section-header"><h3>V9.9 交付验收</h3>${pill(v99?.version || "9.9.0", "good")}</div><div class="system-layer-list">
         ${readinessAreas.map(([name, items]) => textRow(name, Array.isArray(items) ? items.join(" / ") : items, "已固定")).join("") || "<p>暂无 V9.9 readiness 数据。</p>"}
+        ${deliveryStages.slice(0, 4).map((item) => textRow(item, "delivery stage", "已固定")).join("")}
       </div></section>
       <section class="page-section system-section"><div class="section-header"><h3>V9 readiness 入口</h3>${pill(v9?.status || "mounted", "good")}</div><div class="system-layer-list">
         ${Object.entries(entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V9 入口。</p>"}
       </div></section>
       <section class="page-section system-section"><div class="section-header"><h3>V9.8 受托运维边界</h3>${pill(v98?.version || "9.8.0", "good")}</div><div class="system-layer-list">
         ${opsRoles.map((role) => textRow(role, v98?.roles?.[role]?.type || "role", "已固定")).join("") || "<p>暂无角色边界。</p>"}
-        ${separationRules.slice(0, 5).map((rule, index) => textRow(`边界规则 ${index + 1}`, rule, "已固定")).join("")}
+        ${separationRules.slice(0, 3).map((rule, index) => textRow(`边界规则 ${index + 1}`, rule, "已固定")).join("")}
       </div></section>
       <section class="page-section system-section"><div class="section-header"><h3>V7 控制面</h3>${pill(v7?.version || "runtime", "neutral")}</div><div class="system-layer-list">${layers.map(layerRow).join("") || "<p>暂无架构层数据。</p>"}</div></section>
       <section class="page-section system-section"><div class="section-header"><h3>功能开关</h3>${pill(`${enabledFlags.length}/${flags.length} 当前可用`, "good")}</div><div class="system-layer-list">
