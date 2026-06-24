@@ -13,9 +13,9 @@ CHECK_FILES = [
 ]
 
 RUNTIME_PATHS = {
-    "/api/health": "10.1.0",
-    "/api/architecture/v10/task-driven-product": "10.1.0",
-    "/api/architecture/v10/readiness": "10.1.0",
+    "/api/health": "10.2.0",
+    "/api/architecture/v10/task-driven-product": "10.2.0",
+    "/api/architecture/v10/readiness": "10.2.0",
     "/api/architecture/v9/readiness": "9.9.0",
 }
 
@@ -72,18 +72,20 @@ def check_runtime_routes():
     for path, expected_version in RUNTIME_PATHS.items():
         assert_json_version(client, path, expected_version)
 
-    product = assert_json_version(client, "/api/architecture/v10/task-driven-product", "10.1.0")
+    product = assert_json_version(client, "/api/architecture/v10/task-driven-product", "10.2.0")
     must(str(product), "all user intervention must appear as a task")
     must(str(product), "tag_change_task")
     must(str(product), "collapsedOperationRoutes")
-    must(str(product), "business-products")
+    must(str(product), "uiProductizationRules")
+    must(str(product), "main_70_aux_20_title_10")
     if len(product.get("minimalNavigation") or []) != 7:
-        raise AssertionError("V10.1 minimal navigation must contain exactly 7 entries")
+        raise AssertionError("V10 minimal navigation must contain exactly 7 entries")
 
-    readiness = assert_json_version(client, "/api/architecture/v10/readiness", "10.1.0")
+    readiness = assert_json_version(client, "/api/architecture/v10/readiness", "10.2.0")
     entries = readiness.get("entries") or {}
     must(str(entries), "/api/architecture/v10/task-driven-product")
-    must(str(readiness), "collapsedOperationRoutes")
+    must(str(readiness), "frontendLayoutRules")
+    must(str(readiness), "uiProductizationRules")
 
 
 def check_sidebar_navigation(index_html):
@@ -95,7 +97,7 @@ def check_sidebar_navigation(index_html):
     for label in COLLAPSED_NAV_LABELS:
         must_not(nav_block, f">{label}<")
     if nav_block.count('data-route=') != 7:
-        raise AssertionError("V10.1 sidebar must expose exactly 7 main entries")
+        raise AssertionError("V10 sidebar must expose exactly 7 main entries")
 
 
 def main():
@@ -109,34 +111,47 @@ def main():
     readme = read("README.md")
     index = read("web_demo/index.html")
     bootstrap = read("web_demo/bootstrap.js")
+    minimal_ui = read("web_demo/minimal-ui.css")
+    dashboard_page = read("web_demo/modules/dashboard/page.js")
+    report_page = read("web_demo/modules/report/page.js")
     operation_page = read("web_demo/modules/operating-unit/page.js")
     system_status = read("web_demo/modules/system-status/page.js")
     v10_doc = read("docs/V10_TASK_DRIVEN_PRODUCT.md")
 
-    must(main_py, "API_VERSION = \"10.1.0\"")
+    must(main_py, "API_VERSION = \"10.2.0\"")
     must(main_py, "v10_product")
     must(main_py, "app.include_router(v10_product.router)")
-    must(health, "API_VERSION = \"10.1.0\"")
+    must(health, "API_VERSION = \"10.2.0\"")
     must(health, "v100Entry")
-    must(v10_route, "\"version\": \"10.1.0\"")
-    must(v10_route, "collapsedOperationRoutes")
-    must(v10_service, "V100_TASK_PRODUCT_VERSION = \"10.1.0\"")
-    must(v10_service, "NAVIGATION_COMPRESSION_RULES")
-    must(v10_service, "COLLAPSED_OPERATION_ROUTES")
-    must(changelog, "## V10.1.0")
-    must(version, "10.1.0")
-    must(readme, "V10.1.0")
-    must(index, "?v=10.1.0")
+    must(v10_route, "\"version\": \"10.2.0\"")
+    must(v10_route, "frontendLayoutRules")
+    must(v10_route, "uiProductizationRules")
+    must(v10_service, "V100_TASK_PRODUCT_VERSION = \"10.2.0\"")
+    must(v10_service, "V102_UI_PRODUCTIZATION_RULES")
+    must(v10_service, "main_70_aux_20_title_10")
+    must(changelog, "## V10.2.0")
+    must(version, "10.2.0")
+    must(readme, "V10.2.0")
+    must(index, "?v=10.2.0")
+    must(index, "web_demo/modules/report/page.js?v=10.2.0")
     check_sidebar_navigation(index)
     must(bootstrap, "V10_MAIN_NAV")
     must(bootstrap, "INTERNAL_TO_V10_NAV")
+    must(minimal_ui, "V10.2 productized UI")
+    must(minimal_ui, "v102-primary-action")
+    must(minimal_ui, "v102-status-strip")
+    must(dashboard_page, "今日任务台")
+    must(dashboard_page, "v102-primary-action")
+    must(report_page, "route: \"data-check\"")
+    must(report_page, "上传报表")
+    must(report_page, "v102-status-strip")
     must(operation_page, "data-operation-route")
     must(operation_page, "business-products")
-    must(system_status, "SYSTEM STATUS · V10.1")
-    must(system_status, "collapsedOperationRoutes")
-    must(v10_doc, "V10.1 navigation compression")
+    must(system_status, "SYSTEM STATUS · V10.2")
+    must(system_status, "frontendLayoutRules")
+    must(v10_doc, "V10.2 productized layout")
     check_runtime_routes()
-    print("V10.1 navigation compression guard passed.")
+    print("V10.2 productized layout guard passed.")
 
 
 if __name__ == "__main__":
