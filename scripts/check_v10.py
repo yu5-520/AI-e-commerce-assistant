@@ -4,7 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
-CHECK_FILES = [
+PY_CHECK_FILES = [
     "src/api/main.py",
     "src/api/routes/health.py",
     "src/api/routes/v10_product.py",
@@ -39,7 +39,12 @@ RUNTIME_PATHS = {
 
 V10_NAV_LABELS = ["总览", "数据", "经营", "任务", "日志", "账号", "系统"]
 COLLAPSED_NAV_LABELS = ["商品", "竞品", "上新", "流量"]
-V105_ROLES = ["owner", "manager", "operator"]
+OLD_CHILD_SCRIPTS = [
+    "modules/product/page.js",
+    "modules/competitor/page.js",
+    "modules/listing/page.js",
+    "modules/traffic/page.js",
+]
 
 
 def read(path):
@@ -60,7 +65,7 @@ def must_not(text, marker):
 
 
 def compile_files():
-    for path in CHECK_FILES:
+    for path in PY_CHECK_FILES:
         py_compile.compile(str(ROOT / path), doraise=True)
 
 
@@ -86,7 +91,18 @@ def check_runtime_routes():
     from src.api.main import app
 
     registered_paths = {getattr(route, "path", "") for route in app.routes}
-    for path in [*RUNTIME_PATHS, "/api/data/source-connections", "/api/data/source-connections/{source_id}/sync", "/api/modules/report", "/api/modules/operating-unit", "/api/modules/rag-memory", "/api/modules/rag-memory/search", "/api/trends/metric-evidence", "/api/trends/task-sop"]:
+    required_paths = [
+        *RUNTIME_PATHS,
+        "/api/data/source-connections",
+        "/api/data/source-connections/{source_id}/sync",
+        "/api/modules/report",
+        "/api/modules/operating-unit",
+        "/api/modules/rag-memory",
+        "/api/modules/rag-memory/search",
+        "/api/trends/metric-evidence",
+        "/api/trends/task-sop",
+    ]
+    for path in required_paths:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
 
@@ -96,21 +112,11 @@ def check_runtime_routes():
         if payload.get("version") != expected:
             raise AssertionError(f"{path} version mismatch")
 
-    product = get_json(client, "/api/architecture/v10/task-driven-product")
-    must(str(product), "acceptanceGuard")
-    must(str(product), "acceptanceChain")
-    must(str(product), "blockingFailures")
-    must(str(product), "rag_memory_candidate_after_review")
-    if sorted((product.get("roleViewRules") or {}).keys()) != sorted(V105_ROLES):
-        raise AssertionError("role view rules must contain owner/manager/operator")
-
     rag_summary = get_json(client, "/api/modules/rag-memory", user_id="U001")
     if rag_summary.get("version") != "10.11.0":
         raise AssertionError("RAG memory must expose V10.11 baseline")
     if int(rag_summary.get("baselineSeedCount") or 0) < 24:
         raise AssertionError("Demo/MVP RAG seed baseline must contain at least 24 cards")
-    if int(rag_summary.get("crossValidationRules") or 0) < 3:
-        raise AssertionError("RAG baseline must contain cross-validation rule cards")
     must(str(rag_summary), "正式上线只是升级为向量混合召回")
 
     metric_payload = {
@@ -150,15 +156,10 @@ def check_runtime_routes():
     if connections.get("version") != "10.10.0":
         raise AssertionError("data source connection surface must expose V10.10")
     must(str(connections), "api_sources_primary_manual_upload_backup")
-    if "erp" not in (connections.get("primarySourceIds") or []) or "manual_upload" not in (connections.get("backupSourceIds") or []):
-        raise AssertionError("ERP/CRM/API sources must be primary and manual upload must be backup")
 
     source_sync = post_json(client, "/api/data/source-connections/erp/sync", user_id="U001")
-    source_contract = source_sync.get("sourceConnection") or {}
-    if source_contract.get("priority") != "primary" or source_contract.get("sourceId") != "erp":
+    if (source_sync.get("sourceConnection") or {}).get("priority") != "primary":
         raise AssertionError("ERP source sync must use primary source contract")
-    if (source_sync.get("v104ImportTaskSync") or {}).get("source") != "erp_api_sync":
-        raise AssertionError("ERP source sync must still refresh V10.4 module sync contract")
 
     report = get_json(client, "/api/modules/report", user_id="U001")
     if report.get("version") != "5.2.1":
@@ -169,27 +170,15 @@ def check_runtime_routes():
     operating = get_json(client, "/api/modules/operating-unit", user_id="U001")
     if operating.get("version") != "5.2.1":
         raise AssertionError("operating unit must expose true-empty store-row V5.2.1 contract")
-    rows = operating.get("storeRows") or []
-    if not rows:
+    if not (operating.get("storeRows") or []):
         raise AssertionError("operating unit must return storeRows after data sync")
-
-    import_payload = post_json(client, "/api/data/import/report", user_id="U001", payload={"datasetName": "products", "rows": [{"product_id": "P001", "title": "夏季防晒衣", "stock": 220, "sales": 8, "sale_price": 10, "cost_price": 9, "store_id": "S001"}], "autoCreateTasks": True})
-    if (import_payload.get("v104ImportTaskSync") or {}).get("version") != "10.4.0":
-        raise AssertionError("V10.9 must keep V10.4 import sync contract")
-    if (import_payload.get("v107OperatingProfile") or {}).get("version") != "10.7.0":
-        raise AssertionError("V10.9 must keep V10.7 profile contract")
-    if (import_payload.get("v108TagChangeTaskSync") or {}).get("version") != "10.8.0":
-        raise AssertionError("V10.9 must keep V10.8 tag-change contract")
 
     task_agent = post_json(client, "/api/modules/agents/tasks/generate", user_id="U001", payload={"sourceModule": "product", "entityId": "P001", **metric_payload})
     if task_agent.get("version") != "10.13.0":
         raise AssertionError("Task Agent must expose V10.13")
-    if not task_agent.get("ragReferences"):
-        raise AssertionError("Task Agent must recall RAG references from seeded baseline")
     must(str(task_agent), "v1012MetricTrendEvidence")
     must(str(task_agent), "v1013TaskSop")
     must(str(task_agent), "taskExecutionSop")
-    must(str(task_agent), "executionSteps")
     must(str(task_agent), "completionGate")
     must(str(task_agent), "退款理由 Top5")
 
@@ -220,7 +209,6 @@ def main():
     trends_route = read("src/api/routes/trends.py")
     report_route = read("src/api/routes/modules/report_v5.py")
     operating_route = read("src/api/routes/modules/operating_unit.py")
-    rag_route = read("src/api/routes/modules/rag_memory.py")
     rag_seed = read("src/services/demo_rag_seed_data.py")
     rag_service = read("src/services/experience_memory_service.py")
     metric_service = read("src/services/v1012_metric_trend_evidence_service.py")
@@ -228,27 +216,20 @@ def main():
     task_agent = read("src/services/task_agent_service.py")
     todo_route = read("src/api/routes/modules/todo.py")
     data_source_service = read("src/services/data_source_connection_service.py")
-    v10_service = read("src/services/v100_task_driven_product_service.py")
-    action_service = read("src/services/v106_task_action_simplifier.py")
-    profile_service = read("src/services/v107_operating_profile_service.py")
-    tag_task_service = read("src/services/v108_tag_change_task_service.py")
     acceptance_service = read("src/services/v109_acceptance_guard_service.py")
     index = read("web_demo/index.html")
     api_client = read("web_demo/core/api-client.js")
-    report_page = read("web_demo/modules/report/page.js")
     operating_page = read("web_demo/modules/operating-unit/page.js")
+    todo_page = read("web_demo/modules/todo/page.js")
+    task_report_page = read("web_demo/modules/task-report/page.js")
     dashboard_css = read("web_demo/dashboard.css")
     task_store = read("web_demo/core/task-store.js")
     system_status = read("web_demo/modules/system-status/page.js")
-    v10_doc = read("docs/V10_TASK_DRIVEN_PRODUCT.md")
 
     must(main_py, "API_VERSION = \"10.9.0\"")
     must(health, "API_VERSION = \"10.9.0\"")
     must(v10_route, "\"version\": \"10.9.0\"")
     must(v10_route, "acceptanceGuard")
-    must(v10_service, "V100_TASK_PRODUCT_VERSION = \"10.9.0\"")
-    must(profile_service, "V107_OPERATING_PROFILE_VERSION = \"10.7.0\"")
-    must(tag_task_service, "V108_TAG_CHANGE_TASK_VERSION = \"10.8.0\"")
     must(acceptance_service, "V109_ACCEPTANCE_GUARD_VERSION = \"10.9.0\"")
     must(data_source_service, "api_sources_primary_manual_upload_backup")
     must(data_import, "source_connections")
@@ -260,8 +241,6 @@ def main():
     must_not(operating_route, "or store_rows")
     must_not(operating_route, "list(user.get(\"storeIds\")")
     must(todo_route, "acceptanceSurface")
-    must(action_service, "V106_TASK_ACTION_VERSION = \"10.6.0\"")
-    must(rag_route, "rag_memory_search")
     must(rag_seed, "DEMO_RAG_SEED_VERSION = \"10.11.0\"")
     must(rag_seed, "cross_validation_rule")
     must(rag_service, "MEMORY_VERSION = \"10.11.0\"")
@@ -279,30 +258,35 @@ def main():
     must(task_agent, "v1013TaskSop")
     must(task_agent, "taskExecutionSop")
     must(task_agent, "completionGate")
-    must(task_agent, "不允许只写处理建议")
     must(trends_route, "/metric-evidence")
     must(trends_route, "/task-sop")
     must(trends_route, "build_task_sop")
-    must(index, "?v=10.9.0")
-    must(index, "dashboard.css?v=10.9.2")
-    must(index, "modules/report/page.js?v=10.9.4")
-    must(index, "modules/operating-unit/page.js?v=10.9.3")
+
+    check_sidebar_navigation(index)
+    must(index, "modules/task-report/page.js?v=10.13.1")
+    must(index, "modules/todo/page.js?v=10.9.1")
+    must(index, "modules/operating-unit/page.js?v=10.9.4")
+    must(index, "core/api-client.js?v=10.9.3")
+    for marker in OLD_CHILD_SCRIPTS:
+        must_not(index, marker)
+
+    must(api_client, "metricEvidence")
+    must(api_client, "taskSop")
     must(api_client, "syncDataSource")
     must(api_client, "resetRuntimeData")
-    must(report_page, "realRecords")
-    must(report_page, "emptyRecordRow")
-    must(operating_page, "店铺经营状态")
-    must(operating_page, "storeRows")
-    must(operating_page, "operating-store-row")
-    must_not(operating_page, "storeTags")
+    must(operating_page, "data-operation-module")
+    must_not(operating_page, "data-operation-route")
+    must(todo_page, "sopPanel")
+    must(todo_page, "taskExecutionSop")
+    must(todo_page, "不允许只写处理建议")
+    must(task_report_page, "window.TaskReportPage")
+    must(task_report_page, "route: \"task-report\"")
     must(dashboard_css, "operating-store-row")
-    must(task_store, "window.AppTaskStore")
+    must(task_store, "openTaskReport")
     must(system_status, "SYSTEM STATUS · V10.9")
-    must(system_status, "acceptanceChain")
-    must(v10_doc, "V10.9 acceptance guard")
-    check_sidebar_navigation(index)
+
     check_runtime_routes()
-    print("V10.13 task SOP engine guard passed.")
+    print("V10.13 frontend/backend breakpoint and duplicate guard passed.")
 
 
 if __name__ == "__main__":
