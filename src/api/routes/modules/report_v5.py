@@ -24,6 +24,26 @@ def _flatten(groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [report for group in groups for report in group.get("reports", [])]
 
 
+def _real_sync_records(groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    for group in groups:
+        for report in group.get("reports", []):
+            if not report.get("latestDataVersion") and report.get("status") != "已导入":
+                continue
+            records.append({
+                "id": report.get("id"),
+                "name": report.get("name") or report.get("id") or "同步记录",
+                "label": report.get("name") or report.get("id") or "同步记录",
+                "status": report.get("status") or "已处理",
+                "count": report.get("count") or "0 条",
+                "source": report.get("source") or group.get("name") or "数据源",
+                "latestDataVersion": report.get("latestDataVersion"),
+                "latestSnapshotAt": report.get("latestSnapshotAt"),
+                "createdTaskCount": int(report.get("createdTaskCount") or report.get("taskCount") or 0),
+            })
+    return records
+
+
 def report_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "entityType": "报表",
@@ -55,11 +75,20 @@ def report_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/report")
 def report(request: Request) -> Dict[str, Any]:
     user_id = request_user_id(request)
+    groups = projected_report_groups(user_id)
+    details = projected_report_details(user_id)
+    v3 = get_v3_dashboard_summary(user_id)
+    recent_alerts = list_alert_events(limit=10, active_only=True, user_id=user_id)
+    sync_records = _real_sync_records(groups)
+    has_data = bool(sync_records or details or v3.get("latestDataVersion") or recent_alerts)
     return {
-        "reportGroups": projected_report_groups(user_id),
-        "reportDetails": projected_report_details(user_id),
-        "v3": get_v3_dashboard_summary(user_id),
-        "recentAlerts": list_alert_events(limit=10, active_only=True, user_id=user_id),
+        "version": "5.2.1",
+        "hasData": has_data,
+        "reportGroups": groups if has_data else [],
+        "reportDetails": details if has_data else {},
+        "syncRecords": sync_records,
+        "v3": v3 if has_data else {"version": v3.get("version"), "activeAlertCount": 0, "highPriorityAlertCount": 0, "latestAlerts": []},
+        "recentAlerts": recent_alerts if has_data else [],
     }
 
 
