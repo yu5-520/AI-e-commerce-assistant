@@ -66,6 +66,16 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 导入流程、趋势同步、风险任务生成等复杂链路进入系统状态和日志，不占主页面。
 ```
 
+## V10.5 cross-account task flow
+
+```text
+任务是经营事件，不是个人待办副本。
+同一个 task_id 会自动投射老板、总管、运营三种视图。
+老板看进度和结果，总管看派发和复核，运营看接收、提交和补充。
+运营提交后自动进入总管待复核，总管复核后老板同步看到完成结果。
+用户不需要手动选择跨账号流程节点。
+```
+
 ## User actions
 
 ```text
