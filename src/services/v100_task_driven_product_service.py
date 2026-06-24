@@ -1,8 +1,9 @@
-"""V10.0 task-driven product contract.
+"""V10.1 task-driven product contract.
 
 V10 turns the system from architecture readiness into a task-driven product.
 Users should not configure labels, categories, workflow nodes, or routing rules.
 The system and Agent translate data changes into tasks; users finish work through tasks.
+V10.1 compresses the frontend navigation into a few product entries.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from typing import Any, Dict
 
 from src.core.context import UserContext
 
-V100_TASK_PRODUCT_VERSION = "10.0.0"
+V100_TASK_PRODUCT_VERSION = "10.1.0"
 
 TASK_DRIVEN_PRINCIPLES = [
     "all user intervention must appear as a task",
@@ -29,6 +30,33 @@ MINIMAL_NAVIGATION = [
     "logs",
     "accounts",
     "system",
+]
+
+NAVIGATION_LABELS = {
+    "dashboard": "总览",
+    "reports": "报表",
+    "operation": "经营",
+    "tasks": "任务",
+    "logs": "日志",
+    "accounts": "账号",
+    "system": "系统",
+}
+
+NAVIGATION_ROUTE_MAP = {
+    "dashboard": "dashboard",
+    "reports": "data-check",
+    "operation": "operating-unit",
+    "tasks": "business-actions",
+    "logs": "business-report",
+    "accounts": "accounts",
+    "system": "system-status",
+}
+
+COLLAPSED_OPERATION_ROUTES = [
+    "business-products",
+    "business-competitors",
+    "business-listing",
+    "business-traffic",
 ]
 
 USER_ACTIONS_BY_ROLE: Dict[str, Any] = {
@@ -76,6 +104,14 @@ TASK_FLOW_STAGES = [
     "audit_written",
 ]
 
+NAVIGATION_COMPRESSION_RULES = [
+    "sidebar keeps only seven product-level entries",
+    "product, competitor, listing and traffic are collapsed under operation",
+    "old module routes remain registered for internal jumps and detail links",
+    "role scope maps to the compressed navigation before hiding links",
+    "system complexity stays in system status, not daily operation views",
+]
+
 
 def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
     return {
@@ -86,6 +122,10 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
         "stableProductEntries": ["/api/modules", "/api/accounts", "/api/health"],
         "principles": TASK_DRIVEN_PRINCIPLES,
         "minimalNavigation": MINIMAL_NAVIGATION,
+        "navigationLabels": NAVIGATION_LABELS,
+        "navigationRouteMap": NAVIGATION_ROUTE_MAP,
+        "collapsedOperationRoutes": COLLAPSED_OPERATION_ROUTES,
+        "navigationCompressionRules": NAVIGATION_COMPRESSION_RULES,
         "userActionsByRole": USER_ACTIONS_BY_ROLE,
         "taskTypes": TASK_TYPES,
         "agentAutomationScope": AGENT_AUTOMATION_SCOPE,
@@ -96,6 +136,7 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
             "不让用户手动维护分类作为主流程",
             "不把复杂流程节点暴露到经营界面",
             "不把系统能力展示替代用户任务引导",
+            "不把商品、竞品、上新、流量继续放在主导航里",
         ],
         "context": ctx.to_dict(),
         "auditMeta": ctx.audit_meta(),
