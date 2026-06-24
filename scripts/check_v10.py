@@ -9,6 +9,7 @@ CHECK_FILES = [
     "src/api/routes/health.py",
     "src/api/routes/v10_product.py",
     "src/api/routes/data_import.py",
+    "src/api/routes/modules/operating_unit.py",
     "src/api/routes/modules/todo.py",
     "src/services/data_source_connection_service.py",
     "src/services/v100_task_driven_product_service.py",
@@ -80,9 +81,9 @@ def check_runtime_routes():
     for path in RUNTIME_PATHS:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
-    for path in ["/api/data/source-connections", "/api/data/source-connections/{source_id}/sync"]:
+    for path in ["/api/data/source-connections", "/api/data/source-connections/{source_id}/sync", "/api/modules/operating-unit"]:
         if path not in registered_paths:
-            raise AssertionError(f"data source route not mounted: {path}")
+            raise AssertionError(f"runtime route not mounted: {path}")
 
     client = TestClient(app)
     for path, expected in RUNTIME_PATHS.items():
@@ -110,6 +111,15 @@ def check_runtime_routes():
         raise AssertionError("ERP source sync must use primary source contract")
     if (source_sync.get("v104ImportTaskSync") or {}).get("source") != "erp_api_sync":
         raise AssertionError("ERP source sync must still refresh V10.4 module sync contract")
+
+    operating = get_json(client, "/api/modules/operating-unit", user_id="U001")
+    if operating.get("version") != "5.1.0":
+        raise AssertionError("operating unit must expose productized V5.1 contract")
+    must(str(operating), "storeTags")
+    must(str(operating), "operatingJudgment")
+    must(str(operating), "店铺权重")
+    must_not(str(operating), "ModuleProjection")
+    must_not(str(operating), "RAG Memory")
 
     import_payload = post_json(
         client,
@@ -179,6 +189,7 @@ def main():
     health = read("src/api/routes/health.py")
     v10_route = read("src/api/routes/v10_product.py")
     data_import = read("src/api/routes/data_import.py")
+    operating_route = read("src/api/routes/modules/operating_unit.py")
     todo_route = read("src/api/routes/modules/todo.py")
     data_source_service = read("src/services/data_source_connection_service.py")
     v10_service = read("src/services/v100_task_driven_product_service.py")
@@ -192,6 +203,7 @@ def main():
     index = read("web_demo/index.html")
     api_client = read("web_demo/core/api-client.js")
     report_page = read("web_demo/modules/report/page.js")
+    operating_page = read("web_demo/modules/operating-unit/page.js")
     task_store = read("web_demo/core/task-store.js")
     system_status = read("web_demo/modules/system-status/page.js")
     v10_doc = read("docs/V10_TASK_DRIVEN_PRODUCT.md")
@@ -209,18 +221,29 @@ def main():
     must(data_source_service, "api_sources_primary_manual_upload_backup")
     must(data_import, "source_connections")
     must(data_import, "sync_source_connection")
+    must(operating_route, "build_operating_tags")
+    must(operating_route, "storeTags")
+    must(operating_route, "operatingJudgment")
+    must_not(operating_route, "ModuleProjection")
+    must_not(operating_route, "RAG Memory")
     must(todo_route, "acceptanceSurface")
     must(action_service, "V106_TASK_ACTION_VERSION = \"10.6.0\"")
     must(changelog, "## V10.9.0")
     must(version, "10.9.0")
     must(readme, "V10.9.0")
     must(index, "?v=10.9.0")
+    must(index, "dashboard.css?v=10.9.1")
     must(index, "core/task-store.js?v=10.9.1")
     must(index, "core/api-client.js?v=10.9.2")
     must(index, "modules/report/page.js?v=10.9.2")
+    must(index, "modules/operating-unit/page.js?v=10.9.1")
     must(api_client, "syncDataSource")
     must(report_page, "经营数据接入")
     must(report_page, "手动上传只作为备用补数")
+    must(operating_page, "店铺经营标签")
+    must(operating_page, "operatingJudgment")
+    must_not(operating_page, "ModuleProjection")
+    must_not(operating_page, "RAG Memory")
     must(task_store, "window.AppTaskStore")
     must(task_store, "window.AppTaskActions")
     must(task_store, "hydrate")
@@ -230,7 +253,7 @@ def main():
     must(system_status, "acceptanceChain")
     must(v10_doc, "V10.9 acceptance guard")
     check_runtime_routes()
-    print("V10.9/V10.10 data-source primary guard passed.")
+    print("V10.9/V10.10 productized operating guard passed.")
 
 
 if __name__ == "__main__":
