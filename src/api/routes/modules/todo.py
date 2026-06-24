@@ -62,7 +62,7 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
     tasks = list_tasks(assignee_id=mine_assignee, review_scope=review_scope, viewer_id=query_viewer_id)
     active_tasks = list_tasks(active_only=True, assignee_id=mine_assignee, review_scope=review_scope, viewer_id=query_viewer_id)
     return {
-        "version": "10.6.0",
+        "version": "10.9.0",
         "tasks": _v10_tasks(tasks, viewer_id),
         "activeTasks": _v10_tasks(active_tasks, viewer_id),
         "events": list_task_events_for_user(query_viewer_id),
@@ -71,6 +71,7 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
         "viewer": current_user(viewer_id),
         "crossAccountFlow": {"version": "10.5.0", "mode": "one_task_id_multiple_role_views"},
         "taskActionSurface": {"version": "10.6.0", "rule": "任务卡只展示一个主按钮和一个次按钮；详情不是流程动作。"},
+        "acceptanceSurface": {"version": "10.9.0", "rule": "任务池必须能承接标签变化任务、跨账号视图和极简动作验收。"},
         "rule": "任务按当前账号投射角色视图，并把动作压缩成最小可操作集合。",
     }
 
@@ -79,14 +80,14 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
 def todo_events(request: Request) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     query_viewer_id = _viewer_for_query(viewer_id)
-    return {"version": "10.6.0", "events": list_task_events_for_user(query_viewer_id), "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
+    return {"version": "10.9.0", "events": list_task_events_for_user(query_viewer_id), "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
 
 
 @router.get("/todo/counters")
 def todo_counters(request: Request) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     query_viewer_id = _viewer_for_query(viewer_id)
-    return {"version": "10.6.0", "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
+    return {"version": "10.9.0", "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
 
 
 @router.get("/todo/{task_id}/evidence")
@@ -96,6 +97,7 @@ def todo_evidence(request: Request, task_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="task evidence not found")
     evidence["crossAccountFlowVersion"] = "10.5.0"
     evidence["taskActionVersion"] = "10.6.0"
+    evidence["acceptanceSurfaceVersion"] = "10.9.0"
     return evidence
 
 
