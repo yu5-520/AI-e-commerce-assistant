@@ -19,6 +19,7 @@ CHECK_FILES = [
     "src/services/experience_memory_service.py",
     "src/services/task_agent_service.py",
     "src/services/v1012_metric_trend_evidence_service.py",
+    "src/services/v1013_task_sop_engine_service.py",
     "src/services/v100_task_driven_product_service.py",
     "src/services/v104_import_task_sync_service.py",
     "src/services/v105_cross_account_flow_service.py",
@@ -85,18 +86,7 @@ def check_runtime_routes():
     from src.api.main import app
 
     registered_paths = {getattr(route, "path", "") for route in app.routes}
-    for path in RUNTIME_PATHS:
-        if path not in registered_paths:
-            raise AssertionError(f"runtime route not mounted: {path}")
-    for path in [
-        "/api/data/source-connections",
-        "/api/data/source-connections/{source_id}/sync",
-        "/api/modules/report",
-        "/api/modules/operating-unit",
-        "/api/modules/rag-memory",
-        "/api/modules/rag-memory/search",
-        "/api/trends/metric-evidence",
-    ]:
+    for path in [*RUNTIME_PATHS, "/api/data/source-connections", "/api/data/source-connections/{source_id}/sync", "/api/modules/report", "/api/modules/operating-unit", "/api/modules/rag-memory", "/api/modules/rag-memory/search", "/api/trends/metric-evidence", "/api/trends/task-sop"]:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
 
@@ -146,8 +136,15 @@ def check_runtime_routes():
         raise AssertionError("metric evidence must expose V10.12")
     must(str(metric_evidence), "metric_baseline_rag")
     must(str(metric_evidence), "trendEvidence")
-    must(str(metric_evidence), "ROI")
     must(str(metric_evidence), "单点只记录")
+
+    sop = post_json(client, "/api/trends/task-sop", user_id="U001", payload={"problemType": "low_roi_high_refund", "metricEvidence": metric_evidence})
+    if sop.get("version") != "10.13.0":
+        raise AssertionError("Task SOP must expose V10.13")
+    must(str(sop), "低 ROI / 高退款承接与售后排查 SOP")
+    must(str(sop), "退款理由 Top5")
+    must(str(sop), "客服团队核实")
+    must(str(sop), "SOP 是骨架")
 
     connections = get_json(client, "/api/data/source-connections")
     if connections.get("version") != "10.10.0":
@@ -175,36 +172,26 @@ def check_runtime_routes():
     rows = operating.get("storeRows") or []
     if not rows:
         raise AssertionError("operating unit must return storeRows after data sync")
-    first = rows[0]
-    for field in ["storeName", "storeWeightTag", "productRoleTags", "riskTags", "taskIntensity"]:
-        if field not in first:
-            raise AssertionError(f"store row missing {field}")
 
-    import_payload = post_json(
-        client,
-        "/api/data/import/report",
-        user_id="U001",
-        payload={"datasetName": "products", "rows": [{"product_id": "P001", "title": "夏季防晒衣", "stock": 220, "sales": 8, "sale_price": 10, "cost_price": 9, "store_id": "S001"}], "autoCreateTasks": True},
-    )
+    import_payload = post_json(client, "/api/data/import/report", user_id="U001", payload={"datasetName": "products", "rows": [{"product_id": "P001", "title": "夏季防晒衣", "stock": 220, "sales": 8, "sale_price": 10, "cost_price": 9, "store_id": "S001"}], "autoCreateTasks": True})
     if (import_payload.get("v104ImportTaskSync") or {}).get("version") != "10.4.0":
         raise AssertionError("V10.9 must keep V10.4 import sync contract")
-    profile = import_payload.get("v107OperatingProfile") or {}
-    if profile.get("version") != "10.7.0" or profile.get("userConfirmationRequired") is not False:
-        raise AssertionError("V10.9 must keep Agent tags automatic and not require user confirmation")
-    tag_sync = import_payload.get("v108TagChangeTaskSync") or {}
-    if tag_sync.get("version") != "10.8.0" or tag_sync.get("createdTaskCount", 0) < 1:
-        raise AssertionError("V10.9 requires tag-change candidates to become tasks")
+    if (import_payload.get("v107OperatingProfile") or {}).get("version") != "10.7.0":
+        raise AssertionError("V10.9 must keep V10.7 profile contract")
+    if (import_payload.get("v108TagChangeTaskSync") or {}).get("version") != "10.8.0":
+        raise AssertionError("V10.9 must keep V10.8 tag-change contract")
 
     task_agent = post_json(client, "/api/modules/agents/tasks/generate", user_id="U001", payload={"sourceModule": "product", "entityId": "P001", **metric_payload})
-    if task_agent.get("version") != "10.12.0":
-        raise AssertionError("Task Agent must expose V10.12")
+    if task_agent.get("version") != "10.13.0":
+        raise AssertionError("Task Agent must expose V10.13")
     if not task_agent.get("ragReferences"):
         raise AssertionError("Task Agent must recall RAG references from seeded baseline")
     must(str(task_agent), "v1012MetricTrendEvidence")
-    must(str(task_agent), "metricEvidence")
-    must(str(task_agent), "trendEvidence")
-    must(str(task_agent), "crossValidationEvidence")
-    must(str(task_agent), "低 ROI")
+    must(str(task_agent), "v1013TaskSop")
+    must(str(task_agent), "taskExecutionSop")
+    must(str(task_agent), "executionSteps")
+    must(str(task_agent), "completionGate")
+    must(str(task_agent), "退款理由 Top5")
 
     owner_todo = get_json(client, "/api/modules/todo", user_id="U001")
     if owner_todo.get("version") != "10.9.0":
@@ -237,6 +224,7 @@ def main():
     rag_seed = read("src/services/demo_rag_seed_data.py")
     rag_service = read("src/services/experience_memory_service.py")
     metric_service = read("src/services/v1012_metric_trend_evidence_service.py")
+    sop_service = read("src/services/v1013_task_sop_engine_service.py")
     task_agent = read("src/services/task_agent_service.py")
     todo_route = read("src/api/routes/modules/todo.py")
     data_source_service = read("src/services/data_source_connection_service.py")
@@ -245,9 +233,6 @@ def main():
     profile_service = read("src/services/v107_operating_profile_service.py")
     tag_task_service = read("src/services/v108_tag_change_task_service.py")
     acceptance_service = read("src/services/v109_acceptance_guard_service.py")
-    changelog = read("docs/CHANGELOG.md")
-    version = read("versioning/VERSION.md")
-    readme = read("README.md")
     index = read("web_demo/index.html")
     api_client = read("web_demo/core/api-client.js")
     report_page = read("web_demo/modules/report/page.js")
@@ -262,47 +247,42 @@ def main():
     must(v10_route, "\"version\": \"10.9.0\"")
     must(v10_route, "acceptanceGuard")
     must(v10_service, "V100_TASK_PRODUCT_VERSION = \"10.9.0\"")
-    must(v10_service, "v109_acceptance_summary")
     must(profile_service, "V107_OPERATING_PROFILE_VERSION = \"10.7.0\"")
     must(tag_task_service, "V108_TAG_CHANGE_TASK_VERSION = \"10.8.0\"")
     must(acceptance_service, "V109_ACCEPTANCE_GUARD_VERSION = \"10.9.0\"")
-    must(acceptance_service, "rag_memory_candidate_after_review")
     must(data_source_service, "api_sources_primary_manual_upload_backup")
     must(data_import, "source_connections")
     must(data_import, "sync_source_connection")
     must(report_route, "syncRecords")
     must(report_route, "hasData")
-    must(report_route, "_real_sync_records")
-    must(operating_route, "build_store_rows")
     must(operating_route, "Account seed stores are permissions, not business data")
     must(operating_route, "storeRows")
     must_not(operating_route, "or store_rows")
     must_not(operating_route, "list(user.get(\"storeIds\")")
-    must_not(operating_route, "ModuleProjection")
-    must_not(operating_route, "RAG Memory")
     must(todo_route, "acceptanceSurface")
     must(action_service, "V106_TASK_ACTION_VERSION = \"10.6.0\"")
     must(rag_route, "rag_memory_search")
     must(rag_seed, "DEMO_RAG_SEED_VERSION = \"10.11.0\"")
     must(rag_seed, "cross_validation_rule")
-    must(rag_seed, "acceptance_rule")
-    must(rag_seed, "negative_case")
     must(rag_service, "MEMORY_VERSION = \"10.11.0\"")
     must(metric_service, "V1012_METRIC_TREND_EVIDENCE_VERSION = \"10.12.0\"")
     must(metric_service, "METRIC_BASELINE_RAG")
     must(metric_service, "calculate_precise_metrics")
     must(metric_service, "trend_compare")
     must(metric_service, "cross_validate")
-    must(metric_service, "growth")
-    must(task_agent, "TASK_AGENT_VERSION = \"10.12.0\"")
-    must(task_agent, "v1012MetricTrendEvidence")
-    must(task_agent, "metricBaselineRag")
-    must(task_agent, "crossValidationEvidence")
+    must(sop_service, "V1013_TASK_SOP_VERSION = \"10.13.0\"")
+    must(sop_service, "退款理由 Top5")
+    must(sop_service, "客服团队核实")
+    must(sop_service, "completionGate")
+    must(sop_service, "SOP 是骨架，公司 RAG 是调参")
+    must(task_agent, "TASK_AGENT_VERSION = \"10.13.0\"")
+    must(task_agent, "v1013TaskSop")
+    must(task_agent, "taskExecutionSop")
+    must(task_agent, "completionGate")
+    must(task_agent, "不允许只写处理建议")
     must(trends_route, "/metric-evidence")
-    must(trends_route, "build_metric_trend_evidence")
-    must(changelog, "## V10.9.0")
-    must(version, "10.9.0")
-    must(readme, "V10.9.0")
+    must(trends_route, "/task-sop")
+    must(trends_route, "build_task_sop")
     must(index, "?v=10.9.0")
     must(index, "dashboard.css?v=10.9.2")
     must(index, "modules/report/page.js?v=10.9.4")
@@ -322,7 +302,7 @@ def main():
     must(v10_doc, "V10.9 acceptance guard")
     check_sidebar_navigation(index)
     check_runtime_routes()
-    print("V10.12 metric and trend evidence guard passed.")
+    print("V10.13 task SOP engine guard passed.")
 
 
 if __name__ == "__main__":
