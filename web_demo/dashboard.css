@@ -242,6 +242,98 @@
   color: #7a8190;
 }
 
+.operating-hero .unit-hero-side {
+  min-width: 180px;
+  justify-items: start;
+}
+
+.operating-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.operating-module-section {
+  padding: 18px 20px;
+}
+
+.operating-tag-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.operating-tag-card {
+  display: grid;
+  gap: 12px;
+  min-height: 152px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+}
+
+.operating-tag-card > span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.operating-tag-card > strong {
+  font-size: clamp(22px, 2.2vw, 30px);
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+}
+
+.operating-tag-card.warning {
+  border-color: rgba(217, 119, 6, 0.22);
+  background: linear-gradient(180deg, #ffffff, #fffaf0);
+}
+
+.operating-tag-card.good {
+  border-color: rgba(5, 150, 105, 0.16);
+  background: linear-gradient(180deg, #ffffff, #f5fff9);
+}
+
+.operating-tag-card .tag-row {
+  margin: 0;
+}
+
+.operating-tag-card .tag-row em,
+.operating-judgment-card em {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.operating-judgment-card {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #ffffff;
+}
+
+.operating-judgment-card strong {
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.055em;
+}
+
+.operating-judgment-card p {
+  display: block !important;
+  margin: 0;
+  color: #343b49;
+  font-size: 15px;
+  line-height: 1.8;
+  font-weight: 850;
+}
+
 @media (max-width: 1040px) {
   .dashboard-status,
   .unit-hero,
@@ -253,11 +345,18 @@
   .unit-store-row {
     grid-template-columns: 1fr 1fr;
   }
+
+  .operating-metrics,
+  .operating-tag-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
   .dashboard-task-card,
-  .unit-store-row {
+  .unit-store-row,
+  .operating-metrics,
+  .operating-tag-grid {
     grid-template-columns: 1fr;
   }
 }
