@@ -29,6 +29,15 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 系统
 ```
 
+## V10.1 navigation compression
+
+```text
+商品、竞品、上新、流量不再占用左侧主导航。
+这些经营对象折叠到“经营”页面内部，用轻入口或页内标签进入。
+旧路由继续保留，用于内部跳转、详情页、任务卡跳转和后续经营页轻标签。
+账号权限 visibleModules 需要映射到 V10 主导航，避免旧模块列表误隐藏新入口。
+```
+
 ## User actions
 
 ```text
