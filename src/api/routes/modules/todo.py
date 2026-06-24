@@ -9,16 +9,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from src.core.context import UserContext, get_current_context
 from src.services.account_service import current_user, user_has_permission, user_id_from_headers
 from src.services.experience_memory_service import draft_experience_from_task
-from src.services.module_task_service import (
-    get_task_counters_for_user,
-    list_task_events_for_user,
-    list_tasks,
-    pin_task,
-    reorder_task,
-)
+from src.services.module_task_service import get_task_counters_for_user, list_task_events_for_user, list_tasks, pin_task, reorder_task
 from src.services.task_evidence_service import get_task_evidence, review_task_evidence, submit_task_evidence
 from src.services.task_repository_write_service import reset_tasks_with_repository, transition_task_with_repository
 from src.services.v105_cross_account_flow_service import apply_v105_cross_account_flow, projected_task_for_role
+from src.services.v106_task_action_simplifier import apply_v106_task_actions
 
 router = APIRouter()
 
@@ -41,12 +36,13 @@ def _viewer_for_query(user_id: str | None) -> str | None:
     return None if _viewer_role(user_id) == "owner" else user_id
 
 
-def _v105_task(task: Dict[str, Any], user_id: str | None) -> Dict[str, Any]:
-    return projected_task_for_role(apply_v105_cross_account_flow(task), _viewer_role(user_id))
+def _v10_task(task: Dict[str, Any], user_id: str | None) -> Dict[str, Any]:
+    role_task = projected_task_for_role(apply_v105_cross_account_flow(task), _viewer_role(user_id))
+    return apply_v106_task_actions(role_task)
 
 
-def _v105_tasks(tasks: List[Dict[str, Any]], user_id: str | None) -> List[Dict[str, Any]]:
-    return [_v105_task(task, user_id) for task in tasks]
+def _v10_tasks(tasks: List[Dict[str, Any]], user_id: str | None) -> List[Dict[str, Any]]:
+    return [_v10_task(task, user_id) for task in tasks]
 
 
 def _task_from_write_result(result: Dict[str, Any], *, error_detail: str, viewer_id: str | None = None) -> Dict[str, Any]:
@@ -54,7 +50,7 @@ def _task_from_write_result(result: Dict[str, Any], *, error_detail: str, viewer
     if not task:
         raise HTTPException(status_code=400, detail=result.get("message") or error_detail)
     task["repositoryWrite"] = {"version": result.get("version"), "action": result.get("action"), "repository": result.get("repository")}
-    return _v105_task(task, viewer_id)
+    return _v10_task(task, viewer_id)
 
 
 @router.get("/todo")
@@ -66,19 +62,16 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
     tasks = list_tasks(assignee_id=mine_assignee, review_scope=review_scope, viewer_id=query_viewer_id)
     active_tasks = list_tasks(active_only=True, assignee_id=mine_assignee, review_scope=review_scope, viewer_id=query_viewer_id)
     return {
-        "version": "10.5.0",
-        "tasks": _v105_tasks(tasks, viewer_id),
-        "activeTasks": _v105_tasks(active_tasks, viewer_id),
+        "version": "10.6.0",
+        "tasks": _v10_tasks(tasks, viewer_id),
+        "activeTasks": _v10_tasks(active_tasks, viewer_id),
         "events": list_task_events_for_user(query_viewer_id),
         "counters": get_task_counters_for_user(query_viewer_id),
         "scope": scope,
         "viewer": current_user(viewer_id),
-        "crossAccountFlow": {
-            "version": "10.5.0",
-            "mode": "one_task_id_multiple_role_views",
-            "rule": "同一个 task_id 按老板、总管、运营账号投射不同显示状态和主动作。",
-        },
-        "rule": "任务按当前账号的角色、店铺权限、负责人、复核人和可见范围过滤；动作会生成生命周期事件并同步相关账号视图。",
+        "crossAccountFlow": {"version": "10.5.0", "mode": "one_task_id_multiple_role_views"},
+        "taskActionSurface": {"version": "10.6.0", "rule": "任务卡只展示一个主按钮和一个次按钮；详情不是流程动作。"},
+        "rule": "任务按当前账号投射角色视图，并把动作压缩成最小可操作集合。",
     }
 
 
@@ -86,14 +79,14 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
 def todo_events(request: Request) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     query_viewer_id = _viewer_for_query(viewer_id)
-    return {"version": "10.5.0", "events": list_task_events_for_user(query_viewer_id), "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
+    return {"version": "10.6.0", "events": list_task_events_for_user(query_viewer_id), "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
 
 
 @router.get("/todo/counters")
 def todo_counters(request: Request) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     query_viewer_id = _viewer_for_query(viewer_id)
-    return {"version": "10.5.0", "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
+    return {"version": "10.6.0", "counters": get_task_counters_for_user(query_viewer_id), "viewer": current_user(viewer_id)}
 
 
 @router.get("/todo/{task_id}/evidence")
@@ -102,6 +95,7 @@ def todo_evidence(request: Request, task_id: str) -> Dict[str, Any]:
     if not evidence:
         raise HTTPException(status_code=404, detail="task evidence not found")
     evidence["crossAccountFlowVersion"] = "10.5.0"
+    evidence["taskActionVersion"] = "10.6.0"
     return evidence
 
 
@@ -150,7 +144,7 @@ def submit_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | 
     task = submit_task_evidence(task_id, body or {}, submitter_id=viewer_id)
     if not task:
         raise HTTPException(status_code=400, detail="cannot submit task evidence")
-    return _v105_task(task, viewer_id)
+    return _v10_task(task, viewer_id)
 
 
 @router.post("/todo/{task_id}/review")
@@ -177,7 +171,7 @@ def review_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | 
     task = review_task_evidence(task_id, body or {}, reviewer_id=viewer_id)
     if not task:
         raise HTTPException(status_code=400, detail="cannot review task evidence")
-    return _v105_task(task, viewer_id)
+    return _v10_task(task, viewer_id)
 
 
 @router.post("/todo/{task_id}/recap")
@@ -205,7 +199,7 @@ def pin_todo(request: Request, task_id: str) -> Dict[str, Any]:
     task = pin_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="task not found")
-    return _v105_task(task, viewer_id)
+    return _v10_task(task, viewer_id)
 
 
 @router.post("/todo/{task_id}/reorder")
@@ -215,7 +209,7 @@ def reorder_todo(request: Request, task_id: str, direction: str = "down") -> Dic
     task = reorder_task(task_id, direction)
     if not task:
         raise HTTPException(status_code=400, detail="cannot reorder task")
-    return _v105_task(task, viewer_id)
+    return _v10_task(task, viewer_id)
 
 
 @router.post("/todo/reset")
