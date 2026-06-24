@@ -7,33 +7,16 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from src.services.account_service import current_user, user_id_from_headers
-from src.services.data_import_service import (
-    import_mock_data,
-    list_import_records,
-    list_import_sources,
-    validate_all_imports,
-)
+from src.services.data_import_service import import_mock_data, list_import_records, list_import_sources, validate_all_imports
 from src.services.data_version_service import delete_data_version, get_data_version_detail
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
-from src.services.report_alert_service import (
-    get_v3_dashboard_summary,
-    import_report_dataset,
-    latest_data_version,
-    list_alert_events,
-    list_alerts_for_entity,
-    list_data_versions,
-    run_v3_mock_imports,
-)
-from src.services.report_schema_service import (
-    confirm_report_import,
-    get_report_templates,
-    normalize_rows_with_mapping,
-    preview_report_dataset,
-)
+from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions, run_v3_mock_imports
+from src.services.report_schema_service import confirm_report_import, get_report_templates, normalize_rows_with_mapping, preview_report_dataset
 from src.services.risk_task_service import generate_risk_tasks_for_signals
 from src.services.trend_signal_service import ingest_product_trends
 from src.services.v104_import_task_sync_service import attach_v104_import_sync
+from src.services.v107_operating_profile_service import attach_v107_operating_profile
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
@@ -51,6 +34,13 @@ def can_rollback(user_id: str) -> bool:
 def require_rollback_permission(user_id: str) -> None:
     if not can_rollback(user_id):
         raise HTTPException(status_code=403, detail="当前账号无权回滚全局数据版本")
+
+
+def _attach_import_product_contracts(result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
+    if isinstance(rows, list):
+        result["rows"] = rows
+    v104 = attach_v104_import_sync(result, source=source)
+    return attach_v107_operating_profile(v104)
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
@@ -71,12 +61,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
             continue
         field_mapping = (item.get("schemaPreview") or {}).get("fieldMapping") or {}
         routed_rows = normalize_rows_with_mapping(rows, field_mapping) if isinstance(field_mapping, dict) else rows
-        trend_summary = ingest_product_trends(
-            dataset_name=str(dataset_name),
-            data_version=str(data_version),
-            rows=routed_rows,
-            source_system=source_system or result.get("sourceSystem"),
-        )
+        trend_summary = ingest_product_trends(dataset_name=str(dataset_name), data_version=str(data_version), rows=routed_rows, source_system=source_system or result.get("sourceSystem"))
         risk_summary = generate_risk_tasks_for_signals(data_version=str(data_version))
         item["trendSync"] = trend_summary
         item["riskTaskSync"] = risk_summary
@@ -108,37 +93,31 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
 
 @router.get("/sources")
 def data_sources() -> List[Dict[str, Any]]:
-    """List available Mock ERP / CRM import sources."""
     return list_import_sources()
 
 
 @router.post("/validate")
 def validate_imports() -> Dict[str, Any]:
-    """Validate all Mock ERP / CRM datasets and relationship checks."""
     return validate_all_imports()
 
 
 @router.post("/import/mock")
 def import_mock() -> Dict[str, Any]:
-    """Create an import record for current Mock datasets after validation."""
     return import_mock_data()
 
 
 @router.get("/imports")
 def imports() -> List[Dict[str, Any]]:
-    """List recent import records."""
     return list_import_records()
 
 
 @router.get("/import-records")
 def import_records(limit: int = Query(default=50, ge=1, le=200)) -> Dict[str, Any]:
-    """List report data versions with alert/task impact and rollback state."""
     return list_version_import_records(limit=limit)
 
 
 @router.get("/versions/{data_version}/detail")
 def version_detail(request: Request, data_version: str) -> Dict[str, Any]:
-    """Return one data version detail with alerts, linked tasks, rollback, and permissions."""
     user_id = request_user_id(request)
     try:
         detail = get_data_version_detail(data_version, user_id=user_id)
@@ -150,7 +129,6 @@ def version_detail(request: Request, data_version: str) -> Dict[str, Any]:
 
 @router.post("/versions/{data_version}/rollback")
 def rollback_version(request: Request, data_version: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
-    """Soft-rollback alerts generated by one report data version and handle linked tasks."""
     body = body or {}
     user_id = request_user_id(request)
     require_rollback_permission(user_id)
@@ -162,7 +140,6 @@ def rollback_version(request: Request, data_version: str, body: Dict[str, Any] |
 
 @router.delete("/versions/{data_version}")
 def delete_version(request: Request, data_version: str, confirm: bool = Query(default=False), body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
-    """Hard-delete one demo data version so test imports do not keep stacking."""
     if not confirm:
         raise HTTPException(status_code=400, detail="删除导入记录需要 confirm=true")
     body = body or {}
@@ -175,13 +152,11 @@ def delete_version(request: Request, data_version: str, confirm: bool = Query(de
 
 @router.get("/templates")
 def report_templates() -> Dict[str, Any]:
-    """Return report field templates and alias hints."""
     return get_report_templates()
 
 
 @router.post("/preview")
 def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Preview field mapping before creating alerts or tasks."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -193,46 +168,37 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
 
 @router.post("/import/confirm")
 def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Confirm a previewed report import, then trigger scoped alerts/tasks, trends, risk tasks and V10.4 refresh contract."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     source_system = body.get("source_system") or body.get("sourceSystem")
     try:
-        result = confirm_report_import(
-            str(dataset_name),
-            rows=body.get("rows"),
-            field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
-            auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
-            source_system=source_system,
-        )
+        result = confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False, source_system=source_system)
         synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
-        return attach_v104_import_sync(synced, source="confirm_report_import")
+        return _attach_import_product_contracts(synced, body.get("rows"), source="confirm_report_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/report")
 def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Import one report payload, create a data version, then trigger scoped alerts/tasks and V10.4 refresh contract."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
         result = import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False)
         synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
-        return attach_v104_import_sync(synced, source="report_import")
+        return _attach_import_product_contracts(synced, body.get("rows"), source="report_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/mock-alerts")
 def import_mock_alerts(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Run report-driven alert generation from current examples/*.csv files and return V10.4 refresh contract."""
     dataset_names = body.get("dataset_names") or body.get("datasetNames")
     try:
         result = run_v3_mock_imports(dataset_names=dataset_names)
-        return attach_v104_import_sync(result, source="mock_alerts_import")
+        return _attach_import_product_contracts(result, result.get("rows"), source="mock_alerts_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
