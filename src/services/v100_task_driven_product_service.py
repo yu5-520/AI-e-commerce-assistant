@@ -1,10 +1,11 @@
-"""V10.2 task-driven product contract.
+"""V10.3 task-driven product contract.
 
 V10 turns the system from architecture readiness into a task-driven product.
 Users should not configure labels, categories, workflow nodes, or routing rules.
 The system and Agent translate data changes into tasks; users finish work through tasks.
 V10.1 compresses the frontend navigation into a few product entries.
 V10.2 makes the UI hierarchy productized: compact title, dominant action, large task surface.
+V10.3 turns the dashboard into a today task workbench.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Any, Dict
 
 from src.core.context import UserContext
 
-V100_TASK_PRODUCT_VERSION = "10.2.0"
+V100_TASK_PRODUCT_VERSION = "10.3.0"
 
 TASK_DRIVEN_PRINCIPLES = [
     "all user intervention must appear as a task",
@@ -23,15 +24,7 @@ TASK_DRIVEN_PRINCIPLES = [
     "task cards are the primary product surface",
 ]
 
-MINIMAL_NAVIGATION = [
-    "dashboard",
-    "reports",
-    "operation",
-    "tasks",
-    "logs",
-    "accounts",
-    "system",
-]
+MINIMAL_NAVIGATION = ["dashboard", "reports", "operation", "tasks", "logs", "accounts", "system"]
 
 NAVIGATION_LABELS = {
     "dashboard": "总览",
@@ -53,12 +46,7 @@ NAVIGATION_ROUTE_MAP = {
     "system": "system-status",
 }
 
-COLLAPSED_OPERATION_ROUTES = [
-    "business-products",
-    "business-competitors",
-    "business-listing",
-    "business-traffic",
-]
+COLLAPSED_OPERATION_ROUTES = ["business-products", "business-competitors", "business-listing", "business-traffic"]
 
 USER_ACTIONS_BY_ROLE: Dict[str, Any] = {
     "owner": ["view", "follow", "confirm"],
@@ -104,6 +92,22 @@ V102_UI_PRODUCTIZATION_RULES = [
     "each page keeps a clear primary action above secondary data",
 ]
 
+V103_DASHBOARD_WORKBENCH_SECTIONS = [
+    "todayPriorityTasks",
+    "highRiskItems",
+    "latestReportResult",
+    "pendingReviewItems",
+    "completionProgress",
+]
+
+V103_DASHBOARD_RULES = [
+    "dashboard answers what should be handled today",
+    "priority tasks are shown before metrics",
+    "high risk, report result, review and progress are secondary support blocks",
+    "dashboard must route users into tasks instead of making them browse modules",
+    "dashboard is a workbench, not a menu wall or architecture status page",
+]
+
 TASK_FLOW_STAGES = [
     "data_uploaded",
     "agent_understands_context",
@@ -142,6 +146,8 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
         "agentAutomationScope": AGENT_AUTOMATION_SCOPE,
         "frontendLayoutRules": FRONTEND_LAYOUT_RULES,
         "uiProductizationRules": V102_UI_PRODUCTIZATION_RULES,
+        "dashboardWorkbenchSections": V103_DASHBOARD_WORKBENCH_SECTIONS,
+        "dashboardRules": V103_DASHBOARD_RULES,
         "taskFlowStages": TASK_FLOW_STAGES,
         "nonGoals": [
             "不让用户默认确认标签",
@@ -150,6 +156,7 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
             "不把系统能力展示替代用户任务引导",
             "不把商品、竞品、上新、流量继续放在主导航里",
             "不让标题、说明和数据流转抢占主操作空间",
+            "不把总览做成数据菜单墙",
         ],
         "context": ctx.to_dict(),
         "auditMeta": ctx.audit_meta(),
