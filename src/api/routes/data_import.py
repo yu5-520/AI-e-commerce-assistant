@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
+from src.core.context import context_from_headers
 from src.services.account_service import current_user, user_id_from_headers
 from src.services.data_import_service import import_mock_data, list_import_records, list_import_sources, validate_all_imports
 from src.services.data_version_service import delete_data_version, get_data_version_detail
@@ -17,6 +18,7 @@ from src.services.risk_task_service import generate_risk_tasks_for_signals
 from src.services.trend_signal_service import ingest_product_trends
 from src.services.v104_import_task_sync_service import attach_v104_import_sync
 from src.services.v107_operating_profile_service import attach_v107_operating_profile
+from src.services.v108_tag_change_task_service import attach_v108_tag_change_tasks
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
@@ -36,11 +38,12 @@ def require_rollback_permission(user_id: str) -> None:
         raise HTTPException(status_code=403, detail="当前账号无权回滚全局数据版本")
 
 
-def _attach_import_product_contracts(result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
+def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
     if isinstance(rows, list):
         result["rows"] = rows
     v104 = attach_v104_import_sync(result, source=source)
-    return attach_v107_operating_profile(v104)
+    v107 = attach_v107_operating_profile(v104)
+    return attach_v108_tag_change_tasks(v107, context_from_headers(request.headers))
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
@@ -67,27 +70,8 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         item["riskTaskSync"] = risk_summary
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
-    result["trendSync"] = {
-        "version": "6.2.0",
-        "mode": "product_snapshot_metric_trend_signal_sync",
-        "datasetCount": len(summaries),
-        "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries),
-        "trendCount": sum(item.get("trendCount", 0) for item in summaries),
-        "signalCount": sum(item.get("signalCount", 0) for item in summaries),
-        "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries),
-        "summaries": summaries,
-        "rule": "V6.2 导入后生成商品快照、指标趋势、经营信号，并把信号升级为风险分级任务。",
-    }
-    result["riskTaskSync"] = {
-        "version": "6.2.0",
-        "mode": "risk_graded_signal_task_generation",
-        "datasetCount": len(risk_summaries),
-        "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries),
-        "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries),
-        "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries),
-        "summaries": risk_summaries,
-        "rule": "低风险直接生成观察任务；中风险生成带指标边界的修复任务；高风险只生成复核候选，不直接扩大投产。",
-    }
+    result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "V6.2 导入后生成商品快照、指标趋势、经营信号，并把信号升级为风险分级任务。"}
+    result["riskTaskSync"] = {"version": "6.2.0", "mode": "risk_graded_signal_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "低风险直接生成观察任务；中风险生成带指标边界的修复任务；高风险只生成复核候选，不直接扩大投产。"}
     return result
 
 
@@ -167,7 +151,7 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
 
 
 @router.post("/import/confirm")
-def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+def confirm_import(request: Request, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -175,30 +159,30 @@ def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
     try:
         result = confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False, source_system=source_system)
         synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
-        return _attach_import_product_contracts(synced, body.get("rows"), source="confirm_report_import")
+        return _attach_import_product_contracts(request, synced, body.get("rows"), source="confirm_report_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/report")
-def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
         result = import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False)
         synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
-        return _attach_import_product_contracts(synced, body.get("rows"), source="report_import")
+        return _attach_import_product_contracts(request, synced, body.get("rows"), source="report_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/mock-alerts")
-def import_mock_alerts(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
+def import_mock_alerts(request: Request, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     dataset_names = body.get("dataset_names") or body.get("datasetNames")
     try:
         result = run_v3_mock_imports(dataset_names=dataset_names)
-        return _attach_import_product_contracts(result, result.get("rows"), source="mock_alerts_import")
+        return _attach_import_product_contracts(request, result, result.get("rows"), source="mock_alerts_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -215,7 +199,7 @@ def alerts(request: Request, active_only: bool = Query(default=False), limit: in
 
 @router.get("/alerts/{entity_type}/{entity_id}")
 def entity_alerts(request: Request, entity_type: str, entity_id: str, limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
-    return list_alerts_for_entity(entity_type, entity_id, limit=limit, user_id=request_user_id(request))
+    return list_alerts_for_entity(entity_type, entity_id, limit, user_id=request_user_id(request))
 
 
 @router.get("/versions")
