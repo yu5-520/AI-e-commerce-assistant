@@ -1,9 +1,7 @@
-"""V4.1 RAG-style operation experience memory service.
+"""RAG-style operation experience memory service.
 
-This service is intentionally lightweight for the MVP: it stores structured
-experience cards in SQLite and retrieves them by category, platform, store,
-problem type, operator style, quality score, and simple text matching. It is the
-RAG-ready layer for the operation experience flywheel.
+The MVP uses structured SQLite experience cards as the baseline RAG database.
+Formal vector RAG should index and rerank this baseline instead of replacing it.
 """
 
 from __future__ import annotations
@@ -15,9 +13,10 @@ from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services.account_service import current_user, user_display
+from src.services.demo_rag_seed_data import DEMO_RAG_MIN_SEED_COUNT, DEMO_RAG_SEED_VERSION, category_profiles, seed_cards
 from src.services.module_task_service import find_task
 
-MEMORY_VERSION = "4.1.0"
+MEMORY_VERSION = "10.11.0"
 APPROVED_STATUSES = {"approved", "seed_approved"}
 VISIBLE_STATUSES = {"pending_review", "approved", "seed_approved", "rejected"}
 
@@ -30,86 +29,9 @@ def make_id(prefix: str = "CASE") -> str:
     return f"{prefix}-{datetime.now().strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
 
 
-SEED_CATEGORY_PROFILES: List[Dict[str, Any]] = [
-    {
-        "profileId": "CAT-home_living_goods",
-        "memoryType": "category_profile",
-        "categoryId": "home_living_goods",
-        "categoryName": "家居生活商品",
-        "platformHints": {
-            "淘宝": ["搜索关键词覆盖", "尺寸和材质可信度", "场景图不要过度夸张"],
-            "拼多多": ["价格带", "套装数量", "耐用和到手价值"],
-            "抖音小店": ["前后对比", "痛点场景", "短视频首屏冲击"],
-        },
-        "riskFocus": ["尺寸理解偏差", "安装预期", "材质承诺", "库存承接", "退款率"],
-        "creativeFocus": ["容量可视化", "使用前后对比", "场景收纳", "尺寸标注"],
-        "qualityScore": 0.9,
-    }
-]
-
-
-SEED_PLAYBOOKS: List[Dict[str, Any]] = [
-    {
-        "caseId": "PLAYBOOK-low_roi_high_refund",
-        "caseType": "problem_playbook",
-        "level": "L3",
-        "status": "seed_approved",
-        "categoryId": "home_living_goods",
-        "platform": "通用",
-        "storeId": "global",
-        "problemType": "low_roi_high_refund",
-        "operatorStyle": "稳健型",
-        "title": "低 ROI + 高退款先查承接，不先放大预算",
-        "initialJudgment": "ROI 低同时退款率高时，问题常常不是单纯流量，而是商品承接、详情页承诺或售后预期。",
-        "effectiveActions": ["暂停扩大预算", "复查退款原因", "核对详情页承诺", "统一客服话术", "观察 24 小时退款率变化"],
-        "applicableConditions": ["点击率正常", "退款率高", "退款原因集中", "库存足够"],
-        "notApplicableConditions": ["点击率本身过低", "质量差评集中爆发", "毛利无法承接退款"],
-        "resultSummary": "优先控制损耗，再判断是否换素材或继续测试。",
-        "qualityScore": 0.86,
-        "effective": True,
-        "source": "seed_playbook",
-    },
-    {
-        "caseId": "PLAYBOOK-inventory_activity_risk",
-        "caseType": "problem_playbook",
-        "level": "L3",
-        "status": "seed_approved",
-        "categoryId": "home_living_goods",
-        "platform": "通用",
-        "storeId": "global",
-        "problemType": "low_inventory_activity",
-        "operatorStyle": "稳健型",
-        "title": "库存接近安全线时先确认补货周期",
-        "initialJudgment": "活动流量会放大库存风险，库存不足时不应只看转化数据。",
-        "effectiveActions": ["确认供应商补货周期", "估算活动消耗", "限制活动流量", "设置下架或限量边界"],
-        "applicableConditions": ["库存接近安全线", "活动或推广流量上升", "供应周期不确定"],
-        "notApplicableConditions": ["清库存目标", "补货当天可到", "低毛利尾货处理"],
-        "resultSummary": "防止爆单后缺货、退款和评分受损。",
-        "qualityScore": 0.82,
-        "effective": True,
-        "source": "seed_playbook",
-    },
-    {
-        "caseId": "NEG-low_ctr_direct_budget_cut",
-        "caseType": "negative_case",
-        "level": "L4",
-        "status": "seed_approved",
-        "categoryId": "home_living_goods",
-        "platform": "通用",
-        "storeId": "global",
-        "problemType": "low_ctr_low_conversion",
-        "operatorStyle": "失败案例",
-        "title": "点击率低时直接砍预算可能掩盖素材问题",
-        "initialJudgment": "点击率低通常先看标题、主图、人群和素材，不应直接归因到商品承接。",
-        "effectiveActions": ["保留小预算", "换主图方向", "测试人群", "再判断商品承接"],
-        "applicableConditions": ["点击率低", "曝光足够", "退款率未异常"],
-        "notApplicableConditions": ["退款率高", "库存不足", "毛利承接失败"],
-        "resultSummary": "作为避坑边界召回，不作为默认建议。",
-        "qualityScore": 0.78,
-        "effective": False,
-        "source": "seed_negative_case",
-    },
-]
+# Backward-compatible names used by older callers and tests.
+SEED_CATEGORY_PROFILES: List[Dict[str, Any]] = category_profiles()
+SEED_PLAYBOOKS: List[Dict[str, Any]] = seed_cards()
 
 
 def ensure_memory_tables() -> None:
@@ -137,6 +59,7 @@ def ensure_memory_tables() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_rag_cases_problem ON rag_experience_cards(problem_type, category_id, platform)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_rag_cases_status ON rag_experience_cards(status, level, quality_score)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rag_cases_type ON rag_experience_cards(case_type, problem_type)")
         conn.commit()
 
 
@@ -253,17 +176,28 @@ def upsert_case(card: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def seed_memory_if_empty() -> None:
+    """Ensure the Demo/MVP RAG baseline exists even after old installs already have a few cards.
+
+    Runtime reset must not clear this table, and existing approved human cases are protected.
+    Seed cards are upserted only when missing or when the existing row is a seed card.
+    """
     ensure_memory_tables()
+    seeds = seed_cards()
+    seed_ids = [card["caseId"] for card in seeds]
     with connect() as conn:
-        count = conn.execute("SELECT COUNT(*) AS count FROM rag_experience_cards").fetchone()["count"]
-    if count:
-        return
-    for card in SEED_PLAYBOOKS:
-        upsert_case(card)
+        rows = conn.execute(
+            f"SELECT case_id, status, payload FROM rag_experience_cards WHERE case_id IN ({','.join(['?'] * len(seed_ids))})",
+            tuple(seed_ids),
+        ).fetchall()
+    existing = {row["case_id"]: _row_to_case(row) for row in rows}
+    for card in seeds:
+        current = existing.get(card["caseId"])
+        if not current or current.get("status") == "seed_approved":
+            upsert_case(card)
 
 
 def list_category_profiles() -> List[Dict[str, Any]]:
-    return deepcopy(SEED_CATEGORY_PROFILES)
+    return category_profiles()
 
 
 def list_cases(status: str | None = None, level: str | None = None, limit: int = 50) -> List[Dict[str, Any]]:
@@ -288,10 +222,10 @@ def list_cases(status: str | None = None, level: str | None = None, limit: int =
 
 def _text_blob(card: Dict[str, Any]) -> str:
     values: List[str] = []
-    for key in ["title", "initialJudgment", "resultSummary", "problemType", "operatorStyle", "platform", "categoryId"]:
+    for key in ["title", "initialJudgment", "resultSummary", "problemType", "operatorStyle", "platform", "categoryId", "caseType"]:
         if card.get(key):
             values.append(str(card[key]))
-    for key in ["effectiveActions", "applicableConditions", "notApplicableConditions", "judgmentTags"]:
+    for key in ["effectiveActions", "applicableConditions", "notApplicableConditions", "judgmentTags", "evidenceRequired", "crossValidationRules"]:
         values.extend(str(item) for item in card.get(key) or [])
     return " ".join(values).lower()
 
@@ -300,6 +234,10 @@ def _score_case(card: Dict[str, Any], filters: Dict[str, Any], query: str | None
     score = float(card.get("qualityScore") or 0)
     if card.get("status") in APPROVED_STATUSES:
         score += 0.2
+    if card.get("caseType") == "cross_validation_rule":
+        score += 0.12
+    if card.get("caseType") == "acceptance_rule":
+        score += 0.08
     if filters.get("categoryId") and card.get("categoryId") == filters["categoryId"]:
         score += 0.25
     if filters.get("problemType") and card.get("problemType") == filters["problemType"]:
@@ -313,7 +251,7 @@ def _score_case(card: Dict[str, Any], filters: Dict[str, Any], query: str | None
     if query:
         blob = _text_blob(card)
         tokens = [token.lower() for token in str(query).replace("/", " ").replace("，", " ").split() if token]
-        score += min(0.3, 0.06 * sum(1 for token in tokens if token in blob))
+        score += min(0.36, 0.06 * sum(1 for token in tokens if token in blob))
     return round(score, 4)
 
 
@@ -329,7 +267,7 @@ def search_cases(
     min_quality: float = 0.0,
     limit: int = 5,
 ) -> Dict[str, Any]:
-    cases = list_cases(limit=300)
+    cases = list_cases(limit=500)
     filters = {
         "categoryId": category_id,
         "platform": platform,
@@ -359,24 +297,32 @@ def search_cases(
     result.sort(key=lambda item: item.get("retrievalScore", 0), reverse=True)
     return {
         "version": MEMORY_VERSION,
+        "seedVersion": DEMO_RAG_SEED_VERSION,
         "query": query,
         "filters": {key: value for key, value in filters.items() if value},
         "items": result[:limit],
         "totalMatched": len(result),
-        "retrievalRule": "标签过滤 + 质量分 + 简单关键词召回。当前为 V4.1 轻量 RAG-ready 层。",
+        "retrievalRule": "结构化标签过滤 + 质量分 + 关键词召回 + 交叉验证规则加权。当前为 Demo/MVP RAG 基线，正式版可升级为向量混合召回。",
+        "upgradePath": "vector_index + metadata_filter + quality_rerank + feedback_success_rate_rerank",
     }
 
 
 def infer_problem_type_from_task(task: Dict[str, Any]) -> str:
     text = " ".join(str(value) for value in [task.get("riskDomain"), task.get("taskType"), task.get("taskSignal"), task.get("task"), task.get("reason"), *(task.get("judgmentTags") or [])] if value)
-    if any(word in text for word in ["ROI", "ROAS", "退款", "售后", "低"]):
-        return "low_roi_high_refund"
     if any(word in text for word in ["库存", "补货", "活动"]):
         return "low_inventory_activity"
     if any(word in text for word in ["点击", "CTR", "主图", "标题"]):
         return "low_ctr_low_conversion"
+    if any(word in text for word in ["转化率", "详情页", "承接"]):
+        return "detail_page_conversion"
+    if any(word in text for word in ["ROI", "ROAS", "退款", "售后", "低"]):
+        return "low_roi_high_refund"
     if any(word in text for word in ["竞品", "差评"]):
         return "competitor_signal_to_test"
+    if any(word in text for word in ["上新", "新品", "测款"]):
+        return "listing_test_path"
+    if any(word in text for word in ["报表", "字段", "同步", "ERP", "CRM"]):
+        return "report_data_anomaly"
     return "general_operation"
 
 
@@ -495,7 +441,7 @@ def draft_experience_from_task(
 
 def update_case_status(case_id: str, *, status: str, reviewer_id: str | None = None, reason: str = "") -> Dict[str, Any] | None:
     seed_memory_if_empty()
-    case = next((item for item in list_cases(limit=500) if item.get("caseId") == case_id), None)
+    case = next((item for item in list_cases(limit=800) if item.get("caseId") == case_id), None)
     if not case:
         return None
     reviewer = current_user(reviewer_id)
@@ -526,14 +472,21 @@ def reject_case(case_id: str, *, reviewer_id: str | None = None, reason: str = "
 
 def memory_summary() -> Dict[str, Any]:
     seed_memory_if_empty()
-    cases = list_cases(limit=500)
+    cases = list_cases(limit=800)
+    cross_rules = [item for item in cases if item.get("caseType") == "cross_validation_rule"]
+    acceptance_rules = [item for item in cases if item.get("caseType") == "acceptance_rule"]
     return {
         "version": MEMORY_VERSION,
-        "memoryMode": "structured_experience_cards",
+        "seedVersion": DEMO_RAG_SEED_VERSION,
+        "memoryMode": "structured_experience_cards_with_demo_baseline",
         "total": len(cases),
         "approved": len([item for item in cases if item.get("status") in APPROVED_STATUSES]),
         "pendingReview": len([item for item in cases if item.get("status") == "pending_review"]),
         "negativeCases": len([item for item in cases if item.get("caseType") == "negative_case" or item.get("level") == "L4"]),
+        "crossValidationRules": len(cross_rules),
+        "acceptanceRules": len(acceptance_rules),
+        "baselineSeedCount": len([item for item in cases if item.get("seedVersion") == DEMO_RAG_SEED_VERSION]),
+        "baselineSeedMinimum": DEMO_RAG_MIN_SEED_COUNT,
         "categoryProfiles": list_category_profiles(),
         "levels": {
             "L0": "原始日志 / 拒绝入库",
@@ -542,6 +495,8 @@ def memory_summary() -> Dict[str, Any]:
             "L3": "高质量经验",
             "L4": "失败案例 / 避坑边界",
         },
+        "demoRagPrinciple": "Demo/MVP 阶段必须有结构化 RAG 经验库；正式上线只是升级为向量混合召回，不是从 0 建库。",
         "writeBoundary": "日报、周报和任务日志必须先提炼为经验卡，复核后才能进入正式 RAG 召回。",
         "protectionRule": "已批准经验卡不会被自动 feedbackDraft 降级覆盖。",
+        "vectorUpgradePath": "SQLite structured cards -> vector index -> metadata filter -> quality rerank -> success-rate rerank。",
     }
