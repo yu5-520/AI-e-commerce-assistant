@@ -1,13 +1,4 @@
-"""V10.4 task-driven product contract.
-
-V10 turns the system from architecture readiness into a task-driven product.
-Users should not configure labels, categories, workflow nodes, or routing rules.
-The system and Agent translate data changes into tasks; users finish work through tasks.
-V10.1 compresses the frontend navigation into a few product entries.
-V10.2 makes the UI hierarchy productized: compact title, dominant action, large task surface.
-V10.3 turns the dashboard into a today task workbench.
-V10.4 makes report import drive tasks and frontend refresh.
-"""
+"""V10.5 task-driven product contract."""
 
 from __future__ import annotations
 
@@ -15,7 +6,7 @@ from typing import Any, Dict
 
 from src.core.context import UserContext
 
-V100_TASK_PRODUCT_VERSION = "10.4.0"
+V100_TASK_PRODUCT_VERSION = "10.5.0"
 
 TASK_DRIVEN_PRINCIPLES = [
     "all user intervention must appear as a task",
@@ -26,7 +17,6 @@ TASK_DRIVEN_PRINCIPLES = [
 ]
 
 MINIMAL_NAVIGATION = ["dashboard", "reports", "operation", "tasks", "logs", "accounts", "system"]
-
 NAVIGATION_LABELS = {"dashboard": "总览", "reports": "报表", "operation": "经营", "tasks": "任务", "logs": "日志", "accounts": "账号", "system": "系统"}
 NAVIGATION_ROUTE_MAP = {"dashboard": "dashboard", "reports": "data-check", "operation": "operating-unit", "tasks": "business-actions", "logs": "business-report", "accounts": "accounts", "system": "system-status"}
 COLLAPSED_OPERATION_ROUTES = ["business-products", "business-competitors", "business-listing", "business-traffic"]
@@ -68,20 +58,26 @@ V103_DASHBOARD_RULES = [
     "dashboard is a workbench, not a menu wall or architecture status page",
 ]
 
-V104_IMPORT_TASK_FLOW = [
-    "report_uploaded",
-    "data_parsed_and_versioned",
-    "alerts_detected",
-    "tasks_created_or_merged",
-    "modules_refreshed",
-    "logs_written",
-]
-
+V104_IMPORT_TASK_FLOW = ["report_uploaded", "data_parsed_and_versioned", "alerts_detected", "tasks_created_or_merged", "modules_refreshed", "logs_written"]
 V104_IMPORT_REFRESH_CONTRACT = {
     "updatedModules": ["dashboard", "operation", "tasks", "reports", "logs"],
     "frontendRefreshTargets": ["dashboard", "operating-unit", "business-actions", "data-check", "business-report"],
     "userMessage": "已更新，生成 X 个任务",
     "dataFlowDisplay": "collapsed_status_line",
+}
+
+V105_CROSS_ACCOUNT_FLOW = [
+    "one_task_id_multiple_role_views",
+    "operator_submit_routes_to_manager_review",
+    "manager_review_routes_to_owner_progress",
+    "role_views_sync_after_each_transition",
+    "events_and_logs_keep_full_trace",
+]
+
+V105_ROLE_VIEW_RULES = {
+    "owner": {"surface": "progress", "actions": ["view", "follow", "confirm"]},
+    "manager": {"surface": "dispatch_review", "actions": ["dispatch", "approve", "reject"]},
+    "operator": {"surface": "execution", "actions": ["accept", "submit", "supplement"]},
 }
 
 TASK_FLOW_STAGES = ["data_uploaded", "agent_understands_context", "task_created", "role_view_synced", "user_action_submitted", "review_synced", "task_archived", "audit_written"]
@@ -98,7 +94,6 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
     return {
         "version": V100_TASK_PRODUCT_VERSION,
         "name": "V10 task-driven AI operating product",
-        "goal": "把 V9 的企业级架构验收收束成任务驱动产品：用户只处理任务，系统和 Agent 自动完成分类、标签、判断、流转、刷新和留痕。",
         "architectureEntry": "/api/architecture/v10/task-driven-product",
         "stableProductEntries": ["/api/modules", "/api/accounts", "/api/health"],
         "principles": TASK_DRIVEN_PRINCIPLES,
@@ -116,16 +111,14 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
         "dashboardRules": V103_DASHBOARD_RULES,
         "importTaskFlow": V104_IMPORT_TASK_FLOW,
         "importRefreshContract": V104_IMPORT_REFRESH_CONTRACT,
+        "crossAccountFlow": V105_CROSS_ACCOUNT_FLOW,
+        "roleViewRules": V105_ROLE_VIEW_RULES,
         "taskFlowStages": TASK_FLOW_STAGES,
         "nonGoals": [
             "不让用户默认确认标签",
             "不让用户手动维护分类作为主流程",
             "不把复杂流程节点暴露到经营界面",
-            "不把系统能力展示替代用户任务引导",
-            "不把商品、竞品、上新、流量继续放在主导航里",
-            "不让标题、说明和数据流转抢占主操作空间",
-            "不把总览做成数据菜单墙",
-            "不把报表导入流程图放在主页面",
+            "不让用户手动选择跨账号流程节点",
         ],
         "context": ctx.to_dict(),
         "auditMeta": ctx.audit_meta(),
