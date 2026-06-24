@@ -21,8 +21,8 @@ async def v100_task_driven_product(ctx: UserContext = Depends(get_current_contex
 async def v100_readiness_index(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     product = task_driven_product_summary(ctx)
     return {
-        "version": "10.7.0",
-        "status": "v10_7_agent_operating_profile_ready",
+        "version": "10.8.0",
+        "status": "v10_8_tag_change_tasks_ready",
         "entries": {"taskDrivenProduct": "/api/architecture/v10/task-driven-product", "health": "/api/health", "modules": "/api/modules", "accounts": "/api/accounts"},
         "principle": "用户只完成任务，系统和 Agent 自动完成理解、分类、标签、流转、同步和留痕。",
         "minimalNavigation": product["minimalNavigation"],
@@ -40,6 +40,8 @@ async def v100_readiness_index(ctx: UserContext = Depends(get_current_context)) 
         "operatingProfileRules": product["operatingProfileRules"],
         "operatingProfileTagTypes": product["operatingProfileTagTypes"],
         "operatingProfileSurfaces": product["operatingProfileSurfaces"],
+        "tagChangeTaskRules": product["tagChangeTaskRules"],
+        "tagChangeTaskFlow": product["tagChangeTaskFlow"],
         "taskTypes": product["taskTypes"],
         "auditMeta": ctx.audit_meta(),
     }
