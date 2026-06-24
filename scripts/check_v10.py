@@ -10,6 +10,7 @@ CHECK_FILES = [
     "src/api/routes/v10_product.py",
     "src/api/routes/data_import.py",
     "src/api/routes/modules/todo.py",
+    "src/services/data_source_connection_service.py",
     "src/services/v100_task_driven_product_service.py",
     "src/services/v104_import_task_sync_service.py",
     "src/services/v105_cross_account_flow_service.py",
@@ -27,7 +28,7 @@ RUNTIME_PATHS = {
     "/api/architecture/v9/readiness": "9.9.0",
 }
 
-V10_NAV_LABELS = ["总览", "报表", "经营", "任务", "日志", "账号", "系统"]
+V10_NAV_LABELS = ["总览", "数据", "经营", "任务", "日志", "账号", "系统"]
 COLLAPSED_NAV_LABELS = ["商品", "竞品", "上新", "流量"]
 V105_ROLES = ["owner", "manager", "operator"]
 
@@ -79,6 +80,9 @@ def check_runtime_routes():
     for path in RUNTIME_PATHS:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
+    for path in ["/api/data/source-connections", "/api/data/source-connections/{source_id}/sync"]:
+        if path not in registered_paths:
+            raise AssertionError(f"data source route not mounted: {path}")
 
     client = TestClient(app)
     for path, expected in RUNTIME_PATHS.items():
@@ -93,6 +97,19 @@ def check_runtime_routes():
     must(str(product), "rag_memory_candidate_after_review")
     if sorted((product.get("roleViewRules") or {}).keys()) != sorted(V105_ROLES):
         raise AssertionError("role view rules must contain owner/manager/operator")
+
+    connections = get_json(client, "/api/data/source-connections")
+    if connections.get("version") != "10.10.0":
+        raise AssertionError("data source connection surface must expose V10.10")
+    must(str(connections), "api_sources_primary_manual_upload_backup")
+    if "erp" not in (connections.get("primarySourceIds") or []) or "manual_upload" not in (connections.get("backupSourceIds") or []):
+        raise AssertionError("ERP/CRM/API sources must be primary and manual upload must be backup")
+    source_sync = post_json(client, "/api/data/source-connections/erp/sync", user_id="U001")
+    source_contract = source_sync.get("sourceConnection") or {}
+    if source_contract.get("priority") != "primary" or source_contract.get("sourceId") != "erp":
+        raise AssertionError("ERP source sync must use primary source contract")
+    if (source_sync.get("v104ImportTaskSync") or {}).get("source") != "erp_api_sync":
+        raise AssertionError("ERP source sync must still refresh V10.4 module sync contract")
 
     import_payload = post_json(
         client,
@@ -163,6 +180,7 @@ def main():
     v10_route = read("src/api/routes/v10_product.py")
     data_import = read("src/api/routes/data_import.py")
     todo_route = read("src/api/routes/modules/todo.py")
+    data_source_service = read("src/services/data_source_connection_service.py")
     v10_service = read("src/services/v100_task_driven_product_service.py")
     action_service = read("src/services/v106_task_action_simplifier.py")
     profile_service = read("src/services/v107_operating_profile_service.py")
@@ -172,6 +190,8 @@ def main():
     version = read("versioning/VERSION.md")
     readme = read("README.md")
     index = read("web_demo/index.html")
+    api_client = read("web_demo/core/api-client.js")
+    report_page = read("web_demo/modules/report/page.js")
     task_store = read("web_demo/core/task-store.js")
     system_status = read("web_demo/modules/system-status/page.js")
     v10_doc = read("docs/V10_TASK_DRIVEN_PRODUCT.md")
@@ -186,7 +206,9 @@ def main():
     must(tag_task_service, "V108_TAG_CHANGE_TASK_VERSION = \"10.8.0\"")
     must(acceptance_service, "V109_ACCEPTANCE_GUARD_VERSION = \"10.9.0\"")
     must(acceptance_service, "rag_memory_candidate_after_review")
-    must(data_import, "attach_v108_tag_change_tasks")
+    must(data_source_service, "api_sources_primary_manual_upload_backup")
+    must(data_import, "source_connections")
+    must(data_import, "sync_source_connection")
     must(todo_route, "acceptanceSurface")
     must(action_service, "V106_TASK_ACTION_VERSION = \"10.6.0\"")
     must(changelog, "## V10.9.0")
@@ -194,6 +216,11 @@ def main():
     must(readme, "V10.9.0")
     must(index, "?v=10.9.0")
     must(index, "core/task-store.js?v=10.9.1")
+    must(index, "core/api-client.js?v=10.9.2")
+    must(index, "modules/report/page.js?v=10.9.2")
+    must(api_client, "syncDataSource")
+    must(report_page, "经营数据接入")
+    must(report_page, "手动上传只作为备用补数")
     must(task_store, "window.AppTaskStore")
     must(task_store, "window.AppTaskActions")
     must(task_store, "hydrate")
@@ -203,7 +230,7 @@ def main():
     must(system_status, "acceptanceChain")
     must(v10_doc, "V10.9 acceptance guard")
     check_runtime_routes()
-    print("V10.9 task-driven acceptance guard passed.")
+    print("V10.9/V10.10 data-source primary guard passed.")
 
 
 if __name__ == "__main__":
