@@ -1,8 +1,7 @@
 """Task generation and playbook Agent service.
 
-V10.12 makes every task candidate evidence-first: the Agent must attach precise
-metric calculation, metric-baseline RAG, trend comparison, sample confidence, and
-cross-validation evidence before the operator sees a task.
+V10.13 keeps V10.12 metric/trend evidence, then turns the result into an
+operator-facing SOP. Tasks must be executable work orders, not vague advice.
 """
 
 from __future__ import annotations
@@ -16,8 +15,9 @@ from src.services.experience_memory_service import infer_problem_type_from_task,
 from src.services.module_projection_service import projected_products, projected_report_details, projected_report_groups, projected_traffic
 from src.services.module_task_service import create_task, find_task
 from src.services.v1012_metric_trend_evidence_service import build_metric_trend_evidence
+from src.services.v1013_task_sop_engine_service import build_task_sop
 
-TASK_AGENT_VERSION = "10.12.0"
+TASK_AGENT_VERSION = "10.13.0"
 FORBIDDEN_ACTIONS = ["不直接改价", "不直接投放", "不直接退款", "不直接发布商品", "不直接回写 ERP / CRM"]
 MODULE_ROUTES = {"product": "business-products", "traffic": "business-traffic", "competitor": "business-competitors", "listing": "business-listing", "report": "data-check"}
 MODULE_LABELS = {"product": "商品经营列表", "traffic": "流量测试台", "competitor": "竞品观察列表", "listing": "上新测试台", "report": "ERP / CRM 报表"}
@@ -55,10 +55,8 @@ def _source_item(source_module: str, entity_id: str | None = None, body: Dict[st
 
 
 def _text_from_item(item: Dict[str, Any]) -> str:
-    values: List[str] = []
-    for key in ["riskDomain", "taskType", "status", "statusLevel", "suggestion", "nextStep", "risk", "refundRate", "roi", "conversion", "conversion_rate", "ctr", "inventoryStatus", "afterSales", "badReview", "opportunity", "testType", "testPlan", "title", "sourceModule", "count", "latestDataVersion"]:
-        if item.get(key) is not None:
-            values.append(str(item[key]))
+    keys = ["riskDomain", "taskType", "status", "statusLevel", "suggestion", "nextStep", "risk", "refundRate", "roi", "conversion", "conversion_rate", "ctr", "inventoryStatus", "afterSales", "badReview", "opportunity", "testType", "testPlan", "title", "sourceModule", "count", "latestDataVersion"]
+    values = [str(item.get(key)) for key in keys if item.get(key) is not None]
     values.extend(str(value) for value in item.get("judgmentTags") or [])
     return " ".join(values)
 
@@ -69,11 +67,9 @@ def _problem_type(source_module: str, item: Dict[str, Any], metrics: Dict[str, A
     text = _text_from_item(payload)
     decision = ((metric_evidence or {}).get("taskDecision") or {}).get("decision")
     cross = (metric_evidence or {}).get("crossValidation") or {}
-    if decision == "growth":
-        if source_module == "listing" or any(word in text for word in ["新品", "上新", "测款"]):
-            return "listing_test_path"
-        return infer_action_problem_type(payload, source_module=source_module, fallback="general_operation")
     risk_hits = " ".join(cross.get("riskHits") or [])
+    if decision == "growth":
+        return "listing_test_path"
     if "库存" in risk_hits or any(word in text for word in ["库存", "补货", "库存告急", "库存偏低", "活动流量", "待补货"]):
         return "low_inventory_activity"
     if any(word in text for word in ["点击", "CTR", "ctr", "主图", "标题", "素材", "创意"]):
@@ -121,14 +117,22 @@ def _rule_hits(source_module: str, item: Dict[str, Any], metrics: Dict[str, Any]
         hits.append(f"交叉验证：{finding}")
     if decision == "growth":
         hits.append("增长趋势候选")
-    if any(word in text for word in ["点击", "CTR", "ctr", "主图", "标题", "素材"]): hits.append("点击 / 标题 / 主图测试信号")
-    if any(word in text for word in ["转化率", "详情页", "承接", "落地页"]): hits.append("转化承接需要优化")
-    if any(word in text for word in ["ROI", "ROAS", "roi", "0.9", "1.1"]): hits.append("ROI / ROAS 低于安全线")
-    if any(word in text for word in ["退款", "售后敏感", "退款偏高", "材质", "尺寸", "安装"]): hits.append("退款率或售后风险偏高")
-    if any(word in text for word in ["库存告急", "库存偏低", "待补货", "库存"]): hits.append("库存承接需要复核")
-    if source_module == "competitor" or any(word in text for word in ["竞品", "差评"]): hits.append("竞品差评可转为测试假设")
-    if source_module == "listing" or any(word in text for word in ["上新", "测试"]): hits.append("上新测试需要人工确认")
-    if source_module == "report" or any(word in text for word in ["字段", "同步", "导入", "ERP", "CRM", "数据版本"]): hits.append("报表异常需要转成具体经营任务")
+    if any(word in text for word in ["点击", "CTR", "ctr", "主图", "标题", "素材"]):
+        hits.append("点击 / 标题 / 主图测试信号")
+    if any(word in text for word in ["转化率", "详情页", "承接", "落地页"]):
+        hits.append("转化承接需要优化")
+    if any(word in text for word in ["ROI", "ROAS", "roi", "0.9", "1.1"]):
+        hits.append("ROI / ROAS 低于安全线")
+    if any(word in text for word in ["退款", "售后敏感", "退款偏高", "材质", "尺寸", "安装"]):
+        hits.append("退款率或售后风险偏高")
+    if any(word in text for word in ["库存告急", "库存偏低", "待补货", "库存"]):
+        hits.append("库存承接需要复核")
+    if source_module == "competitor" or any(word in text for word in ["竞品", "差评"]):
+        hits.append("竞品差评可转为测试假设")
+    if source_module == "listing" or any(word in text for word in ["上新", "测试"]):
+        hits.append("上新测试需要人工确认")
+    if source_module == "report" or any(word in text for word in ["字段", "同步", "导入", "ERP", "CRM", "数据版本"]):
+        hits.append("报表异常需要转成具体经营任务")
     return hits or ["模块投影数据出现待判断经营信号"]
 
 
@@ -151,24 +155,24 @@ def _confidence(rule_hits: List[str], rag_items: List[Dict[str, Any]], item: Dic
     return min(0.96, max(0.12, round(score, 2)))
 
 
-def _task_title(problem_type: str, item: Dict[str, Any], plan: Dict[str, Any], metric_evidence: Dict[str, Any] | None = None) -> str:
+def _task_title(problem_type: str, item: Dict[str, Any], metric_evidence: Dict[str, Any] | None = None) -> str:
     name = item.get("shortName") or item.get("sourceName") or item.get("targetProduct") or item.get("title") or item.get("name") or item.get("id") or "经营对象"
     decision = ((metric_evidence or {}).get("taskDecision") or {}).get("decision")
     if decision == "growth":
         return f"验证{name}增长趋势并制定小步放量方案"
     if decision == "observe":
         return f"观察{name}指标波动并补齐判断样本"
-    mapping = {"low_roi_high_refund": f"处理{name}低 ROI / 高退款问题", "low_inventory_activity": f"处理{name}库存承接风险", "low_ctr_low_conversion": f"测试{name}标题主图点击率", "detail_page_conversion": f"优化{name}详情页转化承接", "competitor_signal_to_test": f"把{name}竞品差评转成测试方案", "report_data_anomaly": f"把{name}报表异常转成经营任务"}
-    return mapping.get(problem_type, f"{name}{plan.get('actionPlanType') or '经营异常处理'}")
+    mapping = {"low_roi_high_refund": f"处理{name}低 ROI / 高退款问题", "low_inventory_activity": f"处理{name}库存承接风险", "low_ctr_low_conversion": f"测试{name}标题主图点击率", "detail_page_conversion": f"优化{name}详情页转化承接", "competitor_signal_to_test": f"把{name}竞品差评转成测试方案", "report_data_anomaly": f"把{name}报表异常转成经营任务", "listing_test_path": f"验证{name}增长趋势并制定小步放量方案"}
+    return mapping.get(problem_type, f"{name}经营异常处理")
 
 
-def _v1012_task_text(metric_evidence: Dict[str, Any], plan: Dict[str, Any]) -> str:
-    family = (metric_evidence.get("taskDecision") or {}).get("taskFamily") or "经营任务"
-    if family == "增长验证任务":
-        return "按精准指标、趋势和样本量验证增长信号，先小步加测，不直接猛投。"
-    if family == "观察/补样本任务":
-        return "当前样本量不足，只记录指标和趋势，先补充样本后再升级处理。"
-    return f"执行“{family}”，先按指标证据和交叉验证定位问题，再按处理包提交证据。"
+def _deadline_from_sop(task_sop: Dict[str, Any], priority: str) -> str:
+    steps = task_sop.get("executionSteps") or []
+    if not steps:
+        return "今天内" if priority == "高" else "明天前"
+    first = min(int(item.get("deadlineHours") or 24) for item in steps)
+    last = max(int(item.get("deadlineHours") or 24) for item in steps)
+    return f"{first} 小时内启动，{last} 小时内提交完整证据"
 
 
 def _build_task_draft(source_module: str, entity_id: str, item: Dict[str, Any], problem_type: str, confidence: float, rag_items: List[Dict[str, Any]], rule_hits: List[str], metric_evidence: Dict[str, Any]) -> Dict[str, Any]:
@@ -178,30 +182,32 @@ def _build_task_draft(source_module: str, entity_id: str, item: Dict[str, Any], 
     store_ids = [item.get("storeId")] if item.get("storeId") and item.get("storeId") != "global" else []
     plan = action_plan_for_problem(problem_type, item=item, source_module=source_module, rag_items=rag_items)
     package = plan.get("recommendedPackage") or {}
+    task_sop = build_task_sop(problem_type, task_decision=metric_evidence.get("taskDecision") or {}, metric_evidence=metric_evidence, rag_items=rag_items, company_policy=item.get("companyPolicy") or {})
+    sop_steps = task_sop.get("executionSteps") or []
     evidence_summary = metric_evidence.get("summary") or "暂无完整指标证据"
     base_evidence_required = plan.get("evidenceRequired") or []
     metric_required = ["指标证据截图或接口记录", "趋势比对结果", "处理前后 ROI / CTR / CVR / 退款率 / 库存数据"]
     return {
-        "title": _task_title(problem_type, item, plan, metric_evidence),
-        "task": _v1012_task_text(metric_evidence, plan),
+        "title": _task_title(problem_type, item, metric_evidence),
+        "task": f"执行《{task_sop.get('sopName')}》：按分时动作提交证据，不允许只写处理建议。",
         "reason": f"指标证据：{evidence_summary}。命中：{'、'.join(rule_hits[:5])}。参考 {len(rag_items)} 条复核经验，置信度 {confidence}。{plan.get('diagnosis')}",
         "priority": priority,
         "priorityLevel": "danger" if priority == "高" else "warning" if priority == "中" else "good",
-        "deadline": package.get("testDuration") or ("今天内" if priority == "高" else "明天前"),
+        "deadline": _deadline_from_sop(task_sop, priority),
         "riskDomain": risk_domain,
-        "actionType": plan.get("actionPlanType") or "处理",
-        "taskType": "V10.12 指标趋势证据任务",
-        "taskSignal": "MetricEvidence + TrendEvidence + BaselineRAG + CrossValidation + ActionPlan + RAG",
+        "actionType": task_sop.get("sopName") or plan.get("actionPlanType") or "处理",
+        "taskType": "V10.13 SOP 执行工单",
+        "taskSignal": "MetricEvidence + TrendEvidence + BaselineRAG + CrossValidation + TaskSOP + CompanyRAGAdjust",
         "entityType": MODULE_LABELS.get(source_module, "经营模块"),
         "entityId": entity_id,
-        "source": "V10.12 Metric Trend Evidence Agent",
+        "source": "V10.13 Task SOP Agent",
         "sourceModule": MODULE_LABELS.get(source_module, source_module),
         "sourceRoute": MODULE_ROUTES.get(source_module, "dashboard"),
         "productRoute": MODULE_ROUTES.get(source_module, "dashboard"),
         "storeIds": store_ids,
         "visibleStoreIds": store_ids,
         "productId": product_id,
-        "productTitle": item.get("title") or item.get("name") or _task_title(problem_type, item, plan, metric_evidence),
+        "productTitle": item.get("title") or item.get("name") or _task_title(problem_type, item, metric_evidence),
         "productShort": item.get("shortName") or item.get("sourceName") or item.get("targetProduct") or item.get("id") or "对象",
         "platform": item.get("platform") or item.get("source") or "通用",
         "store": item.get("store") or "经营单元",
@@ -213,18 +219,21 @@ def _build_task_draft(source_module: str, entity_id: str, item: Dict[str, Any], 
         "crossValidationEvidence": metric_evidence.get("crossValidation") or {},
         "taskDecision": metric_evidence.get("taskDecision") or {},
         "triggerEvidence": evidence_summary,
+        "taskExecutionSop": task_sop,
+        "companyRagAdjustment": task_sop.get("companyAdjustment") or {},
+        "completionGate": task_sop.get("completionGate") or {},
         "actionPlan": plan,
         "selectedPackage": package,
         "executionPackages": plan.get("executionPackages") or [],
-        "executionSteps": plan.get("executionSteps") or [],
-        "evidenceRequired": [*metric_required, *base_evidence_required],
+        "executionSteps": sop_steps,
+        "evidenceRequired": [*metric_required, *base_evidence_required, *[e for step in sop_steps for e in step.get("requiredEvidence") or []]][:24],
         "submitMetrics": ["当前值", "基线值", "趋势变化", "样本量", *(plan.get("submitMetrics") or [])],
-        "acceptanceCriteria": ["任务完成必须提交精准指标、趋势比对和处理后复盘数据。", *(plan.get("acceptanceCriteria") or [])],
-        "failureThreshold": plan.get("failureThreshold") or [],
-        "reviewFocus": ["指标是否算清楚", "趋势是否连续成立", "交叉验证是否支持该任务", *(plan.get("reviewFocus") or [])],
-        "judgmentTags": [problem_type, risk_domain, (metric_evidence.get("taskDecision") or {}).get("decision"), plan.get("actionPlanType"), *rule_hits[:3]],
+        "acceptanceCriteria": ["任务完成必须提交精准指标、趋势比对、SOP 要求证据和处理后复盘数据。", "未完成 SOP 证据门，不允许标记完成。", *(plan.get("acceptanceCriteria") or [])],
+        "failureThreshold": [*(plan.get("failureThreshold") or []), *[step.get("failureCondition") for step in sop_steps if step.get("failureCondition")]][:10]],
+        "reviewFocus": ["指标是否算清楚", "趋势是否连续成立", "交叉验证是否支持该任务", "SOP 每一步证据是否完整", *(plan.get("reviewFocus") or [])],
+        "judgmentTags": [problem_type, risk_domain, (metric_evidence.get("taskDecision") or {}).get("decision"), task_sop.get("sopName"), *rule_hits[:3]],
         "createdByRole": "agent",
-        "agentJudgment": {"status": "advisory", "version": TASK_AGENT_VERSION, "confidence": confidence, "problemType": problem_type, "actionPlanType": plan.get("actionPlanType"), "ragReferences": [case.get("caseId") for case in rag_items], "metricEvidenceVersion": metric_evidence.get("version"), "boundary": "Agent 只生成带精准指标和趋势证据的任务候选，不直接执行经营动作。", "forbiddenActions": FORBIDDEN_ACTIONS},
+        "agentJudgment": {"status": "advisory", "version": TASK_AGENT_VERSION, "confidence": confidence, "problemType": problem_type, "sopId": task_sop.get("sopId"), "actionPlanType": plan.get("actionPlanType"), "ragReferences": [case.get("caseId") for case in rag_items], "metricEvidenceVersion": metric_evidence.get("version"), "taskSopVersion": task_sop.get("version"), "boundary": "Agent 只生成带精准指标、趋势证据和可执行 SOP 的任务候选，不直接执行经营动作。", "forbiddenActions": FORBIDDEN_ACTIONS},
     }
 
 
@@ -234,6 +243,8 @@ def generate_task_candidates(*, source_module: str, entity_id: str | None = None
     item = _source_item(source_module, entity_id=entity_id, body=body, user_id=user_id)
     if not item:
         return {"version": TASK_AGENT_VERSION, "candidates": [], "message": "source item not found"}
+    if body.get("companyPolicy"):
+        item["companyPolicy"] = body.get("companyPolicy")
     final_entity_id = entity_id or body.get("entityId") or item.get("id") or item.get("productId") or source_module
     metrics = body.get("metrics") or {}
     category_id = body.get("categoryId") or item.get("categoryId") or "home_living_goods"
@@ -247,8 +258,8 @@ def generate_task_candidates(*, source_module: str, entity_id: str | None = None
     rag_items = rag.get("items") or []
     conf = _confidence(hits, rag_items, item, metric_evidence)
     task_draft = _build_task_draft(source_module, final_entity_id, item, problem_type, conf, rag_items, hits, metric_evidence)
-    candidate = {"candidateId": f"CAND-V1012-{source_module}-{final_entity_id}", "sourceModule": source_module, "entityId": final_entity_id, "problemType": problem_type, "problemLabel": task_draft.get("actionPlan", {}).get("problemLabel"), "actionPlanType": task_draft.get("actionPlan", {}).get("actionPlanType"), "confidence": conf, "confidenceLevel": "high" if conf >= 0.75 else "medium" if conf >= 0.45 else "low", "ruleHits": hits, "metricEvidence": metric_evidence, "taskDraft": task_draft, "executionPackages": task_draft.get("executionPackages") or [], "recommendedPackage": task_draft.get("selectedPackage")}
-    return {"version": TASK_AGENT_VERSION, "sourceModule": source_module, "entityId": final_entity_id, "viewer": _viewer(user_id), "sourceItem": item, "v1012MetricTrendEvidence": metric_evidence, "ragReferences": rag_items, "candidates": [candidate], "message": "已基于 V10.12 精准指标、趋势比对、RAG 基线和交叉验证生成任务候选。"}
+    candidate = {"candidateId": f"CAND-V1013-{source_module}-{final_entity_id}", "sourceModule": source_module, "entityId": final_entity_id, "problemType": problem_type, "problemLabel": task_draft.get("actionPlan", {}).get("problemLabel"), "actionPlanType": task_draft.get("actionPlan", {}).get("actionPlanType"), "confidence": conf, "confidenceLevel": "high" if conf >= 0.75 else "medium" if conf >= 0.45 else "low", "ruleHits": hits, "metricEvidence": metric_evidence, "taskExecutionSop": task_draft.get("taskExecutionSop"), "taskDraft": task_draft, "executionPackages": task_draft.get("executionPackages") or [], "recommendedPackage": task_draft.get("selectedPackage")}
+    return {"version": TASK_AGENT_VERSION, "sourceModule": source_module, "entityId": final_entity_id, "viewer": _viewer(user_id), "sourceItem": item, "v1012MetricTrendEvidence": metric_evidence, "v1013TaskSop": task_draft.get("taskExecutionSop"), "ragReferences": rag_items, "candidates": [candidate], "message": "已基于 V10.13 精准指标、趋势比对、RAG 基线、交叉验证和可执行 SOP 生成任务候选。"}
 
 
 def create_task_from_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -264,10 +275,12 @@ def task_playbook(task_id: str, user_id: str | None = None, preferred_style: str
     rag_items = rag.get("items") or []
     plan = action_plan_for_problem(problem_type, item=task, source_module=task.get("sourceModule") or "task", rag_items=rag_items)
     package = plan.get("recommendedPackage") or {}
+    task_sop = task.get("taskExecutionSop") or build_task_sop(problem_type, task_decision=task.get("taskDecision") or {}, metric_evidence={"metricEvidence": task.get("metricEvidence") or [], "trendEvidence": task.get("trendEvidence") or [], "crossValidation": task.get("crossValidationEvidence") or {}, "taskDecision": task.get("taskDecision") or {}}, rag_items=rag_items)
+    steps = task_sop.get("executionSteps") or plan.get("executionSteps") or []
     styles = [
-        {"style": "稳健型", "focus": "先控风险，再小步处理", "steps": plan.get("executionSteps") or []},
-        {"style": "增长型", "focus": "在证据足够时放大有效动作", "steps": [*(plan.get("executionSteps") or []), "记录放量前后的关键指标"]},
-        {"style": "利润型", "focus": "优先复核成本、价格和退款影响", "steps": [*(plan.get("executionSteps") or []), "提交毛利和退款影响说明"]},
+        {"style": "稳健型", "focus": "先控风险，再小步处理", "steps": steps},
+        {"style": "增长型", "focus": "在证据足够时放大有效动作", "steps": [*steps, {"action": "记录放量前后的关键指标", "requiredEvidence": ["处理前后 ROI / CTR / CVR / 退款率 / 库存数据"]}]},
+        {"style": "利润型", "focus": "优先复核成本、价格和退款影响", "steps": [*steps, {"action": "提交毛利和退款影响说明", "requiredEvidence": ["毛利率", "退款率", "成本变化"]}]},
     ]
     selected = next((item for item in styles if item["style"] == preferred_style), styles[0])
-    return {"version": TASK_AGENT_VERSION, "taskId": task_id, "viewer": _viewer(user_id), "problemType": problem_type, "problemLabel": plan.get("problemLabel"), "actionPlan": plan, "recommendedPackage": package, "metricEvidence": task.get("metricEvidence") or [], "trendEvidence": task.get("trendEvidence") or [], "crossValidationEvidence": task.get("crossValidationEvidence") or {}, "ragReferences": rag_items, "playbooks": styles, "selectedPlaybook": selected, "forbiddenActions": FORBIDDEN_ACTIONS, "boundary": "Task Agent 只给执行打法和证据要求，不直接完成任务。"}
+    return {"version": TASK_AGENT_VERSION, "taskId": task_id, "viewer": _viewer(user_id), "problemType": problem_type, "problemLabel": plan.get("problemLabel"), "actionPlan": plan, "recommendedPackage": package, "taskExecutionSop": task_sop, "metricEvidence": task.get("metricEvidence") or [], "trendEvidence": task.get("trendEvidence") or [], "crossValidationEvidence": task.get("crossValidationEvidence") or {}, "ragReferences": rag_items, "playbooks": styles, "selectedPlaybook": selected, "forbiddenActions": FORBIDDEN_ACTIONS, "boundary": "Task Agent 只给执行打法、SOP 和证据要求，不直接完成任务。"}
