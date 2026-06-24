@@ -175,7 +175,7 @@ def main():
     must(import_sync_service, "V104_IMPORT_SYNC_VERSION = \"10.4.0\"")
     must(import_sync_service, "v104ImportTaskSync")
     must(data_import_route, "attach_v104_import_sync")
-    must(data_import_route, "v10.4 refresh contract")
+    must(data_import_route, "V10.4 refresh contract")
     must(dashboard_service, "todayWorkbench")
     must(changelog, "## V10.4.0")
     must(version, "10.4.0")
