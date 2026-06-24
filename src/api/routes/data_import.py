@@ -33,6 +33,7 @@ from src.services.report_schema_service import (
 )
 from src.services.risk_task_service import generate_risk_tasks_for_signals
 from src.services.trend_signal_service import ingest_product_trends
+from src.services.v104_import_task_sync_service import attach_v104_import_sync
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
@@ -143,11 +144,7 @@ def version_detail(request: Request, data_version: str) -> Dict[str, Any]:
         detail = get_data_version_detail(data_version, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    detail["permissions"] = {
-        "canRollback": can_rollback(user_id) and bool(detail.get("record", {}).get("canRollback")),
-        "canDelete": True,
-        "rollbackRoleIds": sorted(ROLLBACK_ROLE_IDS),
-    }
+    detail["permissions"] = {"canRollback": can_rollback(user_id) and bool(detail.get("record", {}).get("canRollback")), "canDelete": True, "rollbackRoleIds": sorted(ROLLBACK_ROLE_IDS)}
     return detail
 
 
@@ -158,34 +155,20 @@ def rollback_version(request: Request, data_version: str, body: Dict[str, Any] |
     user_id = request_user_id(request)
     require_rollback_permission(user_id)
     try:
-        return rollback_data_version(
-            data_version,
-            operator_id=user_id,
-            reason=body.get("reason") or body.get("note"),
-            task_strategy=body.get("task_strategy") or body.get("taskStrategy") or "review",
-        )
+        return rollback_data_version(data_version, operator_id=user_id, reason=body.get("reason") or body.get("note"), task_strategy=body.get("task_strategy") or body.get("taskStrategy") or "review")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/versions/{data_version}")
-def delete_version(
-    request: Request,
-    data_version: str,
-    confirm: bool = Query(default=False),
-    body: Dict[str, Any] | None = Body(default=None),
-) -> Dict[str, Any]:
+def delete_version(request: Request, data_version: str, confirm: bool = Query(default=False), body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
     """Hard-delete one demo data version so test imports do not keep stacking."""
     if not confirm:
         raise HTTPException(status_code=400, detail="删除导入记录需要 confirm=true")
     body = body or {}
     user_id = request_user_id(request)
     try:
-        return delete_data_version(
-            data_version,
-            operator_id=user_id,
-            reason=body.get("reason") or body.get("note") or "Demo 阶段删除导入记录。",
-        )
+        return delete_data_version(data_version, operator_id=user_id, reason=body.get("reason") or body.get("note") or "Demo 阶段删除导入记录。")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -203,19 +186,14 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
-        return preview_report_dataset(
-            str(dataset_name),
-            rows=body.get("rows"),
-            field_mapping=body.get("field_mapping") or body.get("fieldMapping"),
-            source_system=body.get("source_system") or body.get("sourceSystem"),
-        )
+        return preview_report_dataset(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), source_system=body.get("source_system") or body.get("sourceSystem"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/confirm")
 def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Confirm a previewed report import, then trigger scoped alerts/tasks, trends, and V6.2 risk tasks."""
+    """Confirm a previewed report import, then trigger scoped alerts/tasks, trends, risk tasks and V10.4 refresh contract."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
@@ -228,68 +206,57 @@ def confirm_import(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
             auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
             source_system=source_system,
         )
-        return _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
+        synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
+        return attach_v104_import_sync(synced, source="confirm_report_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/report")
 def import_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Import one report payload, create a data version, then trigger scoped alerts."""
+    """Import one report payload, create a data version, then trigger scoped alerts/tasks and V10.4 refresh contract."""
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
-        result = import_report_dataset(
-            str(dataset_name),
-            rows=body.get("rows"),
-            auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False,
-        )
-        return _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        result = import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False)
+        synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        return attach_v104_import_sync(synced, source="report_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/import/mock-alerts")
 def import_mock_alerts(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    """Run report-driven alert generation from current examples/*.csv files."""
+    """Run report-driven alert generation from current examples/*.csv files and return V10.4 refresh contract."""
     dataset_names = body.get("dataset_names") or body.get("datasetNames")
     try:
-        return run_v3_mock_imports(dataset_names=dataset_names)
+        result = run_v3_mock_imports(dataset_names=dataset_names)
+        return attach_v104_import_sync(result, source="mock_alerts_import")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/versions")
-def data_versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
-    """List recent data snapshots created by report imports."""
-    return list_data_versions(limit=limit)
-
-
-@router.get("/versions/latest")
-def latest_version() -> Dict[str, Any]:
-    """Return the latest data version used by global warning refresh."""
-    latest = latest_data_version()
-    return latest or {"version": "6.2.0", "message": "No data snapshot has been imported yet."}
+@router.get("/v3-summary")
+def v3_dashboard_summary(request: Request) -> Dict[str, Any]:
+    return get_v3_dashboard_summary(request_user_id(request))
 
 
 @router.get("/alerts")
-def alerts(
-    request: Request,
-    limit: int = Query(default=50, ge=1, le=200),
-    active_only: bool = Query(default=False),
-) -> List[Dict[str, Any]]:
-    """List report-triggered alert events scoped by current account store access."""
+def alerts(request: Request, active_only: bool = Query(default=False), limit: int = Query(default=50, ge=1, le=200)) -> List[Dict[str, Any]]:
     return list_alert_events(limit=limit, active_only=active_only, user_id=request_user_id(request))
 
 
-@router.get("/alerts/entity/{entity_type}/{entity_id}")
-def entity_alerts(request: Request, entity_type: str, entity_id: str) -> List[Dict[str, Any]]:
-    """List alert events for one product/customer/entity scoped by current account."""
-    return list_alerts_for_entity(entity_type, entity_id, user_id=request_user_id(request))
+@router.get("/alerts/{entity_type}/{entity_id}")
+def entity_alerts(request: Request, entity_type: str, entity_id: str, limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
+    return list_alerts_for_entity(entity_type, entity_id, limit=limit, user_id=request_user_id(request))
 
 
-@router.get("/v3-summary")
-def v3_summary(request: Request) -> Dict[str, Any]:
-    """Global data-version and alert summary scoped by current account."""
-    return get_v3_dashboard_summary(request_user_id(request))
+@router.get("/versions")
+def versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
+    return list_data_versions(limit=limit)
+
+
+@router.get("/latest-version")
+def latest_version() -> Dict[str, Any] | None:
+    return latest_data_version()
