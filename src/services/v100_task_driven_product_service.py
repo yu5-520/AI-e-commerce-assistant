@@ -1,9 +1,10 @@
-"""V10.1 task-driven product contract.
+"""V10.2 task-driven product contract.
 
 V10 turns the system from architecture readiness into a task-driven product.
 Users should not configure labels, categories, workflow nodes, or routing rules.
 The system and Agent translate data changes into tasks; users finish work through tasks.
 V10.1 compresses the frontend navigation into a few product entries.
+V10.2 makes the UI hierarchy productized: compact title, dominant action, large task surface.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Any, Dict
 
 from src.core.context import UserContext
 
-V100_TASK_PRODUCT_VERSION = "10.1.0"
+V100_TASK_PRODUCT_VERSION = "10.2.0"
 
 TASK_DRIVEN_PRINCIPLES = [
     "all user intervention must appear as a task",
@@ -91,7 +92,17 @@ FRONTEND_LAYOUT_RULES = {
     "dataFlow": "collapsed_by_default",
     "systemInfo": "system_page_only",
     "taskCard": "primary_surface",
+    "visualRatio": "main_70_aux_20_title_10",
+    "firstScreenGoal": "user_knows_next_action",
 }
+
+V102_UI_PRODUCTIZATION_RULES = [
+    "topbar and page hero stay compact",
+    "main action and task cards occupy the strongest visual weight",
+    "data flow is summarized in one line or collapsed into details",
+    "system status and version detail do not compete with daily operation",
+    "each page keeps a clear primary action above secondary data",
+]
 
 TASK_FLOW_STAGES = [
     "data_uploaded",
@@ -130,6 +141,7 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
         "taskTypes": TASK_TYPES,
         "agentAutomationScope": AGENT_AUTOMATION_SCOPE,
         "frontendLayoutRules": FRONTEND_LAYOUT_RULES,
+        "uiProductizationRules": V102_UI_PRODUCTIZATION_RULES,
         "taskFlowStages": TASK_FLOW_STAGES,
         "nonGoals": [
             "不让用户默认确认标签",
@@ -137,6 +149,7 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
             "不把复杂流程节点暴露到经营界面",
             "不把系统能力展示替代用户任务引导",
             "不把商品、竞品、上新、流量继续放在主导航里",
+            "不让标题、说明和数据流转抢占主操作空间",
         ],
         "context": ctx.to_dict(),
         "auditMeta": ctx.audit_meta(),
