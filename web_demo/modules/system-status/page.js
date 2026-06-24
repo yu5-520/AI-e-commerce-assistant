@@ -23,18 +23,9 @@
     title: "系统状态",
     async render() {
       const [health, security, repository, architecture, v7, v98, v99, v9, v10, v10Ready] = await Promise.all([
-        loadJson("/api/health", {}),
-        loadJson("/api/system/security", {}),
-        loadJson("/api/system/repositories", {}),
-        loadJson("/api/architecture/p0", {}),
-        loadJson("/api/architecture/v7", {}),
-        loadJson("/api/architecture/v9/ops-authorization", {}),
-        loadJson("/api/architecture/v9/delivery-readiness", {}),
-        loadJson("/api/architecture/v9/readiness", {}),
-        loadJson("/api/architecture/v10/task-driven-product", {}),
-        loadJson("/api/architecture/v10/readiness", {}),
+        loadJson("/api/health", {}), loadJson("/api/system/security", {}), loadJson("/api/system/repositories", {}), loadJson("/api/architecture/p0", {}), loadJson("/api/architecture/v7", {}), loadJson("/api/architecture/v9/ops-authorization", {}), loadJson("/api/architecture/v9/delivery-readiness", {}), loadJson("/api/architecture/v9/readiness", {}), loadJson("/api/architecture/v10/task-driven-product", {}), loadJson("/api/architecture/v10/readiness", {}),
       ]);
-      const apiVersion = health?.version || v10Ready?.version || v10?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "10.4.0";
+      const apiVersion = health?.version || v10Ready?.version || v10?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "10.5.0";
       const layers = v7?.controlPlane?.layers || architecture?.layers || [];
       const flags = v7?.tenantConfig?.featureFlags || [];
       const enabledFlags = flags.filter((flag) => flag.enabledForContext);
@@ -51,58 +42,38 @@
       const dashboardRules = v10?.dashboardRules || v10Ready?.dashboardRules || [];
       const importTaskFlow = v10?.importTaskFlow || v10Ready?.importTaskFlow || [];
       const importRefresh = v10?.importRefreshContract || v10Ready?.importRefreshContract || {};
+      const crossAccountFlow = v10?.crossAccountFlow || v10Ready?.crossAccountFlow || [];
+      const roleViewRules = v10?.roleViewRules || v10Ready?.roleViewRules || {};
       const entries = v9?.entries || { opsAuthorization: health?.v98Entry, deliveryReadiness: health?.v99Entry };
       const readinessAreas = Object.entries(v99?.readinessAreas || {});
       const deliveryStages = v99?.deliveryStages || [];
       const opsRoles = Object.keys(v98?.roles || {});
       const separationRules = v98?.separationRules || [];
-      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V10.4</p><h2>系统状态</h2><p>集中查看任务驱动产品原则、报表导入驱动任务、今日任务台和 V9 交付验收。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v10Ready?.status || "report-import-task-sync")}</small></div></section>
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V10.5</p><h2>系统状态</h2><p>集中查看任务驱动产品原则、跨账号任务流转、报表导入驱动任务和 V9 交付验收。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v10Ready?.status || "cross-account-task-flow")}</small></div></section>
       <section class="system-metric-grid">
-        ${metric("API 版本", apiVersion, apiVersion === "10.4.0" ? "good" : "warn")}
-        ${metric("导入触发", importTaskFlow.length, "good")}
+        ${metric("API 版本", apiVersion, apiVersion === "10.5.0" ? "good" : "warn")}
+        ${metric("跨账号规则", crossAccountFlow.length, "good")}
+        ${metric("角色视图", Object.keys(roleViewRules).length, "good")}
         ${metric("刷新模块", (importRefresh.updatedModules || []).length, "good")}
-        ${metric("任务台结构", dashboardSections.length, "good")}
       </section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.4 报表导入驱动任务</h3>${pill(v10?.version || "10.4.0", "good")}</div><div class="system-layer-list">
+      <section class="page-section system-section"><div class="section-header"><h3>V10.5 跨账号任务流转</h3>${pill(v10?.version || "10.5.0", "good")}</div><div class="system-layer-list">
+        ${crossAccountFlow.map((item) => textRow(item, "自动流转规则", "已固定")).join("") || "<p>暂无跨账号规则。</p>"}
+        ${Object.entries(roleViewRules).map(([role, view]) => textRow(role, `${view.surface || "role"} · ${(view.actions || []).join(" / ")}`, "已固定")).join("")}
+      </div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10.4 报表导入驱动任务</h3>${pill(v10?.version || "10.5.0", "good")}</div><div class="system-layer-list">
         ${importTaskFlow.map((item) => textRow(item, "导入后端流程", "已固定")).join("") || "<p>暂无导入流程。</p>"}
         ${Object.entries(importRefresh).map(([name, value]) => textRow(name, Array.isArray(value) ? value.join(" / ") : value, "已固定")).join("")}
       </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.3 今日任务台</h3>${pill(v10?.version || "10.4.0", "good")}</div><div class="system-layer-list">
-        ${dashboardSections.map((item) => textRow(item, "总览任务台结构", "已固定")).join("") || "<p>暂无任务台结构。</p>"}
-        ${dashboardRules.map((item, index) => textRow(`任务台规则 ${index + 1}`, item, "已固定")).join("")}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.2 产品化排版</h3>${pill(v10?.version || "10.4.0", "good")}</div><div class="system-layer-list">
-        ${Object.entries(layoutRules).map(([name, value]) => textRow(name, value, "已固定")).join("") || "<p>暂无排版规则。</p>"}
-        ${uiRules.map((item, index) => textRow(`UI 规则 ${index + 1}`, item, "已固定")).join("")}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.1 主导航压缩</h3>${pill(v10?.version || "10.4.0", "good")}</div><div class="system-layer-list">
-        ${minimalNav.map((item) => textRow(item, "主导航入口", "已固定")).join("") || "<p>暂无主导航数据。</p>"}
-        ${collapsedRoutes.map((item) => textRow(item, "折叠到经营模块", "已固定")).join("")}
-        ${navRules.slice(0, 5).map((item, index) => textRow(`规则 ${index + 1}`, item, "已固定")).join("")}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10 任务驱动产品</h3>${pill(v10?.version || "10.4.0", "good")}</div><div class="system-layer-list">
-        ${principles.map((item, index) => textRow(`原则 ${index + 1}`, item, "已固定")).join("") || "<p>暂无 V10 产品原则。</p>"}
-        ${taskTypes.map((item) => textRow(item, "需要用户介入时以任务出现", "已固定")).join("")}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10 readiness 入口</h3>${pill(v10Ready?.status || "mounted", "good")}</div><div class="system-layer-list">
-        ${Object.entries(v10Entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V10 入口。</p>"}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V9.9 交付验收</h3>${pill(v99?.version || "9.9.0", "good")}</div><div class="system-layer-list">
-        ${readinessAreas.map(([name, items]) => textRow(name, Array.isArray(items) ? items.join(" / ") : items, "已固定")).join("") || "<p>暂无 V9.9 readiness 数据。</p>"}
-        ${deliveryStages.slice(0, 4).map((item) => textRow(item, "delivery stage", "已固定")).join("")}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V9 readiness 入口</h3>${pill(v9?.status || "mounted", "good")}</div><div class="system-layer-list">
-        ${Object.entries(entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V9 入口。</p>"}
-      </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V9.8 受托运维边界</h3>${pill(v98?.version || "9.8.0", "good")}</div><div class="system-layer-list">
-        ${opsRoles.map((role) => textRow(role, v98?.roles?.[role]?.type || "role", "已固定")).join("") || "<p>暂无角色边界。</p>"}
-        ${separationRules.slice(0, 3).map((rule, index) => textRow(`边界规则 ${index + 1}`, rule, "已固定")).join("")}
-      </div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10.3 今日任务台</h3>${pill(v10?.version || "10.5.0", "good")}</div><div class="system-layer-list">${dashboardSections.map((item) => textRow(item, "总览任务台结构", "已固定")).join("")}${dashboardRules.map((item, index) => textRow(`任务台规则 ${index + 1}`, item, "已固定")).join("")}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10.2 产品化排版</h3>${pill(v10?.version || "10.5.0", "good")}</div><div class="system-layer-list">${Object.entries(layoutRules).map(([name, value]) => textRow(name, value, "已固定")).join("")}${uiRules.map((item, index) => textRow(`UI 规则 ${index + 1}`, item, "已固定")).join("")}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10.1 主导航压缩</h3>${pill(v10?.version || "10.5.0", "good")}</div><div class="system-layer-list">${minimalNav.map((item) => textRow(item, "主导航入口", "已固定")).join("")}${collapsedRoutes.map((item) => textRow(item, "折叠到经营模块", "已固定")).join("")}${navRules.slice(0, 5).map((item, index) => textRow(`规则 ${index + 1}`, item, "已固定")).join("")}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10 任务驱动产品</h3>${pill(v10?.version || "10.5.0", "good")}</div><div class="system-layer-list">${principles.map((item, index) => textRow(`原则 ${index + 1}`, item, "已固定")).join("")}${taskTypes.map((item) => textRow(item, "需要用户介入时以任务出现", "已固定")).join("")}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10 readiness 入口</h3>${pill(v10Ready?.status || "mounted", "good")}</div><div class="system-layer-list">${Object.entries(v10Entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V10 入口。</p>"}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V9.9 交付验收</h3>${pill(v99?.version || "9.9.0", "good")}</div><div class="system-layer-list">${readinessAreas.map(([name, items]) => textRow(name, Array.isArray(items) ? items.join(" / ") : items, "已固定")).join("")}${deliveryStages.slice(0, 4).map((item) => textRow(item, "delivery stage", "已固定")).join("")}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V9 readiness 入口</h3>${pill(v9?.status || "mounted", "good")}</div><div class="system-layer-list">${Object.entries(entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V9 入口。</p>"}</div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V9.8 受托运维边界</h3>${pill(v98?.version || "9.8.0", "good")}</div><div class="system-layer-list">${opsRoles.map((role) => textRow(role, v98?.roles?.[role]?.type || "role", "已固定")).join("")}${separationRules.slice(0, 3).map((rule, index) => textRow(`边界规则 ${index + 1}`, rule, "已固定")).join("")}</div></section>
       <section class="page-section system-section"><div class="section-header"><h3>V7 控制面</h3>${pill(v7?.version || "runtime", "neutral")}</div><div class="system-layer-list">${layers.map(layerRow).join("") || "<p>暂无架构层数据。</p>"}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>功能开关</h3>${pill(`${enabledFlags.length}/${flags.length} 当前可用`, "good")}</div><div class="system-layer-list">
-        <article class="system-layer-row"><div><strong>${s(config.edition || config.plan || "tenant")}</strong><span>${s((config.enabledModules || []).join(" / "))}</span></div>${pill(config.workflowMode || "workflow", "good")}</article>
-        ${flags.map(flagRow).join("") || "<p>暂无功能开关。</p>"}
-      </div></section>`;
+      <section class="page-section system-section"><div class="section-header"><h3>功能开关</h3>${pill(`${enabledFlags.length}/${flags.length} 当前可用`, "good")}</div><div class="system-layer-list"><article class="system-layer-row"><div><strong>${s(config.edition || config.plan || "tenant")}</strong><span>${s((config.enabledModules || []).join(" / "))}</span></div>${pill(config.workflowMode || "workflow", "good")}</article>${flags.map(flagRow).join("") || "<p>暂无功能开关。</p>"}</div></section>`;
     },
     mount(ctx) { ctx.delegate("[data-system-refresh]", "click", () => AppRouter.schedule("system-status-refresh")); },
   };
