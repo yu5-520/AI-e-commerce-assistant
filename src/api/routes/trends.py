@@ -1,4 +1,4 @@
-"""V6.9 Trend Center routes."""
+"""Trend Center routes."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from src.services.indicator_rag_service import indicator_rule_summary
 from src.services.permission_budget_service import permission_budget_summary
 from src.services.risk_task_v66_service import generate_risk_tasks_for_signals, risk_task_summary
 from src.services.trend_signal_service import trend_center_summary
+from src.services.v1012_metric_trend_evidence_service import build_metric_trend_evidence
 
 router = APIRouter(prefix="/api/trends", tags=["trends"])
 
@@ -31,6 +32,11 @@ def trends_summary(request: Request, limit: int = Query(default=30, ge=1, le=200
     summary["approvalLifecycleSummary"] = approval_lifecycle_summary(limit=limit)
     summary["executionFeedbackSummary"] = execution_feedback_summary(limit=limit)
     summary["executionReviewSummary"] = execution_review_summary(limit=limit)
+    summary["v1012MetricTrendEvidence"] = {
+        "version": "10.12.0",
+        "entry": "/api/trends/metric-evidence",
+        "rule": "精准指标是信任底线；单点只记录，趋势和交叉验证决定任务；权重只作为高级升维层。",
+    }
     summary["approvalActionContext"] = {
         "version": "6.9.0",
         "currentRoleId": user.get("roleId"),
@@ -41,8 +47,22 @@ def trends_summary(request: Request, limit: int = Query(default=30, ge=1, le=200
         "rule": "V6.9 前端可把执行回写转成复盘案例和RAG记忆。",
     }
     summary["version"] = "6.9.0"
-    summary["rule"] = "V6.9 增加执行复盘与RAG沉淀：执行结果转成复盘案例，进入本地RAG案例记忆。"
+    summary["rule"] = "趋势中心展示总店铺、单商品、平台、类目的趋势支撑；V10.12 增加精准指标、基线RAG、趋势比对和交叉验证任务证据。"
     return summary
+
+
+@router.post("/metric-evidence")
+def metric_trend_evidence(body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    source_payload = body.get("sourcePayload") or body.get("source_payload") or body
+    metrics = body.get("metrics") or {}
+    return build_metric_trend_evidence(
+        source_payload,
+        metrics=metrics,
+        category_id=body.get("categoryId") or source_payload.get("categoryId"),
+        platform=body.get("platform") or source_payload.get("platform"),
+        product_stage=body.get("productStage") or source_payload.get("productStage"),
+    )
 
 
 @router.get("/risk-tasks")
