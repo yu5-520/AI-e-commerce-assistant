@@ -2,7 +2,7 @@
 
 This layer does not replace the existing V3/V6 import, alert, trend and risk-task logic.
 It wraps import results into a product-facing contract so the frontend can refresh
-Dashboard, Operation, Tasks, Reports and Logs without exposing the internal pipeline.
+Dashboard, Operation, Tasks, Data and Logs without exposing the internal pipeline.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterable, List
 
 V104_IMPORT_SYNC_VERSION = "10.4.0"
 V104_UPDATED_MODULES = ["dashboard", "operation", "tasks", "reports", "logs"]
-V104_UPDATED_MODULE_LABELS = ["总览", "经营", "任务", "报表", "日志"]
+V104_UPDATED_MODULE_LABELS = ["总览", "经营", "任务", "数据", "日志"]
 V104_FRONTEND_REFRESH_TARGETS = ["dashboard", "operating-unit", "business-actions", "data-check", "business-report"]
 
 
@@ -124,8 +124,8 @@ def build_v104_import_sync(result: Dict[str, Any], *, source: str = "report_impo
             "dashboard": "总览任务台已更新",
             "operation": "经营模块已同步最新数据",
             "tasks": f"任务池新增或合并 {created_task_count} 个任务",
-            "reports": "报表导入记录已更新",
-            "logs": "导入和任务动作已留痕",
+            "reports": "数据接入记录已更新",
+            "logs": "同步和任务动作已留痕",
         },
         "userMessage": f"已更新，生成 {created_task_count} 个任务",
         "nextAction": "open_tasks" if created_task_count else "review_report",
