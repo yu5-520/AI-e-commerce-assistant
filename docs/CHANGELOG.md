@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## V10.6.0
+
+任务操作极简化。
+
+- 新增 `src/services/v106_task_action_simplifier.py`，将任务卡动作压缩为一个主动作和一个次动作。
+- `/api/modules/todo` 返回 `taskActionSurface`、`simplifiedActions`、`primaryTaskAction`、`secondaryTaskAction` 和 `visibleTaskActions`。
+- 老板动作固定为查看 / 关注 / 确认，总管动作固定为派发 / 通过 / 驳回，运营动作固定为接收 / 提交 / 补充。
+- 任务页从多按钮操作栏收束为 V10.6 极简动作栏，详情不再被算作流程动作。
+- 拆分、置顶、排序、来源跳转等低频动作不再占用任务卡主操作位，后端事件和日志继续保留完整链路。
+- 系统状态页展示 V10.6 任务操作规则。
+- V10 守卫增加 task action simplifier、todo 动作投射、任务页极简动作和运行态接口检查。
+
 ## V10.5.0
 
 跨账号任务自动流转。
