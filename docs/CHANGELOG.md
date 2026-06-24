@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## V10.4.0
+
+报表导入驱动任务。
+
+- 新增 `src/services/v104_import_task_sync_service.py`，将现有 V3/V6 报表导入结果包装成 V10.4 前端刷新契约。
+- `/api/data/import/confirm`、`/api/data/import/report`、`/api/data/import/mock-alerts` 统一返回 `v104ImportTaskSync`。
+- V10.4 契约固定 `updatedModules`、`frontendRefreshTargets`、`createdTaskCount`、`summary` 和 `nextAction`。
+- 前端报表页上传后显示“已更新，生成 X 个任务”，并同步刷新总览、经营、任务、报表、日志。
+- `AppApi.refreshAfterDataImport(result)` 接收导入结果，刷新任务、报表、总览和日志状态。
+- 系统状态页展示 V10.4 报表导入驱动任务流程和刷新契约。
+- V10 守卫增加导入接口、V10.4 契约、报表页刷新和导入结果检查。
+
 ## V10.3.0
 
 总览深化为今日任务台。
