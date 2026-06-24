@@ -1,26 +1,39 @@
 (async function () {
-  const MANAGER_NAV = ["dashboard", "manager-tasks", "manager-dispatch", "manager-review", "manager-modules", "manager-retrospective", "manager-reports", "operating-unit", "data-check", "trend-center", "weight-center", "tenant-config", "config-audit", "release-governance", "release-alerts", "feedback-flywheel", "business-report", "system-status", "accounts"];
+  const V10_MAIN_NAV = ["dashboard", "data-check", "operating-unit", "business-actions", "business-report", "accounts", "system-status"];
+  const OPERATOR_NAV = ["dashboard", "data-check", "operating-unit", "business-actions", "business-report"];
+  const INTERNAL_TO_V10_NAV = new Map([
+    ["store-overview", "operating-unit"],
+    ["executive-cockpit", "dashboard"],
+    ["people-overview", "business-actions"],
+    ["task-command", "business-actions"],
+    ["manager-tasks", "business-actions"],
+    ["manager-dispatch", "business-actions"],
+    ["manager-review", "business-actions"],
+    ["manager-modules", "operating-unit"],
+    ["manager-retrospective", "business-report"],
+    ["manager-reports", "business-report"],
+    ["business-products", "operating-unit"],
+    ["business-competitors", "operating-unit"],
+    ["business-listing", "operating-unit"],
+    ["business-traffic", "operating-unit"],
+    ["trend-center", "operating-unit"],
+    ["weight-center", "operating-unit"],
+    ["tenant-config", "system-status"],
+    ["config-audit", "system-status"],
+    ["release-governance", "system-status"],
+    ["release-alerts", "system-status"],
+    ["feedback-flywheel", "business-report"],
+  ]);
 
-  const FEEDBACK_ROLES = new Set(["owner", "manager"]);
-  const SYSTEM_STATUS_ROLES = new Set(["owner", "manager"]);
-  const TENANT_CONFIG_ROLES = new Set(["owner", "manager"]);
-  const CONFIG_AUDIT_ROLES = new Set(["owner", "manager", "finance"]);
-  const RELEASE_GOVERNANCE_ROLES = new Set(["owner", "manager", "finance"]);
-  const WEIGHT_CENTER_ROLES = new Set(["owner", "manager", "finance"]);
-  const TREND_ROLES = new Set(["owner", "manager", "operator", "finance"]);
+  function compressedRoute(route) { return INTERNAL_TO_V10_NAV.get(route) || route; }
 
   function visibleModulesFor(account) {
     const role = account?.currentUser?.roleId;
-    const base = role === "manager" ? MANAGER_NAV : (account?.currentUser?.visibleModules || []);
-    const next = [...base];
-    if (TREND_ROLES.has(role)) next.push("trend-center");
-    if (WEIGHT_CENTER_ROLES.has(role)) next.push("weight-center");
-    if (TENANT_CONFIG_ROLES.has(role)) next.push("tenant-config");
-    if (CONFIG_AUDIT_ROLES.has(role)) next.push("config-audit");
-    if (RELEASE_GOVERNANCE_ROLES.has(role)) next.push("release-governance", "release-alerts");
-    if (FEEDBACK_ROLES.has(role)) next.push("feedback-flywheel");
-    if (SYSTEM_STATUS_ROLES.has(role)) next.push("system-status");
-    return Array.from(new Set(next));
+    if (role === "operator") return OPERATOR_NAV;
+    if (["owner", "manager", "finance", "observer"].includes(role)) return V10_MAIN_NAV;
+    const base = account?.currentUser?.visibleModules || V10_MAIN_NAV;
+    const compressed = base.map(compressedRoute).filter((route) => V10_MAIN_NAV.includes(route));
+    return Array.from(new Set(compressed.length ? compressed : V10_MAIN_NAV));
   }
 
   const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.WeightCenterPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.LogPage, window.FeedbackFlywheelPage, window.TaskReportPage];
@@ -44,7 +57,7 @@
       await AppApi.prefetch();
       const nextAccount = await AppApi.accounts();
       renderAccountSwitcher(nextAccount);
-      const active = location.hash.replace("#", "") || "dashboard";
+      const active = compressedRoute(location.hash.replace("#", "") || "dashboard");
       const allowed = new Set(visibleModulesFor(nextAccount));
       if (allowed.size && !allowed.has(active)) AppRouter.navigate("dashboard");
       else AppRouter.schedule("account-switch");
