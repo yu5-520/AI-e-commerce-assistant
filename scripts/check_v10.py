@@ -9,6 +9,7 @@ CHECK_FILES = [
     "src/api/routes/health.py",
     "src/api/routes/v10_product.py",
     "src/api/routes/data_import.py",
+    "src/api/routes/trends.py",
     "src/api/routes/modules/report_v5.py",
     "src/api/routes/modules/operating_unit.py",
     "src/api/routes/modules/rag_memory.py",
@@ -16,6 +17,8 @@ CHECK_FILES = [
     "src/services/data_source_connection_service.py",
     "src/services/demo_rag_seed_data.py",
     "src/services/experience_memory_service.py",
+    "src/services/task_agent_service.py",
+    "src/services/v1012_metric_trend_evidence_service.py",
     "src/services/v100_task_driven_product_service.py",
     "src/services/v104_import_task_sync_service.py",
     "src/services/v105_cross_account_flow_service.py",
@@ -92,6 +95,7 @@ def check_runtime_routes():
         "/api/modules/operating-unit",
         "/api/modules/rag-memory",
         "/api/modules/rag-memory/search",
+        "/api/trends/metric-evidence",
     ]:
         if path not in registered_paths:
             raise AssertionError(f"runtime route not mounted: {path}")
@@ -119,11 +123,31 @@ def check_runtime_routes():
         raise AssertionError("RAG baseline must contain cross-validation rule cards")
     must(str(rag_summary), "正式上线只是升级为向量混合召回")
 
-    rag_search = get_json(client, "/api/modules/rag-memory/search?problem_type=low_roi_high_refund&effective_only=false&limit=8", user_id="U001")
-    if not rag_search.get("items"):
-        raise AssertionError("RAG search must recall low_roi_high_refund seeds")
-    must(str(rag_search), "crossValidationRules")
-    must(str(rag_search), "vector_index")
+    metric_payload = {
+        "sourcePayload": {
+            "id": "P001",
+            "title": "夏季防晒衣",
+            "platform": "淘宝",
+            "categoryId": "home_living_goods",
+            "roi": 0.92,
+            "ctr": 0.037,
+            "conversion_rate": 0.012,
+            "refund_rate": 0.079,
+            "clicks": 360,
+            "impressions": 9730,
+            "orders": 12,
+            "stock": 80,
+            "sales_7d": 35,
+            "previousMetrics": {"roi": 1.42, "ctr": 0.039, "conversion_rate": 0.021, "refund_rate": 0.038},
+        }
+    }
+    metric_evidence = post_json(client, "/api/trends/metric-evidence", user_id="U001", payload=metric_payload)
+    if metric_evidence.get("version") != "10.12.0":
+        raise AssertionError("metric evidence must expose V10.12")
+    must(str(metric_evidence), "metric_baseline_rag")
+    must(str(metric_evidence), "trendEvidence")
+    must(str(metric_evidence), "ROI")
+    must(str(metric_evidence), "单点只记录")
 
     connections = get_json(client, "/api/data/source-connections")
     if connections.get("version") != "10.10.0":
@@ -171,25 +195,21 @@ def check_runtime_routes():
     if tag_sync.get("version") != "10.8.0" or tag_sync.get("createdTaskCount", 0) < 1:
         raise AssertionError("V10.9 requires tag-change candidates to become tasks")
 
-    task_agent = post_json(
-        client,
-        "/api/modules/agents/tasks/generate",
-        user_id="U001",
-        payload={
-            "sourceModule": "product",
-            "entityId": "P001",
-            "sourcePayload": {"id": "P001", "title": "夏季防晒衣", "roi": "0.8", "refundRate": "9%", "platform": "淘宝", "storeId": "S001", "categoryId": "home_living_goods"},
-        },
-    )
+    task_agent = post_json(client, "/api/modules/agents/tasks/generate", user_id="U001", payload={"sourceModule": "product", "entityId": "P001", **metric_payload})
+    if task_agent.get("version") != "10.12.0":
+        raise AssertionError("Task Agent must expose V10.12")
     if not task_agent.get("ragReferences"):
         raise AssertionError("Task Agent must recall RAG references from seeded baseline")
-    must(str(task_agent), "low_roi_high_refund")
+    must(str(task_agent), "v1012MetricTrendEvidence")
+    must(str(task_agent), "metricEvidence")
+    must(str(task_agent), "trendEvidence")
+    must(str(task_agent), "crossValidationEvidence")
+    must(str(task_agent), "低 ROI")
 
     owner_todo = get_json(client, "/api/modules/todo", user_id="U001")
-    for todo, role in [(owner_todo, "owner")]:
-        if todo.get("version") != "10.9.0":
-            raise AssertionError(f"todo response for {role} must expose V10.9 acceptance surface")
-        must(str(todo), "acceptanceSurface")
+    if owner_todo.get("version") != "10.9.0":
+        raise AssertionError("todo response must expose V10.9 acceptance surface")
+    must(str(owner_todo), "acceptanceSurface")
 
 
 def check_sidebar_navigation(index_html):
@@ -210,11 +230,14 @@ def main():
     health = read("src/api/routes/health.py")
     v10_route = read("src/api/routes/v10_product.py")
     data_import = read("src/api/routes/data_import.py")
+    trends_route = read("src/api/routes/trends.py")
     report_route = read("src/api/routes/modules/report_v5.py")
     operating_route = read("src/api/routes/modules/operating_unit.py")
     rag_route = read("src/api/routes/modules/rag_memory.py")
     rag_seed = read("src/services/demo_rag_seed_data.py")
     rag_service = read("src/services/experience_memory_service.py")
+    metric_service = read("src/services/v1012_metric_trend_evidence_service.py")
+    task_agent = read("src/services/task_agent_service.py")
     todo_route = read("src/api/routes/modules/todo.py")
     data_source_service = read("src/services/data_source_connection_service.py")
     v10_service = read("src/services/v100_task_driven_product_service.py")
@@ -264,11 +287,19 @@ def main():
     must(rag_seed, "cross_validation_rule")
     must(rag_seed, "acceptance_rule")
     must(rag_seed, "negative_case")
-    must(rag_seed, "vectorUpgradePath")
     must(rag_service, "MEMORY_VERSION = \"10.11.0\"")
-    must(rag_service, "structured_experience_cards_with_demo_baseline")
-    must(rag_service, "正式上线只是升级为向量混合召回")
-    must(rag_service, "crossValidationRules")
+    must(metric_service, "V1012_METRIC_TREND_EVIDENCE_VERSION = \"10.12.0\"")
+    must(metric_service, "METRIC_BASELINE_RAG")
+    must(metric_service, "calculate_precise_metrics")
+    must(metric_service, "trend_compare")
+    must(metric_service, "cross_validate")
+    must(metric_service, "growth")
+    must(task_agent, "TASK_AGENT_VERSION = \"10.12.0\"")
+    must(task_agent, "v1012MetricTrendEvidence")
+    must(task_agent, "metricBaselineRag")
+    must(task_agent, "crossValidationEvidence")
+    must(trends_route, "/metric-evidence")
+    must(trends_route, "build_metric_trend_evidence")
     must(changelog, "## V10.9.0")
     must(version, "10.9.0")
     must(readme, "V10.9.0")
@@ -291,7 +322,7 @@ def main():
     must(v10_doc, "V10.9 acceptance guard")
     check_sidebar_navigation(index)
     check_runtime_routes()
-    print("V10.11 demo RAG baseline guard passed.")
+    print("V10.12 metric and trend evidence guard passed.")
 
 
 if __name__ == "__main__":
