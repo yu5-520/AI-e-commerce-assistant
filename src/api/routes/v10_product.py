@@ -21,8 +21,8 @@ async def v100_task_driven_product(ctx: UserContext = Depends(get_current_contex
 async def v100_readiness_index(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     product = task_driven_product_summary(ctx)
     return {
-        "version": "10.1.0",
-        "status": "v10_1_navigation_compression_ready",
+        "version": "10.2.0",
+        "status": "v10_2_productized_layout_ready",
         "entries": {
             "taskDrivenProduct": "/api/architecture/v10/task-driven-product",
             "health": "/api/health",
@@ -33,6 +33,8 @@ async def v100_readiness_index(ctx: UserContext = Depends(get_current_context)) 
         "minimalNavigation": product["minimalNavigation"],
         "navigationRouteMap": product["navigationRouteMap"],
         "collapsedOperationRoutes": product["collapsedOperationRoutes"],
+        "frontendLayoutRules": product["frontendLayoutRules"],
+        "uiProductizationRules": product["uiProductizationRules"],
         "taskTypes": product["taskTypes"],
         "auditMeta": ctx.audit_meta(),
     }
