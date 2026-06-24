@@ -1,1 +1,1 @@
-Current Version: 10.6.0
+Current Version: 10.7.0
