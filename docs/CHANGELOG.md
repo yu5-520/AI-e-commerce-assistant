@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## V10.3.0
+
+总览深化为今日任务台。
+
+- 固定总览五块结构：今日优先任务、高风险事项、最新报表结果、待复核事项、今日完成进度。
+- `/api/modules/dashboard` 返回 `dashboardMode=today_task_workbench` 与 `todayWorkbench`，前端不再自己猜任务台结构。
+- 总览 UI 从指标看板深化为任务工作台，优先任务成为主区域，高风险、待复核、完成进度进入右侧辅助区。
+- 新增 `web_demo/v103-workbench.css`，独立承载今日任务台布局样式。
+- 系统状态页展示 V10.3 今日任务台结构和规则。
+- V10 守卫增加 dashboard service、todayWorkbench、五块结构和任务台样式检查。
+
 ## V10.2.0
 
 UI 排版产品化。
