@@ -76,6 +76,17 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 用户不需要手动选择跨账号流程节点。
 ```
 
+## V10.6 minimal task actions
+
+```text
+任务卡只展示一个主动作和一个次动作。
+详情不是流程动作，只作为辅助入口。
+老板：查看 / 关注 / 确认。
+总管：派发 / 通过 / 驳回。
+运营：接收 / 提交 / 补充。
+后端仍保留完整事件、证据、日志和复盘链路。
+```
+
 ## User actions
 
 ```text
