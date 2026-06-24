@@ -1,10 +1,10 @@
 (function () {
   const s = (value) => AppShell.escape(value ?? "");
   const operationTabs = [
-    ["business-products", "商品"],
-    ["business-competitors", "竞品"],
-    ["business-listing", "上新"],
-    ["business-traffic", "流量"],
+    ["product", "商品", "商品预警与处理任务"],
+    ["competitor", "竞品", "竞品信号与测试任务"],
+    ["listing", "上新", "上新验证与增长任务"],
+    ["traffic", "流量", "流量趋势与放量任务"],
   ];
 
   function hero(title, syncState = {}) {
@@ -17,7 +17,7 @@
   }
 
   function tabs() {
-    return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3></div><div class="quick-actions">${operationTabs.map(([route, label]) => `<button data-operation-route="${s(route)}">${s(label)}</button>`).join("")}</div></section>`;
+    return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3><span class="status-badge">任务统一承接</span></div><div class="quick-actions">${operationTabs.map(([module, label, desc]) => `<button data-operation-module="${s(module)}"><strong>${s(label)}</strong><span>${s(desc)}</span></button>`).join("")}</div></section>`;
   }
 
   function tagList(tags) {
@@ -32,7 +32,7 @@
       <div><span>商品结构</span>${tagList(row.productRoleTags)}</div>
       <div><span>风险标签</span>${tagList(row.riskTags)}</div>
       <div><span>任务强度</span>${tagList([row.taskIntensity || "常规处理", `预警 ${row.alertCount ?? 0}`])}</div>
-      <button type="button" class="secondary" data-store-task="${s(row.storeId || "")}">查看</button>
+      <button type="button" class="secondary" data-store-task="${s(row.storeId || "")}">查看任务</button>
     </article>`;
   }
 
@@ -56,8 +56,8 @@
         ${judgmentCard(payload.operatingJudgment)}`;
     },
     mount(ctx) {
-      ctx.delegate("[data-operation-route]", "click", (_event, target) => AppRouter.navigate(target.dataset.operationRoute));
-      ctx.delegate("[data-store-task]", "click", () => AppRouter.navigate("business-actions"));
+      ctx.delegate("[data-operation-module]", "click", (_event, target) => AppRouter.navigate("business-actions", { moduleFilter: target.dataset.operationModule }));
+      ctx.delegate("[data-store-task]", "click", (_event, target) => AppRouter.navigate("business-actions", { storeId: target.dataset.storeTask }));
     },
   };
 })();
