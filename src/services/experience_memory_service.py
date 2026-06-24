@@ -1,7 +1,7 @@
 """RAG-style operation experience memory service.
 
-The MVP uses structured SQLite experience cards as the baseline RAG database.
-Formal vector RAG should index and rerank this baseline instead of replacing it.
+Demo/MVP keeps a structured RAG baseline in SQLite. Formal vector RAG should
+index and rerank these cards instead of replacing the baseline knowledge layer.
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ from src.services.module_task_service import find_task
 MEMORY_VERSION = "10.11.0"
 APPROVED_STATUSES = {"approved", "seed_approved"}
 VISIBLE_STATUSES = {"pending_review", "approved", "seed_approved", "rejected"}
+SEED_CATEGORY_PROFILES: List[Dict[str, Any]] = category_profiles()
+SEED_PLAYBOOKS: List[Dict[str, Any]] = seed_cards()
 
 
 def now_iso() -> str:
@@ -27,11 +29,6 @@ def now_iso() -> str:
 
 def make_id(prefix: str = "CASE") -> str:
     return f"{prefix}-{datetime.now().strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
-
-
-# Backward-compatible names used by older callers and tests.
-SEED_CATEGORY_PROFILES: List[Dict[str, Any]] = category_profiles()
-SEED_PLAYBOOKS: List[Dict[str, Any]] = seed_cards()
 
 
 def ensure_memory_tables() -> None:
@@ -176,17 +173,15 @@ def upsert_case(card: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def seed_memory_if_empty() -> None:
-    """Ensure the Demo/MVP RAG baseline exists even after old installs already have a few cards.
-
-    Runtime reset must not clear this table, and existing approved human cases are protected.
-    Seed cards are upserted only when missing or when the existing row is a seed card.
-    """
+    """Ensure the Demo/MVP RAG baseline exists even when an old DB already has a few cards."""
     ensure_memory_tables()
     seeds = seed_cards()
     seed_ids = [card["caseId"] for card in seeds]
+    if not seed_ids:
+        return
     with connect() as conn:
         rows = conn.execute(
-            f"SELECT case_id, status, payload FROM rag_experience_cards WHERE case_id IN ({','.join(['?'] * len(seed_ids))})",
+            f"SELECT * FROM rag_experience_cards WHERE case_id IN ({','.join(['?'] * len(seed_ids))})",
             tuple(seed_ids),
         ).fetchall()
     existing = {row["case_id"]: _row_to_case(row) for row in rows}
@@ -268,13 +263,7 @@ def search_cases(
     limit: int = 5,
 ) -> Dict[str, Any]:
     cases = list_cases(limit=500)
-    filters = {
-        "categoryId": category_id,
-        "platform": platform,
-        "storeId": store_id,
-        "problemType": problem_type,
-        "operatorStyle": operator_style,
-    }
+    filters = {"categoryId": category_id, "platform": platform, "storeId": store_id, "problemType": problem_type, "operatorStyle": operator_style}
     result: List[Dict[str, Any]] = []
     for card in cases:
         if card.get("status") not in APPROVED_STATUSES:
@@ -362,18 +351,13 @@ def build_experience_card_from_task(
     problem_type = infer_problem_type_from_task(task)
     score = _quality_score(task=task, operator_submission=operator_submission, manager_review=manager_review, before_metrics=before_metrics, after_metrics=after_metrics)
     actor = current_user(user_id)
-    status = "pending_review"
-    level = "L1"
-    if score >= 0.7 and manager_review:
-        level = "L2"
-    if score >= 0.85 and manager_review and _metric_changed(before_metrics, after_metrics):
-        level = "L3"
+    level = "L3" if score >= 0.85 and manager_review and _metric_changed(before_metrics, after_metrics) else "L2" if score >= 0.7 and manager_review else "L1"
     source_store_ids = task.get("storeIds") or task.get("visibleStoreIds") or ["global"]
     return {
         "caseId": f"CASE-{task_id}",
         "caseType": "operation_solution",
         "level": level,
-        "status": status,
+        "status": "pending_review",
         "categoryId": task.get("categoryId") or "home_living_goods",
         "platform": task.get("platform") or "通用",
         "storeId": source_store_ids[0] if source_store_ids else "global",
@@ -403,40 +387,12 @@ def build_experience_card_from_task(
     }
 
 
-def draft_experience_from_task(
-    task_id: str,
-    *,
-    operator_submission: str = "",
-    manager_review: str = "",
-    before_metrics: Dict[str, Any] | None = None,
-    after_metrics: Dict[str, Any] | None = None,
-    user_id: str | None = None,
-) -> Dict[str, Any] | None:
-    card = build_experience_card_from_task(
-        task_id,
-        operator_submission=operator_submission,
-        manager_review=manager_review,
-        before_metrics=before_metrics,
-        after_metrics=after_metrics,
-        user_id=user_id,
-    )
+def draft_experience_from_task(task_id: str, *, operator_submission: str = "", manager_review: str = "", before_metrics: Dict[str, Any] | None = None, after_metrics: Dict[str, Any] | None = None, user_id: str | None = None) -> Dict[str, Any] | None:
+    card = build_experience_card_from_task(task_id, operator_submission=operator_submission, manager_review=manager_review, before_metrics=before_metrics, after_metrics=after_metrics, user_id=user_id)
     if not card:
         return None
     saved = upsert_case(card)
-    return {
-        "version": MEMORY_VERSION,
-        "shouldWriteToRag": bool(saved.get("effective") and saved.get("qualityScore", 0) >= 0.7),
-        "needsHumanReviewBeforeWrite": True,
-        "experienceCard": saved,
-        "ragWriteTarget": "historical_cases" if saved.get("effective") else "pending_experience",
-        "qualityGate": {
-            "managerReviewRequired": True,
-            "metricChangeRequiredForL3": True,
-            "minQualityScore": 0.7,
-            "currentQualityScore": saved.get("qualityScore"),
-        },
-        "protection": "approved_case_preserved" if saved.get("protectedApprovedCase") else "pending_review_draft",
-    }
+    return {"version": MEMORY_VERSION, "shouldWriteToRag": bool(saved.get("effective") and saved.get("qualityScore", 0) >= 0.7), "needsHumanReviewBeforeWrite": True, "experienceCard": saved, "ragWriteTarget": "historical_cases" if saved.get("effective") else "pending_experience", "qualityGate": {"managerReviewRequired": True, "metricChangeRequiredForL3": True, "minQualityScore": 0.7, "currentQualityScore": saved.get("qualityScore")}, "protection": "approved_case_preserved" if saved.get("protectedApprovedCase") else "pending_review_draft"}
 
 
 def update_case_status(case_id: str, *, status: str, reviewer_id: str | None = None, reason: str = "") -> Dict[str, Any] | None:
@@ -445,17 +401,10 @@ def update_case_status(case_id: str, *, status: str, reviewer_id: str | None = N
     if not case:
         return None
     reviewer = current_user(reviewer_id)
-    case["status"] = status
-    case["reviewerId"] = reviewer.get("id")
-    case["reviewerName"] = reviewer.get("name")
-    case["reviewReason"] = reason
-    case["_allowStatusOverwrite"] = True
+    case.update({"status": status, "reviewerId": reviewer.get("id"), "reviewerName": reviewer.get("name"), "reviewReason": reason, "_allowStatusOverwrite": True})
     if status == "approved":
         case["effective"] = bool(case.get("qualityScore", 0) >= 0.7)
-        if case.get("qualityScore", 0) >= 0.85:
-            case["level"] = "L3"
-        elif case.get("qualityScore", 0) >= 0.7:
-            case["level"] = "L2"
+        case["level"] = "L3" if case.get("qualityScore", 0) >= 0.85 else "L2" if case.get("qualityScore", 0) >= 0.7 else case.get("level", "L1")
     elif status == "rejected":
         case["effective"] = False
         case["level"] = "L0"
@@ -488,13 +437,7 @@ def memory_summary() -> Dict[str, Any]:
         "baselineSeedCount": len([item for item in cases if item.get("seedVersion") == DEMO_RAG_SEED_VERSION]),
         "baselineSeedMinimum": DEMO_RAG_MIN_SEED_COUNT,
         "categoryProfiles": list_category_profiles(),
-        "levels": {
-            "L0": "原始日志 / 拒绝入库",
-            "L1": "经验草案",
-            "L2": "已复核经验",
-            "L3": "高质量经验",
-            "L4": "失败案例 / 避坑边界",
-        },
+        "levels": {"L0": "原始日志 / 拒绝入库", "L1": "经验草案", "L2": "已复核经验", "L3": "高质量经验", "L4": "失败案例 / 避坑边界"},
         "demoRagPrinciple": "Demo/MVP 阶段必须有结构化 RAG 经验库；正式上线只是升级为向量混合召回，不是从 0 建库。",
         "writeBoundary": "日报、周报和任务日志必须先提炼为经验卡，复核后才能进入正式 RAG 召回。",
         "protectionRule": "已批准经验卡不会被自动 feedbackDraft 降级覆盖。",
