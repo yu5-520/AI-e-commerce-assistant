@@ -35,7 +35,7 @@
         loadJson("/api/architecture/v10/readiness", {}),
       ]);
       const activeMode = repository?.activeMode || "sqlite";
-      const apiVersion = health?.version || v10Ready?.version || v10?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "10.1.0";
+      const apiVersion = health?.version || v10Ready?.version || v10?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "10.2.0";
       const layers = v7?.controlPlane?.layers || architecture?.layers || [];
       const flags = v7?.tenantConfig?.featureFlags || [];
       const enabledFlags = flags.filter((flag) => flag.enabledForContext);
@@ -46,24 +46,30 @@
       const minimalNav = v10?.minimalNavigation || v10Ready?.minimalNavigation || [];
       const collapsedRoutes = v10?.collapsedOperationRoutes || v10Ready?.collapsedOperationRoutes || [];
       const navRules = v10?.navigationCompressionRules || [];
+      const layoutRules = v10?.frontendLayoutRules || v10Ready?.frontendLayoutRules || {};
+      const uiRules = v10?.uiProductizationRules || v10Ready?.uiProductizationRules || [];
       const entries = v9?.entries || { opsAuthorization: health?.v98Entry, deliveryReadiness: health?.v99Entry };
       const readinessAreas = Object.entries(v99?.readinessAreas || {});
       const deliveryStages = v99?.deliveryStages || [];
       const opsRoles = Object.keys(v98?.roles || {});
       const separationRules = v98?.separationRules || [];
-      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V10.1</p><h2>系统状态</h2><p>集中查看任务驱动产品原则、主导航压缩、运行版本、V9 交付验收和 SaaS 控制面。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v10Ready?.status || "navigation-compression")}</small></div></section>
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V10.2</p><h2>系统状态</h2><p>集中查看任务驱动产品原则、产品化排版、主导航压缩、运行版本和 V9 交付验收。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v10Ready?.status || "productized-layout")}</small></div></section>
       <section class="system-metric-grid">
-        ${metric("API 版本", apiVersion, apiVersion === "10.1.0" ? "good" : "warn")}
+        ${metric("API 版本", apiVersion, apiVersion === "10.2.0" ? "good" : "warn")}
+        ${metric("视觉比例", layoutRules.visualRatio || "main_70", "good")}
         ${metric("主导航", minimalNav.length, minimalNav.length <= 7 ? "good" : "warn")}
-        ${metric("折叠经营入口", collapsedRoutes.length, "good")}
         ${metric("任务类型", taskTypes.length, "good")}
       </section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.1 主导航压缩</h3>${pill(v10?.version || "10.1.0", "good")}</div><div class="system-layer-list">
+      <section class="page-section system-section"><div class="section-header"><h3>V10.2 产品化排版</h3>${pill(v10?.version || "10.2.0", "good")}</div><div class="system-layer-list">
+        ${Object.entries(layoutRules).map(([name, value]) => textRow(name, value, "已固定")).join("") || "<p>暂无排版规则。</p>"}
+        ${uiRules.map((item, index) => textRow(`UI 规则 ${index + 1}`, item, "已固定")).join("")}
+      </div></section>
+      <section class="page-section system-section"><div class="section-header"><h3>V10.1 主导航压缩</h3>${pill(v10?.version || "10.2.0", "good")}</div><div class="system-layer-list">
         ${minimalNav.map((item) => textRow(item, "主导航入口", "已固定")).join("") || "<p>暂无主导航数据。</p>"}
         ${collapsedRoutes.map((item) => textRow(item, "折叠到经营模块", "已固定")).join("")}
         ${navRules.slice(0, 5).map((item, index) => textRow(`规则 ${index + 1}`, item, "已固定")).join("")}
       </div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10 任务驱动产品</h3>${pill(v10?.version || "10.1.0", "good")}</div><div class="system-layer-list">
+      <section class="page-section system-section"><div class="section-header"><h3>V10 任务驱动产品</h3>${pill(v10?.version || "10.2.0", "good")}</div><div class="system-layer-list">
         ${principles.map((item, index) => textRow(`原则 ${index + 1}`, item, "已固定")).join("") || "<p>暂无 V10 产品原则。</p>"}
         ${taskTypes.map((item) => textRow(item, "需要用户介入时以任务出现", "已固定")).join("")}
       </div></section>
