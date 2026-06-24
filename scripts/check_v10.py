@@ -113,9 +113,16 @@ def check_runtime_routes():
         raise AssertionError("ERP source sync must still refresh V10.4 module sync contract")
 
     operating = get_json(client, "/api/modules/operating-unit", user_id="U001")
-    if operating.get("version") != "5.1.0":
-        raise AssertionError("operating unit must expose productized V5.1 contract")
-    must(str(operating), "storeTags")
+    if operating.get("version") != "5.2.0":
+        raise AssertionError("operating unit must expose store-row V5.2 contract")
+    rows = operating.get("storeRows") or []
+    if not rows:
+        raise AssertionError("operating unit must return storeRows")
+    first = rows[0]
+    for field in ["storeName", "storeWeightTag", "productRoleTags", "riskTags", "taskIntensity"]:
+        if field not in first:
+            raise AssertionError(f"store row missing {field}")
+    must(str(operating), "storeRows")
     must(str(operating), "operatingJudgment")
     must(str(operating), "店铺权重")
     must_not(str(operating), "ModuleProjection")
@@ -204,6 +211,7 @@ def main():
     api_client = read("web_demo/core/api-client.js")
     report_page = read("web_demo/modules/report/page.js")
     operating_page = read("web_demo/modules/operating-unit/page.js")
+    dashboard_css = read("web_demo/dashboard.css")
     task_store = read("web_demo/core/task-store.js")
     system_status = read("web_demo/modules/system-status/page.js")
     v10_doc = read("docs/V10_TASK_DRIVEN_PRODUCT.md")
@@ -221,9 +229,11 @@ def main():
     must(data_source_service, "api_sources_primary_manual_upload_backup")
     must(data_import, "source_connections")
     must(data_import, "sync_source_connection")
-    must(operating_route, "build_operating_tags")
-    must(operating_route, "storeTags")
-    must(operating_route, "operatingJudgment")
+    must(operating_route, "build_store_rows")
+    must(operating_route, "storeRows")
+    must(operating_route, "storeWeightTag")
+    must(operating_route, "productRoleTags")
+    must(operating_route, "riskTags")
     must_not(operating_route, "ModuleProjection")
     must_not(operating_route, "RAG Memory")
     must(todo_route, "acceptanceSurface")
@@ -232,11 +242,11 @@ def main():
     must(version, "10.9.0")
     must(readme, "V10.9.0")
     must(index, "?v=10.9.0")
-    must(index, "dashboard.css?v=10.9.1")
+    must(index, "dashboard.css?v=10.9.2")
     must(index, "core/task-store.js?v=10.9.1")
     must(index, "core/api-client.js?v=10.9.2")
     must(index, "modules/report/page.js?v=10.9.3")
-    must(index, "modules/operating-unit/page.js?v=10.9.1")
+    must(index, "modules/operating-unit/page.js?v=10.9.2")
     must(api_client, "syncDataSource")
     must(api_client, "resetRuntimeData")
     must(report_page, "经营数据接入")
@@ -246,10 +256,15 @@ def main():
     must_not(report_page, "v102-primary-action")
     must_not(report_page, "接口优先")
     must_not(report_page, "流程：接口接入")
-    must(operating_page, "店铺经营标签")
-    must(operating_page, "operatingJudgment")
+    must(operating_page, "店铺经营状态")
+    must(operating_page, "storeRows")
+    must(operating_page, "operating-store-row")
+    must_not(operating_page, "店铺经营标签")
+    must_not(operating_page, "storeTags")
     must_not(operating_page, "ModuleProjection")
     must_not(operating_page, "RAG Memory")
+    must(dashboard_css, "operating-store-row")
+    must(dashboard_css, "store-row-tags")
     must(task_store, "window.AppTaskStore")
     must(task_store, "window.AppTaskActions")
     must(task_store, "hydrate")
@@ -259,7 +274,7 @@ def main():
     must(system_status, "acceptanceChain")
     must(v10_doc, "V10.9 acceptance guard")
     check_runtime_routes()
-    print("V10.9/V10.10 slim data page guard passed.")
+    print("V10.9/V10.10 store-row operating guard passed.")
 
 
 if __name__ == "__main__":
