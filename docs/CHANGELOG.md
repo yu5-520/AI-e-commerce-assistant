@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## V10.1.0
+
+主导航压缩。
+
+- 左侧主导航压缩为总览、报表、经营、任务、日志、账号、系统七个大入口。
+- 商品、竞品、上新、流量不再占用主导航，折叠进入经营模块内部轻入口。
+- 保留商品、竞品、上新、流量旧路由，用于内部跳转、详情页和后续经营页轻标签。
+- 前端启动层增加 V10 主导航映射，避免旧账号 visibleModules 把新主导航误隐藏。
+- V10 contract 增加 navigationRouteMap、collapsedOperationRoutes 和 navigationCompressionRules。
+
 ## V10.0.0
 
 任务驱动产品起版。
