@@ -87,6 +87,17 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 后端仍保留完整事件、证据、日志和复盘链路。
 ```
 
+## V10.7 Agent operating profile
+
+```text
+首次导入店铺和商品信息后，系统自动生成 Agent 经营档案。
+标签由 Agent 自动分类，不要求用户确认。
+标签包括垂直类目、店铺权重、商品角色、风险和任务强度。
+用户拥有修改标签的权力，但默认不承担分类工作。
+商品或店铺数据持续走低时，系统生成标签变化任务。
+Agent 生成任务前先读取经营档案，而不是每次重新判断基础类目。
+```
+
 ## User actions
 
 ```text
