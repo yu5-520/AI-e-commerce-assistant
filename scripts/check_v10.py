@@ -15,13 +15,14 @@ CHECK_FILES = [
     "src/services/v105_cross_account_flow_service.py",
     "src/services/v106_task_action_simplifier.py",
     "src/services/v107_operating_profile_service.py",
+    "src/services/v108_tag_change_task_service.py",
     "scripts/check_v10.py",
 ]
 
 RUNTIME_PATHS = {
-    "/api/health": "10.7.0",
-    "/api/architecture/v10/task-driven-product": "10.7.0",
-    "/api/architecture/v10/readiness": "10.7.0",
+    "/api/health": "10.8.0",
+    "/api/architecture/v10/task-driven-product": "10.8.0",
+    "/api/architecture/v10/readiness": "10.8.0",
     "/api/architecture/v9/readiness": "9.9.0",
 }
 
@@ -78,9 +79,9 @@ def check_runtime_routes():
             raise AssertionError(f"{path} version mismatch")
 
     product = get_json(client, "/api/architecture/v10/task-driven-product")
-    must(str(product), "operatingProfileRules")
-    must(str(product), "agent_assigns_tags_without_user_confirmation")
-    must(str(product), "operatingProfileTagTypes")
+    must(str(product), "tagChangeTaskRules")
+    must(str(product), "tag_change_candidates_become_tasks")
+    must(str(product), "tagChangeTaskFlow")
     if sorted((product.get("roleViewRules") or {}).keys()) != sorted(V105_ROLES):
         raise AssertionError("role view rules must contain owner/manager/operator")
 
@@ -93,25 +94,25 @@ def check_runtime_routes():
         raise AssertionError(f"import route failed: {result.status_code} {result.text}")
     payload = result.json()
     if (payload.get("v104ImportTaskSync") or {}).get("version") != "10.4.0":
-        raise AssertionError("V10.7 must keep V10.4 import sync contract")
+        raise AssertionError("V10.8 must keep V10.4 import sync contract")
     profile = payload.get("v107OperatingProfile") or {}
     if profile.get("version") != "10.7.0":
-        raise AssertionError("import must return V10.7 operating profile")
-    if profile.get("userConfirmationRequired") is not False:
-        raise AssertionError("Agent tags must not require user confirmation")
-    must(str(profile), "verticalCategoryTags")
-    must(str(profile), "storeWeightTag")
-    must(str(profile), "tag_change_task")
+        raise AssertionError("import must keep V10.7 operating profile")
+    tag_sync = payload.get("v108TagChangeTaskSync") or {}
+    if tag_sync.get("version") != "10.8.0":
+        raise AssertionError("import must return V10.8 tag change task sync")
+    if tag_sync.get("candidateCount", 0) < 1 or tag_sync.get("createdTaskCount", 0) < 1:
+        raise AssertionError("tag change candidates must become tasks")
+    must(str(tag_sync), "tag_change_candidates_to_tasks")
 
-    for user_id, role in [("U001", "owner"), ("U002", "manager"), ("U003", "operator")]:
-        todo = get_json(client, "/api/modules/todo", user_id=user_id)
-        if todo.get("version") != "10.6.0":
-            raise AssertionError(f"todo response for {role} must remain V10.6 action surface until V10.8")
-        task = next((item for item in todo.get("activeTasks", []) if item.get("taskActionVersion") == "10.6.0"), None)
-        if not task:
-            raise AssertionError(f"todo response for {role} missing V10.6 action task")
-        if len(task.get("visibleTaskActions") or []) > 2:
-            raise AssertionError("task card can expose at most two workflow actions")
+    owner_todo = get_json(client, "/api/modules/todo", user_id="U001")
+    task = next((item for item in owner_todo.get("activeTasks", []) if item.get("taskType") == "标签变化任务"), None)
+    if not task:
+        raise AssertionError("tag change task must be visible in task pool")
+    must(str(task), "profileSnapshot")
+    must(str(task), "primaryTaskAction")
+    if len(task.get("visibleTaskActions") or []) > 2:
+        raise AssertionError("task card can expose at most two workflow actions")
 
 
 def check_sidebar_navigation(index_html):
@@ -136,6 +137,7 @@ def main():
     v10_service = read("src/services/v100_task_driven_product_service.py")
     action_service = read("src/services/v106_task_action_simplifier.py")
     profile_service = read("src/services/v107_operating_profile_service.py")
+    tag_task_service = read("src/services/v108_tag_change_task_service.py")
     changelog = read("docs/CHANGELOG.md")
     version = read("versioning/VERSION.md")
     readme = read("README.md")
@@ -143,29 +145,30 @@ def main():
     system_status = read("web_demo/modules/system-status/page.js")
     v10_doc = read("docs/V10_TASK_DRIVEN_PRODUCT.md")
 
-    must(main_py, "API_VERSION = \"10.7.0\"")
-    must(health, "API_VERSION = \"10.7.0\"")
-    must(v10_route, "\"version\": \"10.7.0\"")
-    must(v10_route, "operatingProfileRules")
-    must(v10_service, "V100_TASK_PRODUCT_VERSION = \"10.7.0\"")
-    must(v10_service, "V107_OPERATING_PROFILE_RULES")
+    must(main_py, "API_VERSION = \"10.8.0\"")
+    must(health, "API_VERSION = \"10.8.0\"")
+    must(v10_route, "\"version\": \"10.8.0\"")
+    must(v10_route, "tagChangeTaskRules")
+    must(v10_service, "V100_TASK_PRODUCT_VERSION = \"10.8.0\"")
+    must(v10_service, "V108_TAG_CHANGE_TASK_RULES")
     must(profile_service, "V107_OPERATING_PROFILE_VERSION = \"10.7.0\"")
-    must(profile_service, "agent_assigns_tags_without_user_confirmation")
-    must(profile_service, "userConfirmationRequired")
-    must(profile_service, "tagChangeTaskCandidates")
-    must(data_import, "attach_v107_operating_profile")
+    must(tag_task_service, "V108_TAG_CHANGE_TASK_VERSION = \"10.8.0\"")
+    must(tag_task_service, "tag_change_candidates_become_tasks")
+    must(tag_task_service, "create_task_with_repository")
+    must(data_import, "attach_v108_tag_change_tasks")
+    must(data_import, "context_from_headers")
     must(todo_route, "apply_v106_task_actions")
     must(action_service, "V106_TASK_ACTION_VERSION = \"10.6.0\"")
-    must(changelog, "## V10.7.0")
-    must(version, "10.7.0")
-    must(readme, "V10.7.0")
-    must(index, "?v=10.7.0")
+    must(changelog, "## V10.8.0")
+    must(version, "10.8.0")
+    must(readme, "V10.8.0")
+    must(index, "?v=10.8.0")
     check_sidebar_navigation(index)
-    must(system_status, "SYSTEM STATUS · V10.7")
-    must(system_status, "operatingProfileRules")
-    must(v10_doc, "V10.7 Agent operating profile")
+    must(system_status, "SYSTEM STATUS · V10.8")
+    must(system_status, "tagChangeTaskRules")
+    must(v10_doc, "V10.8 tag change tasks")
     check_runtime_routes()
-    print("V10.7 operating profile guard passed.")
+    print("V10.8 tag change task guard passed.")
 
 
 if __name__ == "__main__":
