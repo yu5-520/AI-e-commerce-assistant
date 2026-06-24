@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "9.9.0"
+API_VERSION = "10.0.0"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -15,4 +15,6 @@ def health() -> Dict[str, Any]:
         "v98Entry": "/api/architecture/v9/ops-authorization",
         "v99Entry": "/api/architecture/v9/delivery-readiness",
         "v99ReadinessEntry": "/api/architecture/v9/readiness",
+        "v100Entry": "/api/architecture/v10/task-driven-product",
+        "v100ReadinessEntry": "/api/architecture/v10/readiness",
     }
