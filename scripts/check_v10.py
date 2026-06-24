@@ -235,11 +235,17 @@ def main():
     must(index, "dashboard.css?v=10.9.1")
     must(index, "core/task-store.js?v=10.9.1")
     must(index, "core/api-client.js?v=10.9.2")
-    must(index, "modules/report/page.js?v=10.9.2")
+    must(index, "modules/report/page.js?v=10.9.3")
     must(index, "modules/operating-unit/page.js?v=10.9.1")
     must(api_client, "syncDataSource")
+    must(api_client, "resetRuntimeData")
     must(report_page, "经营数据接入")
-    must(report_page, "手动上传只作为备用补数")
+    must(report_page, "手动上传用于补数")
+    must(report_page, "清空测试数据")
+    must(report_page, "resetRuntimeData")
+    must_not(report_page, "v102-primary-action")
+    must_not(report_page, "接口优先")
+    must_not(report_page, "流程：接口接入")
     must(operating_page, "店铺经营标签")
     must(operating_page, "operatingJudgment")
     must_not(operating_page, "ModuleProjection")
@@ -253,7 +259,7 @@ def main():
     must(system_status, "acceptanceChain")
     must(v10_doc, "V10.9 acceptance guard")
     check_runtime_routes()
-    print("V10.9/V10.10 productized operating guard passed.")
+    print("V10.9/V10.10 slim data page guard passed.")
 
 
 if __name__ == "__main__":
