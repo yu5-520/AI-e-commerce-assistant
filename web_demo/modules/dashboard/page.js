@@ -6,13 +6,13 @@
     const tasks = AppTaskStore.listActiveTasks();
     return {
       hasData: Boolean(v3.latestDataVersion || tasks.length || (window.AppMockData.products || []).length),
-      title: "经营总览",
-      heroBadge: "已同步",
+      title: "今日任务台",
+      heroBadge: tasks.length ? `${tasks.length} 个任务` : "已同步",
       latestImport: { label: "最新数据", status: v3.latestDataVersion ? "已入库" : "待导入", totalRows: 0, importedCount: 0, affectedModules: [] },
       metrics: [
         { label: "最新数据", value: v3.latestDataVersion ? "已同步" : "暂无", desc: v3.latestDataVersion ? "已入库" : "待导入" },
         { label: "报表", value: "0 条", desc: "等待导入" },
-        { label: "商品", value: (window.AppMockData.products || []).length, desc: "已进入商品栏" },
+        { label: "商品", value: (window.AppMockData.products || []).length, desc: "已进入经营" },
         { label: "任务", value: tasks.length, desc: "当前待办" },
       ],
       taskQueue: tasks.map((task, index) => normalizeTask(task, index + 1)),
@@ -43,19 +43,19 @@
 
   function importSummary(latest) {
     if (!latest || latest.status === "待导入") return "";
-    const modules = (latest.affectedModules || []).join(" / ") || "报表 / 总览";
-    return `<section class="page-section dashboard-import-summary"><div class="section-header"><h3>最新导入</h3><span class="status-badge">${s(latest.status)}</span></div><div class="alert-kv-grid"><article><span>报表</span><strong>${s(latest.label)}</strong></article><article><span>记录</span><strong>${s(latest.totalRows || latest.rows || 0)} 条</strong></article><article><span>影响模块</span><strong>${s(modules)}</strong></article><article><span>同步时间</span><strong>${s(latest.latestSyncedAt || "已同步")}</strong></article></div></section>`;
+    const modules = (latest.affectedModules || []).join(" / ") || "总览 / 经营 / 任务";
+    return `<section class="v102-status-strip dashboard-import-summary"><strong>${s(latest.status)}</strong><span>${s(latest.label)}</span><span>影响：${s(modules)}</span><span>${s(latest.latestSyncedAt || "已同步")}</span></section>`;
   }
 
   function taskRow(task) {
-    return `<article class="dashboard-task-card dashboard-schedule-row"><div class="todo-rank ${AppShell.statusClass(task.priorityLevel)}">${s(task.rank)}</div><div class="dashboard-schedule-time"><span>时限</span><strong>${s(task.deadline)}</strong></div><div class="dashboard-schedule-main"><span class="dashboard-linked-thumb">${s(task.riskDomain?.[0] || "任")}</span><div class="dashboard-schedule-copy"><div class="dashboard-schedule-title-line"><h3>${s(task.title)}</h3><span>${s(task.priority)}</span></div><strong>${s(task.reason)}</strong><small>${s(task.source)} · ${s(task.status)}</small></div></div><div class="dashboard-linked-actions"><button type="button" data-open-task="${s(task.id)}">进入待办</button></div></article>`;
+    return `<article class="dashboard-task-card dashboard-schedule-row"><div class="todo-rank ${AppShell.statusClass(task.priorityLevel)}">${s(task.rank)}</div><div class="dashboard-schedule-time"><strong>${s(task.deadline)}</strong></div><div class="dashboard-schedule-main"><span class="dashboard-linked-thumb">${s(task.riskDomain?.[0] || "任")}</span><div class="dashboard-schedule-copy"><div class="dashboard-schedule-title-line"><h3>${s(task.title)}</h3><span>${s(task.priority)}</span></div><strong>${s(task.reason)}</strong><small>${s(task.source)} · ${s(task.status)}</small></div></div><div class="dashboard-linked-actions"><button type="button" data-open-task="${s(task.id)}">处理任务</button></div></article>`;
   }
 
   function renderDashboard(payload) {
-    if (!payload?.hasData) return `<section class="owner-hero"><div><h2>暂无数据</h2></div><div class="owner-hero-side"><strong>数据驱动</strong></div></section>`;
+    if (!payload?.hasData) return `<section class="v102-hero owner-hero"><div><h2>今日任务台</h2><strong>上传报表后，系统会把经营问题变成任务。</strong></div><div class="v102-primary-action"><button type="button" data-open-report>上传报表</button><span>先导入数据</span></div></section>`;
     const metrics = payload.metrics || [];
     const tasks = payload.taskQueue || [];
-    return `<section class="owner-hero"><div><h2>经营总览</h2></div><div class="owner-hero-side"><strong>${s(payload.heroBadge || "已同步")}</strong></div></section><section class="kpi-grid owner-metrics">${metrics.map(metricCard).join("")}</section>${importSummary(payload.latestImport)}<section class="page-section dashboard-queue dashboard-linked-queue"><div class="section-header"><h3>当前任务</h3><span class="status-badge">按紧急程度和时间排序</span></div><div class="dashboard-task-list">${tasks.length ? tasks.map(taskRow).join("") : `<div class="dashboard-empty">当前没有可见待办。</div>`}</div></section>`;
+    return `<section class="v102-hero owner-hero"><div><h2>今日任务台</h2><strong>优先处理系统生成的经营任务。</strong></div><div class="v102-primary-action"><button type="button" data-open-tasks>${tasks.length ? "处理任务" : "查看任务"}</button><span>${s(payload.heroBadge || `${tasks.length} 个任务`)}</span></div></section><section class="kpi-grid owner-metrics">${metrics.map(metricCard).join("")}</section>${importSummary(payload.latestImport)}<section class="page-section dashboard-queue dashboard-linked-queue v102-main-section"><div class="section-header"><h3>优先处理</h3><span class="status-badge">${tasks.length} 个可见任务</span></div><div class="dashboard-task-list">${tasks.length ? tasks.map(taskRow).join("") : `<div class="dashboard-empty">当前没有可见待办。</div>`}</div></section>`;
   }
 
   window.DashboardPage = {
@@ -67,6 +67,8 @@
     },
     mount(ctx) {
       ctx.delegate("[data-open-task]", "click", (_, node) => node.dataset.openTask ? AppTaskActions.openTodoTask(node.dataset.openTask) : AppRouter.navigate("business-actions"));
+      ctx.delegate("[data-open-tasks]", "click", () => AppRouter.navigate("business-actions"));
+      ctx.delegate("[data-open-report]", "click", () => AppRouter.navigate("data-check"));
       ctx.addCleanup(AppTaskStore.subscribe(() => AppRouter.schedule("task-store")));
     },
   };
