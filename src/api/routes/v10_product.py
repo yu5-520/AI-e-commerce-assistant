@@ -21,8 +21,8 @@ async def v100_task_driven_product(ctx: UserContext = Depends(get_current_contex
 async def v100_readiness_index(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     product = task_driven_product_summary(ctx)
     return {
-        "version": "10.3.0",
-        "status": "v10_3_today_task_workbench_ready",
+        "version": "10.4.0",
+        "status": "v10_4_report_import_drives_tasks_ready",
         "entries": {
             "taskDrivenProduct": "/api/architecture/v10/task-driven-product",
             "health": "/api/health",
@@ -37,6 +37,8 @@ async def v100_readiness_index(ctx: UserContext = Depends(get_current_context)) 
         "uiProductizationRules": product["uiProductizationRules"],
         "dashboardWorkbenchSections": product["dashboardWorkbenchSections"],
         "dashboardRules": product["dashboardRules"],
+        "importTaskFlow": product["importTaskFlow"],
+        "importRefreshContract": product["importRefreshContract"],
         "taskTypes": product["taskTypes"],
         "auditMeta": ctx.audit_meta(),
     }
