@@ -32,11 +32,6 @@ def _percent(value: Any) -> float | None:
         return None
 
 
-def _store_count(products: List[Dict[str, Any]]) -> int:
-    stores = {item.get("storeId") or item.get("store") for item in products if item.get("storeId") or item.get("store")}
-    return len(stores) or (1 if products else 0)
-
-
 def _store_weight_tag(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> str:
     if len(products) >= 10 or len(traffic) >= 8:
         return "高权重店铺"
@@ -88,23 +83,28 @@ def _main_risk(risk_tags: List[str]) -> str:
     return risk_tags[0] if risk_tags else "常规观察"
 
 
-def _visible_store_rows(user: Dict[str, Any], products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    store_ids = list(user.get("storeIds") or [])
-    product_store_ids = [str(item.get("storeId")) for item in products if item.get("storeId")]
-    for store_id in product_store_ids:
-        if store_id not in store_ids:
+def _visible_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return only stores that have runtime data.
+
+    Account seed stores are permissions, not business data. Demo clear must return a
+    true empty operating page instead of pre-rendering placeholder stores.
+    """
+    store_ids: List[str] = []
+    for item in [*products, *traffic]:
+        store_id = str(item.get("storeId") or "").strip()
+        if store_id and store_id not in store_ids:
             store_ids.append(store_id)
     store_map = {store["id"]: store for store in list_stores()}
     rows: List[Dict[str, Any]] = []
     for index, store_id in enumerate(store_ids, start=1):
         store = store_map.get(store_id) or {"id": store_id, "name": store_id or f"店铺 {index}", "platform": "导入数据"}
         rows.append({"storeId": store.get("id"), "storeName": store.get("name") or store_id or f"店铺 {index}", "platform": store.get("platform") or "导入数据"})
-    if not rows and products:
+    if not rows and (products or traffic):
         rows.append({"storeId": "GLOBAL", "storeName": "未绑定店铺", "platform": "导入数据"})
     return rows
 
 
-def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], user: Dict[str, Any], task_counters: Dict[str, Any]) -> List[Dict[str, Any]]:
+def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], task_counters: Dict[str, Any]) -> List[Dict[str, Any]]:
     products_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     traffic_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for item in products:
@@ -112,7 +112,7 @@ def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any
     for item in traffic:
         traffic_by_store[str(item.get("storeId") or "GLOBAL")].append(item)
     rows: List[Dict[str, Any]] = []
-    for store in _visible_store_rows(user, products):
+    for store in _visible_store_rows(products, traffic):
         store_id = str(store.get("storeId") or "GLOBAL")
         store_products = products_by_store.get(store_id, [])
         store_traffic = traffic_by_store.get(store_id, [])
@@ -162,13 +162,11 @@ def operating_unit(request: Request) -> Dict[str, Any]:
     products = projected_products(user_id)
     traffic = projected_traffic(user_id)
     task_counters = get_task_counters_for_user(user_id)
-    store_rows = build_store_rows(products, traffic, user, task_counters)
-    risk_store_count = sum(1 for row in store_rows if "常规观察" not in (row.get("riskTags") or []))
     active_tasks = _as_int(task_counters.get("visibleActive"), 0)
-    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or store_rows)
+    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or active_tasks)
     if not has_data:
         return {
-            "version": "5.2.0",
+            "version": "5.2.1",
             "hasData": False,
             "emptyState": "暂无数据",
             "syncState": {"label": "等待数据", "status": "empty"},
@@ -178,8 +176,10 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "operatingJudgment": None,
             "tasks": task_counters,
         }
+    store_rows = build_store_rows(products, traffic, task_counters)
+    risk_store_count = sum(1 for row in store_rows if "常规观察" not in (row.get("riskTags") or []))
     return {
-        "version": "5.2.0",
+        "version": "5.2.1",
         "hasData": True,
         "unitName": "经营单元",
         "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
