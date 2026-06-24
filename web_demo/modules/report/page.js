@@ -11,12 +11,21 @@
     { sourceId: "manual_upload", label: "手动上传", priority: "backup", displayStatus: "备用入口", cadence: "临时补录", dataScope: ["历史数据", "异常补数"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "上传文件" },
   ];
 
+  function realRecords(payload) {
+    if (Array.isArray(payload?.syncRecords)) return payload.syncRecords;
+    const groups = Array.isArray(payload?.reportGroups) ? payload.reportGroups : [];
+    return groups.flatMap((group) => (group.reports || []).filter((item) => item.latestDataVersion || item.status === "已导入"));
+  }
+
   function latestReport(payload) {
-    const groups = payload?.reportGroups || [];
-    const first = groups[0] || {};
+    const records = realRecords(payload);
+    const first = records[0] || {};
     const sync = lastImportSync || payload?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync;
+    if (!payload?.hasData && !sync && !records.length) {
+      return { label: "等待同步", status: "待同步", taskCount: 0, rows: 0, message: "暂无同步数据", modules: [] };
+    }
     return {
-      label: sync?.datasetNames?.join(" / ") || first.name || payload?.v3?.latestDataVersion || "等待同步",
+      label: sync?.datasetNames?.join(" / ") || first.name || first.label || payload?.v3?.latestDataVersion || "等待同步",
       status: sync?.status === "completed" ? "已更新" : first.status || (payload?.v3?.latestDataVersion ? "已更新" : "待同步"),
       taskCount: sync?.createdTaskCount ?? first.createdTaskCount ?? first.taskCount ?? payload?.recentAlerts?.length ?? 0,
       rows: sync?.rowCount ?? first.rows ?? first.totalRows ?? 0,
@@ -32,6 +41,10 @@
 
   function recordRow(item) {
     return `<article class="report-record-row"><strong>${s(item.name || item.label || "同步记录")}</strong><span>${s(item.status || "已处理")}</span><span>生成 ${s(item.createdTaskCount ?? item.taskCount ?? 0)} 个任务</span><button type="button" data-report-task="${s(item.id || item.name || "report")}">查看任务</button></article>`;
+  }
+
+  function emptyRecordRow() {
+    return `<article class="report-record-row"><strong>暂无同步记录</strong><span>等待接口同步</span><span>清空后不保留占位记录</span><button type="button" data-source-sync="erp">同步 ERP</button></article>`;
   }
 
   function sourceCard(item) {
@@ -119,14 +132,14 @@
     async render() {
       const [payload, connectionPayload] = await Promise.all([AppApi.report(), AppApi.dataSourceConnections?.()]);
       const latest = latestReport(payload || {});
-      const groups = payload?.reportGroups || [];
+      const records = realRecords(payload || {});
       const sources = connectionPayload?.sources?.length ? connectionPayload.sources : FALLBACK_SOURCES;
       const primarySources = sources.filter((item) => item.priority !== "backup");
       return `<section class="v102-hero report-workbench"><div><h2>经营数据接入</h2><strong>ERP、CRM、平台后台和广告后台是主链路；手动上传用于补数。</strong></div></section>
         ${syncStrip(latest)}
         <section class="page-section v102-main-section"><div class="section-header"><h3>已接入数据源</h3><span class="status-badge">接口主链路</span></div><div class="platform-grid">${primarySources.map(sourceCard).join("")}</div></section>
         ${uploadSection()}
-        <section class="page-section v102-main-section"><div class="section-header"><h3>同步记录</h3><button type="button" class="secondary" data-reset-demo>清空测试数据</button></div><div class="report-record-list">${groups.length ? groups.map(recordRow).join("") : `<article class="report-record-row"><strong>暂无同步记录</strong><span>等待接口同步</span><span>备用上传不会成为主链路</span><button type="button" data-source-sync="erp">同步 ERP</button></article>`}</div></section>`;
+        <section class="page-section v102-main-section"><div class="section-header"><h3>同步记录</h3><button type="button" class="secondary" data-reset-demo>清空测试数据</button></div><div class="report-record-list">${records.length ? records.map(recordRow).join("") : emptyRecordRow()}</div></section>`;
     },
     mount(ctx) {
       ctx.delegate("[data-source-sync]", "click", async (event, target) => {
@@ -144,7 +157,7 @@
         }
         await AppApi.refreshAfterDataImport(result);
         lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
-        AppRouter.schedule("v1011-source-sync");
+        AppRouter.schedule("v1012-source-sync");
       });
       ctx.delegate("[data-open-source-config]", "click", (event, target) => {
         const sourceId = target.getAttribute("data-open-source-config") || "数据源";
@@ -158,7 +171,7 @@
         const result = await AppApi.importMockAlerts();
         await AppApi.refreshAfterDataImport(result);
         lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
-        AppRouter.schedule("v1011-demo-sync");
+        AppRouter.schedule("v1012-demo-sync");
       });
       ctx.delegate("[data-reset-demo]", "click", async (event, target) => {
         if (!window.confirm("清空演示测试数据？这会重置总览、经营、任务、数据和日志。")) return;
@@ -171,7 +184,7 @@
         await AppApi.refreshAfterDataImport({ v104ImportTaskSync: null });
         target.disabled = false;
         target.textContent = oldText;
-        AppRouter.schedule("v1011-reset-demo");
+        AppRouter.schedule("v1012-reset-demo");
       });
       ctx.on("[data-manual-file-input]", "change", async (event) => {
         const file = event.target.files?.[0];
@@ -185,7 +198,7 @@
           await AppApi.refreshAfterDataImport(result);
           lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
           setSourceMessage(`备用上传完成：${file.name}，读取 ${rows.length} 行。`);
-          AppRouter.schedule("v1011-manual-upload");
+          AppRouter.schedule("v1012-manual-upload");
         } catch (error) {
           setSourceMessage(`备用上传失败：${error.message || error}`);
         } finally {
