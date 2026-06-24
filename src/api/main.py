@@ -13,7 +13,7 @@ from src.api.routes import accounts, approvals, architecture, audit, data_import
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "10.2.0"
+API_VERSION = "10.3.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 
