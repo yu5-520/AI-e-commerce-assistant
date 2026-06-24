@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from typing import Any, Dict, List
 
@@ -101,7 +100,7 @@ def build_operating_tags(products: List[Dict[str, Any]], traffic: List[Dict[str,
     priority = "先处理风险商品，再复核流量承接。" if main_risk != "常规观察" else "保持观察，等待下一轮数据同步。"
     return {
         "cards": [
-            {"label": "店铺权重", "value": store_weight, "level": _tag_level(store_weight), "tags": [f"店铺 { _store_count(products) }", f"商品 {len(products)}"]},
+            {"label": "店铺权重", "value": store_weight, "level": _tag_level(store_weight), "tags": [f"店铺 {_store_count(products)}", f"商品 {len(products)}"]},
             {"label": "商品结构", "value": product_roles[0], "level": _tag_level(product_roles[0]), "tags": product_roles[:4]},
             {"label": "风险标签", "value": main_risk, "level": _tag_level(main_risk), "tags": risk_tags[:4]},
             {"label": "任务强度", "value": task_intensity, "level": _tag_level(task_intensity), "tags": [f"任务 {active_tasks}", f"预警 {active_alert_count}"]},
