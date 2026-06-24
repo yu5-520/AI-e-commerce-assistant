@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## V10.9.0
+
+任务驱动验收守卫。
+
+- 新增 `src/services/v109_acceptance_guard_service.py`，固定 V10 任务驱动产品的端到端验收链。
+- V10 readiness 增加 `acceptanceGuard`、`acceptanceChain`、`acceptanceRules` 和 `blockingFailures`。
+- 验收链覆盖报表导入、V10.4 模块刷新、V10.7 经营档案、Agent 自动标签、V10.8 标签变化任务、任务池可见、V10.5 跨账号视图、V10.6 极简动作、日志留痕和 RAG 记忆候选。
+- 系统状态页展示 V10.9 验收链路、验收规则和阻断失败项。
+- V10 守卫升级为端到端验收：导入测试数据、生成标签变化任务、三端查看任务、运营接收提交、总管复核通过，并检查 RAG 记忆候选草案。
+- V10.9 不新增日常操作功能，只收束产品闭环。
+
 ## V10.8.0
 
 标签变化任务。
