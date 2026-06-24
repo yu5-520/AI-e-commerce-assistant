@@ -1,12 +1,13 @@
-"""V10.8 task-driven product contract."""
+"""V10.9 task-driven product contract."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
 from src.core.context import UserContext
+from src.services.v109_acceptance_guard_service import v109_acceptance_summary
 
-V100_TASK_PRODUCT_VERSION = "10.8.0"
+V100_TASK_PRODUCT_VERSION = "10.9.0"
 
 TASK_DRIVEN_PRINCIPLES = ["all user intervention must appear as a task", "system and Agent handle classification, labels, routing, refresh and audit", "users should not confirm tags or manually classify products by default", "frontend shows actions, not internal workflow complexity", "task cards are the primary product surface"]
 MINIMAL_NAVIGATION = ["dashboard", "reports", "operation", "tasks", "logs", "accounts", "system"]
@@ -35,6 +36,7 @@ NAVIGATION_COMPRESSION_RULES = ["sidebar keeps only seven product-level entries"
 
 
 def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
+    acceptance = v109_acceptance_summary()
     return {
         "version": V100_TASK_PRODUCT_VERSION,
         "name": "V10 task-driven AI operating product",
@@ -63,8 +65,12 @@ def task_driven_product_summary(ctx: UserContext) -> Dict[str, Any]:
         "operatingProfileSurfaces": V107_PROFILE_SURFACES,
         "tagChangeTaskRules": V108_TAG_CHANGE_TASK_RULES,
         "tagChangeTaskFlow": V108_TAG_CHANGE_TASK_FLOW,
+        "acceptanceGuard": acceptance,
+        "acceptanceChain": acceptance["acceptanceChain"],
+        "acceptanceRules": acceptance["acceptanceRules"],
+        "blockingFailures": acceptance["blockingFailures"],
         "taskFlowStages": TASK_FLOW_STAGES,
-        "nonGoals": ["不让用户默认确认标签", "不让用户手动维护分类作为主流程", "不把复杂流程节点暴露到经营界面", "不让用户手动选择跨账号流程节点", "不让任务卡堆满低频按钮", "不把标签确认变成用户必做动作", "不让标签变化停留在系统候选里"],
+        "nonGoals": ["不让用户默认确认标签", "不让用户手动维护分类作为主流程", "不把复杂流程节点暴露到经营界面", "不让用户手动选择跨账号流程节点", "不让任务卡堆满低频按钮", "不把标签确认变成用户必做动作", "不让标签变化停留在系统候选里", "不让 V10 闭环缺少验收守卫"],
         "context": ctx.to_dict(),
         "auditMeta": ctx.audit_meta(),
     }
