@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## V10.5.0
+
+跨账号任务自动流转。
+
+- 新增 `src/services/v105_cross_account_flow_service.py`，将同一个任务投射成老板、总管、运营三种角色视图。
+- 任务接口 `/api/modules/todo` 返回 `crossAccountFlow`、`roleViewStatus`、`displayStatus` 和 `primaryRoleActions`。
+- 老板账号看到进度视图，总管账号看到派发 / 复核视图，运营账号看到接收 / 提交 / 补充视图。
+- 运营提交后自动进入总管待复核，总管复核后老板同步看到完成结果。
+- 任务页展示“当前视图”和“下一同步”，减少用户理解流程节点的成本。
+- 系统状态页展示 V10.5 跨账号任务流转规则和角色动作。
+- V10 守卫增加跨账号 service、todo role projection、任务页展示和运行态接口检查。
+
 ## V10.4.0
 
 报表导入驱动任务。
