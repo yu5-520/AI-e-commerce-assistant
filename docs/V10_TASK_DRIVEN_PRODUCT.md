@@ -48,6 +48,15 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 页面视觉比例按主要功能 70%、辅助状态 20%、标题说明 10% 收束。
 ```
 
+## V10.3 dashboard workbench
+
+```text
+总览不是数据看板，而是今日任务台。
+今日任务台固定五块：今日优先任务、高风险事项、最新报表结果、待复核事项、今日完成进度。
+优先任务必须比指标更靠前，用户进入首页先看到今天要处理什么。
+高风险、报表结果、待复核、完成进度作为辅助判断，不抢主任务区。
+```
+
 ## User actions
 
 ```text
