@@ -187,6 +187,7 @@ def _build_task_draft(source_module: str, entity_id: str, item: Dict[str, Any], 
     evidence_summary = metric_evidence.get("summary") or "暂无完整指标证据"
     base_evidence_required = plan.get("evidenceRequired") or []
     metric_required = ["指标证据截图或接口记录", "趋势比对结果", "处理前后 ROI / CTR / CVR / 退款率 / 库存数据"]
+    failure_threshold = [*(plan.get("failureThreshold") or []), *[step.get("failureCondition") for step in sop_steps if step.get("failureCondition")]][:10]
     return {
         "title": _task_title(problem_type, item, metric_evidence),
         "task": f"执行《{task_sop.get('sopName')}》：按分时动作提交证据，不允许只写处理建议。",
@@ -229,7 +230,7 @@ def _build_task_draft(source_module: str, entity_id: str, item: Dict[str, Any], 
         "evidenceRequired": [*metric_required, *base_evidence_required, *[e for step in sop_steps for e in step.get("requiredEvidence") or []]][:24],
         "submitMetrics": ["当前值", "基线值", "趋势变化", "样本量", *(plan.get("submitMetrics") or [])],
         "acceptanceCriteria": ["任务完成必须提交精准指标、趋势比对、SOP 要求证据和处理后复盘数据。", "未完成 SOP 证据门，不允许标记完成。", *(plan.get("acceptanceCriteria") or [])],
-        "failureThreshold": [*(plan.get("failureThreshold") or []), *[step.get("failureCondition") for step in sop_steps if step.get("failureCondition")]][:10]],
+        "failureThreshold": failure_threshold,
         "reviewFocus": ["指标是否算清楚", "趋势是否连续成立", "交叉验证是否支持该任务", "SOP 每一步证据是否完整", *(plan.get("reviewFocus") or [])],
         "judgmentTags": [problem_type, risk_domain, (metric_evidence.get("taskDecision") or {}).get("decision"), task_sop.get("sopName"), *rule_hits[:3]],
         "createdByRole": "agent",
