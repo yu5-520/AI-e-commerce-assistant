@@ -38,6 +38,16 @@ V10 turns the system from an architecture-ready SaaS base into a task-driven AI 
 账号权限 visibleModules 需要映射到 V10 主导航，避免旧模块列表误隐藏新入口。
 ```
 
+## V10.2 productized layout
+
+```text
+标题区只承担定位，不抢首屏。
+说明文字能删就删，必要信息压缩成一行状态。
+数据流转默认折叠，主页面只展示同步结果。
+主要按钮、任务卡、核心列表占最大视觉权重。
+页面视觉比例按主要功能 70%、辅助状态 20%、标题说明 10% 收束。
+```
+
 ## User actions
 
 ```text
