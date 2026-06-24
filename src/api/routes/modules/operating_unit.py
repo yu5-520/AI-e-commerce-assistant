@@ -1,13 +1,13 @@
-"""Operating unit route for productized store tags and business judgment."""
+"""Operating unit route for productized store row tags and business judgment."""
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
 
-from src.services.account_service import current_user, user_id_from_headers
+from src.services.account_service import current_user, list_stores, user_id_from_headers
 from src.services.module_projection_service import projection_summary, projected_products, projected_traffic
 from src.services.module_task_service import get_task_counters_for_user
 from src.services.report_alert_service import get_v3_dashboard_summary
@@ -60,7 +60,7 @@ def _product_role(item: Dict[str, Any]) -> str:
     return "观察款"
 
 
-def _risk_tags(products: List[Dict[str, Any]], active_alert_count: int) -> List[str]:
+def _risk_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) -> List[str]:
     tags: List[str] = []
     if any(item.get("inventoryLevel") in {"danger", "warning"} for item in products):
         tags.append("库存风险")
@@ -88,30 +88,69 @@ def _main_risk(risk_tags: List[str]) -> str:
     return risk_tags[0] if risk_tags else "常规观察"
 
 
-def build_operating_tags(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], v3: Dict[str, Any], task_counters: Dict[str, Any]) -> Dict[str, Any]:
-    active_alert_count = _as_int(v3.get("activeAlertCount"), 0)
+def _visible_store_rows(user: Dict[str, Any], products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    store_ids = list(user.get("storeIds") or [])
+    product_store_ids = [str(item.get("storeId")) for item in products if item.get("storeId")]
+    for store_id in product_store_ids:
+        if store_id not in store_ids:
+            store_ids.append(store_id)
+    store_map = {store["id"]: store for store in list_stores()}
+    rows: List[Dict[str, Any]] = []
+    for index, store_id in enumerate(store_ids, start=1):
+        store = store_map.get(store_id) or {"id": store_id, "name": store_id or f"店铺 {index}", "platform": "导入数据"}
+        rows.append({"storeId": store.get("id"), "storeName": store.get("name") or store_id or f"店铺 {index}", "platform": store.get("platform") or "导入数据"})
+    if not rows and products:
+        rows.append({"storeId": "GLOBAL", "storeName": "未绑定店铺", "platform": "导入数据"})
+    return rows
+
+
+def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], user: Dict[str, Any], task_counters: Dict[str, Any]) -> List[Dict[str, Any]]:
+    products_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    traffic_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for item in products:
+        products_by_store[str(item.get("storeId") or "GLOBAL")].append(item)
+    for item in traffic:
+        traffic_by_store[str(item.get("storeId") or "GLOBAL")].append(item)
+    rows: List[Dict[str, Any]] = []
+    for store in _visible_store_rows(user, products):
+        store_id = str(store.get("storeId") or "GLOBAL")
+        store_products = products_by_store.get(store_id, [])
+        store_traffic = traffic_by_store.get(store_id, [])
+        role_counter = Counter(_product_role(item) for item in store_products)
+        product_role_tags = [f"{name} {count}" for name, count in role_counter.most_common()] or ["暂无商品"]
+        risk_tags = _risk_tags(store_products)
+        risk_count = 0 if risk_tags == ["常规观察"] else len(risk_tags)
+        task_intensity = "强处理" if risk_count or len(store_products) >= 8 else "常规处理"
+        store_weight = _store_weight_tag(store_products, store_traffic)
+        main_risk = _main_risk(risk_tags)
+        rows.append({
+            "storeId": store.get("storeId"),
+            "storeName": store.get("storeName"),
+            "platform": store.get("platform"),
+            "storeWeightTag": store_weight,
+            "productCount": len(store_products),
+            "trafficCount": len(store_traffic),
+            "productRoleTags": product_role_tags[:4],
+            "riskTags": risk_tags[:4],
+            "taskIntensity": task_intensity,
+            "activeTaskCount": 0,
+            "alertCount": risk_count,
+            "level": _tag_level(task_intensity if task_intensity == "强处理" else main_risk),
+            "judgment": f"{main_risk} · {task_intensity}",
+        })
+    return rows
+
+
+def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any]) -> Dict[str, Any]:
+    strong_count = sum(1 for row in store_rows if row.get("taskIntensity") == "强处理")
+    risk_rows = [row for row in store_rows if "常规观察" not in (row.get("riskTags") or [])]
+    main_risk = (risk_rows[0].get("riskTags") or ["常规观察"])[0] if risk_rows else "常规观察"
     active_tasks = _as_int(task_counters.get("visibleActive"), 0)
-    store_weight = _store_weight_tag(products, traffic)
-    role_counter = Counter(_product_role(item) for item in products)
-    product_roles = [f"{name} {count}" for name, count in role_counter.most_common()] or ["暂无商品"]
-    risk_tags = _risk_tags(products, active_alert_count)
-    task_intensity = "强处理" if active_alert_count >= 2 or active_tasks >= 5 or any(tag != "常规观察" for tag in risk_tags) else "常规处理"
-    main_risk = _main_risk(risk_tags)
-    priority = "先处理风险商品，再复核流量承接。" if main_risk != "常规观察" else "保持观察，等待下一轮数据同步。"
-    return {
-        "cards": [
-            {"label": "店铺权重", "value": store_weight, "level": _tag_level(store_weight), "tags": [f"店铺 {_store_count(products)}", f"商品 {len(products)}"]},
-            {"label": "商品结构", "value": product_roles[0], "level": _tag_level(product_roles[0]), "tags": product_roles[:4]},
-            {"label": "风险标签", "value": main_risk, "level": _tag_level(main_risk), "tags": risk_tags[:4]},
-            {"label": "任务强度", "value": task_intensity, "level": _tag_level(task_intensity), "tags": [f"任务 {active_tasks}", f"预警 {active_alert_count}"]},
-        ],
-        "judgment": {
-            "title": "经营判断",
-            "summary": f"当前经营单元以{main_risk}为主要信号，任务强度为{task_intensity}。{priority}",
-            "priority": priority,
-            "mainRisk": main_risk,
-        },
-    }
+    if strong_count:
+        summary = f"当前 {len(store_rows)} 个店铺中，{strong_count} 个需要强处理，优先处理{main_risk}店铺。"
+    else:
+        summary = f"当前 {len(store_rows)} 个店铺以常规观察为主，保持同步并等待下一轮数据。"
+    return {"title": "经营判断", "summary": summary, "priority": "按店铺逐行处理", "mainRisk": main_risk, "strongStoreCount": strong_count, "activeTaskCount": active_tasks}
 
 
 @router.get("/operating-unit")
@@ -123,37 +162,37 @@ def operating_unit(request: Request) -> Dict[str, Any]:
     products = projected_products(user_id)
     traffic = projected_traffic(user_id)
     task_counters = get_task_counters_for_user(user_id)
-    active_alert_count = _as_int(v3.get("activeAlertCount"), 0)
+    store_rows = build_store_rows(products, traffic, user, task_counters)
+    risk_store_count = sum(1 for row in store_rows if "常规观察" not in (row.get("riskTags") or []))
     active_tasks = _as_int(task_counters.get("visibleActive"), 0)
-    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or active_alert_count)
+    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or store_rows)
     if not has_data:
         return {
-            "version": "5.1.0",
+            "version": "5.2.0",
             "hasData": False,
             "emptyState": "暂无数据",
             "syncState": {"label": "等待数据", "status": "empty"},
             "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
             "metrics": [],
-            "storeTags": [],
+            "storeRows": [],
             "operatingJudgment": None,
             "tasks": task_counters,
         }
-    tag_payload = build_operating_tags(products, traffic, v3, task_counters)
     return {
-        "version": "5.1.0",
+        "version": "5.2.0",
         "hasData": True,
         "unitName": "经营单元",
         "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
         "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
         "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
         "metrics": [
-            {"label": "店铺", "value": _store_count(products)},
+            {"label": "店铺", "value": len(store_rows)},
             {"label": "商品", "value": len(products)},
-            {"label": "风险", "value": active_alert_count},
+            {"label": "风险店铺", "value": risk_store_count},
             {"label": "任务", "value": active_tasks},
         ],
-        "storeTags": tag_payload["cards"],
-        "operatingJudgment": tag_payload["judgment"],
+        "storeRows": store_rows,
+        "operatingJudgment": build_operating_judgment(store_rows, task_counters),
         "tasks": task_counters,
         "projection": projection,
         "v3": v3,
