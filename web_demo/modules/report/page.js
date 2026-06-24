@@ -55,7 +55,8 @@
       <input type="file" data-manual-file-input accept=".csv,.json,text/csv,application/json" style="display:none" />
       <div class="report-record-list">
         <article class="report-record-row"><strong>手动上传 CSV / JSON</strong><span>备用补数</span><span>接口未开通或异常时使用</span><button type="button" class="secondary" data-open-upload>选择文件</button></article>
-        <article class="report-record-row"><strong>演示数据同步</strong><span>Demo</span><span>不代表正式主链路</span><button type="button" class="secondary" data-import-demo>运行演示</button></article>
+        <article class="report-record-row"><strong>演示数据同步</strong><span>Demo</span><span>生成测试任务和记录</span><button type="button" class="secondary" data-import-demo>运行演示</button></article>
+        <article class="report-record-row"><strong>清空测试数据</strong><span>Demo</span><span>重置总览、经营、任务、数据和日志</span><button type="button" class="secondary" data-reset-demo>清空数据</button></article>
       </div>
     </section>`;
   }
@@ -121,12 +122,11 @@
       const groups = payload?.reportGroups || [];
       const sources = connectionPayload?.sources?.length ? connectionPayload.sources : FALLBACK_SOURCES;
       const primarySources = sources.filter((item) => item.priority !== "backup");
-      return `<section class="v102-hero report-workbench"><div><h2>经营数据接入</h2><strong>ERP、CRM、平台后台和广告后台是主链路；手动上传只作为备用补数。</strong></div><div class="v102-primary-action"><button type="button" data-source-sync="erp">同步 ERP</button><button type="button" class="secondary" data-open-source-config="erp">接入数据源</button><span>${s(latest.message || `主链路就绪 · 生成 ${latest.taskCount} 个任务`)}</span></div></section>
-        <section class="v102-status-strip v104-import-sync-strip"><strong>接口优先</strong><span data-source-message>${s(sourceMessage)}</span><span>流程：接口接入 / 自动同步 / 字段识别 / 任务生成 / 日志留痕</span><button type="button" class="secondary" data-open-upload>备用上传</button></section>
+      return `<section class="v102-hero report-workbench"><div><h2>经营数据接入</h2><strong>ERP、CRM、平台后台和广告后台是主链路；手动上传用于补数。</strong></div></section>
         ${syncStrip(latest)}
         <section class="page-section v102-main-section"><div class="section-header"><h3>已接入数据源</h3><span class="status-badge">接口主链路</span></div><div class="platform-grid">${primarySources.map(sourceCard).join("")}</div></section>
         ${uploadSection()}
-        <section class="page-section v102-main-section"><div class="section-header"><h3>同步记录</h3><span class="status-badge">任务驱动</span></div><div class="report-record-list">${groups.length ? groups.map(recordRow).join("") : `<article class="report-record-row"><strong>暂无同步记录</strong><span>等待接口同步</span><span>备用上传不会成为主链路</span><button type="button" data-source-sync="erp">同步 ERP</button></article>`}</div></section>`;
+        <section class="page-section v102-main-section"><div class="section-header"><h3>同步记录</h3><button type="button" class="secondary" data-reset-demo>清空测试数据</button></div><div class="report-record-list">${groups.length ? groups.map(recordRow).join("") : `<article class="report-record-row"><strong>暂无同步记录</strong><span>等待接口同步</span><span>备用上传不会成为主链路</span><button type="button" data-source-sync="erp">同步 ERP</button></article>`}</div></section>`;
     },
     mount(ctx) {
       ctx.delegate("[data-source-sync]", "click", async (event, target) => {
@@ -139,16 +139,16 @@
         if (!result) {
           target.disabled = false;
           target.textContent = oldText;
-          setSourceMessage("接口同步失败：请先确认后端服务和 /api/data/source-connections 接口已更新。");
+          setSourceMessage("接口同步失败：请确认后端服务已更新。");
           return;
         }
         await AppApi.refreshAfterDataImport(result);
         lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
-        AppRouter.schedule("v1010-source-sync");
+        AppRouter.schedule("v1011-source-sync");
       });
       ctx.delegate("[data-open-source-config]", "click", (event, target) => {
         const sourceId = target.getAttribute("data-open-source-config") || "数据源";
-        setSourceMessage(`${sourceId.toUpperCase()} 接口配置入口已预留：正式接入时配置 API 地址、密钥、同步频率、字段映射和店铺权限。`);
+        setSourceMessage(`${sourceId.toUpperCase()} 接口配置入口已预留。`);
       });
       ctx.delegate("[data-open-upload]", "click", () => AppShell.view()?.querySelector("[data-manual-file-input]")?.click());
       ctx.delegate("[data-import-demo]", "click", async (event, target) => {
@@ -158,7 +158,20 @@
         const result = await AppApi.importMockAlerts();
         await AppApi.refreshAfterDataImport(result);
         lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
-        AppRouter.schedule("v1010-demo-sync");
+        AppRouter.schedule("v1011-demo-sync");
+      });
+      ctx.delegate("[data-reset-demo]", "click", async (event, target) => {
+        if (!window.confirm("清空演示测试数据？这会重置总览、经营、任务、数据和日志。")) return;
+        const oldText = target.textContent;
+        target.disabled = true;
+        target.textContent = "清空中";
+        await AppApi.resetRuntimeData(true);
+        lastImportSync = null;
+        setSourceMessage("测试数据已清空。");
+        await AppApi.refreshAfterDataImport({ v104ImportTaskSync: null });
+        target.disabled = false;
+        target.textContent = oldText;
+        AppRouter.schedule("v1011-reset-demo");
       });
       ctx.on("[data-manual-file-input]", "change", async (event) => {
         const file = event.target.files?.[0];
@@ -172,7 +185,7 @@
           await AppApi.refreshAfterDataImport(result);
           lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
           setSourceMessage(`备用上传完成：${file.name}，读取 ${rows.length} 行。`);
-          AppRouter.schedule("v1010-manual-upload");
+          AppRouter.schedule("v1011-manual-upload");
         } catch (error) {
           setSourceMessage(`备用上传失败：${error.message || error}`);
         } finally {
