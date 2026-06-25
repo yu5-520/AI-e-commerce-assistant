@@ -388,6 +388,36 @@ def update_task(task_id: str, patch: Dict[str, Any], *, log_type: str | None = N
     return deepcopy(task)
 
 
+def submit_task(task_id: str, note: str | None = None, submitter_id: str | None = None) -> Dict[str, Any] | None:
+    """Lifecycle-only submit adapter used by evidence forms."""
+    return update_task(
+        task_id,
+        {"status": "待复核", "workflowStatus": "待复核", "submissionNote": note or "运营已提交处理结果。", "submittedById": submitter_id, "submittedAt": now_iso()},
+        log_type="任务提交",
+        action="提交复核",
+        result=note or "运营已提交处理结果，等待复核。",
+    )
+
+
+def review_task(task_id: str, decision: str = "approve", note: str | None = None, reviewer_id: str | None = None) -> Dict[str, Any] | None:
+    """Lifecycle-only review adapter used by evidence review."""
+    approved = decision in {"approve", "approved", "pass", "通过"}
+    return update_task(
+        task_id,
+        {
+            "status": "已完成" if approved else "已退回",
+            "workflowStatus": "已通过" if approved else "已退回",
+            "reviewResult": "通过" if approved else "退回",
+            "reviewNote": note or ("复核通过。" if approved else "复核退回。"),
+            "reviewerId": reviewer_id,
+            "reviewedAt": now_iso(),
+        },
+        log_type="任务复核",
+        action="复核通过" if approved else "复核退回",
+        result=note or ("复核通过。" if approved else "复核退回。"),
+    )
+
+
 def pin_task(task_id: str) -> Dict[str, Any] | None:
     """Lifecycle-only pin adapter kept for the todo route."""
     task = find_task(task_id)
