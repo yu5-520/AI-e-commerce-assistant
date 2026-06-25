@@ -32,6 +32,8 @@ web_demo/modules/dashboard/page.js
 
 ## 2. 数据 / 报表导入模块链
 
+### 2.1 JSON rows 旧链路
+
 ```text
 web_demo/modules/report/page.js
 → AppApi.previewReportRows()
@@ -49,9 +51,30 @@ web_demo/modules/report/page.js
 → v108_tag_change_task_service
 ```
 
+### 2.2 Excel / CSV / JSON 文件上传链路
+
+```text
+web_demo/modules/report/page.js
+→ AppApi.uploadReportFile()
+→ POST /api/data/upload/confirm
+→ src/api/routes/data_import.py
+→ import_adapter_service
+→ Excel / CSV / JSON parser
+→ Sheet 识别
+→ 原始事实 rows
+→ report_schema_service
+→ trend_signal_service
+→ risk_task_service
+→ v104_import_task_sync_service
+→ v107_operating_profile_service
+→ v108_tag_change_task_service
+```
+
+边界：`import_adapter_service` 只能做文件读取、Sheet 识别、字段读取和单元格格式标准化，不能提前写风险判断、任务线索、售后归因或经营建议。
+
 关联模块：总览、经营、任务、日志、趋势、RAG。
 
-验收点：确认导入后必须返回导入结果、趋势同步、风险任务同步、经营档案、标签变化任务同步，并触发前端刷新。
+验收点：确认导入后必须返回导入结果、上传元信息、趋势同步、风险任务同步、经营档案、标签变化任务同步，并触发前端刷新。
 
 ## 3. 经营模块链
 
