@@ -1,10 +1,10 @@
 (function () {
   const s = (value) => AppShell.escape(value ?? "");
   const operationTabs = [
-    ["product", "商品", "商品预警与处理任务"],
-    ["competitor", "竞品", "竞品信号与测试任务"],
-    ["listing", "上新", "上新验证与增长任务"],
-    ["traffic", "流量", "流量趋势与放量任务"],
+    ["business-products", "商品档案", "清洗后的商品列表、商品标签、基线状态"],
+    ["business-competitors", "竞品信号", "价格变化、差评关键词、可转化机会"],
+    ["business-listing", "上新测试", "主图、标题、SKU、卖点测试记录"],
+    ["business-traffic", "流量趋势", "曝光、点击、转化、ROI 与流量结构"],
   ];
 
   function hero(title, syncState = {}) {
@@ -17,7 +17,7 @@
   }
 
   function tabs() {
-    return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3><span class="status-badge">任务统一承接</span></div><div class="quick-actions">${operationTabs.map(([module, label, desc]) => `<button data-operation-module="${s(module)}"><strong>${s(label)}</strong><span>${s(desc)}</span></button>`).join("")}</div></section>`;
+    return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3><span class="status-badge">经营对象入口</span></div><div class="quick-actions">${operationTabs.map(([route, label, desc]) => `<button data-operation-route="${s(route)}"><strong>${s(label)}</strong><span>${s(desc)}</span></button>`).join("")}</div></section>`;
   }
 
   function tagList(tags) {
@@ -26,13 +26,18 @@
   }
 
   function storeRow(row) {
+    const taskCount = Number(row.activeTaskCount || 0);
+    const storeName = row.displayName || row.storeName || "店铺";
+    const action = taskCount > 0
+      ? `<button type="button" class="secondary" data-store-task="${s(row.storeId || storeName)}">查看任务</button>`
+      : `<button type="button" class="secondary" data-store-products="${s(storeName)}">查看店铺</button>`;
     return `<article class="operating-store-row ${s(row.level || "watch")}">
-      <div class="store-row-main"><strong>${s(row.storeName || row.storeId || "店铺")}</strong><span>${s(row.platform || "平台")} · 商品 ${s(row.productCount ?? 0)}</span></div>
+      <div class="store-row-main"><strong>${s(storeName)}</strong><span>${s(row.platform || "平台")} · 商品 ${s(row.productCount ?? 0)}</span></div>
       <div><span>店铺权重</span>${tagList([row.storeWeightTag || "常规店铺"])}</div>
-      <div><span>商品结构</span>${tagList(row.productRoleTags)}</div>
-      <div><span>风险标签</span>${tagList(row.riskTags)}</div>
-      <div><span>任务强度</span>${tagList([row.taskIntensity || "常规处理", `预警 ${row.alertCount ?? 0}`])}</div>
-      <button type="button" class="secondary" data-store-task="${s(row.storeId || "")}">查看任务</button>
+      <div><span>经营标签</span>${tagList(row.businessTags || row.riskTags)}</div>
+      <div><span>商品状态</span>${tagList(row.productRoleTags)}</div>
+      <div><span>执行任务</span>${tagList([`${taskCount} 个`])}</div>
+      ${action}
     </article>`;
   }
 
@@ -56,8 +61,9 @@
         ${judgmentCard(payload.operatingJudgment)}`;
     },
     mount(ctx) {
-      ctx.delegate("[data-operation-module]", "click", (_event, target) => AppRouter.navigate("business-actions", { moduleFilter: target.dataset.operationModule }));
+      ctx.delegate("[data-operation-route]", "click", (_event, target) => AppRouter.navigate(target.dataset.operationRoute));
       ctx.delegate("[data-store-task]", "click", (_event, target) => AppRouter.navigate("business-actions", { storeId: target.dataset.storeTask }));
+      ctx.delegate("[data-store-products]", "click", (_event, target) => AppRouter.navigate("business-products", { storeName: target.dataset.storeProducts }));
     },
   };
 })();
