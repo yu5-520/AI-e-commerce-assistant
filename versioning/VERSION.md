@@ -1,5 +1,5 @@
-Current Version: 11.11.0
+Current Version: 11.12.0
 
-V11.11｜部署原子化 + 版本一致性守卫
+V11.12｜轻量原子部署 + 共享 venv
 
-主线：ECS 不再作为半开发环境原地 git pull 运行 → 新版本 clone 到独立 releases 目录 → VERSION / FastAPI app.version / health.API_VERSION / 前端资源版本 / 关键路由全部一致才允许切换 current → systemd 固定运行 current 软链接 → 健康检查失败自动回滚上一版 → fetch 失败不再继续 reset 到旧缓存。
+主线：保留 releases / current 原子切换，但默认使用 shared/.venv 共享虚拟环境 → requirements 未变化时跳过 pip install → 版本一致性仍强校验，路由守卫默认 warn 不误杀低配 ECS → systemd 固定运行 current 代码 + shared venv → 运行时 health 仍为硬闸门，路由检查默认警告。
