@@ -1,4 +1,4 @@
-"""Operating unit route for V11.9 object-sync hard verification."""
+"""Operating unit route for V11.10 object-store fail-closed verification."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from src.services.operating_object_store_service import list_operating_products,
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.9.0"
+OPERATING_UNIT_VERSION = "11.10.0"
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -199,9 +199,11 @@ def _merge_store_rows(generated: List[Dict[str, Any]], master: List[Dict[str, An
     return list(seen.values())
 
 
-def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any]) -> Dict[str, Any]:
+def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any], *, object_missing: bool = False) -> Dict[str, Any]:
     active_tasks = _as_int(task_counters.get("visibleActive"), 0)
     tagged_stores = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
+    if object_missing:
+        return {"title": "经营判断", "summary": "检测到报表数据或数据版本，但当前账号可读商品 / 店铺仍为 0。请在系统页执行经营对象回填，或重新导入报表。", "priority": "先修复经营对象入库，再生成任务", "mainRisk": "经营对象未入库", "taggedStoreCount": 0, "activeTaskCount": active_tasks, "objectSyncFailed": True}
     if active_tasks:
         summary = f"当前有 {active_tasks} 个执行任务，需要先处理高风险高时效事项。低风险信号已沉淀为店铺和商品标签。"
         main = "执行任务"
@@ -218,12 +220,17 @@ def operating_unit(request: Request) -> Dict[str, Any]:
     projection = projection_summary(user_id)
     object_summary = operating_object_summary(user_id)
     v3 = get_v3_dashboard_summary(user_id)
-    products = _merge_products(projected_products(user_id), list_operating_products(user_id))
+    master_products = list_operating_products(user_id)
+    master_stores = list_operating_stores(user_id)
+    products = _merge_products(projected_products(user_id), master_products)
     traffic = projected_traffic(user_id)
     task_counters = get_task_counters_for_user(user_id)
     active_tasks = list_tasks(viewer_id=user_id, active_only=True)
     execution_tasks = [task for task in active_tasks if task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag", "observe_candidate"}]
-    has_data = bool(projection.get("hasData") or object_summary.get("productCount") or object_summary.get("storeCount") or v3.get("latestDataVersion") or products or traffic or execution_tasks)
+    has_source_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or traffic or execution_tasks)
+    has_objects = bool(master_products or master_stores or object_summary.get("productCount") or object_summary.get("storeCount"))
+    has_data = bool(has_objects or has_source_data)
+    object_missing = bool(has_source_data and not has_objects and not products)
     if not has_data:
         return {
             "version": OPERATING_UNIT_VERSION,
@@ -237,7 +244,28 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "tasks": task_counters,
             "objectStore": object_summary,
         }
-    store_rows = _merge_store_rows(build_store_rows(products, traffic, execution_tasks), list_operating_stores(user_id))
+    if object_missing:
+        return {
+            "version": OPERATING_UNIT_VERSION,
+            "hasData": True,
+            "unitName": "经营单元",
+            "syncState": {"label": "经营对象未入库", "status": "object_sync_failed", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
+            "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
+            "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
+            "metrics": [
+                {"label": "店铺", "value": 0},
+                {"label": "商品", "value": 0},
+                {"label": "标签店铺", "value": 0},
+                {"label": "执行任务", "value": len(execution_tasks)},
+            ],
+            "storeRows": [],
+            "operatingJudgment": build_operating_judgment([], task_counters, object_missing=True),
+            "tasks": task_counters,
+            "objectStore": object_summary,
+            "objectSyncFailed": True,
+            "rule": "V11.10 fail closed：有数据版本但经营对象为 0 时，不允许显示经营对象已更新。",
+        }
+    store_rows = _merge_store_rows(build_store_rows(products, traffic, execution_tasks), master_stores)
     tagged_store_count = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
     return {
         "version": OPERATING_UNIT_VERSION,
@@ -256,5 +284,6 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "operatingJudgment": build_operating_judgment(store_rows, task_counters),
         "tasks": task_counters,
         "objectStore": object_summary,
-        "rule": "V11.9 经营单元只展示经营对象主档真实可读结果；导入成功必须绑定商品/店铺入库结果。",
+        "objectSyncFailed": False,
+        "rule": "V11.10 经营单元只展示经营对象主档真实可读结果；导入成功必须绑定商品/店铺入库结果。",
     }
