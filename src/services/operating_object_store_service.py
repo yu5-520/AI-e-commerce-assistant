@@ -11,7 +11,7 @@ V11.7 separates business-object ingestion from task generation:
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List, Mapping
 
 from src.repositories.sqlite_repository import connect, dumps, loads
 from src.services.account_service import current_user, visible_store_ids_for_user
@@ -61,6 +61,17 @@ def ensure_operating_object_tables() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_operating_stores_name ON operating_stores(store_name)")
         conn.commit()
+
+
+def _row_get(row: Mapping[str, Any] | Any, *names: str, default: Any = None) -> Any:
+    for name in names:
+        try:
+            value = row[name]
+        except (KeyError, IndexError, TypeError):
+            value = row.get(name) if hasattr(row, "get") else None
+        if value not in {None, ""}:
+            return value
+    return default
 
 
 def _pick(row: Dict[str, Any], *fields: str, default: Any = None) -> Any:
@@ -217,14 +228,14 @@ def upsert_operating_objects_from_import(result: Dict[str, Any], rows: List[Dict
     }
 
 
-def _visible_for_user(row: Dict[str, Any], user_id: str | None) -> bool:
+def _visible_for_user(row: Mapping[str, Any] | Any, user_id: str | None) -> bool:
     if not user_id:
         return True
     user = current_user(user_id)
     role = user.get("roleId")
     if role in {"owner", "manager", "finance"}:
         return True
-    store_id = _text(row.get("store_id") or row.get("storeId"))
+    store_id = _text(_row_get(row, "store_id", "storeId"))
     if not store_id:
         return True
     return store_id in set(visible_store_ids_for_user(user_id))
