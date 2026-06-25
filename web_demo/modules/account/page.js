@@ -6,7 +6,7 @@
     if (document.querySelector('link[data-account-ui="1"]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/web_demo/account-ui.css?v=11.4.0";
+    link.href = "/web_demo/account-ui.css?v=11.5.0";
     link.dataset.accountUi = "1";
     document.head.appendChild(link);
   }
@@ -31,122 +31,72 @@
     ["抖音小店授权", "未绑定", "店铺数据"],
     ["ERP 数据授权", "未绑定", "商品 / 订单 / 库存"],
   ];
+  const securityItems = [["登录密码", accountProfile.password, "登录安全"], ["手机号", accountProfile.phone, "找回账号"], ["邮箱", accountProfile.email, "系统通知"], ["二次验证", accountProfile.twoFactor, "企业安全"], ["登录设备", accountProfile.devices, "设备管理"]];
+  const noticeItems = [["日报提醒", "开启", "经营日报"], ["周报提醒", "开启", "复盘报告"], ["任务提醒", "开启", "任务流转"], ["审计提醒", "开启", "异常复核"]];
 
-  const securityItems = [
-    ["登录密码", accountProfile.password, "登录安全"],
-    ["手机号", accountProfile.phone, "找回账号"],
-    ["邮箱", accountProfile.email, "系统通知"],
-    ["二次验证", accountProfile.twoFactor, "企业安全"],
-    ["登录设备", accountProfile.devices, "设备管理"],
-  ];
-
-  const noticeItems = [
-    ["日报提醒", "开启", "经营日报"],
-    ["周报提醒", "开启", "复盘报告"],
-    ["任务提醒", "开启", "任务流转"],
-    ["审计提醒", "开启", "异常复核"],
-  ];
-
-  function infoItem(label, value) {
-    return `<article><span>${s(label)}</span><strong>${s(value)}</strong></article>`;
-  }
-
-  function settingRow([title, status, desc], action = "设置") {
-    return `<article class="account-setting-row"><div><strong>${s(title)}</strong><small>${s(desc)}</small></div><span>${s(status)}</span><button type="button" class="secondary" data-account-action data-label="${s(action)}">${s(action)}</button></article>`;
-  }
-
-  function actionButton(label, variant = "") {
-    return `<button type="button" class="${s(variant)}" data-account-action data-label="${s(label)}">${s(label)}</button>`;
-  }
-
+  function infoItem(label, value) { return `<article><span>${s(label)}</span><strong>${s(value)}</strong></article>`; }
+  function settingRow([title, status, desc], action = "设置") { return `<article class="account-setting-row"><div><strong>${s(title)}</strong><small>${s(desc)}</small></div><span>${s(status)}</span><button type="button" class="secondary" data-account-action data-label="${s(action)}">${s(action)}</button></article>`; }
+  function actionButton(label, variant = "") { return `<button type="button" class="${s(variant)}" data-account-action data-label="${s(label)}">${s(label)}</button>`; }
   function dataScopeLabel(user) {
-    const role = user?.roleId || "observer";
-    const map = {
-      owner: "全部经营单元",
-      manager: "负责经营单元",
-      operator: "店铺切片",
-      finance: "财务经营数据",
-      observer: "授权摘要",
-    };
-    return map[role] || "授权范围";
+    const role = user?.roleId;
+    const map = { owner: "全部经营单元", manager: "负责经营单元", operator: "店铺切片", finance: "财务经营数据", observer: "授权摘要" };
+    return map[role] || "未返回数据范围";
   }
-
   function dataScopeNote(user) {
-    const role = user?.roleId || "observer";
-    const map = {
-      owner: "看全局汇总，不表示账号绑定店铺数据",
-      manager: "由经营单元与店铺归属动态计算",
-      operator: "只读负责范围内的经营对象",
-      finance: "只读财务与经营指标口径",
-      observer: "只读脱敏进度和摘要",
-    };
-    return map[role] || "由后端数据范围计算";
+    const role = user?.roleId;
+    const map = { owner: "看全局汇总，不表示账号绑定店铺数据", manager: "由经营单元与店铺归属动态计算", operator: "只读负责范围内的经营对象", finance: "只读财务与经营指标口径", observer: "只读脱敏进度和摘要" };
+    return map[role] || "请检查 /api/accounts 返回的 currentUser";
   }
-
   function compactPermissions(user) {
     const names = Array.isArray(user?.permissionNames) ? user.permissionNames.filter(Boolean) : [];
-    return names.length ? names.slice(0, 4).join("、") : "只读基础权限";
+    return names.length ? names.slice(0, 4).join("、") : "未返回权限";
   }
-
   function roleTag(user) {
-    const role = user?.roleId || "observer";
+    const role = user?.roleId;
     const map = { owner: "老板", manager: "总管", operator: "运营", finance: "财务", observer: "观察" };
-    return map[role] || role;
+    return map[role] || "未知";
   }
-
+  function assertAccountPayload(payload) {
+    if (!payload || !payload.currentUser || !payload.currentUser.id) {
+      throw new Error("账号接口未返回 currentUser；已禁止本地模拟账号兜底。请检查 /api/accounts、APP_ENV 或账号隔离配置。");
+    }
+  }
   function testAccountCard(user, currentId) {
     const active = user.id === currentId;
     return `<button type="button" class="account-switch-card ${active ? "active" : ""}" data-switch-user="${s(user.id)}" ${active ? "disabled" : ""}>
-      <span>${s(roleTag(user))}</span>
-      <strong>${s(user.name || user.id)}</strong>
-      <em>${s(user.roleName || user.roleId)}</em>
-      <small>${s(dataScopeLabel(user))} · ${s(dataScopeNote(user))}</small>
-      <b>${active ? "当前身份" : "切换测试"}</b>
+      <span>${s(roleTag(user))}</span><strong>${s(user.name || user.id)}</strong><em>${s(user.roleName || user.roleId)}</em>
+      <small>${s(dataScopeLabel(user))} · ${s(dataScopeNote(user))}</small><b>${active ? "当前身份" : "切换测试"}</b>
     </button>`;
   }
-
   function currentIdentityBlock(current) {
     return `<section class="account-current-block">
-      <article><span>当前登录身份</span><strong>${s(current.name || "未识别")}</strong><small>${s(current.roleName || "模拟账号")}</small></article>
+      <article><span>当前登录身份</span><strong>${s(current.name)}</strong><small>${s(current.roleName)}</small></article>
       <article><span>数据范围</span><strong>${s(dataScopeLabel(current))}</strong><small>${s(dataScopeNote(current))}</small></article>
       <article><span>权限摘要</span><strong>${s(compactPermissions(current))}</strong><small>正式版通过登录态切换账号</small></article>
     </section>`;
   }
-
   function testSwitcherBlock(payload) {
     const users = Array.isArray(payload?.users) ? payload.users : [];
     const current = payload?.currentUser || {};
-    if (!users.length) return "";
+    if (!users.length || payload?.demoSwitchDisabled) return "";
     return `<section class="page-section account-section account-switch-section">
       <div class="section-header"><h3>MVP 测试身份</h3><span class="status-badge">仅测试</span></div>
       <p class="account-note">用于快速检查不同角色看到的任务、报表、经营模块和日志范围。正式版本通过登录 / 退出登录切换账号，此处不改变权限配置，也不表示账号绑定具体店铺数据。</p>
       <div class="account-switch-grid">${users.map((user) => testAccountCard(user, current.id)).join("")}</div>
     </section>`;
   }
-
   async function switchTestUser(userId, node) {
     const oldText = node?.querySelector("b")?.textContent || "切换测试";
-    if (node) {
-      node.disabled = true;
-      node.classList.add("is-loading");
-      const label = node.querySelector("b");
-      if (label) label.textContent = "切换中";
-    }
+    if (node) { node.disabled = true; node.classList.add("is-loading"); const label = node.querySelector("b"); if (label) label.textContent = "切换中"; }
     try {
-      const account = await AppApi.switchAccount(userId);
+      const nextAccount = await AppApi.switchAccount(userId);
       await AppApi.refreshTaskState();
-      const name = account?.currentUser?.name || userId;
-      const role = account?.currentUser?.roleName || "测试身份";
-      accountNotice = `已切换到 ${name} · ${role}。`;
+      const user = nextAccount?.currentUser;
+      accountNotice = `已切换到 ${user?.name || userId} · ${user?.roleName || "测试身份"}。`;
       AppRouter.schedule("account-switch");
     } catch (error) {
       accountNotice = `切换失败：${error.message || error}`;
-      if (node) {
-        node.disabled = false;
-        node.classList.remove("is-loading");
-        const label = node.querySelector("b");
-        if (label) label.textContent = oldText;
-      }
+      if (node) { node.disabled = false; node.classList.remove("is-loading"); const label = node.querySelector("b"); if (label) label.textContent = oldText; }
     }
   }
 
@@ -156,22 +106,14 @@
     async render() {
       ensureAccountCss();
       const payload = await AppApi.accounts();
-      const current = payload?.currentUser || {};
-      const roleName = current.roleName || "模拟账号";
-      const loginName = current.name || "老板";
-      return `<section class="account-hero"><div class="account-avatar">${s(accountProfile.avatar)}</div><div class="account-hero-main"><h2>账号中心</h2><p>登录、安全、绑定和通知集中管理。MVP 阶段可在本页切换测试身份。</p></div><div class="account-status-card"><span>当前身份</span><strong>${s(roleName)}</strong><em>${s(accountProfile.status)}</em></div></section>
+      assertAccountPayload(payload);
+      const current = payload.currentUser;
+      return `<section class="account-hero"><div class="account-avatar">${s(accountProfile.avatar)}</div><div class="account-hero-main"><h2>账号中心</h2><p>登录、安全、绑定和通知集中管理。MVP 阶段可在本页切换测试身份。</p></div><div class="account-status-card"><span>当前身份</span><strong>${s(current.roleName)}</strong><em>${s(accountProfile.status)}</em></div></section>
       ${accountNotice ? AppShell.notice("账号切换", accountNotice) : ""}
       ${currentIdentityBlock(current)}
       ${testSwitcherBlock(payload)}
       <section class="account-grid">
-        <article class="account-info-card"><div class="section-header"><h3>基础信息</h3><span class="status-badge">账号</span></div><div class="account-info-list">${[
-          ["昵称", accountProfile.nickname],
-          ["账号 ID", accountProfile.accountNo],
-          ["登录账号", loginName],
-          ["当前身份", roleName],
-          ["手机号", accountProfile.phone],
-          ["邮箱", accountProfile.email],
-        ].map(([label, value]) => infoItem(label, value)).join("")}</div></article>
+        <article class="account-info-card"><div class="section-header"><h3>基础信息</h3><span class="status-badge">账号</span></div><div class="account-info-list">${[["昵称", accountProfile.nickname], ["账号 ID", accountProfile.accountNo], ["登录账号", current.name], ["当前身份", current.roleName], ["手机号", accountProfile.phone], ["邮箱", accountProfile.email]].map(([label, value]) => infoItem(label, value)).join("")}</div></article>
         <article class="account-info-card account-action-card"><div class="section-header"><h3>基础操作</h3><span class="status-badge">操作</span></div><div class="account-action-list">${actionButton("编辑资料")}${actionButton("清除缓存")}${actionButton("退出登录", "secondary")}</div><div class="account-note">真实登录、短信、邮箱和第三方授权在正式版接入。MVP 测试身份不会改动真实权限配置。</div></article>
       </section>
       <section class="page-section account-section"><div class="section-header"><h3>安全设置</h3><span class="status-badge">安全</span></div><div class="account-setting-list">${securityItems.map((item) => settingRow(item)).join("")}</div></section>
@@ -180,15 +122,7 @@
     },
     mount(ctx) {
       ctx.delegate("[data-switch-user]", "click", (_, node) => switchTestUser(node.dataset.switchUser, node));
-      ctx.delegate("[data-account-action]", "click", (_, node) => {
-        const label = node.dataset.label || node.textContent || "设置";
-        node.textContent = label === "退出登录" ? "正式版接入" : "暂未接入";
-        node.disabled = true;
-        window.setTimeout(() => {
-          node.disabled = false;
-          node.textContent = label;
-        }, 900);
-      });
+      ctx.delegate("[data-account-action]", "click", (_, node) => { const label = node.dataset.label || node.textContent || "设置"; node.textContent = label === "退出登录" ? "正式版接入" : "暂未接入"; node.disabled = true; window.setTimeout(() => { node.disabled = false; node.textContent = label; }, 900); });
     },
   };
 
@@ -199,8 +133,6 @@
       ensureAccountCss();
       return `<section class="report-hero"><div><h2>入口已迁移</h2><p>账号页只保留登录、安全、绑定和通知。权限与店铺归属在系统权限中管理。</p></div><div class="report-hero-side"><strong>兼容入口</strong></div></section><section class="page-section"><div class="section-header"><h3>权限治理</h3><button type="button" data-system-status>进入系统</button></div></section>`;
     },
-    mount(ctx) {
-      ctx.delegate("[data-system-status]", "click", () => AppRouter.navigate("system-status"));
-    },
+    mount(ctx) { ctx.delegate("[data-system-status]", "click", () => AppRouter.navigate("system-status")); },
   };
 })();
