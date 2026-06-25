@@ -42,18 +42,30 @@ def require_rollback_permission(user_id: str) -> None:
         raise HTTPException(status_code=403, detail="当前账号无权回滚全局数据版本")
 
 
-def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
-    """Attach product contracts after import.
+def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
+    """Upsert store/product objects before any tag/task generation.
 
-    V11.7 rule: operating objects are upserted before tag/task sync. Product and
-    store visibility must not depend on whether a risk signal is strong enough to
-    create an executable task.
+    V11.8 rule: normal report import ownership comes from the uploader account.
+    New stores found in a report are created directly under that uploader. Store
+    transfer confirmation is only for explicit permission migration, not import.
     """
     if isinstance(rows, list):
         result["rows"] = rows
     ctx = context_from_headers(request.headers)
-    object_sync = upsert_operating_objects_from_import(result, rows if isinstance(rows, list) else None, source=source)
-    result["operatingObjectSync"] = object_sync
+    result["operatingObjectSync"] = upsert_operating_objects_from_import(
+        result,
+        rows if isinstance(rows, list) else None,
+        source=source,
+        uploader_user_id=ctx.user_id,
+        uploader_role_id=ctx.role_id,
+    )
+    return result
+
+
+def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = True) -> Dict[str, Any]:
+    if upsert_objects:
+        result = _attach_operating_object_sync(request, result, rows, source=source)
+    ctx = context_from_headers(request.headers)
     v104 = attach_v104_import_sync(result, source=source)
     v107 = attach_v107_operating_profile(v104)
     v108 = attach_v108_tag_change_tasks(v107, ctx)
@@ -61,10 +73,10 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    """Generate product snapshots, metric trends, business signals, and risk tasks after import."""
+    """Generate product snapshots, metric trends, signals, and V11.8 SOP tasks."""
     if not isinstance(rows, list):
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "11.8.0", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -84,8 +96,8 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         item["riskTaskSync"] = risk_summary
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
-    result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "V6.2 导入后生成商品快照、指标趋势、经营信号，并把信号升级为风险分级任务。"}
-    result["riskTaskSync"] = {"version": "6.2.0", "mode": "risk_graded_signal_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "低风险进入标签/观察层；中高风险再按时效升级为可执行任务。"}
+    result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "导入后先生成商品快照、指标趋势和经营信号。"}
+    result["riskTaskSync"] = {"version": "11.8.0", "mode": "ownership_first_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；旧规则不再自动推断任务。"}
     return result
 
 
@@ -204,8 +216,9 @@ async def confirm_upload(
     try:
         result = confirm_report_import(str(dataset_name), rows=rows, field_mapping={}, auto_create_tasks=auto_create_tasks, source_system=source_system)
         result["uploadMeta"] = compact_upload_meta(parsed)
-        synced = _attach_v62_trend_and_risk_sync(result, rows, source_system=source_system)
-        return _attach_import_product_contracts(request, synced, rows, source="upload_file_import")
+        objected = _attach_operating_object_sync(request, result, rows, source="upload_file_import")
+        synced = _attach_v62_trend_and_risk_sync(objected, rows, source_system=source_system)
+        return _attach_import_product_contracts(request, synced, rows, source="upload_file_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -229,8 +242,9 @@ def confirm_import(request: Request, body: Dict[str, Any] = Body(default_factory
     source_system = body.get("source_system") or body.get("sourceSystem")
     try:
         result = confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=body.get("auto_tasks", body.get("autoCreateTasks", True)) is not False, source_system=source_system)
-        synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
-        return _attach_import_product_contracts(request, synced, body.get("rows"), source="confirm_report_import")
+        objected = _attach_operating_object_sync(request, result, body.get("rows"), source="confirm_report_import")
+        synced = _attach_v62_trend_and_risk_sync(objected, body.get("rows"), source_system=source_system)
+        return _attach_import_product_contracts(request, synced, body.get("rows"), source="confirm_report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -242,8 +256,9 @@ def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
         result = import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False)
-        synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
-        return _attach_import_product_contracts(request, synced, body.get("rows"), source="report_import")
+        objected = _attach_operating_object_sync(request, result, body.get("rows"), source="report_import")
+        synced = _attach_v62_trend_and_risk_sync(objected, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        return _attach_import_product_contracts(request, synced, body.get("rows"), source="report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
