@@ -1,4 +1,4 @@
-"""Operating unit route for productized store row tags and business judgment."""
+"""Operating unit route for V11.1 productized business object navigation."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from fastapi import APIRouter, Request
 
 from src.services.account_service import current_user, list_stores, user_id_from_headers
 from src.services.module_projection_service import projection_summary, projected_products, projected_traffic
-from src.services.module_task_service import get_task_counters_for_user
+from src.services.module_task_service import get_task_counters_for_user, list_tasks
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
+OPERATING_UNIT_VERSION = "11.1.0"
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -32,12 +33,42 @@ def _percent(value: Any) -> float | None:
         return None
 
 
+def _store_map() -> Dict[str, Dict[str, Any]]:
+    stores: Dict[str, Dict[str, Any]] = {}
+    for store in list_stores():
+        stores[str(store.get("id"))] = store
+        stores[str(store.get("name"))] = store
+    return stores
+
+
+def _clean_store_name(item: Dict[str, Any] | None, fallback: str = "未命名店铺") -> str:
+    item = item or {}
+    raw = str(item.get("storeName") or item.get("store") or "").strip()
+    store_id = str(item.get("storeId") or item.get("id") or "").strip()
+    if raw and raw not in {store_id, "导入数据店铺", "未绑定店铺", "GLOBAL"}:
+        return raw
+    store = _store_map().get(store_id)
+    if store and store.get("name") and store.get("name") != store_id:
+        return str(store["name"])
+    return fallback if not store_id else fallback
+
+
+def _store_platform(item: Dict[str, Any] | None, fallback: str = "平台") -> str:
+    item = item or {}
+    platform = str(item.get("platform") or "").strip()
+    if platform and platform not in {"导入数据", "未知平台"}:
+        return platform
+    store_id = str(item.get("storeId") or item.get("id") or "").strip()
+    store = _store_map().get(store_id)
+    return str(store.get("platform") or fallback) if store else fallback
+
+
 def _store_weight_tag(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> str:
     if len(products) >= 10 or len(traffic) >= 8:
         return "高权重店铺"
     if len(products) <= 2 and len(traffic) <= 1:
-        return "测试店铺"
-    return "常规店铺"
+        return "测试型店铺"
+    return "中权重店铺"
 
 
 def _product_role(item: Dict[str, Any]) -> str:
@@ -45,112 +76,104 @@ def _product_role(item: Dict[str, Any]) -> str:
     after_sales_level = item.get("afterSalesLevel")
     margin = _percent(item.get("grossMargin"))
     if after_sales_level in {"danger", "warning"}:
-        return "售后风险款"
+        return "售后观察"
     if inventory_level in {"danger", "warning"}:
-        return "库存风险款"
+        return "库存观察"
     if margin is not None and margin < 0.2:
-        return "低毛利款"
+        return "低毛利观察"
     if item.get("orderSummary"):
-        return "成交款"
-    return "观察款"
+        return "成交商品"
+    return "普通观察"
 
 
-def _risk_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) -> List[str]:
+def _business_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) -> List[str]:
     tags: List[str] = []
-    if any(item.get("inventoryLevel") in {"danger", "warning"} for item in products):
-        tags.append("库存风险")
     if any(item.get("afterSalesLevel") in {"danger", "warning"} for item in products):
-        tags.append("售后风险")
+        tags.append("售后观察")
+    if any(item.get("inventoryLevel") in {"danger", "warning"} for item in products):
+        tags.append("库存观察")
     if any((_percent(item.get("grossMargin")) or 1) < 0.2 for item in products):
-        tags.append("低毛利风险")
+        tags.append("毛利观察")
     if active_alert_count > 0:
-        tags.append("经营预警")
+        tags.append("执行任务")
     return tags or ["常规观察"]
 
 
 def _tag_level(value: str) -> str:
-    if any(word in value for word in ["风险", "强处理", "低毛利", "库存"]):
+    if any(word in value for word in ["执行任务", "高风险", "库存"]):
         return "warning"
     if any(word in value for word in ["高权重", "成交", "稳定"]):
         return "good"
     return "watch"
 
 
-def _main_risk(risk_tags: List[str]) -> str:
-    for risk in ["库存风险", "低毛利风险", "售后风险", "经营预警"]:
-        if risk in risk_tags:
-            return risk
-    return risk_tags[0] if risk_tags else "常规观察"
-
-
 def _visible_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Return only stores that have runtime data.
-
-    Account seed stores are permissions, not business data. Demo clear must return a
-    true empty operating page instead of pre-rendering placeholder stores.
-    """
-    store_ids: List[str] = []
-    for item in [*products, *traffic]:
+    seen: Dict[str, Dict[str, Any]] = {}
+    for index, item in enumerate([*products, *traffic], start=1):
         store_id = str(item.get("storeId") or "").strip()
-        if store_id and store_id not in store_ids:
-            store_ids.append(store_id)
-    store_map = {store["id"]: store for store in list_stores()}
-    rows: List[Dict[str, Any]] = []
-    for index, store_id in enumerate(store_ids, start=1):
-        store = store_map.get(store_id) or {"id": store_id, "name": store_id or f"店铺 {index}", "platform": "导入数据"}
-        rows.append({"storeId": store.get("id"), "storeName": store.get("name") or store_id or f"店铺 {index}", "platform": store.get("platform") or "导入数据"})
-    if not rows and (products or traffic):
-        rows.append({"storeId": "GLOBAL", "storeName": "未绑定店铺", "platform": "导入数据"})
-    return rows
+        store_name = _clean_store_name(item, fallback=f"店铺 {index}")
+        platform = _store_platform(item, fallback="导入平台")
+        key = store_name or store_id or f"店铺 {index}"
+        seen.setdefault(key, {"storeId": store_id, "storeName": store_name, "platform": platform})
+    return list(seen.values())
 
 
-def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], task_counters: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _active_task_count_for_store(store_id: str | None, active_tasks: List[Dict[str, Any]]) -> int:
+    if not store_id:
+        return 0
+    return len([task for task in active_tasks if store_id in set(task.get("storeIds") or task.get("visibleStoreIds") or []) and task.get("displayState") != "backend_only"])
+
+
+def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], active_tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     products_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     traffic_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for item in products:
-        products_by_store[str(item.get("storeId") or "GLOBAL")].append(item)
+        key = _clean_store_name(item, fallback=str(item.get("storeId") or "未命名店铺"))
+        products_by_store[key].append(item)
     for item in traffic:
-        traffic_by_store[str(item.get("storeId") or "GLOBAL")].append(item)
+        key = _clean_store_name(item, fallback=str(item.get("storeId") or "未命名店铺"))
+        traffic_by_store[key].append(item)
     rows: List[Dict[str, Any]] = []
     for store in _visible_store_rows(products, traffic):
-        store_id = str(store.get("storeId") or "GLOBAL")
-        store_products = products_by_store.get(store_id, [])
-        store_traffic = traffic_by_store.get(store_id, [])
+        store_name = str(store.get("storeName") or "店铺")
+        store_id = str(store.get("storeId") or "")
+        store_products = products_by_store.get(store_name, [])
+        store_traffic = traffic_by_store.get(store_name, [])
         role_counter = Counter(_product_role(item) for item in store_products)
         product_role_tags = [f"{name} {count}" for name, count in role_counter.most_common()] or ["暂无商品"]
-        risk_tags = _risk_tags(store_products)
-        risk_count = 0 if risk_tags == ["常规观察"] else len(risk_tags)
-        task_intensity = "强处理" if risk_count or len(store_products) >= 8 else "常规处理"
+        tags = _business_tags(store_products)
+        task_count = _active_task_count_for_store(store_id, active_tasks)
         store_weight = _store_weight_tag(store_products, store_traffic)
-        main_risk = _main_risk(risk_tags)
         rows.append({
-            "storeId": store.get("storeId"),
-            "storeName": store.get("storeName"),
+            "storeId": store_id,
+            "storeName": store_name,
+            "displayName": store_name,
             "platform": store.get("platform"),
             "storeWeightTag": store_weight,
             "productCount": len(store_products),
             "trafficCount": len(store_traffic),
             "productRoleTags": product_role_tags[:4],
-            "riskTags": risk_tags[:4],
-            "taskIntensity": task_intensity,
-            "activeTaskCount": 0,
-            "alertCount": risk_count,
-            "level": _tag_level(task_intensity if task_intensity == "强处理" else main_risk),
-            "judgment": f"{main_risk} · {task_intensity}",
+            "businessTags": tags[:4],
+            "riskTags": tags[:4],
+            "activeTaskCount": task_count,
+            "alertCount": task_count,
+            "taskIntensity": "有执行任务" if task_count else "标签观察",
+            "level": _tag_level("执行任务" if task_count else store_weight),
+            "judgment": f"{store_weight} · 执行任务 {task_count}",
         })
     return rows
 
 
 def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any]) -> Dict[str, Any]:
-    strong_count = sum(1 for row in store_rows if row.get("taskIntensity") == "强处理")
-    risk_rows = [row for row in store_rows if "常规观察" not in (row.get("riskTags") or [])]
-    main_risk = (risk_rows[0].get("riskTags") or ["常规观察"])[0] if risk_rows else "常规观察"
     active_tasks = _as_int(task_counters.get("visibleActive"), 0)
-    if strong_count:
-        summary = f"当前 {len(store_rows)} 个店铺中，{strong_count} 个需要强处理，优先处理{main_risk}店铺。"
+    tagged_stores = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
+    if active_tasks:
+        summary = f"当前有 {active_tasks} 个执行任务，需要先处理高风险高时效事项。低风险信号已沉淀为店铺和商品标签。"
+        main = "执行任务"
     else:
-        summary = f"当前 {len(store_rows)} 个店铺以常规观察为主，保持同步并等待下一轮数据。"
-    return {"title": "经营判断", "summary": summary, "priority": "按店铺逐行处理", "mainRisk": main_risk, "strongStoreCount": strong_count, "activeTaskCount": active_tasks}
+        summary = f"当前无需要立即处理的执行任务，{tagged_stores} 个店铺已更新经营标签，可进入店铺或商品档案查看。"
+        main = "标签已更新"
+    return {"title": "经营判断", "summary": summary, "priority": "先看店铺和商品标签，再处理执行任务", "mainRisk": main, "taggedStoreCount": tagged_stores, "activeTaskCount": active_tasks}
 
 
 @router.get("/operating-unit")
@@ -162,11 +185,12 @@ def operating_unit(request: Request) -> Dict[str, Any]:
     products = projected_products(user_id)
     traffic = projected_traffic(user_id)
     task_counters = get_task_counters_for_user(user_id)
-    active_tasks = _as_int(task_counters.get("visibleActive"), 0)
-    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or active_tasks)
+    active_tasks = list_tasks(viewer_id=user_id, active_only=True)
+    execution_tasks = [task for task in active_tasks if task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag"}]
+    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or execution_tasks)
     if not has_data:
         return {
-            "version": "5.2.1",
+            "version": OPERATING_UNIT_VERSION,
             "hasData": False,
             "emptyState": "暂无数据",
             "syncState": {"label": "等待数据", "status": "empty"},
@@ -176,10 +200,10 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "operatingJudgment": None,
             "tasks": task_counters,
         }
-    store_rows = build_store_rows(products, traffic, task_counters)
-    risk_store_count = sum(1 for row in store_rows if "常规观察" not in (row.get("riskTags") or []))
+    store_rows = build_store_rows(products, traffic, execution_tasks)
+    tagged_store_count = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
     return {
-        "version": "5.2.1",
+        "version": OPERATING_UNIT_VERSION,
         "hasData": True,
         "unitName": "经营单元",
         "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
@@ -188,12 +212,13 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "metrics": [
             {"label": "店铺", "value": len(store_rows)},
             {"label": "商品", "value": len(products)},
-            {"label": "风险店铺", "value": risk_store_count},
-            {"label": "任务", "value": active_tasks},
+            {"label": "标签店铺", "value": tagged_store_count},
+            {"label": "执行任务", "value": len(execution_tasks)},
         ],
         "storeRows": store_rows,
         "operatingJudgment": build_operating_judgment(store_rows, task_counters),
         "tasks": task_counters,
         "projection": projection,
         "v3": v3,
+        "rule": "V11.1 经营模块只展示真实店铺名称；工程ID仅用于后端匹配和审计，不在运营前端显示。",
     }
