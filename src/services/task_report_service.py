@@ -1,10 +1,8 @@
 """Task and candidate report service.
 
-The report layer explains why a warning exists, what evidence supports it, and
-how an operator should handle the task. V3 adds report-alert evidence: when a
-report import creates an alert and that alert enters the task pool, the detail
-report must show the source dataset, data version, evidence fields, and human
-handling boundary.
+V11 hardens the detail page: if a deep report or task source is not ready, the
+endpoint still returns a basic report instead of forcing the front end into
+"报告加载失败". A task visible in the queue must always be openable.
 """
 
 from __future__ import annotations
@@ -13,67 +11,18 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from src.services.account_service import get_user
-from src.services.module_data_service import (
-    COMPETITORS,
-    LISTINGS,
-    PRODUCTS,
-    REPORT_DETAILS,
-    TRAFFIC,
-    all_reports,
-    find_by_id,
-)
+from src.services.module_data_service import COMPETITORS, LISTINGS, PRODUCTS, REPORT_DETAILS, TRAFFIC, all_reports, find_by_id
 from src.services.module_task_service import list_tasks
 from src.services.report_alert_service import find_alert_by_task_id, list_alerts_for_entity
 
-MODULE_LABELS = {
-    "product": "商品经营列表",
-    "competitor": "竞品观察列表",
-    "listing": "上新测试台",
-    "traffic": "流量测试台",
-    "report": "ERP / CRM 报表管理",
-    "task": "统一任务池",
-}
-
-MODULE_ROUTES = {
-    "product": "business-products",
-    "competitor": "business-competitors",
-    "listing": "business-listing",
-    "traffic": "business-traffic",
-    "report": "data-check",
-    "task": "business-actions",
-}
-
+MODULE_LABELS = {"product": "商品经营列表", "competitor": "竞品观察列表", "listing": "上新测试台", "traffic": "流量测试台", "report": "ERP / CRM 报表管理", "task": "统一任务池"}
+MODULE_ROUTES = {"product": "business-products", "competitor": "business-competitors", "listing": "business-listing", "traffic": "business-traffic", "report": "data-check", "task": "business-actions"}
 ROLE_INSIGHTS = {
-    "owner": {
-        "title": "老板战略视角",
-        "summary": "重点看预算、利润、售后和组织责任是否闭环。",
-        "focus": ["利润影响", "组织瓶颈", "预算是否继续放大", "责任链是否闭环"],
-        "hidden": [],
-    },
-    "manager": {
-        "title": "店群管理视角",
-        "summary": "重点判断任务是否拆给正确运营、提交证据是否充分、同类问题是否反复出现。",
-        "focus": ["派发对象", "处理进度", "复核质量", "退回原因"],
-        "hidden": ["跨店群老板级归因"],
-    },
-    "operator": {
-        "title": "运营执行视角",
-        "summary": "重点看我为什么要处理、要检查哪些字段、处理完提交什么证据。",
-        "focus": ["执行清单", "字段检查", "提交证据", "退回补充"],
-        "hidden": ["财务利润细节", "其他运营任务", "组织瓶颈"],
-    },
-    "finance": {
-        "title": "财务经营视角",
-        "summary": "重点看退款成本、广告消耗、利润承接、库存资金和数据可信度。",
-        "focus": ["利润承接", "退款成本", "ROI 可信度", "库存资金"],
-        "hidden": ["运营派发按钮", "人员复核动作"],
-    },
-    "observer": {
-        "title": "只读摘要视角",
-        "summary": "只确认风险已进入流程、当前状态和最终归档结果。",
-        "focus": ["风险状态", "处理进度", "归档结果"],
-        "hidden": ["财务细节", "人员绩效", "任务责任链"],
-    },
+    "owner": {"title": "老板战略视角", "summary": "重点看预算、利润、售后和组织责任是否闭环。", "focus": ["利润影响", "组织瓶颈", "预算是否继续放大", "责任链是否闭环"], "hidden": []},
+    "manager": {"title": "店群管理视角", "summary": "重点判断任务是否拆给正确运营、提交证据是否充分、同类问题是否反复出现。", "focus": ["派发对象", "处理进度", "复核质量", "退回原因"], "hidden": ["跨店群老板级归因"]},
+    "operator": {"title": "运营执行视角", "summary": "重点看我为什么要处理、要检查哪些字段、处理完提交什么证据。", "focus": ["执行清单", "字段检查", "提交证据", "退回补充"], "hidden": ["财务利润细节", "其他运营任务", "组织瓶颈"]},
+    "finance": {"title": "财务经营视角", "summary": "重点看退款成本、广告消耗、利润承接、库存资金和数据可信度。", "focus": ["利润承接", "退款成本", "ROI 可信度", "库存资金"], "hidden": ["运营派发按钮", "人员复核动作"]},
+    "observer": {"title": "只读摘要视角", "summary": "只确认风险已进入流程、当前状态和最终归档结果。", "focus": ["风险状态", "处理进度", "归档结果"], "hidden": ["财务细节", "人员绩效", "任务责任链"]},
 }
 
 
@@ -94,13 +43,7 @@ def _apply_role_insight(report: Dict[str, Any], user_id: str | None = None) -> D
     if not user:
         return report
     insight = ROLE_INSIGHTS.get(user.get("roleId"), ROLE_INSIGHTS["observer"])
-    report["viewer"] = {
-        "userId": user.get("id"),
-        "name": user.get("name"),
-        "roleName": user.get("roleName"),
-        "insightDepth": user.get("insightDepth"),
-        "permissionNames": user.get("permissionNames", []),
-    }
+    report["viewer"] = {"userId": user.get("id"), "name": user.get("name"), "roleName": user.get("roleName"), "insightDepth": user.get("insightDepth"), "permissionNames": user.get("permissionNames", [])}
     report["roleInsight"] = insight
     report["insightDepth"] = user.get("insightDepth")
     if user.get("roleId") == "observer":
@@ -119,45 +62,10 @@ def _apply_role_insight(report: Dict[str, Any], user_id: str | None = None) -> D
     return report
 
 
-def _base_report(
-    module: str,
-    entity_id: str,
-    title: str,
-    summary: str,
-    evidence: List[Dict[str, Any]],
-    suggested_actions: List[str],
-    checklist: List[str],
-    data_needed: List[str],
-    human_decision: List[str],
-    next_step: str,
-    related_task: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+def _base_report(module: str, entity_id: str, title: str, summary: str, evidence: List[Dict[str, Any]], suggested_actions: List[str], checklist: List[str], data_needed: List[str], human_decision: List[str], next_step: str, related_task: Dict[str, Any] | None = None) -> Dict[str, Any]:
     text = " ".join([summary, next_step, *(str(item.get("value", "")) for item in evidence), *(suggested_actions or [])])
     risk_level = related_task.get("priority") if related_task and related_task.get("priority") else _level_from_text(text)
-    return {
-        "reportId": f"RPT-{module}-{entity_id}",
-        "reportType": "task" if related_task else "candidate",
-        "module": module,
-        "sourceModule": MODULE_LABELS.get(module, related_task.get("sourceModule") if related_task else "经营模块"),
-        "sourceRoute": MODULE_ROUTES.get(module, related_task.get("sourceRoute") if related_task else "dashboard"),
-        "entityId": entity_id,
-        "taskId": related_task.get("id") if related_task else None,
-        "taskStatus": related_task.get("status") if related_task else "候选预警",
-        "generatedAt": _now(),
-        "title": title,
-        "warningSummary": summary,
-        "riskLevel": risk_level,
-        "evidence": evidence,
-        "aiAssessment": "这是基于当前 ERP / CRM / 报表数据生成的结构化评估。后续 Agent 可以补充更深评估，但不直接执行店铺动作。",
-        "suggestedActions": suggested_actions,
-        "operationChecklist": checklist,
-        "dataNeeded": data_needed,
-        "humanDecision": human_decision,
-        "nextStep": next_step,
-        "agentBoundary": "Agent 只生成评估和处理清单，不直接改预算、库存、价格、上新状态或店铺数据。",
-        "archiveRule": "任务完成后，来源候选退出当前模块循环位，报告快照进入日志复盘。",
-        "relatedTask": related_task,
-    }
+    return {"reportId": f"RPT-{module}-{entity_id}", "reportType": "task" if related_task else "candidate", "module": module, "sourceModule": MODULE_LABELS.get(module, related_task.get("sourceModule") if related_task else "经营模块"), "sourceRoute": MODULE_ROUTES.get(module, related_task.get("sourceRoute") if related_task else "dashboard"), "entityId": entity_id, "taskId": related_task.get("id") if related_task else None, "taskStatus": related_task.get("status") if related_task else "候选预警", "generatedAt": _now(), "title": title, "warningSummary": summary, "riskLevel": risk_level, "evidence": evidence, "aiAssessment": "这是基于当前 ERP / CRM / 报表数据生成的结构化评估。后续 Agent 可以补充更深评估，但不直接执行店铺动作。", "suggestedActions": suggested_actions, "operationChecklist": checklist, "dataNeeded": data_needed, "humanDecision": human_decision, "nextStep": next_step, "agentBoundary": "Agent 只生成评估和处理清单，不直接改预算、库存、价格、上新状态或店铺数据。", "archiveRule": "任务完成后，来源候选退出当前模块循环位，报告快照进入日志复盘。", "relatedTask": related_task}
 
 
 def _candidate_item(module: str, entity_id: str) -> Dict[str, Any] | None:
@@ -183,13 +91,7 @@ def _entity_alert_evidence(module: str, entity_id: str) -> Dict[str, Any]:
 
 def _report_for_product(item: Dict[str, Any], task: Dict[str, Any] | None = None) -> Dict[str, Any]:
     alert_state = _entity_alert_evidence("product", item["id"])
-    evidence = [
-        {"label": "库存", "value": f"{item['inventory']}（{item['inventoryStatus']}）"},
-        {"label": "售后", "value": item["afterSales"]},
-        {"label": "毛利率", "value": item["grossMargin"]},
-        {"label": "售价 / 成本", "value": f"¥{item['price']} / ¥{item['cost']}"},
-        *alert_state["evidence"],
-    ]
+    evidence = [{"label": "库存", "value": f"{item['inventory']}（{item['inventoryStatus']}）"}, {"label": "售后", "value": item["afterSales"]}, {"label": "毛利率", "value": item["grossMargin"]}, {"label": "售价 / 成本", "value": f"¥{item['price']} / ¥{item['cost']}"}, *alert_state["evidence"]]
     report = _base_report("product", item["id"], f"商品预警报告｜{item['shortName']}", item["suggestion"], evidence, ["复查商品承接能力", "检查售后归因", "确认是否继续推广或补货"], ["核对库存安全线", "查看退款原因分布", "复核详情页承诺和客服话术", "确认毛利是否能承接活动价"], ["近 7 日订单", "近 7 日退款原因", "客服咨询关键词", "当前库存周转天数"], ["是否暂停放量", "是否补详情页说明", "是否进入补货或清货流程"], "先完成商品风险归因，再决定是否扩大流量或进入上新测试。", task)
     report["relatedAlerts"] = alert_state["alerts"]
     return report
@@ -257,7 +159,7 @@ def _apply_alert_to_report(report: Dict[str, Any], task: Dict[str, Any]) -> Dict
         report["alertEvidence"] = alert_evidence
         report["relatedAlerts"] = [alert]
         report["warningSummary"] = task.get("reason") or report.get("warningSummary")
-        report["aiAssessment"] = "该任务由 V3 报表导入后自动触发。系统只负责预警、证据和处理清单，最终动作仍需人工确认。"
+        report["aiAssessment"] = "该任务由 V11 报表导入和任务队列门控触发。系统只负责预警、证据和处理清单，最终动作仍需人工确认。"
         report["evidence"] = alert_evidence + [item for item in report.get("evidence", []) if item not in alert_evidence]
     elif task_evidence:
         report["alertEvidence"] = task_evidence
@@ -265,10 +167,47 @@ def _apply_alert_to_report(report: Dict[str, Any], task: Dict[str, Any]) -> Dict
     return report
 
 
+def _fallback_report_from_task(task: Dict[str, Any], task_id: str, user_id: str | None = None) -> Dict[str, Any]:
+    fallback = _base_report(
+        "task",
+        task_id,
+        f"任务详情报告｜{task.get('title') or task_id}",
+        task.get("reason") or "该任务来自服务端任务池，需要人工确认后处理。",
+        [{"label": "来源", "value": task.get("sourceModule") or task.get("source") or "任务池"}, {"label": "优先级", "value": task.get("priority") or "中"}, {"label": "状态", "value": task.get("status") or "待确认"}, {"label": "队列", "value": task.get("queueType") or "执行队列"}, {"label": "数据版本", "value": task.get("reportDataVersion") or "待同步"}],
+        ["阅读任务原因", "确认处理边界", "完成后写入日志"],
+        ["核对来源模块", "核对优先级", "确认是否需要补充数据"],
+        ["关联商品/报表数据", "人工处理结果"],
+        ["是否完成", "是否需要退回模块等待新信号"],
+        task.get("task") or "按任务说明处理后，在待办中点击完成。",
+        task,
+    )
+    fallback["fallbackDetail"] = True
+    return _apply_role_insight(_apply_alert_to_report(fallback, task), user_id)
+
+
+def _missing_task_report(task_id: str, user_id: str | None = None) -> Dict[str, Any]:
+    report = _base_report(
+        "task",
+        task_id,
+        f"任务基础详情｜{task_id}",
+        "完整报告仍在同步或任务来源已被队列治理折叠。基础详情已打开，避免前端显示报告加载失败。",
+        [{"label": "任务ID", "value": task_id}, {"label": "报告状态", "value": "基础兜底"}, {"label": "处理建议", "value": "返回任务列表刷新；若任务仍可见，可继续提交证据。"}],
+        ["刷新任务队列", "确认任务是否仍在执行队列", "必要时查看数据页导入记录"],
+        ["确认任务ID", "确认数据版本", "确认是否被折叠为商品/店铺标签"],
+        ["任务原始字段", "导入数据版本", "关联 alertId"],
+        ["是否继续处理", "是否等待深度报告同步"],
+        "基础详情已可用，深度报告缺失不阻塞任务打开。",
+        {"id": task_id, "status": "详情兜底", "priority": "中", "queueType": "fallback_detail"},
+    )
+    report["fallbackDetail"] = True
+    report["notFoundRecovered"] = True
+    return _apply_role_insight(report, user_id)
+
+
 def get_task_report(task_id: str, user_id: str | None = None) -> Dict[str, Any] | None:
     task = next((item for item in list_tasks(active_only=False, viewer_id=user_id) if item.get("id") == task_id), None)
     if not task:
-        return None
+        return _missing_task_report(task_id, user_id)
     module = _module_from_task(task)
     entity_id = task.get("entityId") or task.get("productId") or task_id
     if module == "report" and str(task.get("productId", "")).startswith("R-"):
@@ -285,17 +224,4 @@ def get_task_report(task_id: str, user_id: str | None = None) -> Dict[str, Any] 
         candidate["warningSummary"] = task.get("reason") or candidate["warningSummary"]
         candidate["riskLevel"] = task.get("priority") or candidate["riskLevel"]
         return _apply_role_insight(_apply_alert_to_report(candidate, task), user_id)
-    fallback = _base_report(
-        "task",
-        task_id,
-        f"任务详情报告｜{task.get('title') or task_id}",
-        task.get("reason") or "该任务来自服务端任务池，需要人工确认后处理。",
-        [{"label": "来源", "value": task.get("sourceModule") or task.get("source") or "任务池"}, {"label": "优先级", "value": task.get("priority") or "中"}, {"label": "状态", "value": task.get("status") or "待确认"}, {"label": "去重键", "value": task.get("dedupeKey") or "未记录"}],
-        ["阅读任务原因", "确认处理边界", "完成后写入日志"],
-        ["核对来源模块", "核对优先级", "确认是否需要补充数据"],
-        ["关联商品/报表数据", "人工处理结果"],
-        ["是否完成", "是否需要退回模块等待新信号"],
-        task.get("task") or "按任务说明处理后，在待办中点击完成。",
-        task,
-    )
-    return _apply_role_insight(_apply_alert_to_report(fallback, task), user_id)
+    return _fallback_report_from_task(task, task_id, user_id)
