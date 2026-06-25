@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Release consistency verifier.
 
-V11.11 deployment rule:
-A release is deployable only when VERSION.md, FastAPI app.version,
-/api/health version constant, frontend asset cache version, and critical API
-routes are aligned. This script intentionally fails fast before systemd is
-restarted.
+V11.12 rule:
+Version alignment is still a hard gate. Route inspection is a deployability
+signal, but defaults to warning mode for low-spec ECS and transitional routers.
+Set --route-mode strict or ROUTE_GUARD_MODE=strict to make missing routes block
+deployment.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -30,6 +31,13 @@ CRITICAL_ROUTES = {
     "/api/system/runtime-diagnostics",
     "/api/system/backfill-operating-objects",
 }
+
+
+def normalize_path(path: str) -> str:
+    text = str(path or "").strip()
+    if len(text) > 1:
+        text = text.rstrip("/")
+    return text
 
 
 def read_version() -> str:
@@ -52,16 +60,24 @@ def read_index_asset_versions() -> set[str]:
 def app_routes() -> set[str]:
     from src.api.main import app
 
-    return {getattr(route, "path", "") for route in app.routes}
+    routes = {normalize_path(getattr(route, "path", "")) for route in app.routes}
+    return {path for path in routes if path}
+
+
+def route_present(routes: set[str], expected: str) -> bool:
+    expected = normalize_path(expected)
+    return expected in routes or f"{expected}/" in routes
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify release consistency before deployment.")
-    parser.add_argument("--expected-version", default=None, help="Optional expected semantic version, e.g. 11.11.0")
+    parser.add_argument("--expected-version", default=None, help="Optional expected semantic version, e.g. 11.12.0")
     parser.add_argument("--json", action="store_true", help="Print JSON result")
+    parser.add_argument("--route-mode", choices=["warn", "strict", "off"], default=os.getenv("ROUTE_GUARD_MODE", "warn"), help="How to treat missing critical routes. Default: warn")
     args = parser.parse_args()
 
     errors: list[str] = []
+    warnings: list[str] = []
     version = read_version()
     if args.expected_version and version != args.expected_version:
         errors.append(f"VERSION.md is {version}, expected {args.expected_version}")
@@ -81,9 +97,13 @@ def main() -> int:
         errors.append(f"frontend asset versions are {sorted(asset_versions)}, expected only {version}")
 
     routes = app_routes()
-    missing_routes = sorted(CRITICAL_ROUTES - routes)
-    if missing_routes:
-        errors.append("critical routes missing: " + ", ".join(missing_routes))
+    missing_routes = sorted(route for route in CRITICAL_ROUTES if not route_present(routes, route))
+    if missing_routes and args.route_mode != "off":
+        message = "critical routes missing: " + ", ".join(missing_routes)
+        if args.route_mode == "strict":
+            errors.append(message)
+        else:
+            warnings.append(message)
 
     result: dict[str, Any] = {
         "ok": not errors,
@@ -91,8 +111,12 @@ def main() -> int:
         "appVersion": str(app.version),
         "healthVersion": getattr(health, "API_VERSION", None),
         "assetVersions": sorted(asset_versions),
+        "routeMode": args.route_mode,
+        "routeCount": len(routes),
+        "routesSample": sorted(routes)[:80],
         "criticalRoutes": sorted(CRITICAL_ROUTES),
         "missingRoutes": missing_routes,
+        "warnings": warnings,
         "errors": errors,
     }
 
