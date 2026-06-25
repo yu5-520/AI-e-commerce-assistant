@@ -12,75 +12,86 @@
     }
   }
 
+  async function postJson(path) {
+    const response = await fetch(path, { method: "POST", headers: { Accept: "application/json", "X-Mock-User-Id": window.AppApi?.getCurrentUserId?.() || "U001" } });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.json();
+  }
+
   function pill(text, tone = "neutral") { return `<span class="system-pill ${tone}">${s(text)}</span>`; }
   function metric(label, value, tone = "neutral") { return `<article class="system-metric"><span>${s(label)}</span><strong>${s(value)}</strong>${pill(tone === "good" ? "正常" : tone === "warn" ? "关注" : tone === "danger" ? "阻断" : "状态", tone)}</article>`; }
-  function layerRow(layer) { return `<article class="system-layer-row"><div><strong>${s(layer?.name)}</strong><span>${s(layer?.capability || layer?.target)}</span></div>${pill(layer?.status || "unknown", "neutral")}</article>`; }
-  function flagRow(flag) { return `<article class="system-layer-row"><div><strong>${s(flag.name)}</strong><span>${s(flag.flagKey)} · ${s(flag.stage)} · ${s(flag.rolloutPercentage)}%</span></div>${pill(flag.enabledForContext ? "当前可用" : "当前不可用", flag.enabledForContext ? "good" : "warn")}</article>`; }
-  function textRow(title, value, tone = "neutral") { return `<article class="system-layer-row"><div><strong>${s(title)}</strong><span>${s(value)}</span></div>${pill(tone, tone === "已挂载" || tone === "已固定" ? "good" : "neutral")}</article>`; }
+  function row(title, value, tone = "neutral") { return `<article class="system-layer-row"><div><strong>${s(title)}</strong><span>${s(value)}</span></div>${pill(tone, tone === "正常" || tone === "已回填" ? "good" : tone === "关注" ? "warn" : tone === "阻断" ? "danger" : "neutral")}</article>`; }
+
+  function statusTone(status) {
+    if (status === "ok") return "good";
+    if (status === "object_sync_failed") return "danger";
+    if (status === "visible_empty") return "warn";
+    return "neutral";
+  }
+
+  function renderTableCounts(counts = {}) {
+    const entries = Object.entries(counts);
+    return entries.map(([name, value]) => row(name, value, value > 0 ? "正常" : "关注")).join("") || "<p>暂无运行态表数据。</p>";
+  }
+
+  function renderBackfillResult(result) {
+    if (!result) return "";
+    const after = result.after || {};
+    return `<section class="page-section system-section"><div class="section-header"><h3>最近回填结果</h3>${pill(result.status || "completed", result.status === "completed" ? "good" : "warn")}</div><div class="system-layer-list">
+      ${row("来源", result.source, "正常")}
+      ${row("回填行数", result.rowCount, result.rowCount > 0 ? "已回填" : "关注")}
+      ${row("商品入库", result.operatingObjectSync?.productUpsertCount ?? 0, (result.operatingObjectSync?.productUpsertCount ?? 0) > 0 ? "已回填" : "关注")}
+      ${row("店铺入库", result.operatingObjectSync?.storeUpsertCount ?? 0, (result.operatingObjectSync?.storeUpsertCount ?? 0) > 0 ? "已回填" : "关注")}
+      ${row("当前可见商品", after.visibleCounts?.products ?? 0, (after.visibleCounts?.products ?? 0) > 0 ? "正常" : "关注")}
+      ${row("当前可见店铺", after.visibleCounts?.stores ?? 0, (after.visibleCounts?.stores ?? 0) > 0 ? "正常" : "关注")}
+    </div></section>`;
+  }
 
   window.SystemStatusPage = {
     route: "system-status",
     title: "系统状态",
+    _backfillResult: null,
     async render() {
-      const [health, security, repository, architecture, v7, v98, v99, v9, v10, v10Ready] = await Promise.all([
-        loadJson("/api/health", {}), loadJson("/api/system/security", {}), loadJson("/api/system/repositories", {}), loadJson("/api/architecture/p0", {}), loadJson("/api/architecture/v7", {}), loadJson("/api/architecture/v9/ops-authorization", {}), loadJson("/api/architecture/v9/delivery-readiness", {}), loadJson("/api/architecture/v9/readiness", {}), loadJson("/api/architecture/v10/task-driven-product", {}), loadJson("/api/architecture/v10/readiness", {}),
+      const [health, diagnostics, db] = await Promise.all([
+        loadJson("/api/health", {}),
+        loadJson("/api/system/runtime-diagnostics", {}),
+        loadJson("/api/system/db-status", {}),
       ]);
-      const apiVersion = health?.version || v10Ready?.version || v10?.version || v9?.version || v99?.version || security?.apiVersion || repository?.version || architecture?.version || "10.9.0";
-      const layers = v7?.controlPlane?.layers || architecture?.layers || [];
-      const flags = v7?.tenantConfig?.featureFlags || [];
-      const enabledFlags = flags.filter((flag) => flag.enabledForContext);
-      const config = v7?.tenantConfig?.config || {};
-      const v10Entries = v10Ready?.entries || { taskDrivenProduct: health?.v100Entry, readiness: health?.v100ReadinessEntry };
-      const taskTypes = v10?.taskTypes || v10Ready?.taskTypes || [];
-      const principles = v10?.principles || [];
-      const minimalNav = v10?.minimalNavigation || v10Ready?.minimalNavigation || [];
-      const collapsedRoutes = v10?.collapsedOperationRoutes || v10Ready?.collapsedOperationRoutes || [];
-      const navRules = v10?.navigationCompressionRules || [];
-      const layoutRules = v10?.frontendLayoutRules || v10Ready?.frontendLayoutRules || {};
-      const uiRules = v10?.uiProductizationRules || v10Ready?.uiProductizationRules || [];
-      const dashboardSections = v10?.dashboardWorkbenchSections || v10Ready?.dashboardWorkbenchSections || [];
-      const dashboardRules = v10?.dashboardRules || v10Ready?.dashboardRules || [];
-      const importTaskFlow = v10?.importTaskFlow || v10Ready?.importTaskFlow || [];
-      const importRefresh = v10?.importRefreshContract || v10Ready?.importRefreshContract || {};
-      const crossAccountFlow = v10?.crossAccountFlow || v10Ready?.crossAccountFlow || [];
-      const roleViewRules = v10?.roleViewRules || v10Ready?.roleViewRules || {};
-      const taskActionRules = v10?.taskActionRules || v10Ready?.taskActionRules || [];
-      const operatingProfileRules = v10?.operatingProfileRules || v10Ready?.operatingProfileRules || [];
-      const operatingProfileTagTypes = v10?.operatingProfileTagTypes || v10Ready?.operatingProfileTagTypes || [];
-      const tagChangeTaskRules = v10?.tagChangeTaskRules || v10Ready?.tagChangeTaskRules || [];
-      const tagChangeTaskFlow = v10?.tagChangeTaskFlow || v10Ready?.tagChangeTaskFlow || [];
-      const acceptanceChain = v10?.acceptanceChain || v10Ready?.acceptanceChain || [];
-      const acceptanceRules = v10?.acceptanceRules || v10Ready?.acceptanceRules || [];
-      const blockingFailures = v10?.blockingFailures || v10Ready?.blockingFailures || [];
-      const entries = v9?.entries || { opsAuthorization: health?.v98Entry, deliveryReadiness: health?.v99Entry };
-      const readinessAreas = Object.entries(v99?.readinessAreas || {});
-      const deliveryStages = v99?.deliveryStages || [];
-      const opsRoles = Object.keys(v98?.roles || {});
-      const separationRules = v98?.separationRules || [];
-      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V10.9</p><h2>系统状态</h2><p>集中查看 V10 任务驱动验收守卫、标签变化任务、Agent 经营档案和跨账号任务流转。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(v10Ready?.status || "task-driven-acceptance")}</small></div></section>
+      const apiVersion = health?.version || diagnostics?.version || "11.10.0";
+      const visible = diagnostics?.visibleCounts || {};
+      const tableCounts = diagnostics?.tableCounts || {};
+      const tone = statusTone(diagnostics?.status);
+      const statusText = diagnostics?.status === "object_sync_failed" ? "经营对象未入库" : diagnostics?.status === "visible_empty" ? "当前账号不可见" : "运行正常";
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V11.10</p><h2>系统状态</h2><p>优先检查真实运行态：导入行、经营对象主档、当前账号可见商品和店铺。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(statusText)}</small></div></section>
       <section class="system-metric-grid">
-        ${metric("API 版本", apiVersion, apiVersion === "10.9.0" ? "good" : "warn")}
-        ${metric("验收链路", acceptanceChain.length, "good")}
-        ${metric("阻断项", blockingFailures.length, "warn")}
-        ${metric("标签任务规则", tagChangeTaskRules.length, "good")}
+        ${metric("运行状态", statusText, tone)}
+        ${metric("当前可见商品", visible.products ?? 0, (visible.products ?? 0) > 0 ? "good" : "warn")}
+        ${metric("当前可见店铺", visible.stores ?? 0, (visible.stores ?? 0) > 0 ? "good" : "warn")}
+        ${metric("导入行", tableCounts.imported_report_rows ?? 0, (tableCounts.imported_report_rows ?? 0) > 0 ? "good" : "warn")}
       </section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.9 任务驱动验收守卫</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${acceptanceChain.map((item) => textRow(item, "验收链路", "已固定")).join("") || "<p>暂无验收链路。</p>"}${acceptanceRules.map((item) => textRow(item, "验收规则", "已固定")).join("")}${blockingFailures.map((item) => textRow(item, "阻断失败项", "关注")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.8 标签变化任务</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${tagChangeTaskRules.map((item) => textRow(item, "候选转任务规则", "已固定")).join("") || "<p>暂无标签变化任务规则。</p>"}${tagChangeTaskFlow.map((item) => textRow(item, "标签任务流程", "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.7 Agent 经营档案</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${operatingProfileRules.map((item) => textRow(item, "自动标签规则", "已固定")).join("") || "<p>暂无经营档案规则。</p>"}${operatingProfileTagTypes.map((item) => textRow(item, "Agent 标签类型", "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.6 任务操作极简化</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${taskActionRules.map((item) => textRow(item, "任务卡动作规则", "已固定")).join("") || "<p>暂无动作规则。</p>"}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.5 跨账号任务流转</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${crossAccountFlow.map((item) => textRow(item, "自动流转规则", "已固定")).join("") || "<p>暂无跨账号规则。</p>"}${Object.entries(roleViewRules).map(([role, view]) => textRow(role, `${view.surface || "role"} · ${(view.actions || []).join(" / ")}`, "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.4 报表导入驱动任务</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${importTaskFlow.map((item) => textRow(item, "导入后端流程", "已固定")).join("")}${Object.entries(importRefresh).map(([name, value]) => textRow(name, Array.isArray(value) ? value.join(" / ") : value, "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.3 今日任务台</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${dashboardSections.map((item) => textRow(item, "总览任务台结构", "已固定")).join("")}${dashboardRules.map((item, index) => textRow(`任务台规则 ${index + 1}`, item, "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.2 产品化排版</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${Object.entries(layoutRules).map(([name, value]) => textRow(name, value, "已固定")).join("")}${uiRules.map((item, index) => textRow(`UI 规则 ${index + 1}`, item, "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10.1 主导航压缩</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${minimalNav.map((item) => textRow(item, "主导航入口", "已固定")).join("")}${collapsedRoutes.map((item) => textRow(item, "折叠到经营模块", "已固定")).join("")}${navRules.slice(0, 5).map((item, index) => textRow(`规则 ${index + 1}`, item, "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10 任务驱动产品</h3>${pill(v10?.version || "10.9.0", "good")}</div><div class="system-layer-list">${principles.map((item, index) => textRow(`原则 ${index + 1}`, item, "已固定")).join("")}${taskTypes.map((item) => textRow(item, "需要用户介入时以任务出现", "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V10 readiness 入口</h3>${pill(v10Ready?.status || "mounted", "good")}</div><div class="system-layer-list">${Object.entries(v10Entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V10 入口。</p>"}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V9.9 交付验收</h3>${pill(v99?.version || "9.9.0", "good")}</div><div class="system-layer-list">${readinessAreas.map(([name, items]) => textRow(name, Array.isArray(items) ? items.join(" / ") : items, "已固定")).join("")}${deliveryStages.slice(0, 4).map((item) => textRow(item, "delivery stage", "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V9 readiness 入口</h3>${pill(v9?.status || "mounted", "good")}</div><div class="system-layer-list">${Object.entries(entries || {}).map(([name, path]) => textRow(name, path, "已挂载")).join("") || "<p>暂无 V9 入口。</p>"}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V9.8 受托运维边界</h3>${pill(v98?.version || "9.8.0", "good")}</div><div class="system-layer-list">${opsRoles.map((role) => textRow(role, v98?.roles?.[role]?.type || "role", "已固定")).join("")}${separationRules.slice(0, 3).map((rule, index) => textRow(`边界规则 ${index + 1}`, rule, "已固定")).join("")}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>V7 控制面</h3>${pill(v7?.version || "runtime", "neutral")}</div><div class="system-layer-list">${layers.map(layerRow).join("") || "<p>暂无架构层数据。</p>"}</div></section>
-      <section class="page-section system-section"><div class="section-header"><h3>功能开关</h3>${pill(`${enabledFlags.length}/${flags.length} 当前可用`, "good")}</div><div class="system-layer-list"><article class="system-layer-row"><div><strong>${s(config.edition || config.plan || "tenant")}</strong><span>${s((config.enabledModules || []).join(" / "))}</span></div>${pill(config.workflowMode || "workflow", "good")}</article>${flags.map(flagRow).join("") || "<p>暂无功能开关。</p>"}</div></section>`;
+      <section class="page-section system-section"><div class="section-header"><h3>经营对象运行诊断</h3>${pill(statusText, tone)}</div><div class="system-layer-list">
+        ${row("当前账号", `${diagnostics?.currentContext?.user_id || diagnostics?.currentContext?.userId || "-"} / ${diagnostics?.currentContext?.role_id || diagnostics?.currentContext?.roleId || "-"}`, "正常")}
+        ${row("operating_products", tableCounts.operating_products ?? 0, (tableCounts.operating_products ?? 0) > 0 ? "正常" : "关注")}
+        ${row("operating_stores", tableCounts.operating_stores ?? 0, (tableCounts.operating_stores ?? 0) > 0 ? "正常" : "关注")}
+        ${row("当前账号可见商品", visible.products ?? 0, (visible.products ?? 0) > 0 ? "正常" : "关注")}
+        ${row("当前账号可见店铺", visible.stores ?? 0, (visible.stores ?? 0) > 0 ? "正常" : "关注")}
+        ${row("诊断规则", diagnostics?.rule || "经营对象主档为准", diagnostics?.objectSyncFailed ? "阻断" : "正常")}
+      </div><div class="dashboard-linked-actions" style="margin-top:16px"><button type="button" data-backfill-objects>回填经营对象</button><button type="button" class="secondary" data-system-refresh>刷新诊断</button></div></section>
+      ${renderBackfillResult(this._backfillResult)}
+      <section class="page-section system-section"><div class="section-header"><h3>运行态表计数</h3>${pill(db?.database?.type || "sqlite", "good")}</div><div class="system-layer-list">${renderTableCounts(tableCounts)}</div></section>`;
     },
-    mount(ctx) { ctx.delegate("[data-system-refresh]", "click", () => AppRouter.schedule("system-status-refresh")); },
+    mount(ctx) {
+      ctx.delegate("[data-system-refresh]", "click", () => AppRouter.schedule("system-status-refresh"));
+      ctx.delegate("[data-backfill-objects]", "click", async (_, node) => {
+        node.disabled = true;
+        node.textContent = "回填中";
+        try {
+          this._backfillResult = await postJson("/api/system/backfill-operating-objects");
+        } catch (error) {
+          this._backfillResult = { status: "failed", source: String(error), rowCount: 0, operatingObjectSync: { productUpsertCount: 0, storeUpsertCount: 0 }, after: { visibleCounts: { products: 0, stores: 0 } } };
+        }
+        AppRouter.schedule("system-backfill");
+      });
+    },
   };
 })();
