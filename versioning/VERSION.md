@@ -1,1 +1,5 @@
-Current Version: 10.9.0
+Current Version: 11.0.0
+
+V11｜产品 MVP 测验阶段
+
+主线：真实报表导入 → 商品入库ID分流 → 商品/店铺标签 → 店铺权重 → 任务队列 → 详情页兜底 → MVP 验收。
