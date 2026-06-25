@@ -71,6 +71,8 @@
 /api/data/templates
 /api/data/source-connections
 /api/data/source-connections/{source_id}/sync
+/api/data/upload/preview
+/api/data/upload/confirm
 /api/data/preview
 /api/data/import/confirm
 /api/data/import/report
@@ -82,7 +84,9 @@
 /api/data/versions/{data_version}/rollback
 ```
 
-用途：报表模板、字段映射、报表导入、数据版本、测试记录清理、回滚。
+用途：Excel / CSV / JSON 上传、报表模板、字段映射、报表导入、数据版本、测试记录清理、回滚。
+
+边界：`/api/data/upload/*` 只负责文件解析、Sheet 识别、字段读取和标准化入库，不提前写风险判断、任务线索或经营建议。
 
 ## 趋势
 
