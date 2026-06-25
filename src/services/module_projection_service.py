@@ -15,7 +15,7 @@ from src.services.module_data_service import REPORT_GROUPS
 
 PROJECTION_VERSION = "11.4.0"
 DATASET_LABELS = {"products": "商品报表", "inventory": "库存报表", "orders": "订单报表", "refunds": "退款报表", "customers": "客户报表"}
-DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "订单报表", "refunds": "CRM", "customers": "CRM"}
+DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "ERP", "refunds": "CRM", "customers": "CRM"}
 
 
 def _pick(row: Dict[str, Any], *fields: str, default: Any = None) -> Any:
