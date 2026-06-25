@@ -1,8 +1,9 @@
 """P0 TaskRepository backed by the SQLite task persistence mirror.
 
 This repository is the bridge from the current in-memory task runtime to a SaaS
-source-of-truth task store. It enforces tenant / soft-delete / data-scope reads
-at the repository boundary and keeps writes idempotent for demo-stage retries.
+source-of-truth task store. It enforces tenant / org / soft-delete / data-scope
+reads at the repository boundary and keeps writes idempotent for demo-stage
+retries.
 """
 
 from __future__ import annotations
@@ -13,6 +14,9 @@ from src.core.context import UserContext
 from src.repositories.scoped_repository import ScopedRepositoryBase, item_visible_to_context
 from src.repositories.sqlite_repository import connect, dumps, init_db, loads
 from src.services.task_state_machine_service import ensure_task_persistence_tables, mirror_task
+
+
+DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
 
 
 class TaskRepository(ScopedRepositoryBase):
@@ -40,8 +44,8 @@ class TaskRepository(ScopedRepositoryBase):
         return payload
 
     def list(self, *, active_only: bool = False, assignee_id: str | None = None, limit: int = 200) -> list[Dict[str, Any]]:
-        where = ["deleted_at IS NULL", "tenant_id = ?"]
-        params: list[Any] = [self.ctx.tenant_id]
+        where = ["deleted_at IS NULL", "tenant_id = ?", "org_id = ?"]
+        params: list[Any] = [self.ctx.tenant_id, self.ctx.org_id]
         if active_only:
             where.append("status NOT IN ('已完成','已拒绝','已确认','已归档','已通过','已写入复盘')")
         if assignee_id:
@@ -57,8 +61,8 @@ class TaskRepository(ScopedRepositoryBase):
     def get(self, task_id: str) -> Dict[str, Any] | None:
         with connect() as conn:
             row = conn.execute(
-                "SELECT * FROM task_status WHERE task_id = ? AND tenant_id = ? AND deleted_at IS NULL",
-                (task_id, self.ctx.tenant_id),
+                "SELECT * FROM task_status WHERE task_id = ? AND tenant_id = ? AND org_id = ? AND deleted_at IS NULL",
+                (task_id, self.ctx.tenant_id, self.ctx.org_id),
             ).fetchone()
         if not row:
             return None
@@ -66,8 +70,8 @@ class TaskRepository(ScopedRepositoryBase):
         return task if item_visible_to_context(task, self.ctx) else None
 
     def find_by_dedupe_key(self, dedupe_key: str, *, active_only: bool = False) -> Dict[str, Any] | None:
-        where = ["tenant_id = ?", "dedupe_key = ?", "deleted_at IS NULL"]
-        params: list[Any] = [self.ctx.tenant_id, dedupe_key]
+        where = ["tenant_id = ?", "org_id = ?", "dedupe_key = ?", "deleted_at IS NULL"]
+        params: list[Any] = [self.ctx.tenant_id, self.ctx.org_id, dedupe_key]
         if active_only:
             where.append("status NOT IN ('已完成','已拒绝','已确认','已归档','已通过','已写入复盘')")
         with connect() as conn:
@@ -100,9 +104,9 @@ class TaskRepository(ScopedRepositoryBase):
                 """
                 UPDATE task_status
                 SET deleted_at = datetime('now'), deleted_by = ?, delete_reason = ?
-                WHERE task_id = ? AND tenant_id = ? AND deleted_at IS NULL
+                WHERE task_id = ? AND tenant_id = ? AND org_id = ? AND deleted_at IS NULL
                 """,
-                (deleted_by or self.ctx.user_id, reason, task_id, self.ctx.tenant_id),
+                (deleted_by or self.ctx.user_id, reason, task_id, self.ctx.tenant_id, self.ctx.org_id),
             )
             conn.commit()
         return result.rowcount > 0
@@ -117,19 +121,20 @@ class TaskRepository(ScopedRepositoryBase):
                 f"""
                 UPDATE task_status
                 SET deleted_at = datetime('now'), deleted_by = ?, delete_reason = ?
-                WHERE tenant_id = ? AND deleted_at IS NULL AND task_id IN ({placeholders})
+                WHERE tenant_id = ? AND org_id = ? AND deleted_at IS NULL AND task_id IN ({placeholders})
                 """,
-                [deleted_by or self.ctx.user_id, reason, self.ctx.tenant_id, *visible_ids],
+                [deleted_by or self.ctx.user_id, reason, self.ctx.tenant_id, self.ctx.org_id, *visible_ids],
             )
             conn.commit()
         return result.rowcount
 
     def summary(self) -> dict[str, Any]:
         visible = self.list(active_only=False, limit=1000)
-        active = [task for task in visible if task.get("status") not in {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}]
+        active = [task for task in visible if task.get("status") not in DONE_STATUS]
         return {
             "source": "TaskRepository(SQLite mirror)",
             "tenantId": self.ctx.tenant_id,
+            "orgId": self.ctx.org_id,
             "visibleTasks": len(visible),
             "activeTasks": len(active),
             "queryPlan": self.query_plan().where,
