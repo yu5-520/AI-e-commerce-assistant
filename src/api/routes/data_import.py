@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, UploadFile
 
 from src.core.context import context_from_headers
 from src.services.account_service import current_user, user_id_from_headers
@@ -13,6 +13,7 @@ from src.services.data_source_connection_service import build_source_sync_summar
 from src.services.data_version_service import delete_data_version, get_data_version_detail
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
+from src.services.import_adapter_service import compact_upload_meta, parse_upload_file
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions, run_v3_mock_imports
 from src.services.report_schema_service import confirm_report_import, get_report_templates, normalize_rows_with_mapping, preview_report_dataset
 from src.services.risk_task_service import generate_risk_tasks_for_signals
@@ -74,6 +75,14 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
     result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "V6.2 导入后生成商品快照、指标趋势、经营信号，并把信号升级为风险分级任务。"}
     result["riskTaskSync"] = {"version": "6.2.0", "mode": "risk_graded_signal_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "低风险直接生成观察任务；中风险生成带指标边界的修复任务；高风险只生成复核候选，不直接扩大投产。"}
     return result
+
+
+async def _rows_from_uploaded_file(file: UploadFile) -> Dict[str, Any]:
+    content = await file.read()
+    try:
+        return parse_upload_file(file.filename or "upload", content, content_type=file.content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/sources")
@@ -157,6 +166,36 @@ def delete_version(request: Request, data_version: str, confirm: bool = Query(de
 @router.get("/templates")
 def report_templates() -> Dict[str, Any]:
     return get_report_templates()
+
+
+@router.post("/upload/preview")
+async def preview_upload(file: UploadFile = File(...), dataset_name: str = Form(default="auto"), source_system: str = Form(default="manual_upload")) -> Dict[str, Any]:
+    parsed = await _rows_from_uploaded_file(file)
+    try:
+        preview = preview_report_dataset(str(dataset_name), rows=parsed.get("rows"), source_system=source_system)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    preview["uploadMeta"] = compact_upload_meta(parsed)
+    return preview
+
+
+@router.post("/upload/confirm")
+async def confirm_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    dataset_name: str = Form(default="auto"),
+    source_system: str = Form(default="manual_upload"),
+    auto_create_tasks: bool = Form(default=True),
+) -> Dict[str, Any]:
+    parsed = await _rows_from_uploaded_file(file)
+    rows = parsed.get("rows")
+    try:
+        result = confirm_report_import(str(dataset_name), rows=rows, field_mapping={}, auto_create_tasks=auto_create_tasks, source_system=source_system)
+        result["uploadMeta"] = compact_upload_meta(parsed)
+        synced = _attach_v62_trend_and_risk_sync(result, rows, source_system=source_system)
+        return _attach_import_product_contracts(request, synced, rows, source="upload_file_import")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/preview")
