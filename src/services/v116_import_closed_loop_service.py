@@ -1,14 +1,14 @@
-"""V11.7 import closed-loop verification.
+"""V11.8 import closed-loop verification.
 
 Import responses must describe what the product modules can actually read after
-an import. Product/store master updates are verified separately from tag/task
-creation so low-risk data still appears in the operating unit page.
+an import. The uploading account is the data-scope source for normal operator
+imports; task generation inherits that operating-object ownership.
 """
 
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable
 
 from src.core.context import UserContext
 from src.services.module_projection_service import projected_products, projected_traffic, projection_summary
@@ -16,7 +16,7 @@ from src.services.module_task_service import list_tasks
 from src.services.operating_object_store_service import operating_object_summary
 from src.services.risk_task_service import risk_task_summary
 
-V116_IMPORT_CLOSED_LOOP_VERSION = "11.7.0"
+V116_IMPORT_CLOSED_LOOP_VERSION = "11.8.0"
 EXECUTABLE_QUEUE_TYPES = {"urgent_execution", "today_execution"}
 BACKEND_ONLY_QUEUE_TYPES = {"backend_tag", "store_product_tag", "observe_candidate"}
 
@@ -91,8 +91,6 @@ def _patch_v104(payload: Dict[str, Any], closed_loop: Dict[str, Any]) -> None:
 
 
 def attach_v116_import_closed_loop(result: Dict[str, Any], ctx: UserContext, *, source: str = "report_import") -> Dict[str, Any]:
-    """Attach post-import truth metrics read from product modules."""
-
     payload = deepcopy(result)
     products = projected_products(ctx.user_id)
     traffic = projected_traffic(ctx.user_id)
@@ -125,7 +123,7 @@ def attach_v116_import_closed_loop(result: Dict[str, Any], ctx: UserContext, *, 
         "latestDataVersion": object_summary.get("latestDataVersion") or projection.get("latestDataVersion"),
         "operatingObjectSync": object_sync,
         "truthSource": "operating_object_store + projected_products + projected_traffic + module_task_service.list_tasks + risk_task_summary",
-        "rule": "商品/店铺入库在前；标签和任务是后续状态。低风险不生成任务，也必须更新经营对象。",
+        "rule": "上传账号决定正常报表导入归属；新店铺直接创建；任务继承经营对象权限；旧规则不得生成新任务。",
     }
     payload["importClosedLoop"] = closed_loop
     payload["closedLoopVerified"] = True
