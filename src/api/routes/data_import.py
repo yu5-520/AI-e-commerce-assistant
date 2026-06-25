@@ -21,6 +21,7 @@ from src.services.trend_signal_service import ingest_product_trends
 from src.services.v104_import_task_sync_service import attach_v104_import_sync
 from src.services.v107_operating_profile_service import attach_v107_operating_profile
 from src.services.v108_tag_change_task_service import attach_v108_tag_change_tasks
+from src.services.v116_import_closed_loop_service import attach_v116_import_closed_loop
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
@@ -43,9 +44,11 @@ def require_rollback_permission(user_id: str) -> None:
 def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
     if isinstance(rows, list):
         result["rows"] = rows
+    ctx = context_from_headers(request.headers)
     v104 = attach_v104_import_sync(result, source=source)
     v107 = attach_v107_operating_profile(v104)
-    return attach_v108_tag_change_tasks(v107, context_from_headers(request.headers))
+    v108 = attach_v108_tag_change_tasks(v107, ctx)
+    return attach_v116_import_closed_loop(v108, ctx, source=source)
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
@@ -216,7 +219,7 @@ def confirm_import(request: Request, body: Dict[str, Any] = Body(default_factory
         raise HTTPException(status_code=400, detail="dataset_name is required")
     source_system = body.get("source_system") or body.get("sourceSystem")
     try:
-        result = confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=body.get("auto_create_tasks", body.get("autoCreateTasks", True)) is not False, source_system=source_system)
+        result = confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=body.get("auto_tasks", body.get("autoCreateTasks", True)) is not False, source_system=source_system)
         synced = _attach_v62_trend_and_risk_sync(result, body.get("rows"), source_system=source_system)
         return _attach_import_product_contracts(request, synced, body.get("rows"), source="confirm_report_import")
     except ValueError as exc:
