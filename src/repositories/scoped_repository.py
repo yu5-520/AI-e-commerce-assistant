@@ -22,6 +22,7 @@ class ScopeFilter:
     store_ids: list[str] = field(default_factory=list)
     role_id: str = "observer"
     include_deleted: bool = False
+    strict_scope: bool = False
 
     @classmethod
     def from_context(cls, ctx: UserContext, *, include_deleted: bool = False) -> "ScopeFilter":
@@ -32,6 +33,7 @@ class ScopeFilter:
             store_ids=list(ctx.store_ids),
             role_id=ctx.role_id,
             include_deleted=include_deleted,
+            strict_scope=ctx.strict_scope,
         )
 
 
@@ -41,15 +43,15 @@ class ScopedQueryPlan:
 
     where: list[str]
     params: dict[str, Any]
-    rule: str = "tenant + soft delete + role data scope"
+    rule: str = "tenant + org + soft delete + role data scope"
 
 
 def query_plan_for_context(ctx: UserContext, *, table_alias: str = "resource", include_deleted: bool = False) -> ScopedQueryPlan:
     """Return the mandatory WHERE contract every repository must apply."""
 
     prefix = f"{table_alias}." if table_alias else ""
-    where = [f"{prefix}tenant_id = :tenant_id"]
-    params: dict[str, Any] = {"tenant_id": ctx.tenant_id}
+    where = [f"{prefix}tenant_id = :tenant_id", f"{prefix}org_id = :org_id"]
+    params: dict[str, Any] = {"tenant_id": ctx.tenant_id, "org_id": ctx.org_id}
     if not include_deleted:
         where.append(f"{prefix}deleted_at IS NULL")
     if ctx.role_id == "owner":
@@ -79,6 +81,7 @@ def item_visible_to_context(
     *,
     include_deleted: bool = False,
     tenant_fields: tuple[str, ...] = ("tenantId", "tenant_id"),
+    org_fields: tuple[str, ...] = ("orgId", "org_id"),
     store_fields: tuple[str, ...] = ("storeId", "store_id"),
     store_group_fields: tuple[str, ...] = ("storeGroupId", "store_group_id", "groupId", "group_id"),
     deleted_fields: tuple[str, ...] = ("deletedAt", "deleted_at"),
@@ -90,20 +93,28 @@ def item_visible_to_context(
     """
 
     tenant_id = _pick(item, *tenant_fields)
+    org_id = _pick(item, *org_fields)
+    if ctx.strict_scope and not tenant_id:
+        return False
     if tenant_id and tenant_id != ctx.tenant_id:
+        return False
+    if ctx.strict_scope and not org_id:
+        return False
+    if org_id and org_id != ctx.org_id:
         return False
     if not include_deleted and _pick(item, *deleted_fields):
         return False
     if ctx.role_id == "owner":
         return True
     store_group_id = _pick(item, *store_group_fields)
+    store_id = _pick(item, *store_fields)
+    if ctx.strict_scope and not store_group_id and not store_id:
+        return False
     if ctx.role_id == "manager":
         if store_group_id:
             return store_group_id in set(ctx.store_group_ids)
-        store_id = _pick(item, *store_fields)
-        return not store_id or store_id in set(ctx.store_ids)
-    store_id = _pick(item, *store_fields)
-    return not store_id or store_id in set(ctx.store_ids)
+        return (not ctx.strict_scope and not store_id) or store_id in set(ctx.store_ids)
+    return (not ctx.strict_scope and not store_id) or store_id in set(ctx.store_ids)
 
 
 def filter_visible_items(items: Iterable[dict[str, Any]], ctx: UserContext, *, include_deleted: bool = False) -> list[dict[str, Any]]:
@@ -114,7 +125,7 @@ class ScopedRepositoryBase:
     """Base class contract for future SQLAlchemy repositories.
 
     P0 rule: route handlers must call repository/service methods with UserContext;
-    repositories apply tenant, deleted_at and role data-scope filters centrally.
+    repositories apply tenant, org, deleted_at and role data-scope filters centrally.
     """
 
     resource_name = "resource"
