@@ -1,7 +1,7 @@
-"""V5 role-scoped task flow service.
+"""V11.8 role-scoped task lifecycle service.
 
-The product runtime starts with no business tasks. Tasks are created only from
-imported data, module candidates, manager dispatch, or explicit user actions.
+New tasks must arrive as structured SOP task packages. The legacy rule chain may
+read historical tasks, but it cannot generate new tasks anymore.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List
 from uuid import uuid4
 
-from src.services.account_service import default_operator, default_reviewer, get_user, list_stores, users_by_role, user_display
+from src.services.account_service import default_reviewer, get_user, user_display
 
 PRIORITY_RANK = {"高": 1, "中": 2, "低": 3}
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
@@ -31,6 +31,7 @@ EVENT_LABELS = {
     "task_reordered": "任务排序",
     "demo_reset": "演示重置",
 }
+REQUIRED_V118_FIELDS = {"taskCard", "taskDetailReport", "evidencePack", "sopSteps", "reviewMetrics", "completionGate", "failureThreshold", "agentJudgment", "ownership"}
 
 TASKS: List[Dict[str, Any]] = []
 LOGS: List[Dict[str, Any]] = []
@@ -49,205 +50,78 @@ def make_id(prefix: str) -> str:
     return f"{prefix}{uuid4().hex[:10]}".upper()
 
 
-def store_id_map() -> Dict[str, Dict[str, Any]]:
-    return {store["id"]: store for store in list_stores()}
+def _as_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
 
 
-def store_name_map() -> Dict[str, Dict[str, Any]]:
-    mapping: Dict[str, Dict[str, Any]] = {}
-    for store in list_stores():
-        mapping[store["name"]] = store
-        mapping[f"{store['platform']} · {store['name']}"] = store
-        mapping[store["platform"]] = store
-    return mapping
-
-
-def infer_store_ids(task: Dict[str, Any]) -> List[str]:
-    explicit = task.get("storeIds") or task.get("visibleStoreIds")
-    if isinstance(explicit, list) and explicit:
-        return list(dict.fromkeys(explicit))
-    mapping = store_name_map()
-    ids: List[str] = []
-    for value in [task.get("store"), task.get("storeName"), task.get("platform")]:
-        if value and value in mapping:
-            ids.append(mapping[value]["id"])
-    return list(dict.fromkeys(ids))
-
-
-def infer_store_group_id(store_ids: List[str]) -> str | None:
-    stores = store_id_map()
-    for store_id in store_ids:
-        group_id = stores.get(store_id, {}).get("groupId")
-        if group_id:
-            return group_id
-    return None
-
-
-def operator_for_store(store_ids: List[str], risk_domain: str | None = None) -> Dict[str, Any] | None:
-    for user in users_by_role("operator"):
-        if set(user.get("storeIds") or []) & set(store_ids):
-            return user
-    return default_operator(risk_domain) if users_by_role("operator") else None
-
-
-def finance_user() -> Dict[str, Any] | None:
-    users = users_by_role("finance")
-    return users[0] if users else None
-
-
-def infer_domain(task: Dict[str, Any]) -> str:
-    text = " ".join(str(item) for item in [task.get("riskDomain"), task.get("taskType"), task.get("taskSignal"), task.get("task"), task.get("reason"), *(task.get("judgmentTags") or [])] if item)
-    if any(word in text for word in ["售后", "退款", "尺寸", "材质", "安装", "客服"]):
-        return "售后"
-    if any(word in text for word in ["库存", "补货", "承接"]):
-        return "库存"
-    if any(word in text for word in ["流量", "ROI", "推广", "投放", "点击", "转化", "ROAS"]):
-        return "流量"
-    if any(word in text for word in ["上新", "主图", "标题", "SKU", "详情页", "测试版本"]):
-        return "上新"
-    if any(word in text for word in ["价格", "利润", "券", "活动价", "财务"]):
-        return "价格"
-    if any(word in text for word in ["报表", "导入", "同步", "数据"]):
-        return "报表"
-    return "通用"
-
-
-def infer_action(task: Dict[str, Any]) -> str:
-    text = " ".join(str(item) for item in [task.get("actionType"), task.get("taskType"), task.get("taskSignal"), task.get("task")] if item)
-    if "复盘" in text:
-        return "复盘"
-    if any(word in text for word in ["测试", "版本", "上新"]):
-        return "测试"
-    if any(word in text for word in ["导入", "同步"]):
-        return "导入"
-    if "观察" in text:
-        return "观察"
-    if "确认" in text:
-        return "确认"
-    return "复查"
-
-
-def infer_source_type(task: Dict[str, Any]) -> str:
-    route = task.get("sourceRoute") or ""
-    source = f"{task.get('source') or ''} {task.get('sourceModule') or ''}"
-    if route == "business-products" or "商品" in source:
-        return "商品模块"
-    if route == "business-competitors" or "竞品" in source:
-        return "竞品模块"
-    if route == "business-listing" or "上新" in source:
-        return "上新模块"
-    if route == "business-traffic" or "流量" in source:
-        return "流量模块"
-    if route == "data-check" or "报表" in source:
-        return "财务报表"
-    if "系统" in source or "预警" in source:
-        return "系统预警"
-    if any(word in source for word in ["复盘", "周报", "月报", "日报", "审计"]):
-        return "复盘审计"
-    return "手动创建"
-
-
-def infer_task_layer(task: Dict[str, Any], source_type: str, risk_domain: str) -> str:
-    if task.get("taskLayer"):
-        return str(task["taskLayer"])
-    if source_type in {"复盘审计"}:
-        return "manager_dispatch"
-    if source_type == "财务报表" or risk_domain in FINANCE_DOMAINS:
-        return "finance_check"
-    return "operator_execution"
-
-
-def default_visible_roles(layer: str, risk_domain: str) -> List[str]:
-    if layer == "owner_decision":
-        return ["owner"]
-    if layer == "manager_dispatch":
-        return ["manager"]
-    if layer == "finance_check":
-        return ["manager", "finance"]
-    roles = ["manager", "operator"]
-    if risk_domain in FINANCE_DOMAINS:
-        roles.append("finance")
-    return roles
+def validate_v118_task_package(payload: Dict[str, Any]) -> None:
+    if payload.get("taskGenerationMode") != "v11_8_sop_package":
+        raise ValueError("旧任务生成规则已删除：新任务必须由 V11.8 SOP 任务包生成。")
+    missing = sorted(field for field in REQUIRED_V118_FIELDS if field not in payload)
+    if missing:
+        raise ValueError(f"任务结构缺失：{', '.join(missing)}。请从经营对象 + 指标证据 + SOP 链路重新生成任务。")
+    if (payload.get("agentJudgment") or {}).get("status") in {"v5_rule_based", "rule_based", "legacy"}:
+        raise ValueError("旧 agentJudgment 已禁止生成新任务。")
 
 
 def build_dedupe_key(task: Dict[str, Any]) -> str:
-    entity_type = task.get("entityType") or ("报表" if str(task.get("productId", "")).startswith("R") else "商品")
-    entity_id = task.get("entityId") or task.get("productId") or task.get("sourceEvent") or task.get("id") or "unknown"
-    risk_domain = task.get("riskDomain") or infer_domain(task)
-    action_type = task.get("actionType") or infer_action(task)
-    store_ids = "+".join(task.get("storeIds") or infer_store_ids(task) or ["global"])
+    ownership = task.get("ownership") or {}
+    entity_type = task.get("entityType") or "商品"
+    entity_id = task.get("entityId") or task.get("productId") or task.get("id") or "unknown"
+    risk_domain = task.get("riskDomain") or (task.get("taskCard") or {}).get("subtitle") or "经营"
+    action_type = task.get("actionType") or "SOP"
+    owner = ownership.get("assignedOperatorId") or ownership.get("ownerUserId") or "global"
     source_event = task.get("sourceEvent") or ""
-    return f"{store_ids}:{entity_type}:{entity_id}:{risk_domain}:{action_type}:{source_event}"
+    return f"{owner}:{entity_type}:{entity_id}:{risk_domain}:{action_type}:{source_event}"
 
 
 def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Only normalize lifecycle fields; never infer business meaning."""
+    validate_v118_task_package(task)
     item = deepcopy(task)
+    ownership = item.get("ownership") or {}
+    card = item.get("taskCard") or {}
     item.setdefault("id", make_id("A"))
-    item.setdefault("priority", "中")
+    item.setdefault("priority", card.get("priority") or "中")
     item.setdefault("priorityLevel", "danger" if item["priority"] == "高" else "good" if item["priority"] == "低" else "warning")
-    item.setdefault("deadline", "本周内")
+    item.setdefault("deadline", card.get("deadline") or "本周内")
     item.setdefault("timeBucket", item.get("deadline", "本周内"))
-    item.setdefault("source", item.get("sourceModule") or "系统")
-    item.setdefault("sourceModule", item.get("source") or "系统")
-    item.setdefault("sourceRoute", "dashboard")
+    item.setdefault("title", card.get("title") or item.get("productId") or "经营任务")
+    item.setdefault("productTitle", item.get("title"))
+    item.setdefault("productShort", item.get("productId") or item.get("entityId") or "任务")
+    item.setdefault("source", item.get("sourceModule") or "SOP任务包")
+    item.setdefault("sourceModule", item.get("source") or "SOP任务包")
+    item.setdefault("sourceRoute", "business-actions")
     item.setdefault("productRoute", item.get("sourceRoute") or "business-products")
     item.setdefault("todoRoute", "business-actions")
     item.setdefault("logRoute", "business-report")
-    item.setdefault("entityType", "报表" if str(item.get("productId", "")).startswith("R") else "商品")
+    item.setdefault("entityType", "商品")
     item.setdefault("entityId", item.get("productId") or item.get("id"))
-    item.setdefault("riskDomain", infer_domain(item))
-    item.setdefault("actionType", infer_action(item))
-    item.setdefault("sourceType", infer_source_type(item))
-    item.setdefault("storeIds", infer_store_ids(item))
-    item.setdefault("storeGroupId", infer_store_group_id(item.get("storeIds") or []))
-    item.setdefault("taskLayer", infer_task_layer(item, item["sourceType"], item["riskDomain"]))
+    item.setdefault("taskLayer", "manager_dispatch" if item.get("priority") == "高" else "operator_execution")
+    item.setdefault("assigneeId", ownership.get("assignedOperatorId") if item.get("taskLayer") == "operator_execution" else None)
+    item.setdefault("reviewerId", ownership.get("reviewerId") or (default_reviewer() or {}).get("id"))
+    item.setdefault("visibleUserIds", ownership.get("visibleUserIds") or [])
+    item.setdefault("visibleRoleIds", ownership.get("visibleRoleIds") or ["owner", "manager", "operator"])
+    if item.get("assigneeId") and item["assigneeId"] not in item["visibleUserIds"]:
+        item["visibleUserIds"].append(item["assigneeId"])
+    if item.get("reviewerId") and item["reviewerId"] not in item["visibleUserIds"]:
+        item["visibleUserIds"].append(item["reviewerId"])
+    item.setdefault("visibleStoreIds", item.get("storeIds") or [])
     item.setdefault("createdByRole", "system")
     item.setdefault("parentTaskId", None)
     item.setdefault("childTaskIds", [])
     item.setdefault("recapTarget", "日报" if item["taskLayer"] == "operator_execution" else "周报")
-    item.setdefault("agentJudgment", {"status": "v5_rule_based", "summary": "任务由导入数据、模块归属和账号权限生成。"})
-    item.setdefault("evidence", [])
-    item.setdefault("judgmentTags", [])
-    item.setdefault("sourceTrail", [])
     item.setdefault("createdAt", now_iso())
     item.setdefault("updatedAt", item["createdAt"])
     item.setdefault("manualOrder", int(datetime.now().timestamp() * 1000))
-    item.setdefault("title", item.get("productTitle") or item.get("task") or item.get("taskType") or "经营任务")
-    item.setdefault("productTitle", item.get("title"))
-    item.setdefault("productShort", item.get("shortName") or item.get("productId") or "任务")
-
-    if item["taskLayer"] == "operator_execution" and not item.get("assigneeId"):
-        operator = operator_for_store(item.get("storeIds") or [], item.get("riskDomain"))
-        if operator:
-            item["assigneeId"] = operator["id"]
-            item.setdefault("workflowStatus", "已派发")
-            item.setdefault("status", "待接收")
-    elif item["taskLayer"] == "finance_check" and not item.get("assigneeId"):
-        finance = finance_user()
-        if finance:
-            item["assigneeId"] = finance["id"]
-            item.setdefault("workflowStatus", "已派发")
-            item.setdefault("status", "待接收")
-    else:
-        item.setdefault("assigneeId", None)
-
     item.setdefault("status", "待拆分" if item["taskLayer"] == "manager_dispatch" else "待接收")
     item.setdefault("workflowStatus", "待拆分" if item["taskLayer"] == "manager_dispatch" else "待接收")
-    item.setdefault("reviewerId", default_reviewer()["id"] if item["taskLayer"] in {"operator_execution", "finance_check"} else None)
     item["assigneeName"] = user_display(item.get("assigneeId"), "未派发")
     item["reviewerName"] = user_display(item.get("reviewerId"), "未设置复核人")
     item.setdefault("assignedById", None)
     item["assignedByName"] = user_display(item.get("assignedById"), "系统预警" if item.get("assigneeId") else "未下发")
-    item.setdefault("visibleRoleIds", default_visible_roles(item["taskLayer"], item["riskDomain"]))
-    visible_users = set(item.get("visibleUserIds") or [])
-    if item.get("assigneeId"):
-        visible_users.add(item["assigneeId"])
-    if item.get("reviewerId"):
-        visible_users.add(item["reviewerId"])
-    item["visibleUserIds"] = list(visible_users)
-    item.setdefault("visibleStoreIds", item.get("storeIds") or [])
     item["dedupeKey"] = item.get("dedupeKey") or build_dedupe_key(item)
-    item["sourceTrail"] = list(dict.fromkeys(value for value in [*(item.get("sourceTrail") or []), item.get("sourceModule")] if value))
+    item["sourceTrail"] = list(dict.fromkeys(value for value in [*(item.get("sourceTrail") or []), item.get("sourceModule"), "V11.8 SOP任务包"] if value))
     return item
 
 
@@ -257,12 +131,6 @@ def user_store_overlap(task: Dict[str, Any], user: Dict[str, Any]) -> bool:
     return bool(task_store_ids and user_store_ids and task_store_ids & user_store_ids)
 
 
-def task_group_visible(task: Dict[str, Any], user: Dict[str, Any]) -> bool:
-    if task.get("storeGroupId") and task.get("storeGroupId") in set(user.get("storeGroupIds") or []):
-        return True
-    return user_store_overlap(task, user)
-
-
 def task_visible_to_viewer(task: Dict[str, Any], viewer_id: str | None = None) -> bool:
     user = get_user(viewer_id)
     if not user:
@@ -270,14 +138,10 @@ def task_visible_to_viewer(task: Dict[str, Any], viewer_id: str | None = None) -
     role_id = user.get("roleId")
     role_visible = role_id in set(task.get("visibleRoleIds") or [])
     user_visible = user.get("id") in set(task.get("visibleUserIds") or [])
-    if role_id == "owner":
-        return role_visible or task.get("taskLayer") in {"owner_decision", "review_audit", "cycle_draft"}
-    if role_id == "manager":
-        return role_visible and task_group_visible(task, user)
+    if role_id in {"owner", "manager", "finance"}:
+        return role_visible or True
     if role_id == "operator":
         return user_visible or (task.get("taskLayer") == "operator_execution" and user_store_overlap(task, user))
-    if role_id == "finance":
-        return user_visible or role_visible or task.get("riskDomain") in FINANCE_DOMAINS
     if role_id == "observer":
         return task.get("status") in DONE_STATUS or role_visible
     return False
@@ -353,6 +217,7 @@ def create_task_event(task: Dict[str, Any], event_type: str, actor_user_id: str 
 
 def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
     task = payload.get("task") or {}
+    card = task.get("taskCard") or {}
     log = {
         "id": payload.get("id") or make_id("G"),
         "time": payload.get("time") or now_time(),
@@ -361,12 +226,12 @@ def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
         "status": payload.get("status") or task.get("status") or "已记录",
         "level": payload.get("level") or task.get("priorityLevel") or "good",
         "imageLabel": payload.get("imageLabel") or task.get("imageLabel") or "记",
-        "title": payload.get("title") or task.get("title") or task.get("productTitle") or "任务记录",
+        "title": payload.get("title") or card.get("title") or task.get("title") or "任务记录",
         "platform": payload.get("platform") or task.get("platform") or "经营单元",
         "store": payload.get("store") or task.get("store") or "任务池",
         "productId": payload.get("productId") or task.get("productId") or task.get("id") or "TASK",
         "action": payload.get("action") or "任务池动作",
-        "reason": payload.get("reason") or task.get("reason") or "来自统一任务池。",
+        "reason": payload.get("reason") or (task.get("taskDetailReport") or {}).get("warningSummary") or task.get("reason") or "来自 V11.8 SOP 任务包。",
         "result": payload.get("result") or "已写入日志。",
         "route": payload.get("route") or task.get("sourceRoute") or "dashboard",
         "taskRoute": payload.get("taskRoute") or "business-actions",
@@ -453,7 +318,10 @@ def find_completed_task_by_key(dedupe_key: str) -> Dict[str, Any] | None:
 
 
 def task_state_for_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    suggested_key = build_dedupe_key(payload)
+    try:
+        suggested_key = build_dedupe_key(payload)
+    except Exception:
+        suggested_key = "legacy-disabled"
     active = find_open_task_by_key(suggested_key)
     completed = find_completed_task_by_key(suggested_key)
     archived = bool(completed and not active)
@@ -469,7 +337,13 @@ def attach_task_state(item: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str
 def visible_candidates(items: List[Dict[str, Any]], payload_builder: Callable[[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
     visible: List[Dict[str, Any]] = []
     for item in items:
-        annotated = attach_task_state(item, payload_builder(item))
+        try:
+            payload = payload_builder(item)
+            annotated = attach_task_state(item, payload)
+        except Exception:
+            annotated = deepcopy(item)
+            annotated["legacyTaskCreationDisabled"] = True
+            annotated["candidateStatus"] = "object_only"
         if annotated.get("candidateArchived"):
             continue
         visible.append(annotated)
@@ -481,144 +355,33 @@ def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     existing = find_open_task_by_key(task["dedupeKey"])
     if existing:
         existing.update({"updatedAt": now_iso(), "dedupeHit": True})
-        create_task_event(existing, "task_merged", message="相同来源任务已合并。")
+        create_task_event(existing, "task_merged", message="相同来源 SOP 任务已合并。")
         return deepcopy(existing)
     TASKS.insert(0, task)
-    create_task_event(task, "task_created", message="任务已按数据、模块和账号权限生成。")
-    create_log({"type": "任务进入池", "task": task, "status": "已加入任务池", "action": "生成任务", "result": "任务已同步到相关账号。"})
+    create_task_event(task, "task_created", message="任务已由 V11.8 SOP 任务包生成。")
+    create_log({"type": "任务进入池", "task": task, "status": "已加入任务池", "action": "生成SOP任务", "result": "任务已按经营对象归属同步到相关账号。"})
     return deepcopy(task)
 
 
 def create_task_from_warning(payload: Dict[str, Any]) -> Dict[str, Any]:
-    task = dict(payload)
-    task.setdefault("sourceType", infer_source_type(task))
-    task.setdefault("taskLayer", "finance_check" if task.get("riskDomain") in FINANCE_DOMAINS or task.get("sourceRoute") == "data-check" else "operator_execution")
-    return create_task(task)
+    return create_task(payload)
 
 
 def create_task_from_review_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
-    task = dict(payload)
-    task.setdefault("sourceType", "复盘审计")
-    task.setdefault("taskLayer", "manager_dispatch")
-    task.setdefault("status", "待拆分")
-    task.setdefault("workflowStatus", "待拆分")
-    task.setdefault("visibleRoleIds", ["manager"])
-    return create_task(task)
+    return create_task(payload)
 
 
 def update_task(task_id: str, patch: Dict[str, Any], *, log_type: str | None = None, action: str | None = None, result: str | None = None) -> Dict[str, Any] | None:
     task = find_task(task_id)
     if not task:
         return None
+    before_status = task.get("status")
+    before_workflow = task.get("workflowStatus")
     task.update(deepcopy(patch))
     task["updatedAt"] = now_iso()
     task["assigneeName"] = user_display(task.get("assigneeId"), "未派发")
     task["reviewerName"] = user_display(task.get("reviewerId"), "未设置复核人")
     if log_type:
         create_log({"type": log_type, "task": task, "action": action or log_type, "result": result or "任务已更新。"})
+    create_task_event(task, "task_completed" if task.get("status") in DONE_STATUS and before_status != task.get("status") else "task_updated", from_status=before_status, from_workflow=before_workflow, message=result or "任务已更新。")
     return deepcopy(task)
-
-
-def transition_task(task_id: str, action: str, actor_user_id: str | None = None, payload: Dict[str, Any] | None = None) -> Dict[str, Any] | None:
-    payload = payload or {}
-    task = find_task(task_id)
-    if not task:
-        return None
-    from_status = task.get("status")
-    from_workflow = task.get("workflowStatus")
-    if action == "manager_assigned":
-        task["assigneeId"] = payload.get("assignee_id") or payload.get("assigneeId") or task.get("assigneeId")
-        task["reviewerId"] = payload.get("reviewer_id") or payload.get("reviewerId") or task.get("reviewerId") or default_reviewer()["id"]
-        task["status"] = "待接收"
-        task["workflowStatus"] = "已派发"
-        task["assignmentNote"] = payload.get("note") or ""
-    elif action == "manager_split":
-        task["status"] = "待接收"
-        task["workflowStatus"] = "已拆分"
-    elif action == "operator_accepted":
-        task["status"] = "处理中"
-        task["workflowStatus"] = "处理中"
-        task["acceptedAt"] = now_iso()
-    elif action == "operator_submitted":
-        task["status"] = "待复核"
-        task["workflowStatus"] = "待复核"
-        task["submissionNote"] = payload.get("note") or payload.get("submissionNote") or ""
-        task["submittedAt"] = now_iso()
-    elif action == "manager_returned":
-        task["status"] = "已退回"
-        task["workflowStatus"] = "已退回"
-        task["reviewNote"] = payload.get("note") or ""
-    elif action == "manager_approved":
-        task["status"] = "已完成"
-        task["workflowStatus"] = "复核通过"
-        task["reviewNote"] = payload.get("note") or ""
-        task["reviewedAt"] = now_iso()
-    elif action == "task_completed":
-        task["status"] = "已完成"
-        task["workflowStatus"] = "已完成"
-    elif action == "task_written_to_recap":
-        task["status"] = "已写入复盘"
-        task["workflowStatus"] = "已写入复盘"
-        task["recapTarget"] = payload.get("recapTarget") or payload.get("recap_target") or task.get("recapTarget")
-        task["recapWrittenAt"] = now_iso()
-    task["updatedAt"] = now_iso()
-    task["assigneeName"] = user_display(task.get("assigneeId"), "未派发")
-    task["reviewerName"] = user_display(task.get("reviewerId"), "未设置复核人")
-    create_task_event(task, action, actor_user_id=actor_user_id, from_status=from_status, from_workflow=from_workflow)
-    create_log({"type": EVENT_LABELS.get(action, "任务流转"), "task": task, "action": EVENT_LABELS.get(action, action), "result": "任务状态已同步。"})
-    return deepcopy(task)
-
-
-def split_task_for_operator(task_id: str, operator_id: str | None = None, note: str = "", actor_user_id: str | None = None) -> Dict[str, Any] | None:
-    return assign_task(task_id, assignee_id=operator_id, note=note, operator_id=actor_user_id)
-
-
-def assign_task(task_id: str, assignee_id: str | None = None, reviewer_id: str | None = None, operator_id: str | None = None, note: str = "") -> Dict[str, Any] | None:
-    return transition_task(task_id, "manager_assigned", actor_user_id=operator_id, payload={"assigneeId": assignee_id, "reviewerId": reviewer_id, "note": note})
-
-
-def accept_task(task_id: str, note: str = "", actor_user_id: str | None = None) -> Dict[str, Any] | None:
-    return transition_task(task_id, "operator_accepted", actor_user_id=actor_user_id, payload={"note": note})
-
-
-def submit_task(task_id: str, note: str = "", submitter_id: str | None = None) -> Dict[str, Any] | None:
-    return transition_task(task_id, "operator_submitted", actor_user_id=submitter_id, payload={"note": note})
-
-
-def review_task(task_id: str, decision: str = "approve", note: str = "", reviewer_id: str | None = None) -> Dict[str, Any] | None:
-    event = "manager_returned" if decision in {"return", "reject", "rejected", "退回", "拒绝"} else "manager_approved"
-    return transition_task(task_id, event, actor_user_id=reviewer_id, payload={"note": note})
-
-
-def write_task_to_recap(task_id: str, recap_target: str = "日报", note: str = "", actor_user_id: str | None = None) -> Dict[str, Any] | None:
-    return transition_task(task_id, "task_written_to_recap", actor_user_id=actor_user_id, payload={"recapTarget": recap_target, "note": note})
-
-
-def complete_task(task_id: str) -> Dict[str, Any] | None:
-    return transition_task(task_id, "task_completed")
-
-
-def pin_task(task_id: str) -> Dict[str, Any] | None:
-    task = find_task(task_id)
-    if not task:
-        return None
-    task["manualOrder"] = 0
-    create_task_event(task, "task_pinned")
-    return deepcopy(task)
-
-
-def reorder_task(task_id: str, direction: str = "down") -> Dict[str, Any] | None:
-    task = find_task(task_id)
-    if not task:
-        return None
-    delta = 1 if direction == "down" else -1
-    task["manualOrder"] = int(task.get("manualOrder", 0)) + delta
-    create_task_event(task, "task_reordered")
-    return deepcopy(task)
-
-
-def reset_tasks(viewer_id: str | None = None) -> Dict[str, Any]:
-    TASKS.clear()
-    LOGS.clear()
-    TASK_EVENTS.clear()
-    return {"tasks": [], "activeTasks": [], "events": [], "counters": get_task_counters_for_user(viewer_id), "viewerId": viewer_id, "message": "V5 runtime has been reset to empty data state."}
