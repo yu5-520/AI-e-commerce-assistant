@@ -12,6 +12,12 @@
 
   function rawRouteFromHash() { return location.hash.replace("#", "") || "dashboard"; }
   function routeFromHash() { return aliases.get(rawRouteFromHash()) || rawRouteFromHash(); }
+  function errorView(error) {
+    const message = error?.message || String(error || "接口异常");
+    const last = window.AppApi?.status?.lastError;
+    const path = last?.path || "当前页面接口";
+    return `<section class="page-section"><div class="section-header"><h3>接口异常</h3><span class="status-badge">无本地兜底</span></div><p>后端接口没有返回可用数据，页面已停止展示本地模拟业务内容。</p><div class="product-notice"><strong>${AppShell.escape(path)}</strong><span>${AppShell.escape(message)}</span></div></section>`;
+  }
 
   function createContext(route, token, state = {}) {
     const cleanup = [];
@@ -63,7 +69,7 @@
       window.dispatchEvent(new CustomEvent("app-route-mounted", { detail: { route, reason, token, state } }));
     } catch (error) {
       console.error("[router] render error", error);
-      if (ctx.isCurrent()) AppShell.setView(`<section class="page-section"><h3>页面加载失败</h3><p>${AppShell.escape(error.message || error)}</p></section>`);
+      if (ctx.isCurrent()) AppShell.setView(errorView(error));
     }
   }
 
