@@ -2,21 +2,31 @@
 
 This module is intentionally dependency-light so it can be introduced without
 breaking the current demo runtime. In production, the same UserContext contract
-should be populated from JWT / Session claims instead of mock headers.
+must be populated from verified JWT / Session claims instead of mock headers.
+
+V11.4 safety rule: X-Mock-User-Id is demo-only. Production mode must use a
+trusted auth identity header until the real session/JWT adapter is connected.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
-from src.services.account_service import current_user, user_id_from_headers, visible_store_ids_for_user
+from src.services.account_service import current_user, get_user, user_id_from_headers, visible_store_ids_for_user
+from src.services.backend_isolation_service import (
+    DEFAULT_ORG_ID,
+    DEFAULT_TENANT_ID,
+    mock_user_header_value,
+    production_mode,
+    request_org_id,
+    request_tenant_id,
+    strict_data_scope_enabled,
+    trusted_user_header_value,
+)
 
-DEFAULT_TENANT_ID = os.getenv("DEFAULT_TENANT_ID", "tenant_demo")
-DEFAULT_ORG_ID = os.getenv("DEFAULT_ORG_ID", "org_demo")
 TENANT_HEADER = "x-tenant-id"
 ORG_HEADER = "x-org-id"
 
@@ -39,6 +49,8 @@ class UserContext:
     store_ids: list[str] = field(default_factory=list)
     visible_modules: list[str] = field(default_factory=list)
     demo_mode: bool = True
+    auth_source: str = "demo_mock_header"
+    strict_scope: bool = False
 
     @property
     def is_owner(self) -> bool:
@@ -64,29 +76,46 @@ class UserContext:
             "storeGroupIds": list(self.store_group_ids),
             "storeIds": list(self.store_ids),
             "demoMode": self.demo_mode,
+            "authSource": self.auth_source,
+            "strictScope": self.strict_scope,
         }
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def _header_value(headers: Mapping[str, str] | None, name: str, default: str) -> str:
-    headers = headers or {}
-    return headers.get(name) or headers.get(name.title()) or headers.get(name.upper()) or default
+def _resolve_request_user(headers: Mapping[str, str]) -> tuple[str, str]:
+    """Resolve user identity with different demo/production trust rules."""
+    if production_mode():
+        if mock_user_header_value(headers):
+            raise HTTPException(status_code=403, detail="X-Mock-User-Id is disabled in production")
+        user_id = trusted_user_header_value(headers)
+        if not user_id:
+            raise HTTPException(status_code=401, detail="missing trusted auth identity")
+        if not get_user(user_id):
+            raise HTTPException(status_code=401, detail="unknown auth identity")
+        return user_id, "trusted_auth_header"
+    return user_id_from_headers(headers), "demo_mock_header"
 
 
 def context_from_headers(headers: Mapping[str, str] | None = None) -> UserContext:
-    """Build UserContext from demo headers.
+    """Build UserContext from request headers.
 
     Production replacement point: verify JWT / session, load tenant membership,
-    then return the same UserContext contract.
+    then return the same UserContext contract. Do not read user_id directly from
+    business handlers.
     """
 
     headers = headers or {}
-    user_id = user_id_from_headers(headers)
+    user_id, auth_source = _resolve_request_user(headers)
     user = current_user(user_id)
-    tenant_id = _header_value(headers, TENANT_HEADER, DEFAULT_TENANT_ID)
-    org_id = _header_value(headers, ORG_HEADER, DEFAULT_ORG_ID)
+    tenant_id = request_tenant_id(headers)
+    org_id = request_org_id(headers)
+    if production_mode():
+        if tenant_id == DEFAULT_TENANT_ID and not headers.get(TENANT_HEADER):
+            raise HTTPException(status_code=401, detail="missing tenant scope")
+        if org_id == DEFAULT_ORG_ID and not headers.get(ORG_HEADER):
+            raise HTTPException(status_code=401, detail="missing organization scope")
     return UserContext(
         tenant_id=tenant_id,
         org_id=org_id,
@@ -97,7 +126,9 @@ def context_from_headers(headers: Mapping[str, str] | None = None) -> UserContex
         store_group_ids=list(user.get("storeGroupIds") or []),
         store_ids=list(visible_store_ids_for_user(user.get("id"))),
         visible_modules=list(user.get("visibleModules") or []),
-        demo_mode=os.getenv("APP_ENV", "demo") != "production",
+        demo_mode=not production_mode(),
+        auth_source=auth_source,
+        strict_scope=strict_data_scope_enabled(),
     )
 
 
