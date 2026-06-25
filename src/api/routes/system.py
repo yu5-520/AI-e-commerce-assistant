@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.core.context import UserContext, get_current_context
 from src.services.backend_isolation_service import isolation_runtime_summary
+from src.services.operating_object_backfill_service import backfill_operating_objects, runtime_diagnostics
 from src.services.postgres_cutover_check_service import postgres_cutover_check
 from src.services.repository_runtime_service import repository_health_check, repository_runtime_summary
 from src.services.security_status_service import security_status
@@ -21,6 +22,18 @@ router = APIRouter(prefix="/api/system", tags=["system"])
 def db_status() -> Dict[str, Any]:
     """Return SQLite database file and table status."""
     return get_db_status()
+
+
+@router.get("/runtime-diagnostics")
+def runtime_object_diagnostics(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return V11.10 runtime diagnostics for imported rows and operating objects."""
+    return runtime_diagnostics(ctx)
+
+
+@router.post("/backfill-operating-objects")
+def backfill_operating_object_store(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Backfill operating_products / operating_stores from historical imported rows."""
+    return backfill_operating_objects(ctx)
 
 
 @router.get("/security")
