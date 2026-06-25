@@ -17,6 +17,9 @@ RUN_GROUP="${RUN_GROUP:-$(id -gn)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 EXPECTED_VERSION="${EXPECTED_VERSION:-}"
 INSTALL_SYSTEMD_OVERRIDE="${INSTALL_SYSTEMD_OVERRIDE:-1}"
+PIP_INDEX_URLS="${PIP_INDEX_URLS:-https://pypi.org/simple https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple https://pypi.mirrors.ustc.edu.cn/simple}"
+PIP_TIMEOUT="${PIP_TIMEOUT:-60}"
+PIP_RETRIES="${PIP_RETRIES:-3}"
 
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 SHARED_DIR="$DEPLOY_ROOT/shared"
@@ -93,6 +96,23 @@ remote_commit() {
   git ls-remote "$REPO_URL" "refs/heads/$BRANCH" | awk '{print $1}'
 }
 
+pip_install_with_fallback() {
+  local pip_args=("$@")
+  local index_url
+  local success=0
+  for index_url in $PIP_INDEX_URLS; do
+    log "pip install via index: $index_url"
+    if python -m pip install --no-cache-dir --timeout "$PIP_TIMEOUT" --retries "$PIP_RETRIES" --index-url "$index_url" "${pip_args[@]}"; then
+      success=1
+      break
+    fi
+    log "pip index failed: $index_url"
+  done
+  if [ "$success" != "1" ]; then
+    return 1
+  fi
+}
+
 create_release() {
   local commit="$1"
   local stamp
@@ -115,9 +135,11 @@ create_release() {
   "$PYTHON_BIN" -m venv .venv
   # shellcheck disable=SC1091
   source .venv/bin/activate
-  python -m pip install --upgrade pip >/dev/null
+  log "upgrade pip with fallback indexes"
+  pip_install_with_fallback --upgrade pip || log "pip upgrade failed, continue with bundled pip"
   if [ -f requirements.txt ]; then
-    python -m pip install -r requirements.txt
+    log "install requirements with fallback indexes"
+    pip_install_with_fallback -r requirements.txt
   fi
 
   log "verify release consistency"
