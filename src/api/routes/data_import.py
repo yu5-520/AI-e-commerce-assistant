@@ -14,6 +14,7 @@ from src.services.data_version_service import delete_data_version, get_data_vers
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
 from src.services.import_adapter_service import compact_upload_meta, parse_upload_file
+from src.services.operating_object_store_service import upsert_operating_objects_from_import
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions, run_v3_mock_imports
 from src.services.report_schema_service import confirm_report_import, get_report_templates, normalize_rows_with_mapping, preview_report_dataset
 from src.services.risk_task_service import generate_risk_tasks_for_signals
@@ -42,9 +43,17 @@ def require_rollback_permission(user_id: str) -> None:
 
 
 def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
+    """Attach product contracts after import.
+
+    V11.7 rule: operating objects are upserted before tag/task sync. Product and
+    store visibility must not depend on whether a risk signal is strong enough to
+    create an executable task.
+    """
     if isinstance(rows, list):
         result["rows"] = rows
     ctx = context_from_headers(request.headers)
+    object_sync = upsert_operating_objects_from_import(result, rows if isinstance(rows, list) else None, source=source)
+    result["operatingObjectSync"] = object_sync
     v104 = attach_v104_import_sync(result, source=source)
     v107 = attach_v107_operating_profile(v104)
     v108 = attach_v108_tag_change_tasks(v107, ctx)
@@ -76,7 +85,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
     result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "V6.2 导入后生成商品快照、指标趋势、经营信号，并把信号升级为风险分级任务。"}
-    result["riskTaskSync"] = {"version": "6.2.0", "mode": "risk_graded_signal_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "低风险直接生成观察任务；中风险生成带指标边界的修复任务；高风险只生成复核候选，不直接扩大投产。"}
+    result["riskTaskSync"] = {"version": "6.2.0", "mode": "risk_graded_signal_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "低风险进入标签/观察层；中高风险再按时效升级为可执行任务。"}
     return result
 
 
