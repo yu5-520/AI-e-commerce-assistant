@@ -1,4 +1,4 @@
-"""Dashboard service for the V11.1 productized task workbench."""
+"""Dashboard service for the V11.8 productized task workbench."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ from typing import Any, Dict, List
 
 from src.services.module_projection_service import DATASET_LABELS, projection_summary, projected_products, projected_report_groups
 from src.services.module_task_service import DONE_STATUS, PRIORITY_RANK, get_task_counters_for_user, list_logs, list_tasks
+from src.services.operating_object_store_service import operating_object_summary
 from src.services.report_alert_service import get_v3_dashboard_summary
 
-DASHBOARD_VERSION = "11.1.0"
-DEADLINE_RANK = {"今天内": 1, "今日": 1, "明天前": 2, "明天": 2, "48小时内": 3, "本周内": 4}
+DASHBOARD_VERSION = "11.8.0"
+DEADLINE_RANK = {"今天内": 1, "今日": 1, "今日内": 1, "明天前": 2, "明天": 2, "48小时内": 3, "本周内": 4}
 DASHBOARD_WORKBENCH_SECTIONS = ["todayPriorityTasks", "highRiskItems", "latestReportResult", "pendingReviewItems", "completionProgress"]
 
 
@@ -40,7 +41,7 @@ def _deadline_rank(task: Dict[str, Any]) -> int:
 
 
 def _is_front_task(task: Dict[str, Any]) -> bool:
-    return task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag"}
+    return task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag", "observe_candidate"}
 
 
 def _report_summary(groups: List[Dict[str, Any]], projection: Dict[str, Any]) -> Dict[str, Any]:
@@ -66,34 +67,31 @@ def _report_summary(groups: List[Dict[str, Any]], projection: Dict[str, Any]) ->
         "latestSyncedAt": _short_time(projection.get("latestSnapshotAt")),
         "technicalDataVersion": projection.get("latestDataVersion"),
         "technicalDatasetName": latest_dataset,
-        "userSummary": "经营数据、商品标签、店铺权重和任务队列已更新。" if synced else "等待报表同步。",
+        "userSummary": "经营数据、商品、店铺、标签和任务队列已同步。" if synced else "等待报表同步。",
     }
 
 
-def _task_title(task: Dict[str, Any]) -> str:
-    product = task.get("productId") or task.get("entityId") or task.get("productShort") or "任务"
-    domain = task.get("riskDomain") or task.get("taskType") or "经营"
-    signal = task.get("taskSignal") or task.get("actionType") or "处理"
-    if product and product != "任务":
-        return f"{product}｜{domain}｜{signal}"
-    return str(task.get("title") or task.get("taskType") or "经营任务")
-
-
 def _task_card(task: Dict[str, Any], rank: int) -> Dict[str, Any]:
+    card = task.get("taskCard") or {}
+    detail = task.get("taskDetailReport") or {}
+    ownership = task.get("ownership") or {}
+    title = card.get("title") or task.get("productId") or task.get("entityId") or task.get("title") or "经营任务"
+    subtitle = card.get("subtitle") or detail.get("warningSummary") or task.get("riskDomain") or "SOP任务"
     return {
         "rank": rank,
         "id": task.get("id"),
-        "title": _task_title(task),
+        "title": title,
+        "subtitle": subtitle,
         "productId": task.get("productId") or task.get("entityId"),
-        "riskDomain": task.get("riskDomain") or "经营",
-        "priority": task.get("priority") or "中",
+        "riskDomain": task.get("riskDomain") or subtitle,
+        "priority": task.get("priority") or card.get("priority") or "中",
         "priorityLevel": task.get("priorityLevel") or "warning",
-        "deadline": task.get("deadline") or "本周内",
+        "deadline": task.get("deadline") or card.get("deadline") or "本周内",
         "status": task.get("workflowStatus") or task.get("status") or "待处理",
-        "source": task.get("source") or task.get("sourceModule") or "任务池",
-        "assigneeName": task.get("assigneeName") or "未派发",
+        "source": task.get("source") or task.get("sourceModule") or "SOP任务包",
+        "assigneeName": task.get("assigneeName") or ownership.get("assignedOperatorId") or "未派发",
         "reviewerName": task.get("reviewerName") or "待复核人",
-        "reason": task.get("reason") or task.get("task") or "由导入数据生成。",
+        "reason": subtitle,
         "route": "business-actions",
     }
 
@@ -130,7 +128,7 @@ def _dashboard_workbench(active_tasks: List[Dict[str, Any]], all_tasks: List[Dic
         "latestSyncedAt": report_summary.get("latestSyncedAt"),
     }
     return {
-        "mode": "v11_1_today_task_workbench",
+        "mode": "v11_8_today_task_workbench",
         "sections": DASHBOARD_WORKBENCH_SECTIONS,
         "todayPriorityTasks": priority_tasks,
         "highRiskItems": high_risk,
@@ -155,18 +153,19 @@ def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
     counters = get_task_counters_for_user(user_id)
     v3_summary = get_v3_dashboard_summary(user_id)
     projection = projection_summary(user_id)
+    object_summary = operating_object_summary(user_id)
     products = projected_products(user_id)
     reports = projected_report_groups(user_id)
     logs = list_logs()[:5]
     report_summary = _report_summary(reports, projection)
-    has_data = bool(projection.get("hasData") or report_summary["importedCount"] or active_tasks or logs or products)
+    has_data = bool(projection.get("hasData") or object_summary.get("productCount") or object_summary.get("storeCount") or report_summary["importedCount"] or active_tasks or logs or products)
     workbench = _dashboard_workbench(active_tasks, all_tasks, report_summary, counters)
     front_tasks = [task for task in active_tasks if _is_front_task(task)]
     high_tasks = [task for task in front_tasks if _is_high_risk(task)]
     return {
         "apiEntry": "/api/modules/dashboard",
         "version": DASHBOARD_VERSION,
-        "dashboardMode": "v11_1_today_task_workbench",
+        "dashboardMode": "v11_8_today_task_workbench",
         "workbenchSections": DASHBOARD_WORKBENCH_SECTIONS,
         "hasData": has_data,
         "emptyState": "暂无数据",
@@ -176,8 +175,8 @@ def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
         "metrics": [
             {"label": "优先任务", "value": len(workbench["todayPriorityTasks"]), "desc": "今日先处理"},
             {"label": "高风险", "value": len(high_tasks), "desc": "执行队列"},
-            {"label": "待复核", "value": workbench["completionProgress"]["pendingReview"], "desc": "等待确认"},
-            {"label": "完成率", "value": f"{workbench['completionProgress']['completionRate']}%", "desc": "任务进度"},
+            {"label": "店铺", "value": object_summary.get("storeCount") or 0, "desc": "经营对象"},
+            {"label": "商品", "value": object_summary.get("productCount") or len(products), "desc": "已入库"},
         ],
         "taskQueue": workbench["todayPriorityTasks"],
         "tasks": front_tasks[:6],
@@ -185,6 +184,7 @@ def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
         "recentLogs": logs,
         "v3": v3_summary,
         "projection": projection,
-        "productsCount": len(products),
-        "rule": "V11.1 总览不展示后端入库行数，只展示经营同步结果和执行任务。",
+        "objectSummary": object_summary,
+        "productsCount": object_summary.get("productCount") or len(products),
+        "rule": "V11.8 总览只展示任务摘要；完整 SOP 在详情页。",
     }
