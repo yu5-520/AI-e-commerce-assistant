@@ -7,6 +7,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.core.context import UserContext, get_current_context
+from src.services.backend_isolation_service import isolation_runtime_summary
 from src.services.postgres_cutover_check_service import postgres_cutover_check
 from src.services.repository_runtime_service import repository_health_check, repository_runtime_summary
 from src.services.security_status_service import security_status
@@ -26,6 +27,12 @@ def db_status() -> Dict[str, Any]:
 def system_security(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     """Return deployment security, rate limit, worker, LLM, and log redaction status."""
     return security_status(ctx)
+
+
+@router.get("/isolation")
+def backend_isolation(ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    """Return the account/data isolation runtime contract for production readiness."""
+    return {**isolation_runtime_summary(), "currentContext": ctx.audit_meta()}
 
 
 @router.get("/repositories")
