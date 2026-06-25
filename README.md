@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V11.11 部署原子化 + 版本一致性守卫。
+当前基线：V11.12 轻量原子部署 + 共享 venv。
 
 ## 产品定位
 
@@ -30,6 +30,8 @@ V11.10 的重点是运行态诊断和历史回填：系统页优先展示 import
 
 V11.11 的重点是部署原子化：ECS 不再作为半开发环境原地覆盖运行；新版本先进入独立 releases 目录，版本、前端资源和关键 API 路由全部验收通过后才切换 current，失败自动回滚上一版。
 
+V11.12 的重点是轻量原子部署：保留 releases/current 原子切换，但默认复用 shared/.venv；requirements 未变化时跳过 pip install；版本一致性仍强校验，路由守卫默认 warn，适配低配 ECS。
+
 ## 当前主链路
 
 ```text
@@ -52,7 +54,7 @@ V11.11 的重点是部署原子化：ECS 不再作为半开发环境原地覆盖
 → 日志留痕 / RAG 记忆候选
 ```
 
-## V11.11 可信展示规则
+## V11.12 可信展示规则
 
 ```text
 账号 Account 只表达登录身份，不直接拥有业务数据。
@@ -77,9 +79,10 @@ rows > 0 但商品 / 店铺为 0 时，必须显示经营对象入库失败。
 不生成任务不等于不更新商品。
 不生成任务不等于不更新店铺。
 旧 infer / v5_rule_based / 详情兜底报告不得生成新任务。
-部署必须通过 VERSION / app.version / health / 前端资源版本 / 关键路由一致性检查。
+部署必须通过 VERSION / app.version / health / 前端资源版本一致性检查。
 fetch 失败不得继续 reset 到旧缓存。
 ECS 运行态以 /opt/ai-ecommerce-assistant-deploy/current 为准。
+低配 ECS 默认使用 /opt/ai-ecommerce-assistant-deploy/shared/.venv，不每次重装依赖。
 ```
 
 ## 当前主入口
@@ -110,7 +113,7 @@ docs/MODULE_CHAIN.md              AI 修改仓库的模块链定位图
 docs/API_CONTRACT.md              当前 API 契约
 docs/DATA_TASK_LIFECYCLE.md       数据到任务生命周期
 docs/DEPLOYMENT_RUNBOOK.md        服务器部署和排障 SOP
-scripts/deploy_atomic.sh          ECS 原子化部署脚本
+scripts/deploy_atomic.sh          ECS 轻量原子部署脚本
 scripts/verify_release.py         版本一致性验收脚本
 docs/POSTGRESQL_CUTOVER.md        PostgreSQL 主写切换边界
 ```
@@ -139,6 +142,14 @@ src/api/main.py
 
 ```text
 bash scripts/deploy_atomic.sh
+```
+
+默认低配 ECS 模式：
+
+```text
+LIGHT_DEPLOY=1
+ROUTE_GUARD_MODE=warn
+RUNTIME_ROUTE_GUARD=warn
 ```
 
 部署后运行态以：
