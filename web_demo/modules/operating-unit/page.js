@@ -1,10 +1,10 @@
 (function () {
   const s = (value) => AppShell.escape(value ?? "");
   const operationTabs = [
-    ["business-products", "商品档案", "清洗后的商品列表、商品标签、基线状态"],
-    ["business-competitors", "竞品信号", "价格变化、差评关键词、可转化机会"],
-    ["business-listing", "上新测试", "主图、标题、SKU、卖点测试记录"],
-    ["business-traffic", "流量趋势", "曝光、点击、转化、ROI 与流量结构"],
+    ["business-products", "商品"],
+    ["business-competitors", "竞品"],
+    ["business-listing", "上新"],
+    ["business-traffic", "流量"],
   ];
 
   function hero(title, syncState = {}) {
@@ -17,7 +17,7 @@
   }
 
   function tabs() {
-    return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3><span class="status-badge">经营对象入口</span></div><div class="quick-actions">${operationTabs.map(([route, label, desc]) => `<button data-operation-route="${s(route)}"><strong>${s(label)}</strong><span>${s(desc)}</span></button>`).join("")}</div></section>`;
+    return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3><span class="status-badge">入口</span></div><div class="quick-actions operating-simple-actions">${operationTabs.map(([route, label]) => `<button data-operation-route="${s(route)}"><strong>${s(label)}</strong></button>`).join("")}</div></section>`;
   }
 
   function tagList(tags) {
