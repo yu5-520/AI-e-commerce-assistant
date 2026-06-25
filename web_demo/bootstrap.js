@@ -25,9 +25,9 @@
     if (!badge) return;
     const source = window.AppApi?.status?.source;
     const ok = source === "server";
-    badge.textContent = ok ? "后端正常" : "接口异常";
+    badge.textContent = ok ? "后端正常" : source === "unknown" ? "接口检测中" : "接口异常";
     badge.title = window.AppApi?.failureSummary?.() || "接口状态未知";
-    badge.classList.toggle("warning", !ok);
+    badge.classList.toggle("warning", !ok && source !== "unknown");
   }
 
   const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.WeightCenterPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.LogPage, window.FeedbackFlywheelPage, window.TaskReportPage];
@@ -62,6 +62,7 @@
   }
 
   window.addEventListener("api-client-error", setApiBadge);
+  window.addEventListener("api-client-status", setApiBadge);
   if (window.AppApi?.prefetch) {
     try {
       await window.AppApi.prefetch();
