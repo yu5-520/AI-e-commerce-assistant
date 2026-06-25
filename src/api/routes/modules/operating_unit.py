@@ -1,4 +1,4 @@
-"""Operating unit route for V11.1 productized business object navigation."""
+"""Operating unit route for V11.7 business object first ingestion."""
 
 from __future__ import annotations
 
@@ -10,10 +10,11 @@ from fastapi import APIRouter, Request
 from src.services.account_service import current_user, list_stores, user_id_from_headers
 from src.services.module_projection_service import projection_summary, projected_products, projected_traffic
 from src.services.module_task_service import get_task_counters_for_user, list_tasks
+from src.services.operating_object_store_service import list_operating_products, list_operating_stores, operating_object_summary
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.1.0"
+OPERATING_UNIT_VERSION = "11.7.0"
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -45,7 +46,7 @@ def _clean_store_name(item: Dict[str, Any] | None, fallback: str = "未命名店
     item = item or {}
     raw = str(item.get("storeName") or item.get("store") or "").strip()
     store_id = str(item.get("storeId") or item.get("id") or "").strip()
-    if raw and raw not in {store_id, "导入数据店铺", "未绑定店铺", "GLOBAL"}:
+    if raw and raw not in {store_id, "导入数据店铺", "未绑定店铺", "GLOBAL", "未归属店铺"}:
         return raw
     store = _store_map().get(store_id)
     if store and store.get("name") and store.get("name") != store_id:
@@ -83,6 +84,8 @@ def _product_role(item: Dict[str, Any]) -> str:
         return "低毛利观察"
     if item.get("orderSummary"):
         return "成交商品"
+    if item.get("objectStoreVersion"):
+        return "已入库商品"
     return "普通观察"
 
 
@@ -94,6 +97,8 @@ def _business_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) 
         tags.append("库存观察")
     if any((_percent(item.get("grossMargin")) or 1) < 0.2 for item in products):
         tags.append("毛利观察")
+    if any(item.get("objectStoreVersion") for item in products):
+        tags.append("已入库")
     if active_alert_count > 0:
         tags.append("执行任务")
     return tags or ["常规观察"]
@@ -102,9 +107,24 @@ def _business_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) 
 def _tag_level(value: str) -> str:
     if any(word in value for word in ["执行任务", "高风险", "库存"]):
         return "warning"
-    if any(word in value for word in ["高权重", "成交", "稳定"]):
+    if any(word in value for word in ["高权重", "成交", "稳定", "已入库"]):
         return "good"
     return "watch"
+
+
+def _merge_products(projected: List[Dict[str, Any]], master: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen: Dict[str, Dict[str, Any]] = {}
+    for item in [*master, *projected]:
+        product_id = str(item.get("id") or item.get("productId") or "").strip()
+        if not product_id:
+            continue
+        store_id = str(item.get("storeId") or item.get("store") or item.get("storeName") or "GLOBAL").strip()
+        key = f"{store_id}::{product_id}"
+        if key not in seen:
+            seen[key] = dict(item)
+        else:
+            seen[key].update({key2: value for key2, value in item.items() if value not in {None, "", "—"}})
+    return list(seen.values())
 
 
 def _visible_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -158,10 +178,25 @@ def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any
             "activeTaskCount": task_count,
             "alertCount": task_count,
             "taskIntensity": "有执行任务" if task_count else "标签观察",
-            "level": _tag_level("执行任务" if task_count else store_weight),
-            "judgment": f"{store_weight} · 执行任务 {task_count}",
+            "level": _tag_level("执行任务" if task_count else " ".join(tags)),
+            "judgment": f"{store_weight} · 商品 {len(store_products)} · 执行任务 {task_count}",
         })
     return rows
+
+
+def _merge_store_rows(generated: List[Dict[str, Any]], master: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen: Dict[str, Dict[str, Any]] = {}
+    for row in [*master, *generated]:
+        key = str(row.get("storeId") or row.get("storeName") or row.get("displayName") or "").strip()
+        if not key:
+            continue
+        if key not in seen:
+            seen[key] = dict(row)
+        else:
+            existing = seen[key]
+            existing.update({k: v for k, v in row.items() if v not in {None, "", [], "—"}})
+            existing["productCount"] = max(_as_int(existing.get("productCount")), _as_int(row.get("productCount")))
+    return list(seen.values())
 
 
 def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any]) -> Dict[str, Any]:
@@ -171,9 +206,9 @@ def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Di
         summary = f"当前有 {active_tasks} 个执行任务，需要先处理高风险高时效事项。低风险信号已沉淀为店铺和商品标签。"
         main = "执行任务"
     else:
-        summary = f"当前无需要立即处理的执行任务，{tagged_stores} 个店铺已更新经营标签，可进入店铺或商品档案查看。"
-        main = "标签已更新"
-    return {"title": "经营判断", "summary": summary, "priority": "先看店铺和商品标签，再处理执行任务", "mainRisk": main, "taggedStoreCount": tagged_stores, "activeTaskCount": active_tasks}
+        summary = f"当前无需要立即处理的执行任务，{len(store_rows)} 个店铺、{sum(_as_int(row.get('productCount')) for row in store_rows)} 个商品已完成清洗入库。"
+        main = "经营对象已更新"
+    return {"title": "经营判断", "summary": summary, "priority": "先看经营对象，再处理执行任务", "mainRisk": main, "taggedStoreCount": tagged_stores, "activeTaskCount": active_tasks}
 
 
 @router.get("/operating-unit")
@@ -181,13 +216,14 @@ def operating_unit(request: Request) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     user = current_user(user_id)
     projection = projection_summary(user_id)
+    object_summary = operating_object_summary(user_id)
     v3 = get_v3_dashboard_summary(user_id)
-    products = projected_products(user_id)
+    products = _merge_products(projected_products(user_id), list_operating_products(user_id))
     traffic = projected_traffic(user_id)
     task_counters = get_task_counters_for_user(user_id)
     active_tasks = list_tasks(viewer_id=user_id, active_only=True)
-    execution_tasks = [task for task in active_tasks if task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag"}]
-    has_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or products or traffic or execution_tasks)
+    execution_tasks = [task for task in active_tasks if task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag", "observe_candidate"}]
+    has_data = bool(projection.get("hasData") or object_summary.get("productCount") or object_summary.get("storeCount") or v3.get("latestDataVersion") or products or traffic or execution_tasks)
     if not has_data:
         return {
             "version": OPERATING_UNIT_VERSION,
@@ -199,14 +235,15 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "storeRows": [],
             "operatingJudgment": None,
             "tasks": task_counters,
+            "objectStore": object_summary,
         }
-    store_rows = build_store_rows(products, traffic, execution_tasks)
+    store_rows = _merge_store_rows(build_store_rows(products, traffic, execution_tasks), list_operating_stores(user_id))
     tagged_store_count = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
     return {
         "version": OPERATING_UNIT_VERSION,
         "hasData": True,
         "unitName": "经营单元",
-        "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
+        "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": object_summary.get("latestDataVersion") or projection.get("latestDataVersion") or v3.get("latestDataVersion")},
         "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
         "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
         "metrics": [
@@ -218,7 +255,6 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "storeRows": store_rows,
         "operatingJudgment": build_operating_judgment(store_rows, task_counters),
         "tasks": task_counters,
-        "projection": projection,
-        "v3": v3,
-        "rule": "V11.1 经营模块只展示真实店铺名称；工程ID仅用于后端匹配和审计，不在运营前端显示。",
+        "objectStore": object_summary,
+        "rule": "经营单元展示清洗入库后的商品/店铺对象；任务生成只是后续动作层，不反向决定商品店铺是否显示。",
     }
