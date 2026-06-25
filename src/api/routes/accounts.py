@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from src.core.context import context_from_headers
 from src.services.account_service import (
     account_summary,
     current_user,
@@ -24,14 +25,14 @@ from src.services.account_service import (
     update_user_role,
     update_user_stores,
     user_has_permission,
-    user_id_from_headers,
 )
+from src.services.backend_isolation_service import production_mode
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 
 def request_user_id(request: Request) -> str:
-    return user_id_from_headers(request.headers)
+    return context_from_headers(request.headers).user_id
 
 
 def require_role_manager(request: Request) -> str:
@@ -42,9 +43,25 @@ def require_role_manager(request: Request) -> str:
     return user_id
 
 
+def _scrub_account_summary_for_production(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Account center must not leak organization membership in production."""
+    if not production_mode():
+        return payload
+    return {
+        **payload,
+        "users": [payload.get("currentUser")],
+        "stores": [],
+        "storeAssignments": [],
+        "pendingStoreMigrations": [],
+        "roleChangeLogs": [],
+        "demoSwitchDisabled": True,
+        "isolationNote": "Production account summary is scoped to the current login identity. Organization/store membership is available only in permission governance routes.",
+    }
+
+
 @router.get("")
 def accounts(request: Request) -> Dict[str, Any]:
-    return account_summary(request_user_id(request))
+    return _scrub_account_summary_for_production(account_summary(request_user_id(request)))
 
 
 @router.get("/me")
@@ -55,18 +72,22 @@ def me(request: Request) -> Dict[str, Any]:
 @router.post("/switch")
 def switch_account(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     """Return a validated mock user context for frontend role switching."""
+    if production_mode():
+        raise HTTPException(status_code=403, detail="MVP account switch is disabled in production")
     user_id = resolve_user_id(body.get("user_id") or body.get("userId"))
     return {"currentUser": current_user(user_id), "account": account_summary(user_id)}
 
 
 @router.get("/users")
-def users() -> List[Dict[str, Any]]:
+def users(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_users()
 
 
 @router.get("/users/{user_id}")
-def user_detail(user_id: str) -> Dict[str, Any]:
-    user = get_user(user_id)
+def user_detail(request: Request, user_id: str) -> Dict[str, Any]:
+    operator_id = require_role_manager(request)
+    user = get_user(user_id if user_id != "me" else operator_id)
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
     return user
@@ -78,7 +99,7 @@ def change_user_role(request: Request, user_id: str, body: Dict[str, Any] = Body
     user = update_user_role(user_id, body.get("role_id") or body.get("roleId"), operator_id=operator_id)
     if not user:
         raise HTTPException(status_code=400, detail="cannot update user role")
-    return {"user": user, "account": account_summary(operator_id)}
+    return {"user": user, "account": _scrub_account_summary_for_production(account_summary(operator_id))}
 
 
 @router.post("/users/{user_id}/stores")
@@ -87,16 +108,18 @@ def change_user_stores(request: Request, user_id: str, body: Dict[str, Any] = Bo
     user = update_user_stores(user_id, body.get("store_ids") or body.get("storeIds") or [], operator_id=operator_id)
     if not user:
         raise HTTPException(status_code=400, detail="cannot update user stores")
-    return {"user": user, "account": account_summary(operator_id)}
+    return {"user": user, "account": _scrub_account_summary_for_production(account_summary(operator_id))}
 
 
 @router.get("/store-assignments")
-def store_assignments() -> List[Dict[str, Any]]:
+def store_assignments(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_store_assignments()
 
 
 @router.get("/store-migrations")
-def store_migrations() -> List[Dict[str, Any]]:
+def store_migrations(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_pending_store_migrations()
 
 
@@ -115,11 +138,12 @@ def change_store_assignment(request: Request, store_id: str, body: Dict[str, Any
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not migration:
         raise HTTPException(status_code=400, detail="cannot schedule store assignment migration")
-    return {"migration": migration, "account": account_summary(operator_id)}
+    return {"migration": migration, "account": _scrub_account_summary_for_production(account_summary(operator_id))}
 
 
 @router.get("/roles")
-def roles() -> List[Dict[str, Any]]:
+def roles(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_roles()
 
 
@@ -129,24 +153,28 @@ def change_role_permissions(request: Request, role_id: str, body: Dict[str, Any]
     role = update_role_permissions(role_id, body.get("permissions") or [], operator_id=operator_id)
     if not role:
         raise HTTPException(status_code=400, detail="cannot update role permissions")
-    return {"role": role, "account": account_summary(operator_id)}
+    return {"role": role, "account": _scrub_account_summary_for_production(account_summary(operator_id))}
 
 
 @router.get("/permissions")
-def permissions() -> List[Dict[str, str]]:
+def permissions(request: Request) -> List[Dict[str, str]]:
+    require_role_manager(request)
     return list_permissions()
 
 
 @router.get("/store-groups")
-def store_groups() -> List[Dict[str, Any]]:
+def store_groups(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_store_groups()
 
 
 @router.get("/stores")
-def stores() -> List[Dict[str, Any]]:
+def stores(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_stores()
 
 
 @router.get("/role-change-logs")
-def role_logs() -> List[Dict[str, Any]]:
+def role_logs(request: Request) -> List[Dict[str, Any]]:
+    require_role_manager(request)
     return list_role_change_logs()
