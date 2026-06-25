@@ -101,6 +101,18 @@ def _find_task_for_detail(task_id: str, user_id: str | None) -> Dict[str, Any] |
     return None
 
 
+def _restore_task_source_fields(report: Dict[str, Any], task: Dict[str, Any], module: str, entity_id: str) -> Dict[str, Any]:
+    """Keep fallback reports from looking like generic unified-pool reports."""
+    report["module"] = module or report.get("module")
+    report["entityId"] = entity_id or report.get("entityId")
+    report["sourceModule"] = task.get("sourceModule") or task.get("source") or report.get("sourceModule")
+    report["sourceRoute"] = task.get("sourceRoute") or report.get("sourceRoute")
+    report["taskStatus"] = task.get("status") or report.get("taskStatus")
+    report["taskId"] = task.get("id") or report.get("taskId")
+    report["relatedTask"] = task
+    return report
+
+
 def get_task_report_v112(task_id: str, user_id: str | None = None) -> Dict[str, Any] | None:
     """Task report reader that cannot disagree with /todo visibility."""
     from src.services import task_report_service
@@ -135,6 +147,7 @@ def get_task_report_v112(task_id: str, user_id: str | None = None) -> Dict[str, 
         return task_report_service._apply_role_insight(task_report_service._apply_alert_to_report(candidate, task), user_id)
 
     fallback = task_report_service._fallback_report_from_task(task, task_id, user_id)
+    _restore_task_source_fields(fallback, task, module, str(entity_id))
     fallback["detailLookup"] = {"version": V112_TASK_CHAIN_FIX_VERSION, "status": "matched_task_fallback"}
     return fallback
 
