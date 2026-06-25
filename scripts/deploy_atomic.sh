@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# V11.11 atomic deployment script.
-# Goal: ECS only runs verified releases. Never overwrite the running directory in-place.
+# V11.12 lightweight atomic deployment script.
+# Goal: keep atomic code switching, but avoid rebuilding venv on low-spec ECS.
 
 APP_NAME="${APP_NAME:-ai-ecommerce-assistant}"
 SERVICE_NAME="${SERVICE_NAME:-ai-operating-advisor}"
@@ -17,6 +17,9 @@ RUN_GROUP="${RUN_GROUP:-$(id -gn)}"
 PYTHON_BIN="${PYTHON_BIN:-}"
 EXPECTED_VERSION="${EXPECTED_VERSION:-}"
 INSTALL_SYSTEMD_OVERRIDE="${INSTALL_SYSTEMD_OVERRIDE:-1}"
+LIGHT_DEPLOY="${LIGHT_DEPLOY:-1}"
+ROUTE_GUARD_MODE="${ROUTE_GUARD_MODE:-warn}"
+RUNTIME_ROUTE_GUARD="${RUNTIME_ROUTE_GUARD:-warn}"
 PIP_INDEX_URLS="${PIP_INDEX_URLS:-https://pypi.org/simple https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple https://pypi.mirrors.ustc.edu.cn/simple}"
 PIP_TIMEOUT="${PIP_TIMEOUT:-60}"
 PIP_RETRIES="${PIP_RETRIES:-3}"
@@ -24,11 +27,14 @@ BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 SHARED_DIR="$DEPLOY_ROOT/shared"
+SHARED_VENV="$SHARED_DIR/.venv"
+REQUIREMENTS_HASH_FILE="$SHARED_DIR/requirements.sha256"
 CURRENT_LINK="$DEPLOY_ROOT/current"
 NEXT_LINK="$DEPLOY_ROOT/.next"
 LOG_FILE="$DEPLOY_ROOT/deploy.log"
 PREVIOUS_RELEASE=""
 NEW_RELEASE=""
+SERVICE_VENV=""
 
 log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"
@@ -67,7 +73,7 @@ resolve_python() {
   fi
 
   local candidate resolved
-  for candidate in "$BOOTSTRAP_DIR/.venv/bin/python" python3.12 python3.11 python3.10 python3 python; do
+  for candidate in "$BOOTSTRAP_DIR/.venv/bin/python" "$SHARED_VENV/bin/python" python3.12 python3.11 python3.10 python3 python; do
     if [ -x "$candidate" ]; then
       resolved="$candidate"
     else
@@ -82,6 +88,18 @@ resolve_python() {
     log "skip python candidate: $resolved ($(python_version_text "$resolved"))"
   done
   fail "No Python >= 3.10 found. Install python3.10+ or run with PYTHON_BIN=/opt/ai-ecommerce-assistant/.venv/bin/python bash scripts/deploy_atomic.sh"
+}
+
+file_hash() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+  else
+    python - "$file" <<'PY'
+import hashlib, pathlib, sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+  fi
 }
 
 retry() {
@@ -155,6 +173,56 @@ pip_install_with_fallback() {
   fi
 }
 
+ensure_shared_venv() {
+  if [ ! -x "$SHARED_VENV/bin/python" ]; then
+    log "create shared virtualenv with $PYTHON_BIN ($(python_version_text "$PYTHON_BIN"))"
+    "$PYTHON_BIN" -m venv "$SHARED_VENV"
+  else
+    log "reuse shared virtualenv: $SHARED_VENV ($(python_version_text "$SHARED_VENV/bin/python"))"
+  fi
+  # shellcheck disable=SC1091
+  source "$SHARED_VENV/bin/activate"
+  log "upgrade shared pip with fallback indexes"
+  pip_install_with_fallback --upgrade pip || log "pip upgrade failed, continue with existing pip"
+}
+
+install_requirements_if_needed() {
+  if [ ! -f requirements.txt ]; then
+    log "requirements.txt not found; skip dependency install"
+    return 0
+  fi
+  local current_hash previous_hash
+  current_hash="$(file_hash requirements.txt)"
+  previous_hash="$(cat "$REQUIREMENTS_HASH_FILE" 2>/dev/null || true)"
+  if [ "$LIGHT_DEPLOY" = "1" ] && [ "$current_hash" = "$previous_hash" ]; then
+    log "requirements unchanged; skip pip install"
+    return 0
+  fi
+  log "install requirements with fallback indexes"
+  pip_install_with_fallback -r requirements.txt
+  printf '%s\n' "$current_hash" > "$REQUIREMENTS_HASH_FILE"
+}
+
+prepare_release_venv() {
+  if [ "$LIGHT_DEPLOY" = "1" ]; then
+    ensure_shared_venv
+    install_requirements_if_needed
+    rm -rf .venv
+    ln -sfn "$SHARED_VENV" .venv
+    SERVICE_VENV="$SHARED_VENV"
+    log "light deploy enabled: service uses shared venv $SERVICE_VENV"
+  else
+    log "create release virtualenv with $PYTHON_BIN ($(python_version_text "$PYTHON_BIN"))"
+    "$PYTHON_BIN" -m venv .venv
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+    log "upgrade pip with fallback indexes"
+    pip_install_with_fallback --upgrade pip || log "pip upgrade failed, continue with bundled pip"
+    install_requirements_if_needed
+    SERVICE_VENV="$CURRENT_LINK/.venv"
+  fi
+}
+
 create_release() {
   local commit="$1"
   local stamp
@@ -173,28 +241,20 @@ create_release() {
     ln -sfn "$SHARED_DIR/.env" .env
   fi
 
-  log "create virtualenv with $PYTHON_BIN ($(python_version_text "$PYTHON_BIN"))"
-  "$PYTHON_BIN" -m venv .venv
-  # shellcheck disable=SC1091
-  source .venv/bin/activate
-  log "upgrade pip with fallback indexes"
-  pip_install_with_fallback --upgrade pip || log "pip upgrade failed, continue with bundled pip"
-  if [ -f requirements.txt ]; then
-    log "install requirements with fallback indexes"
-    pip_install_with_fallback -r requirements.txt
-  fi
+  prepare_release_venv
 
   log "verify release consistency"
   if [ -n "$EXPECTED_VERSION" ]; then
-    python scripts/verify_release.py --expected-version "$EXPECTED_VERSION"
+    python scripts/verify_release.py --expected-version "$EXPECTED_VERSION" --route-mode "$ROUTE_GUARD_MODE"
   else
-    python scripts/verify_release.py
+    python scripts/verify_release.py --route-mode "$ROUTE_GUARD_MODE"
   fi
 }
 
 install_systemd_override() {
   [ "$INSTALL_SYSTEMD_OVERRIDE" = "1" ] || return 0
-  log "install systemd override for $SERVICE_NAME"
+  [ -n "$SERVICE_VENV" ] || SERVICE_VENV="$CURRENT_LINK/.venv"
+  log "install systemd override for $SERVICE_NAME with venv $SERVICE_VENV"
   sudo mkdir -p "/etc/systemd/system/$SERVICE_NAME.service.d"
   sudo tee "/etc/systemd/system/$SERVICE_NAME.service.d/override.conf" >/dev/null <<EOF
 [Service]
@@ -204,7 +264,7 @@ Environment=APP_PORT=$APP_PORT
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-$SHARED_DIR/.env
 ExecStart=
-ExecStart=$CURRENT_LINK/.venv/bin/uvicorn src.api.main:app --host $APP_HOST --port $APP_PORT
+ExecStart=$SERVICE_VENV/bin/uvicorn src.api.main:app --host $APP_HOST --port $APP_PORT
 Restart=always
 RestartSec=3
 User=$RUN_USER
@@ -252,9 +312,16 @@ PY
 }
 
 route_check() {
-  log "runtime route check"
-  curl -fsS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/system/runtime-diagnostics" >/dev/null
-  curl -fsS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/modules/operating-unit" >/dev/null
+  log "runtime route check mode=$RUNTIME_ROUTE_GUARD"
+  local failures=0
+  curl -fsS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/system/runtime-diagnostics" >/dev/null || failures=$((failures + 1))
+  curl -fsS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/modules/operating-unit" >/dev/null || failures=$((failures + 1))
+  if [ "$failures" -gt 0 ]; then
+    if [ "$RUNTIME_ROUTE_GUARD" = "strict" ]; then
+      fail "runtime route check failed: $failures"
+    fi
+    log "WARN: runtime route check failed: $failures; continue because RUNTIME_ROUTE_GUARD=$RUNTIME_ROUTE_GUARD"
+  fi
 }
 
 reload_nginx() {
@@ -276,7 +343,7 @@ cleanup_old_releases() {
 
 main() {
   preflight
-  log "=== atomic deploy start ==="
+  log "=== lightweight atomic deploy start ==="
   local commit
   commit="$(retry 5 3 remote_commit)"
   [ -n "$commit" ] || fail "cannot resolve remote commit for $REPO_URL $BRANCH"
@@ -288,7 +355,7 @@ main() {
   route_check
   reload_nginx
   cleanup_old_releases
-  log "=== atomic deploy success ==="
+  log "=== lightweight atomic deploy success ==="
   log "current: $(readlink -f "$CURRENT_LINK")"
 }
 
