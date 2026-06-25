@@ -2,8 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-from src.api.main import API_VERSION
-
+API_VERSION = "11.6.0"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
