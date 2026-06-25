@@ -12,9 +12,10 @@
     if (!status.failures.length) return "所有模块接口请求正常。";
     return status.failures.slice(-5).map((item) => `${item.path}: ${item.message}`).join("\n");
   }
-  function setServerHealthy() {
+  function setServerHealthy(path = "") {
     status.source = "server";
     status.lastError = null;
+    window.dispatchEvent(new CustomEvent("api-client-status", { detail: { source: status.source, path } }));
   }
   function recordFailure(path, error) {
     const message = error?.message || String(error || "接口异常");
@@ -42,7 +43,7 @@
         body: options.body ? JSON.stringify(options.body) : undefined,
       });
       if (!response.ok) throw new Error(await parseError(response));
-      setServerHealthy();
+      setServerHealthy(path);
       return await response.json();
     } catch (error) {
       recordFailure(path, error);
@@ -56,7 +57,7 @@
       Object.entries(fields || {}).forEach(([key, value]) => form.append(key, value));
       const response = await fetch(path, { method: "POST", headers: { Accept: "application/json", "X-Mock-User-Id": getCurrentUserId() }, body: form });
       if (!response.ok) throw new Error(await parseError(response));
-      setServerHealthy();
+      setServerHealthy(path);
       return await response.json();
     } catch (error) {
       recordFailure(path, error);
