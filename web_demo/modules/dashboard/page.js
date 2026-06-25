@@ -3,29 +3,29 @@
 
   function localFallback() {
     const v3 = window.AppMockData?.v3 || {};
-    const tasks = AppTaskStore.listActiveTasks().map((task, index) => normalizeTask(task, index + 1));
+    const tasks = AppTaskStore.listActiveTasks().filter((task) => task.displayState !== "backend_only" && !["backend_tag", "store_product_tag"].includes(task.queueType)).map((task, index) => normalizeTask(task, index + 1));
     const highRisk = tasks.filter((task) => task.priority === "高" || task.priorityLevel === "danger").slice(0, 3);
     const review = tasks.filter((task) => ["待复核", "已提交"].includes(task.status)).slice(0, 3);
     return {
       hasData: Boolean(v3.latestDataVersion || tasks.length || (window.AppMockData.products || []).length),
       title: "今日任务台",
-      heroBadge: tasks.length ? `${tasks.length} 个优先任务` : "先上传报表",
-      latestImport: { label: "最新数据", status: v3.latestDataVersion ? "已入库" : "待导入", totalRows: 0, importedCount: 0, affectedModules: [] },
+      heroBadge: tasks.length ? `${tasks.length} 个优先任务` : "数据已同步",
+      latestImport: { label: "最新数据", status: v3.latestDataVersion ? "已同步" : "待同步", totalRows: 0, importedCount: 0, affectedModules: [] },
       metrics: [
         { label: "优先任务", value: tasks.length, desc: "今日先处理" },
-        { label: "高风险", value: highRisk.length, desc: "需要关注" },
+        { label: "高风险", value: highRisk.length, desc: "执行队列" },
         { label: "待复核", value: review.length, desc: "等待确认" },
         { label: "完成率", value: "0%", desc: "任务进度" },
       ],
       taskQueue: tasks,
       todayWorkbench: {
-        mode: "today_task_workbench",
-        sections: ["todayPriorityTasks", "highRiskItems", "latestReportResult", "pendingReviewItems", "completionProgress"],
+        mode: "v11_1_today_task_workbench",
         todayPriorityTasks: tasks.slice(0, 5),
         highRiskItems: highRisk,
         pendingReviewItems: review,
-        latestReportResult: { label: "最新数据", status: v3.latestDataVersion ? "已入库" : "待导入", summary: v3.latestDataVersion ? "数据已同步到总览 / 经营 / 任务" : "上传报表后自动生成任务", taskHint: `${tasks.length} 个任务`, latestSyncedAt: "已同步" },
-        completionProgress: { visibleActive: tasks.length, processing: 0, pendingReview: review.length, returned: 0, completed: 0, completionRate: 0, summary: `当前可见待办 ${tasks.length} 个` },
+        emptyPriorityText: "当前无需要立即处理的高风险任务，低风险信号已沉淀为商品 / 店铺标签。",
+        latestReportResult: { label: "最新数据", status: v3.latestDataVersion ? "已同步" : "待同步", summary: v3.latestDataVersion ? "经营数据、商品标签、店铺权重和任务队列已更新。" : "上传报表后自动清洗、入库并生成标签。", taskHint: `${tasks.length} 个执行任务`, latestSyncedAt: "已同步" },
+        completionProgress: { visibleActive: tasks.length, processing: 0, pendingReview: review.length, returned: 0, completed: 0, completionRate: 0, summary: `当前执行任务 ${tasks.length} 个` },
       },
     };
   }
@@ -34,19 +34,7 @@
     const product = task.productId || task.entityId || task.productShort || "任务";
     const domain = task.riskDomain || task.taskType || "经营";
     const signal = task.taskSignal || task.actionType || "处理";
-    return {
-      rank,
-      id: task.id,
-      title: task.title && task.title !== task.taskType ? task.title : `${product}｜${domain}｜${signal}`,
-      riskDomain: domain,
-      priority: task.priority || "中",
-      priorityLevel: task.priorityLevel || "warning",
-      deadline: task.deadline || "本周内",
-      status: task.workflowStatus || task.status || "待处理",
-      source: task.source || task.sourceModule || "任务池",
-      reason: task.reason || task.task || "由导入数据生成。",
-      assigneeName: task.assigneeName || "未派发",
-    };
+    return { rank, id: task.id, title: task.title && task.title !== task.taskType ? task.title : `${product}｜${domain}｜${signal}`, riskDomain: domain, priority: task.priority || "中", priorityLevel: task.priorityLevel || "warning", deadline: task.deadline || "本周内", status: task.workflowStatus || task.status || "待处理", source: task.source || task.sourceModule || "任务池", reason: task.reason || task.task || "由导入数据生成。", assigneeName: task.assigneeName || "未派发" };
   }
 
   function metricCard(item) {
@@ -67,7 +55,7 @@
   }
 
   function completionCard(progress = {}) {
-    return `<section class="page-section dashboard-progress-card"><div class="section-header"><h3>今日完成进度</h3><span class="status-badge">${s(progress.completionRate ?? 0)}%</span></div><div class="dashboard-progress-grid"><article><span>可见待办</span><strong>${s(progress.visibleActive ?? 0)}</strong></article><article><span>处理中</span><strong>${s(progress.processing ?? 0)}</strong></article><article><span>待复核</span><strong>${s(progress.pendingReview ?? 0)}</strong></article><article><span>已完成</span><strong>${s(progress.completed ?? 0)}</strong></article></div><p>${s(progress.summary || "任务完成后进入日志沉淀。")}</p></section>`;
+    return `<section class="page-section dashboard-progress-card"><div class="section-header"><h3>今日完成进度</h3><span class="status-badge">${s(progress.completionRate ?? 0)}%</span></div><div class="dashboard-progress-grid"><article><span>执行任务</span><strong>${s(progress.visibleActive ?? 0)}</strong></article><article><span>处理中</span><strong>${s(progress.processing ?? 0)}</strong></article><article><span>待复核</span><strong>${s(progress.pendingReview ?? 0)}</strong></article><article><span>已完成</span><strong>${s(progress.completed ?? 0)}</strong></article></div><p>${s(progress.summary || "任务完成后进入日志沉淀。")}</p></section>`;
   }
 
   function sideSection(title, items, emptyText) {
@@ -75,19 +63,20 @@
   }
 
   function renderDashboard(payload) {
-    if (!payload?.hasData) return `<section class="v102-hero owner-hero"><div><h2>今日任务台</h2><strong>上传报表后，系统会把经营问题变成任务。</strong></div><div class="v102-primary-action"><button type="button" data-open-report>上传报表</button><span>先导入数据</span></div></section>`;
+    if (!payload?.hasData) return `<section class="v102-hero owner-hero"><div><h2>今日任务台</h2><strong>上传报表后，系统会清洗数据、生成标签并同步任务队列。</strong></div><div class="v102-primary-action"><button type="button" data-open-report>上传报表</button><span>先导入数据</span></div></section>`;
     const metrics = payload.metrics || [];
     const workbench = payload.todayWorkbench || {};
     const priorityTasks = workbench.todayPriorityTasks || payload.taskQueue || [];
     const highRisk = workbench.highRiskItems || [];
     const reviewItems = workbench.pendingReviewItems || [];
-    return `<section class="v102-hero owner-hero"><div><h2>今日任务台</h2><strong>先处理任务，再查看数据。</strong></div><div class="v102-primary-action"><button type="button" data-open-tasks>${priorityTasks.length ? "处理任务" : "查看任务"}</button><span>${s(payload.heroBadge || `${priorityTasks.length} 个优先任务`)}</span></div></section>
+    const emptyText = workbench.emptyPriorityText || "当前无需要立即处理的高风险任务，低风险信号已沉淀为商品 / 店铺标签。";
+    return `<section class="v102-hero owner-hero"><div><h2>今日任务台</h2><strong>先处理执行任务，再查看经营数据。</strong></div><div class="v102-primary-action"><button type="button" data-open-tasks>${priorityTasks.length ? "处理任务" : "查看任务"}</button><span>${s(payload.heroBadge || `${priorityTasks.length} 个优先任务`)}</span></div></section>
       <section class="kpi-grid owner-metrics dashboard-workbench-metrics">${metrics.map(metricCard).join("")}</section>
       ${reportResult(workbench.latestReportResult)}
       <section class="dashboard-workbench-grid">
-        <section class="page-section dashboard-queue dashboard-linked-queue v102-main-section dashboard-priority-section"><div class="section-header"><h3>今日优先任务</h3><span class="status-badge">${priorityTasks.length} 个</span></div><div class="dashboard-task-list">${priorityTasks.length ? priorityTasks.map(taskRow).join("") : `<div class="dashboard-empty">当前没有优先任务。</div>`}</div></section>
+        <section class="page-section dashboard-queue dashboard-linked-queue v102-main-section dashboard-priority-section"><div class="section-header"><h3>今日优先任务</h3><span class="status-badge">${priorityTasks.length} 个</span></div><div class="dashboard-task-list">${priorityTasks.length ? priorityTasks.map(taskRow).join("") : `<div class="dashboard-empty">${s(emptyText)}</div>`}</div></section>
         <div class="dashboard-workbench-side">
-          ${sideSection("高风险事项", highRisk, "暂无高风险事项。")}
+          ${sideSection("高风险事项", highRisk, "暂无高风险执行事项。")}
           ${sideSection("待复核事项", reviewItems, "暂无待复核事项。")}
           ${completionCard(workbench.completionProgress)}
         </div>
