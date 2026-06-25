@@ -1,11 +1,12 @@
 (function () {
   const s = (value) => AppShell.escape(value ?? "");
+  let accountNotice = "";
 
   function ensureAccountCss() {
     if (document.querySelector('link[data-account-ui="1"]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/web_demo/account-ui.css?v=10.9.1";
+    link.href = "/web_demo/account-ui.css?v=11.3.0";
     link.dataset.accountUi = "1";
     document.head.appendChild(link);
   }
@@ -58,6 +59,82 @@
     return `<button type="button" class="${s(variant)}" data-account-action data-label="${s(label)}">${s(label)}</button>`;
   }
 
+  function compactStores(user) {
+    const names = Array.isArray(user?.storeNames) ? user.storeNames.filter(Boolean) : [];
+    if (names.length) return names.join("、");
+    const ids = Array.isArray(user?.storeIds) ? user.storeIds.filter(Boolean) : [];
+    return ids.length ? ids.join("、") : "未绑定店铺";
+  }
+
+  function compactPermissions(user) {
+    const names = Array.isArray(user?.permissionNames) ? user.permissionNames.filter(Boolean) : [];
+    return names.length ? names.slice(0, 4).join("、") : "只读基础权限";
+  }
+
+  function roleTag(user) {
+    const role = user?.roleId || "observer";
+    const map = { owner: "老板", manager: "总管", operator: "运营", finance: "财务", observer: "观察" };
+    return map[role] || role;
+  }
+
+  function testAccountCard(user, currentId) {
+    const active = user.id === currentId;
+    return `<button type="button" class="account-switch-card ${active ? "active" : ""}" data-switch-user="${s(user.id)}" ${active ? "disabled" : ""}>
+      <span>${s(roleTag(user))}</span>
+      <strong>${s(user.name || user.id)}</strong>
+      <em>${s(user.roleName || user.roleId)}</em>
+      <small>${s(compactStores(user))}</small>
+      <b>${active ? "当前身份" : "切换测试"}</b>
+    </button>`;
+  }
+
+  function currentIdentityBlock(current, visibleStoreIds = []) {
+    const stores = compactStores(current);
+    const visible = Array.isArray(visibleStoreIds) && visibleStoreIds.length ? visibleStoreIds.join("、") : stores;
+    return `<section class="account-current-block">
+      <article><span>当前登录身份</span><strong>${s(current.name || "未识别")}</strong><small>${s(current.roleName || "模拟账号")}</small></article>
+      <article><span>可见店铺</span><strong>${s(stores)}</strong><small>数据范围：${s(visible)}</small></article>
+      <article><span>权限摘要</span><strong>${s(compactPermissions(current))}</strong><small>正式版通过登录态切换账号</small></article>
+    </section>`;
+  }
+
+  function testSwitcherBlock(payload) {
+    const users = Array.isArray(payload?.users) ? payload.users : [];
+    const current = payload?.currentUser || {};
+    if (!users.length) return "";
+    return `<section class="page-section account-section account-switch-section">
+      <div class="section-header"><h3>MVP 测试身份</h3><span class="status-badge">仅测试</span></div>
+      <p class="account-note">用于快速检查不同角色看到的任务、报表、经营模块和日志范围。正式版本通过登录 / 退出登录切换账号，此处不改变权限配置。</p>
+      <div class="account-switch-grid">${users.map((user) => testAccountCard(user, current.id)).join("")}</div>
+    </section>`;
+  }
+
+  async function switchTestUser(userId, node) {
+    const oldText = node?.querySelector("b")?.textContent || "切换测试";
+    if (node) {
+      node.disabled = true;
+      node.classList.add("is-loading");
+      const label = node.querySelector("b");
+      if (label) label.textContent = "切换中";
+    }
+    try {
+      const account = await AppApi.switchAccount(userId);
+      await AppApi.refreshTaskState();
+      const name = account?.currentUser?.name || userId;
+      const role = account?.currentUser?.roleName || "测试身份";
+      accountNotice = `已切换到 ${name} · ${role}。`;
+      AppRouter.schedule("account-switch");
+    } catch (error) {
+      accountNotice = `切换失败：${error.message || error}`;
+      if (node) {
+        node.disabled = false;
+        node.classList.remove("is-loading");
+        const label = node.querySelector("b");
+        if (label) label.textContent = oldText;
+      }
+    }
+  }
+
   window.AccountPage = {
     route: "accounts",
     title: "账号",
@@ -67,7 +144,10 @@
       const current = payload?.currentUser || {};
       const roleName = current.roleName || "模拟账号";
       const loginName = current.name || "老板";
-      return `<section class="account-hero"><div class="account-avatar">${s(accountProfile.avatar)}</div><div class="account-hero-main"><h2>账号中心</h2><p>登录、安全、绑定和通知集中管理。</p></div><div class="account-status-card"><span>当前身份</span><strong>${s(roleName)}</strong><em>${s(accountProfile.status)}</em></div></section>
+      return `<section class="account-hero"><div class="account-avatar">${s(accountProfile.avatar)}</div><div class="account-hero-main"><h2>账号中心</h2><p>登录、安全、绑定和通知集中管理。MVP 阶段可在本页切换测试身份。</p></div><div class="account-status-card"><span>当前身份</span><strong>${s(roleName)}</strong><em>${s(accountProfile.status)}</em></div></section>
+      ${accountNotice ? AppShell.notice("账号切换", accountNotice) : ""}
+      ${currentIdentityBlock(current, payload?.visibleStoreIds)}
+      ${testSwitcherBlock(payload)}
       <section class="account-grid">
         <article class="account-info-card"><div class="section-header"><h3>基础信息</h3><span class="status-badge">账号</span></div><div class="account-info-list">${[
           ["昵称", accountProfile.nickname],
@@ -77,16 +157,17 @@
           ["手机号", accountProfile.phone],
           ["邮箱", accountProfile.email],
         ].map(([label, value]) => infoItem(label, value)).join("")}</div></article>
-        <article class="account-info-card account-action-card"><div class="section-header"><h3>基础操作</h3><span class="status-badge">操作</span></div><div class="account-action-list">${actionButton("编辑资料")}${actionButton("清除缓存")}${actionButton("退出登录", "secondary")}</div><div class="account-note">真实登录、短信、邮箱和第三方授权在正式版接入。</div></article>
+        <article class="account-info-card account-action-card"><div class="section-header"><h3>基础操作</h3><span class="status-badge">操作</span></div><div class="account-action-list">${actionButton("编辑资料")}${actionButton("清除缓存")}${actionButton("退出登录", "secondary")}</div><div class="account-note">真实登录、短信、邮箱和第三方授权在正式版接入。MVP 测试身份不会改动真实权限配置。</div></article>
       </section>
       <section class="page-section account-section"><div class="section-header"><h3>安全设置</h3><span class="status-badge">安全</span></div><div class="account-setting-list">${securityItems.map((item) => settingRow(item)).join("")}</div></section>
       <section class="page-section account-section"><div class="section-header"><h3>绑定与授权</h3><span class="status-badge">授权</span></div><div class="account-setting-list">${bindings.map((item) => settingRow(item, "绑定")).join("")}</div></section>
       <section class="page-section account-section"><div class="section-header"><h3>通知设置</h3><span class="status-badge">通知</span></div><div class="account-setting-list">${noticeItems.map((item) => settingRow(item, "调整")).join("")}</div></section>`;
     },
     mount(ctx) {
+      ctx.delegate("[data-switch-user]", "click", (_, node) => switchTestUser(node.dataset.switchUser, node));
       ctx.delegate("[data-account-action]", "click", (_, node) => {
         const label = node.dataset.label || node.textContent || "设置";
-        node.textContent = "暂未接入";
+        node.textContent = label === "退出登录" ? "正式版接入" : "暂未接入";
         node.disabled = true;
         window.setTimeout(() => {
           node.disabled = false;
