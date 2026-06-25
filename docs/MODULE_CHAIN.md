@@ -23,12 +23,11 @@ web_demo/modules/dashboard/page.js
 → AppApi.dashboard()
 → GET /api/modules/dashboard
 → src/api/routes/modules/dashboard.py
-→ dashboard / report / task projection services
+→ dashboard_service
+→ module_projection_service / module_task_service / report_alert_service
 ```
 
-关联模块：数据、经营、任务、日志。
-
-验收点：报表导入后，总览必须同步刷新最新执行任务、高风险事项、最新报表结果、待复核事项和今日完成进度。
+V11.1 验收点：总览不展示“已入库多少条记录”等后端明细，只展示经营同步结果和执行任务；没有任务时说明低风险信号已沉淀为商品 / 店铺标签。
 
 ## 2. 数据 / 报表导入模块链
 
@@ -80,10 +79,6 @@ web_demo/modules/report/page.js
 
 V11 边界：报表导入后的低风险结果不进入任务栏，必须沉淀为商品标签、店铺标签或观察信号；只有高风险、高时效、需要人处理的问题进入执行队列。
 
-关联模块：总览、经营、任务、日志、趋势、RAG。
-
-验收点：确认导入后必须返回导入结果、上传元信息、商品入库ID分流、店铺权重、趋势同步、风险任务同步、经营档案、标签变化任务同步，并触发前端刷新。
-
 ## 3. 商品 / 店铺标签治理链
 
 ```text
@@ -118,19 +113,39 @@ web_demo/modules/operating-unit/page.js
 → AppApi.operatingUnit()
 → GET /api/modules/operating-unit
 → src/api/routes/modules/operating_unit.py
-
-商品 / 竞品 / 上新 / 流量：
-web_demo/modules/operating-unit/page.js
-→ AppApi.product() / competitor() / listing() / traffic()
-→ /api/modules/product | competitor | listing | traffic
-→ src/api/routes/modules/product.py 等
 → module_projection_service
 → report_alert_service
 → v11_mvp_governance_service
-→ module_task_service
 ```
 
-关联模块：数据、任务、Agent、趋势。
+经营对象入口：
+
+```text
+商品档案
+web_demo/modules/operating-unit/page.js
+→ AppRouter.navigate("business-products")
+→ web_demo/modules/product/page.js
+→ AppMockData.products / AppApi.product()
+→ src/api/routes/modules/product.py
+→ module_projection_service
+
+竞品信号
+web_demo/modules/operating-unit/page.js
+→ AppRouter.navigate("business-competitors")
+→ web_demo/modules/competitor/page.js
+
+上新测试
+web_demo/modules/operating-unit/page.js
+→ AppRouter.navigate("business-listing")
+→ web_demo/modules/listing/page.js
+
+流量趋势
+web_demo/modules/operating-unit/page.js
+→ AppRouter.navigate("business-traffic")
+→ web_demo/modules/traffic/page.js
+```
+
+V11.1 前端规则：经营模块不直接跳任务栏；商品 / 竞品 / 上新 / 流量进入各自经营对象页。店铺前端只显示真实店铺名称，不显示工程 ID。工程 ID 只用于后端匹配、权限、日志和审计。
 
 验收点：经营模块只展示当前账号可见店铺和商品；低风险信号以标签方式进入商品/店铺档案，高风险高时效才进入统一任务池。
 
