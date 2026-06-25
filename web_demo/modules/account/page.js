@@ -6,7 +6,7 @@
     if (document.querySelector('link[data-account-ui="1"]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/web_demo/account-ui.css?v=11.3.0";
+    link.href = "/web_demo/account-ui.css?v=11.4.0";
     link.dataset.accountUi = "1";
     document.head.appendChild(link);
   }
@@ -59,11 +59,28 @@
     return `<button type="button" class="${s(variant)}" data-account-action data-label="${s(label)}">${s(label)}</button>`;
   }
 
-  function compactStores(user) {
-    const names = Array.isArray(user?.storeNames) ? user.storeNames.filter(Boolean) : [];
-    if (names.length) return names.join("、");
-    const ids = Array.isArray(user?.storeIds) ? user.storeIds.filter(Boolean) : [];
-    return ids.length ? ids.join("、") : "未绑定店铺";
+  function dataScopeLabel(user) {
+    const role = user?.roleId || "observer";
+    const map = {
+      owner: "全部经营单元",
+      manager: "负责经营单元",
+      operator: "店铺切片",
+      finance: "财务经营数据",
+      observer: "授权摘要",
+    };
+    return map[role] || "授权范围";
+  }
+
+  function dataScopeNote(user) {
+    const role = user?.roleId || "observer";
+    const map = {
+      owner: "看全局汇总，不表示账号绑定店铺数据",
+      manager: "由经营单元与店铺归属动态计算",
+      operator: "只读负责范围内的经营对象",
+      finance: "只读财务与经营指标口径",
+      observer: "只读脱敏进度和摘要",
+    };
+    return map[role] || "由后端数据范围计算";
   }
 
   function compactPermissions(user) {
@@ -83,17 +100,15 @@
       <span>${s(roleTag(user))}</span>
       <strong>${s(user.name || user.id)}</strong>
       <em>${s(user.roleName || user.roleId)}</em>
-      <small>${s(compactStores(user))}</small>
+      <small>${s(dataScopeLabel(user))} · ${s(dataScopeNote(user))}</small>
       <b>${active ? "当前身份" : "切换测试"}</b>
     </button>`;
   }
 
-  function currentIdentityBlock(current, visibleStoreIds = []) {
-    const stores = compactStores(current);
-    const visible = Array.isArray(visibleStoreIds) && visibleStoreIds.length ? visibleStoreIds.join("、") : stores;
+  function currentIdentityBlock(current) {
     return `<section class="account-current-block">
       <article><span>当前登录身份</span><strong>${s(current.name || "未识别")}</strong><small>${s(current.roleName || "模拟账号")}</small></article>
-      <article><span>可见店铺</span><strong>${s(stores)}</strong><small>数据范围：${s(visible)}</small></article>
+      <article><span>数据范围</span><strong>${s(dataScopeLabel(current))}</strong><small>${s(dataScopeNote(current))}</small></article>
       <article><span>权限摘要</span><strong>${s(compactPermissions(current))}</strong><small>正式版通过登录态切换账号</small></article>
     </section>`;
   }
@@ -104,7 +119,7 @@
     if (!users.length) return "";
     return `<section class="page-section account-section account-switch-section">
       <div class="section-header"><h3>MVP 测试身份</h3><span class="status-badge">仅测试</span></div>
-      <p class="account-note">用于快速检查不同角色看到的任务、报表、经营模块和日志范围。正式版本通过登录 / 退出登录切换账号，此处不改变权限配置。</p>
+      <p class="account-note">用于快速检查不同角色看到的任务、报表、经营模块和日志范围。正式版本通过登录 / 退出登录切换账号，此处不改变权限配置，也不表示账号绑定具体店铺数据。</p>
       <div class="account-switch-grid">${users.map((user) => testAccountCard(user, current.id)).join("")}</div>
     </section>`;
   }
@@ -146,7 +161,7 @@
       const loginName = current.name || "老板";
       return `<section class="account-hero"><div class="account-avatar">${s(accountProfile.avatar)}</div><div class="account-hero-main"><h2>账号中心</h2><p>登录、安全、绑定和通知集中管理。MVP 阶段可在本页切换测试身份。</p></div><div class="account-status-card"><span>当前身份</span><strong>${s(roleName)}</strong><em>${s(accountProfile.status)}</em></div></section>
       ${accountNotice ? AppShell.notice("账号切换", accountNotice) : ""}
-      ${currentIdentityBlock(current, payload?.visibleStoreIds)}
+      ${currentIdentityBlock(current)}
       ${testSwitcherBlock(payload)}
       <section class="account-grid">
         <article class="account-info-card"><div class="section-header"><h3>基础信息</h3><span class="status-badge">账号</span></div><div class="account-info-list">${[

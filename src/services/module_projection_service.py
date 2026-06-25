@@ -1,4 +1,4 @@
-"""V5 data-driven module projection service."""
+"""V11.4 data-driven module projection service with strict scope gate."""
 
 from __future__ import annotations
 
@@ -9,10 +9,11 @@ from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import connect, loads
 from src.services.account_service import current_user, list_stores, visible_store_ids_for_user
+from src.services.backend_isolation_service import DEFAULT_ORG_ID, DEFAULT_TENANT_ID, row_scope_status, strict_data_scope_enabled
 from src.services.import_row_store_service import load_import_rows
 from src.services.module_data_service import REPORT_GROUPS
 
-PROJECTION_VERSION = "5.0.8"
+PROJECTION_VERSION = "11.4.0"
 DATASET_LABELS = {"products": "商品报表", "inventory": "库存报表", "orders": "订单报表", "refunds": "退款报表", "customers": "客户报表"}
 DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "ERP", "refunds": "CRM", "customers": "CRM"}
 
@@ -74,14 +75,31 @@ def _visible_store_ids(user_id: str | None) -> set[str]:
     return set(visible_store_ids_for_user(user_id)) if user_id else set()
 
 
+def _raw_dataset_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
+    full_rows = load_import_rows(dataset_name)
+    return full_rows if full_rows else _snapshot_rows(dataset_name)
+
+
+def _scope_decision(row: Dict[str, Any], store_id: str | None = None) -> Dict[str, Any]:
+    return row_scope_status(row, tenant_id=DEFAULT_TENANT_ID, org_id=DEFAULT_ORG_ID, store_id=store_id, require_store=True)
+
+
 def _row_visible(row: Dict[str, Any], user_id: str | None) -> bool:
     store_id = row.get("storeId") or row.get("store_id") or _resolve_store_id(row)
+    if store_id:
+        row.setdefault("storeId", store_id)
+    if strict_data_scope_enabled():
+        decision = _scope_decision(row, store_id)
+        if decision.get("status") != "ok":
+            row["scopeStatus"] = "quarantined"
+            row["scopeMissing"] = decision.get("missing", [])
+            row["scopeErrors"] = decision.get("errors", [])
+            return False
     if not user_id:
         return True
     if not store_id:
-        # If an imported report does not carry a store field, keep it visible to the
-        # current role so the dashboard / report / product projections still refresh.
-        # The task layer can still assign ownership through the default operator.
+        # Demo-only compatibility. Strict mode already quarantines rows without a
+        # store ownership field, so production cannot leak unassigned data here.
         return True
     role = current_user(user_id).get("roleId")
     if role in {"owner", "manager", "finance"}:
@@ -129,9 +147,21 @@ def _snapshot_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
 
 
 def dataset_rows(dataset_name: str | None = None, user_id: str | None = None) -> List[Dict[str, Any]]:
-    full_rows = load_import_rows(dataset_name)
-    rows = full_rows if full_rows else _snapshot_rows(dataset_name)
+    rows = _raw_dataset_rows(dataset_name)
     return [row for row in rows if _row_visible(row, user_id)]
+
+
+def quarantined_dataset_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
+    rows = _raw_dataset_rows(dataset_name)
+    quarantined: List[Dict[str, Any]] = []
+    for row in rows:
+        store_id = row.get("storeId") or row.get("store_id") or _resolve_store_id(row)
+        decision = _scope_decision(row, store_id)
+        if decision.get("status") != "ok":
+            item = dict(row)
+            item["scopeDecision"] = decision
+            quarantined.append(item)
+    return quarantined
 
 
 def has_runtime_data(user_id: str | None = None) -> bool:
@@ -301,4 +331,5 @@ def projection_summary(user_id: str | None = None) -> Dict[str, Any]:
     products = projected_products(user_id)
     traffic = projected_traffic(user_id)
     reports = projected_report_groups(user_id)
-    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "scopedStoreIds": sorted(_visible_store_ids(user_id))}
+    quarantined = quarantined_dataset_rows() if strict_data_scope_enabled() else []
+    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "scopedStoreIds": sorted(_visible_store_ids(user_id)), "strictDataScope": strict_data_scope_enabled(), "quarantinedRowCount": len(quarantined)}

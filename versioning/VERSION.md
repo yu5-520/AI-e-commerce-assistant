@@ -1,5 +1,5 @@
-Current Version: 11.3.0
+Current Version: 11.4.0
 
-V11.3｜账号页 MVP 测试身份切换
+V11.4｜后端账号隔离安全闸
 
-主线：账号页新增 MVP 测试身份切换区 → 一键切换老板 / 总管 / 运营 A / 运营 B / 财务 / 观察者 → 切换后刷新任务、经营、报表和日志数据 → 不做全局切换器 → 不改变正式权限配置和店铺迁移逻辑。
+主线：生产模式禁止信任 X-Mock-User-Id → 统一 UserContext 认证边界 → Repository 查询强制 tenant + org + data scope → 严格模式下缺 tenant/org/store 归属的数据进入隔离区，不进入经营模块 → 账号页只展示数据范围，不展示账号绑定店铺。
