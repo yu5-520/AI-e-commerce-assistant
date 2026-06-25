@@ -19,6 +19,7 @@ FINANCE_DOMAINS = {"报表", "价格", "流量", "库存", "利润", "财务"}
 EVENT_LABELS = {
     "task_created": "任务创建",
     "task_merged": "任务合并",
+    "task_updated": "任务更新",
     "manager_split": "总管拆分",
     "manager_assigned": "总管派发",
     "operator_accepted": "运营接收",
@@ -385,3 +386,35 @@ def update_task(task_id: str, patch: Dict[str, Any], *, log_type: str | None = N
         create_log({"type": log_type, "task": task, "action": action or log_type, "result": result or "任务已更新。"})
     create_task_event(task, "task_completed" if task.get("status") in DONE_STATUS and before_status != task.get("status") else "task_updated", from_status=before_status, from_workflow=before_workflow, message=result or "任务已更新。")
     return deepcopy(task)
+
+
+def pin_task(task_id: str) -> Dict[str, Any] | None:
+    """Lifecycle-only pin adapter kept for the todo route."""
+    task = find_task(task_id)
+    if not task:
+        return None
+    task["manualOrder"] = 0
+    task["pinned"] = True
+    task["updatedAt"] = now_iso()
+    create_task_event(task, "task_pinned", message="任务已置顶。")
+    return deepcopy(task)
+
+
+def reorder_task(task_id: str, direction: str = "down") -> Dict[str, Any] | None:
+    """Lifecycle-only reorder adapter kept for the todo route."""
+    ordered = sort_tasks(TASKS)
+    index = next((i for i, item in enumerate(ordered) if item.get("id") == task_id), None)
+    if index is None:
+        return None
+    target_index = index - 1 if direction in {"up", "top", "prev", "上移"} else index + 1
+    if target_index < 0 or target_index >= len(ordered):
+        return deepcopy(ordered[index])
+    current = ordered[index]
+    target = ordered[target_index]
+    current_order = current.get("manualOrder", index)
+    target_order = target.get("manualOrder", target_index)
+    current["manualOrder"], target["manualOrder"] = target_order, current_order
+    current["updatedAt"] = now_iso()
+    target["updatedAt"] = now_iso()
+    create_task_event(current, "task_reordered", message="任务排序已更新。")
+    return deepcopy(current)
