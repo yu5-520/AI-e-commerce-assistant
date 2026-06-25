@@ -10,12 +10,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import accounts, approvals, architecture, audit, data_import, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, trends, v10_product, v9_readiness, worker_jobs
+from src.services.v112_task_chain_fix_service import apply_v112_task_chain_fix
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "10.9.0"
+API_VERSION = "11.2.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
+V112_TASK_CHAIN_FIX = apply_v112_task_chain_fix()
 
 if WEB_DEMO_DIR.exists():
     app.mount("/web_demo", StaticFiles(directory=WEB_DEMO_DIR), name="web_demo")
