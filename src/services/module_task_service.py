@@ -448,3 +448,14 @@ def reorder_task(task_id: str, direction: str = "down") -> Dict[str, Any] | None
     target["updatedAt"] = now_iso()
     create_task_event(current, "task_reordered", message="任务排序已更新。")
     return deepcopy(current)
+
+
+def reset_tasks() -> Dict[str, Any]:
+    """Runtime reset adapter kept for system cleanup; it does not generate tasks."""
+    task_count = len(TASKS)
+    log_count = len(LOGS)
+    event_count = len(TASK_EVENTS)
+    TASKS.clear()
+    LOGS.clear()
+    TASK_EVENTS.clear()
+    return {"ok": True, "version": "11.8.0", "clearedTasks": task_count, "clearedLogs": log_count, "clearedEvents": event_count, "rule": "只清空运行态，不恢复旧任务生成规则。"}
