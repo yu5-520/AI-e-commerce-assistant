@@ -1,4 +1,9 @@
-"""V6.5 risk task service with permission-budget gates."""
+"""V6.5 risk task service with V11 MVP task-queue governance.
+
+Trend signals are fully retained, but low-risk groups no longer enter the front-end
+execution queue. They are stored as backend plans/tag candidates so the system does
+not lose analysis while reducing operator pressure.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,7 @@ from src.services.high_risk_trend_gate_service import evaluate_high_risk_trend_g
 from src.services.indicator_rag_service import resolve_indicator_constraints
 from src.services.permission_budget_service import resolve_permission_budget_gate
 
-RISK_TASK_VERSION = "6.5.0"
+RISK_TASK_VERSION = "11.0.0"
 RISK_RANK = {"高": 1, "中": 2, "低": 3}
 POSITIVE_METRICS = {"roi", "traffic", "clicks", "ctr", "conversion_rate", "gross_margin", "sales_volume", "quantity", "revenue", "actual_paid", "good_review_rate"}
 BLOCKER_METRICS = {"refund_rate", "refund_amount", "refund_count", "bad_review_rate"}
@@ -131,7 +136,17 @@ def _deadline(risk_level: str, constraints: Dict[str, Any]) -> str:
         return "今日内"
     if risk_level == "中":
         return f"{(constraints.get('targets') or {}).get('observeDays') or 3}天内"
-    return "本周内"
+    return "后台观察"
+
+
+def _queue_type(risk_level: str, opportunity: bool) -> str:
+    if risk_level == "高":
+        return "urgent_execution"
+    if risk_level == "中" and opportunity:
+        return "today_execution"
+    if risk_level == "中":
+        return "observe_candidate"
+    return "backend_tag"
 
 
 def _build_actions(risk_level: str, constraints: Dict[str, Any], gate: Dict[str, Any] | None, budget: Dict[str, Any]) -> List[str]:
@@ -159,8 +174,8 @@ def _task_type(risk_level: str, domain: str, gate: Dict[str, Any] | None) -> str
     if risk_level == "高":
         return "高风险投产申请任务" if gate and gate.get("applicationAllowed") else "高风险趋势门控复核任务"
     if risk_level == "中":
-        return f"中风险{domain}指标修复任务"
-    return "低风险趋势观察任务"
+        return f"中风险{domain}观察复核任务"
+    return "低风险标签沉淀"
 
 
 def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_version: str | None, risk_level: str, opportunity: bool, requester_role_id: str) -> Dict[str, Any]:
@@ -172,8 +187,9 @@ def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_v
     budget = resolve_permission_budget_gate(product=product, risk_level=risk_level, domain=domain, constraints=constraints, high_risk_gate=gate, requester_role_id=requester_role_id, data_version=data_version)
     application_allowed = bool(gate and gate.get("applicationAllowed"))
     task_type = _task_type(risk_level, domain, gate)
-    suffix = "投产申请" if application_allowed else "趋势门控复核" if risk_level == "高" else f"{domain}指标修复" if risk_level == "中" else "趋势观察"
+    suffix = "投产申请" if application_allowed else "趋势门控复核" if risk_level == "高" else f"{domain}观察复核" if risk_level == "中" else "标签沉淀"
     actions = _build_actions(risk_level, constraints, gate, budget)
+    queue_type = _queue_type(risk_level, opportunity)
     return {
         "id": make_id("RISK"),
         "title": f"{product.get('title') or product_id} · {suffix}",
@@ -182,6 +198,9 @@ def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_v
         "priority": risk_level,
         "deadline": _deadline(risk_level, constraints),
         "timeBucket": _deadline(risk_level, constraints),
+        "urgencyLevel": "urgent" if risk_level == "高" else "today" if queue_type == "today_execution" else "observe",
+        "queueType": queue_type,
+        "displayState": "expanded" if queue_type in {"urgent_execution", "today_execution"} else "backend_only",
         "source": "趋势中心",
         "sourceModule": "趋势中心",
         "sourceRoute": "trend-center",
@@ -194,12 +213,12 @@ def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_v
         "platform": product.get("platform") or "未知平台",
         "category": product.get("category") or "未分类",
         "riskDomain": domain,
-        "actionType": "申请" if application_allowed else "复核" if risk_level == "高" else "修复" if risk_level == "中" else "观察",
+        "actionType": "申请" if application_allowed else "复核" if risk_level == "高" else "观察" if risk_level == "中" else "标签",
         "taskLayer": "manager_dispatch" if risk_level == "高" else "operator_execution",
         "visibleRoleIds": ["owner", "manager", "finance"] if risk_level == "高" else ["manager", "operator"],
-        "sourceEvent": f"V6.5:{data_version or 'latest'}:{product_id}:{domain}:{risk_level}:{budget.get('status')}",
+        "sourceEvent": f"V11:{data_version or 'latest'}:{product_id}:{domain}:{risk_level}:{budget.get('status')}",
         "riskGrade": risk_level,
-        "riskPolicy": {"riskMode": budget.get("status"), "requiresRagMetrics": risk_level in {"中", "高"}, "requiresTrendGate": risk_level == "高", "requiresBudgetGate": True, "requiresApproval": budget.get("needsApproval"), "approvalChain": budget.get("approvalChain") or [], "rule": "账号额度决定任务是执行、申请还是升级审批。"},
+        "riskPolicy": {"riskMode": budget.get("status"), "requiresRagMetrics": risk_level in {"中", "高"}, "requiresTrendGate": risk_level == "高", "requiresBudgetGate": True, "requiresApproval": budget.get("needsApproval"), "approvalChain": budget.get("approvalChain") or [], "rule": "V11只把高风险高时效放入前端任务队列，中低风险沉淀为标签或观察候选。"},
         "ragIndicatorConstraints": constraints,
         "highRiskTrendGate": gate,
         "permissionBudgetGate": budget,
@@ -210,17 +229,17 @@ def _task_payload(product: Dict[str, Any], signals: List[Dict[str, Any]], data_v
         "suggestedStockBudget": budget.get("suggestedStockBudget"),
         "suggestedTotalBudget": budget.get("suggestedTotalBudget"),
         "executionRequirements": actions,
-        "judgmentTags": ["V6.5权限额度", f"{risk_level}风险", domain, budget.get("status")],
+        "judgmentTags": ["V11任务队列", f"{risk_level}风险", domain, queue_type, budget.get("status")],
         "evidence": [{"type": "trend_signal", "title": item.get("signalType"), "metric": item.get("metricLabel") or item.get("sourceMetric"), "reason": item.get("reason"), "dataVersion": item.get("dataVersion")} for item in signals] + [{"type": "permission_budget", "title": "账号额度门控", "metric": f"申请额度 {budget.get('suggestedTotalBudget')} 元", "reason": budget.get("rule"), "dataVersion": data_version}],
         "reason": "；".join(item.get("reason") or item.get("signalType") or "趋势信号" for item in signals[:4]),
-        "agentJudgment": {"status": "v6_5_permission_budget_task", "riskLevel": risk_level, "indicatorConstraints": constraints, "highRiskTrendGate": gate, "permissionBudgetGate": budget, "executionRequirements": actions, "boundary": "Agent 不能绕过账号额度和审批链路。"},
-        "sourceTrail": ["报表中心", "趋势中心", "RAG指标门控", "高风险趋势门控", "权限额度门控", "风险分级任务"],
+        "agentJudgment": {"status": "v11_mvp_task_queue", "riskLevel": risk_level, "indicatorConstraints": constraints, "highRiskTrendGate": gate, "permissionBudgetGate": budget, "executionRequirements": actions, "boundary": "低风险不进任务栏；高风险也不能绕过账号额度和审批链路。"},
+        "sourceTrail": ["报表中心", "趋势中心", "RAG指标门控", "高风险趋势门控", "权限额度门控", "V11任务队列"],
     }
 
 
 def _save_plan(product_id: str, store_id: str | None, data_version: str | None, risk_level: str, task_type: str, task_id: str | None, status: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     ensure_risk_task_tables()
-    plan = {"planId": make_id("RPLAN"), "productId": product_id, "storeId": store_id, "dataVersion": data_version, "riskLevel": risk_level, "taskType": task_type, "taskId": task_id, "status": status, "payload": payload, "createdAt": now_iso()}
+    plan = {"planId": make_id("RPLAN"), "productId": product_id, "StoreId": store_id, "storeId": store_id, "dataVersion": data_version, "riskLevel": risk_level, "taskType": task_type, "taskId": task_id, "status": status, "payload": payload, "createdAt": now_iso()}
     with connect() as conn:
         conn.execute("INSERT OR REPLACE INTO risk_task_plans_v6 (plan_id, product_id, store_id, data_version, risk_level, task_type, task_id, status, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (plan["planId"], product_id, store_id, data_version, risk_level, task_type, task_id, status, dumps(plan), plan["createdAt"]))
         conn.commit()
@@ -238,25 +257,32 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
     tasks: List[Dict[str, Any]] = []
     plans: List[Dict[str, Any]] = []
     skipped = 0
+    tagged_only = 0
     application_candidates = 0
     for (product_id, store_id, version), items in groups.items():
         dominant = _dominant_risk(items)
         opportunity = _positive_count(items) >= 4 and not _has_blocker(items)
         risk_level = "高" if opportunity else dominant
         candidates = [item for item in items if item.get("taskCandidate")]
-        if not opportunity and risk_level == "低" and len(items) < 2:
-            skipped += 1
+        if risk_level == "低":
+            tagged_only += 1
+            plans.append(_save_plan(product_id, store_id, version, risk_level, "低风险标签沉淀", None, "tagged_only", {"signals": items, "rule": "V11低风险不进入前端任务栏，沉淀为商品/店铺标签。"}))
             continue
         if not opportunity and risk_level in {"中", "高"} and not candidates:
             skipped += 1
+            plans.append(_save_plan(product_id, store_id, version, risk_level, "观察候选", None, "observation_candidate", {"signals": items, "rule": "缺少任务候选门控，不进入执行队列。"}))
             continue
         payload = _task_payload(_product_context(product_id, store_id), items, version, risk_level, opportunity, requester_role_id)
+        if payload.get("queueType") in {"backend_tag", "observe_candidate"}:
+            tagged_only += 1
+            plans.append(_save_plan(product_id, store_id, version, payload["riskGrade"], payload["taskType"], None, payload.get("queueType"), {"taskCandidate": payload, "signals": items}))
+            continue
         if opportunity:
             application_candidates += 1
         task = module_task_service.create_task(payload)
         tasks.append(task)
         plans.append(_save_plan(product_id, store_id, version, payload["riskGrade"], payload["taskType"], task.get("id"), "created", {"task": task, "signals": items, "indicatorConstraints": payload.get("ragIndicatorConstraints"), "highRiskTrendGate": payload.get("highRiskTrendGate"), "permissionBudgetGate": payload.get("permissionBudgetGate")}))
-    return {"version": RISK_TASK_VERSION, "mode": "permission_budget_task_generation", "dataVersion": data_version, "requesterRoleId": requester_role_id, "signalCount": len(signals), "groupCount": len(groups), "createdTaskCount": len(tasks), "skippedGroupCount": skipped, "investmentApplicationCandidateCount": application_candidates, "tasks": tasks, "plans": plans, "rule": "V6.5 接入账号额度与审批链路：运营提交申请，总管/老板按额度审批，高风险不能自动执行。"}
+    return {"version": RISK_TASK_VERSION, "mode": "v11_mvp_task_queue_generation", "dataVersion": data_version, "requesterRoleId": requester_role_id, "signalCount": len(signals), "groupCount": len(groups), "createdTaskCount": len(tasks), "taggedOnlyCount": tagged_only, "skippedGroupCount": skipped, "investmentApplicationCandidateCount": application_candidates, "tasks": tasks, "plans": plans, "rule": "V11完整保留信号，但低风险只进标签；高风险高时效才进前端任务队列。"}
 
 
 def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
@@ -265,9 +291,11 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
         rows = conn.execute("SELECT * FROM risk_task_plans_v6 ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
     plans = [loads(row["payload"]) for row in rows]
     by_level: Dict[str, int] = defaultdict(int)
-    rag_matched = gate_passed = application_allowed = budget_checked = 0
+    rag_matched = gate_passed = application_allowed = budget_checked = tagged_only = 0
     for plan in plans:
         by_level[str(plan.get("riskLevel") or "低")] += 1
+        if plan.get("status") in {"tagged_only", "backend_tag"}:
+            tagged_only += 1
         task = (plan.get("payload") or {}).get("task") or {}
         if (task.get("ragIndicatorConstraints") or {}).get("status") == "matched":
             rag_matched += 1
@@ -277,4 +305,4 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
             application_allowed += 1
         if task.get("permissionBudgetGate"):
             budget_checked += 1
-    return {"version": RISK_TASK_VERSION, "total": len(plans), "byLevel": dict(by_level), "ragMatchedCount": rag_matched, "highRiskGatePassedCount": gate_passed, "investmentApplicationAllowedCount": application_allowed, "budgetCheckedCount": budget_checked, "latestPlans": plans}
+    return {"version": RISK_TASK_VERSION, "total": len(plans), "byLevel": dict(by_level), "taggedOnlyCount": tagged_only, "ragMatchedCount": rag_matched, "highRiskGatePassedCount": gate_passed, "investmentApplicationAllowedCount": application_allowed, "budgetCheckedCount": budget_checked, "latestPlans": plans}
