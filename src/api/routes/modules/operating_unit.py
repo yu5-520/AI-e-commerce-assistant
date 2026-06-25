@@ -1,4 +1,4 @@
-"""Operating unit route for V11.7 business object first ingestion."""
+"""Operating unit route for V11.9 object-sync hard verification."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from src.services.operating_object_store_service import list_operating_products,
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.7.0"
+OPERATING_UNIT_VERSION = "11.9.0"
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -256,5 +256,5 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "operatingJudgment": build_operating_judgment(store_rows, task_counters),
         "tasks": task_counters,
         "objectStore": object_summary,
-        "rule": "经营单元展示清洗入库后的商品/店铺对象；任务生成只是后续动作层，不反向决定商品店铺是否显示。",
+        "rule": "V11.9 经营单元只展示经营对象主档真实可读结果；导入成功必须绑定商品/店铺入库结果。",
     }
