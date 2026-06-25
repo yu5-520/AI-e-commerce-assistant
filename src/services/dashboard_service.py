@@ -1,4 +1,4 @@
-"""Dashboard service for the V10.3 task workbench runtime."""
+"""Dashboard service for the V11.1 productized task workbench."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.services.module_projection_service import DATASET_LABELS, projection_su
 from src.services.module_task_service import DONE_STATUS, PRIORITY_RANK, get_task_counters_for_user, list_logs, list_tasks
 from src.services.report_alert_service import get_v3_dashboard_summary
 
-DASHBOARD_VERSION = "10.3.0"
+DASHBOARD_VERSION = "11.1.0"
 DEADLINE_RANK = {"今天内": 1, "今日": 1, "明天前": 2, "明天": 2, "48小时内": 3, "本周内": 4}
 DASHBOARD_WORKBENCH_SECTIONS = ["todayPriorityTasks", "highRiskItems", "latestReportResult", "pendingReviewItems", "completionProgress"]
 
@@ -39,6 +39,10 @@ def _deadline_rank(task: Dict[str, Any]) -> int:
     return 9
 
 
+def _is_front_task(task: Dict[str, Any]) -> bool:
+    return task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag"}
+
+
 def _report_summary(groups: List[Dict[str, Any]], projection: Dict[str, Any]) -> Dict[str, Any]:
     imported: List[Dict[str, Any]] = []
     total_rows = 0
@@ -51,16 +55,18 @@ def _report_summary(groups: List[Dict[str, Any]], projection: Dict[str, Any]) ->
     latest_dataset = projection.get("latestDatasetName")
     latest_label = DATASET_LABELS.get(latest_dataset, "最新数据") if latest_dataset else "暂无数据"
     latest_report = next((item for item in reversed(imported) if item.get("id") == latest_dataset), None) or (imported[-1] if imported else None)
+    synced = bool(imported or projection.get("latestDataVersion"))
     return {
         "label": latest_report.get("name") if latest_report else latest_label,
-        "status": "已入库" if imported else "待导入",
+        "status": "已同步" if synced else "待同步",
         "rows": _count_value(latest_report.get("count")) if latest_report else 0,
         "totalRows": total_rows,
         "importedCount": len(imported),
-        "affectedModules": ["报表", "总览", "经营", "任务"] if imported else [],
+        "affectedModules": ["总览", "经营", "数据", "任务队列"] if synced else [],
         "latestSyncedAt": _short_time(projection.get("latestSnapshotAt")),
         "technicalDataVersion": projection.get("latestDataVersion"),
         "technicalDatasetName": latest_dataset,
+        "userSummary": "经营数据、商品标签、店铺权重和任务队列已更新。" if synced else "等待报表同步。",
     }
 
 
@@ -93,48 +99,52 @@ def _task_card(task: Dict[str, Any], rank: int) -> Dict[str, Any]:
 
 
 def _task_queue(tasks: List[Dict[str, Any]], limit: int = 6) -> List[Dict[str, Any]]:
-    sorted_tasks = sorted(tasks, key=lambda task: (PRIORITY_RANK.get(task.get("priority"), 9), _deadline_rank(task), task.get("manualOrder", 999999999), task.get("createdAt", "")))
+    front_tasks = [task for task in tasks if _is_front_task(task)]
+    sorted_tasks = sorted(front_tasks, key=lambda task: (PRIORITY_RANK.get(task.get("priority"), 9), _deadline_rank(task), task.get("manualOrder", 999999999), task.get("createdAt", "")))
     return [_task_card(task, index) for index, task in enumerate(sorted_tasks[:limit], start=1)]
 
 
 def _is_high_risk(task: Dict[str, Any]) -> bool:
-    return task.get("priority") == "高" or task.get("priorityLevel") == "danger" or "高风险" in " ".join(task.get("judgmentTags") or [])
+    return _is_front_task(task) and (task.get("priority") == "高" or task.get("priorityLevel") == "danger" or "高风险" in " ".join(task.get("judgmentTags") or []))
 
 
 def _is_review_task(task: Dict[str, Any]) -> bool:
-    return task.get("status") in {"待复核", "已提交"} or task.get("workflowStatus") in {"待复核", "已提交"}
+    return _is_front_task(task) and (task.get("status") in {"待复核", "已提交"} or task.get("workflowStatus") in {"待复核", "已提交"})
 
 
 def _dashboard_workbench(active_tasks: List[Dict[str, Any]], all_tasks: List[Dict[str, Any]], report_summary: Dict[str, Any], counters: Dict[str, Any]) -> Dict[str, Any]:
-    priority_tasks = _task_queue(active_tasks, limit=5)
-    high_risk = _task_queue([task for task in active_tasks if _is_high_risk(task)], limit=3)
-    review_items = _task_queue([task for task in active_tasks if _is_review_task(task)], limit=3)
+    front_tasks = [task for task in active_tasks if _is_front_task(task)]
+    priority_tasks = _task_queue(front_tasks, limit=5)
+    high_risk = _task_queue([task for task in front_tasks if _is_high_risk(task)], limit=3)
+    review_items = _task_queue([task for task in front_tasks if _is_review_task(task)], limit=3)
     completed_count = len([task for task in all_tasks if task.get("status") in DONE_STATUS])
-    total_count = max(len(all_tasks), completed_count + len(active_tasks), 1)
+    total_count = max(completed_count + len(front_tasks), 1)
     completion_rate = round(completed_count / total_count * 100)
+    no_task_text = "当前无需要立即处理的高风险任务，低风险信号已沉淀为商品 / 店铺标签。"
     report_result = {
         "label": report_summary.get("label"),
         "status": report_summary.get("status"),
-        "summary": f"{report_summary.get('status')} · {report_summary.get('totalRows', 0)} 条记录 · 同步到 {' / '.join(report_summary.get('affectedModules') or ['总览'])}",
-        "taskHint": f"当前可见 {len(active_tasks)} 个任务",
+        "summary": report_summary.get("userSummary") or "经营数据已同步。",
+        "taskHint": f"执行任务 {len(front_tasks)} 个",
         "updatedModules": report_summary.get("affectedModules") or [],
         "latestSyncedAt": report_summary.get("latestSyncedAt"),
     }
     return {
-        "mode": "today_task_workbench",
+        "mode": "v11_1_today_task_workbench",
         "sections": DASHBOARD_WORKBENCH_SECTIONS,
         "todayPriorityTasks": priority_tasks,
         "highRiskItems": high_risk,
         "latestReportResult": report_result,
         "pendingReviewItems": review_items,
+        "emptyPriorityText": no_task_text,
         "completionProgress": {
-            "visibleActive": counters.get("visibleActive", len(active_tasks)),
-            "processing": counters.get("processing", 0),
-            "pendingReview": counters.get("reviewing", len(review_items)),
-            "returned": counters.get("returned", 0),
+            "visibleActive": len(front_tasks),
+            "processing": len([task for task in front_tasks if task.get("status") == "处理中"]),
+            "pendingReview": len(review_items),
+            "returned": len([task for task in front_tasks if task.get("workflowStatus") == "已退回"]),
             "completed": completed_count,
             "completionRate": completion_rate,
-            "summary": f"已完成 {completed_count} 个，当前可见待办 {len(active_tasks)} 个",
+            "summary": f"已完成 {completed_count} 个，当前执行任务 {len(front_tasks)} 个",
         },
     }
 
@@ -149,14 +159,14 @@ def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
     reports = projected_report_groups(user_id)
     logs = list_logs()[:5]
     report_summary = _report_summary(reports, projection)
-    has_data = bool(projection.get("hasData") or report_summary["importedCount"] or active_tasks or logs)
-    task_queue = _task_queue(active_tasks)
-    high_tasks = [task for task in active_tasks if _is_high_risk(task)]
+    has_data = bool(projection.get("hasData") or report_summary["importedCount"] or active_tasks or logs or products)
     workbench = _dashboard_workbench(active_tasks, all_tasks, report_summary, counters)
+    front_tasks = [task for task in active_tasks if _is_front_task(task)]
+    high_tasks = [task for task in front_tasks if _is_high_risk(task)]
     return {
         "apiEntry": "/api/modules/dashboard",
         "version": DASHBOARD_VERSION,
-        "dashboardMode": "today_task_workbench",
+        "dashboardMode": "v11_1_today_task_workbench",
         "workbenchSections": DASHBOARD_WORKBENCH_SECTIONS,
         "hasData": has_data,
         "emptyState": "暂无数据",
@@ -165,15 +175,16 @@ def get_dashboard_summary(user_id: str | None = None) -> Dict[str, Any]:
         "latestImport": report_summary,
         "metrics": [
             {"label": "优先任务", "value": len(workbench["todayPriorityTasks"]), "desc": "今日先处理"},
-            {"label": "高风险", "value": len(high_tasks), "desc": "需要关注"},
+            {"label": "高风险", "value": len(high_tasks), "desc": "执行队列"},
             {"label": "待复核", "value": workbench["completionProgress"]["pendingReview"], "desc": "等待确认"},
             {"label": "完成率", "value": f"{workbench['completionProgress']['completionRate']}%", "desc": "任务进度"},
         ],
-        "taskQueue": task_queue,
-        "tasks": active_tasks[:6],
+        "taskQueue": workbench["todayPriorityTasks"],
+        "tasks": front_tasks[:6],
         "todayWorkbench": workbench,
         "recentLogs": logs,
         "v3": v3_summary,
         "projection": projection,
         "productsCount": len(products),
+        "rule": "V11.1 总览不展示后端入库行数，只展示经营同步结果和执行任务。",
     }
