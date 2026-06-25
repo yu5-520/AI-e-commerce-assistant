@@ -14,12 +14,13 @@ APP_PORT="${APP_PORT:-3000}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 RUN_USER="${RUN_USER:-$(id -un)}"
 RUN_GROUP="${RUN_GROUP:-$(id -gn)}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTHON_BIN="${PYTHON_BIN:-}"
 EXPECTED_VERSION="${EXPECTED_VERSION:-}"
 INSTALL_SYSTEMD_OVERRIDE="${INSTALL_SYSTEMD_OVERRIDE:-1}"
 PIP_INDEX_URLS="${PIP_INDEX_URLS:-https://pypi.org/simple https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple https://pypi.mirrors.ustc.edu.cn/simple}"
 PIP_TIMEOUT="${PIP_TIMEOUT:-60}"
 PIP_RETRIES="${PIP_RETRIES:-3}"
+BOOTSTRAP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 SHARED_DIR="$DEPLOY_ROOT/shared"
@@ -40,6 +41,47 @@ fail() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"
+}
+
+python_version_ok() {
+  local candidate="$1"
+  "$candidate" - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+}
+
+python_version_text() {
+  local candidate="$1"
+  "$candidate" - <<'PY' 2>/dev/null || true
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+PY
+}
+
+resolve_python() {
+  if [ -n "$PYTHON_BIN" ]; then
+    command -v "$PYTHON_BIN" >/dev/null 2>&1 || [ -x "$PYTHON_BIN" ] || fail "PYTHON_BIN not found: $PYTHON_BIN"
+    python_version_ok "$PYTHON_BIN" || fail "PYTHON_BIN must be Python >= 3.10, got $(python_version_text "$PYTHON_BIN") at $PYTHON_BIN"
+    return 0
+  fi
+
+  local candidate resolved
+  for candidate in "$BOOTSTRAP_DIR/.venv/bin/python" python3.12 python3.11 python3.10 python3 python; do
+    if [ -x "$candidate" ]; then
+      resolved="$candidate"
+    else
+      resolved="$(command -v "$candidate" 2>/dev/null || true)"
+    fi
+    [ -n "$resolved" ] || continue
+    if python_version_ok "$resolved"; then
+      PYTHON_BIN="$resolved"
+      log "selected python: $PYTHON_BIN ($(python_version_text "$PYTHON_BIN"))"
+      return 0
+    fi
+    log "skip python candidate: $resolved ($(python_version_text "$resolved"))"
+  done
+  fail "No Python >= 3.10 found. Install python3.10+ or run with PYTHON_BIN=/opt/ai-ecommerce-assistant/.venv/bin/python bash scripts/deploy_atomic.sh"
 }
 
 retry() {
@@ -76,13 +118,13 @@ trap 'on_error $LINENO' ERR
 
 preflight() {
   require_cmd git
-  require_cmd "$PYTHON_BIN"
   require_cmd sudo
   require_cmd curl
   mkdir -p "$DEPLOY_ROOT"
   sudo mkdir -p "$RELEASES_DIR" "$SHARED_DIR/logs"
   sudo chown -R "$RUN_USER:$RUN_GROUP" "$DEPLOY_ROOT"
   touch "$LOG_FILE"
+  resolve_python
 
   git config --global --add safe.directory "$DEPLOY_ROOT" >/dev/null 2>&1 || true
   git config --global http.version HTTP/1.1
@@ -131,7 +173,7 @@ create_release() {
     ln -sfn "$SHARED_DIR/.env" .env
   fi
 
-  log "create virtualenv"
+  log "create virtualenv with $PYTHON_BIN ($(python_version_text "$PYTHON_BIN"))"
   "$PYTHON_BIN" -m venv .venv
   # shellcheck disable=SC1091
   source .venv/bin/activate
