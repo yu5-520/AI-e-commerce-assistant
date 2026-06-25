@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
 
@@ -10,9 +10,29 @@ from src.api.routes.modules.common import find_or_404
 from src.services.account_service import user_id_from_headers
 from src.services.module_projection_service import projected_products
 from src.services.module_task_service import create_task, visible_candidates
+from src.services.operating_object_store_service import list_operating_products
 from src.services.report_alert_service import attach_alert_state
 
 router = APIRouter()
+
+
+def _merge_products(projected: List[Dict[str, Any]], master: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen: Dict[str, Dict[str, Any]] = {}
+    for item in [*master, *projected]:
+        product_id = str(item.get("id") or item.get("productId") or "").strip()
+        if not product_id:
+            continue
+        store_id = str(item.get("storeId") or item.get("store") or item.get("storeName") or "GLOBAL").strip()
+        key = f"{store_id}::{product_id}"
+        if key not in seen:
+            seen[key] = dict(item)
+        else:
+            seen[key].update({key2: value for key2, value in item.items() if value not in {None, "", "—"}})
+    return list(seen.values())
+
+
+def product_items(user_id: str | None) -> List[Dict[str, Any]]:
+    return _merge_products(projected_products(user_id), list_operating_products(user_id))
 
 
 def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -57,12 +77,12 @@ def with_alert_state(item: Dict[str, Any], user_id: str | None = None) -> Dict[s
 @router.get("/product")
 def product(request: Request) -> list[Dict[str, Any]]:
     user_id = user_id_from_headers(request.headers)
-    items = projected_products(user_id)
+    items = product_items(user_id)
     return [with_alert_state(item, user_id) for item in visible_candidates(items, product_task_payload)]
 
 
 @router.post("/product/{product_id}/tasks")
 def product_task(request: Request, product_id: str) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
-    item = find_or_404(projected_products(user_id), product_id, "product")
+    item = find_or_404(product_items(user_id), product_id, "product")
     return create_task(product_task_payload(item))
