@@ -8,7 +8,7 @@
     { sourceId: "crm", label: "CRM 接口", priority: "primary", displayStatus: "待配置", cadence: "1小时 / 每日", dataScope: ["客户", "售后", "退款", "标签"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "同步 CRM" },
     { sourceId: "platform", label: "平台后台 API", priority: "primary", displayStatus: "待配置", cadence: "15分钟 / 1小时", dataScope: ["商品", "订单", "评价", "售后"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "同步平台" },
     { sourceId: "ads", label: "广告后台 API", priority: "primary", displayStatus: "待配置", cadence: "15分钟 / 每日", dataScope: ["投放", "ROI", "点击", "转化"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "同步广告" },
-    { sourceId: "manual_upload", label: "手动上传", priority: "backup", displayStatus: "备用入口", cadence: "临时补录", dataScope: ["历史数据", "异常补数"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "上传文件" },
+    { sourceId: "manual_upload", label: "手动上传", priority: "backup", displayStatus: "备用入口", cadence: "临时补录", dataScope: ["Excel", "CSV", "JSON"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "上传文件" },
   ];
 
   function realRecords(payload) {
@@ -65,9 +65,9 @@
 
   function uploadSection() {
     return `<section class="page-section v102-main-section"><div class="section-header"><h3>备用上传</h3><span class="status-badge">兜底入口</span></div>
-      <input type="file" data-manual-file-input accept=".csv,.json,text/csv,application/json" style="display:none" />
+      <input type="file" data-manual-file-input accept=".xlsx,.xlsm,.xls,.csv,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/json" style="display:none" />
       <div class="report-record-list">
-        <article class="report-record-row"><strong>手动上传 CSV / JSON</strong><span>备用补数</span><span>接口未开通或异常时使用</span><button type="button" class="secondary" data-open-upload>选择文件</button></article>
+        <article class="report-record-row"><strong>手动上传 Excel / CSV / JSON</strong><span>备用补数</span><span>接口未开通或异常时使用</span><button type="button" class="secondary" data-open-upload>选择文件</button></article>
         <article class="report-record-row"><strong>演示数据同步</strong><span>Demo</span><span>生成测试任务和记录</span><button type="button" class="secondary" data-import-demo>运行演示</button></article>
         <article class="report-record-row"><strong>清空测试数据</strong><span>Demo</span><span>重置总览、经营、任务、数据和日志</span><button type="button" class="secondary" data-reset-demo>清空数据</button></article>
       </div>
@@ -118,6 +118,13 @@
       return rows.filter((item) => item && typeof item === "object");
     }
     return parseCsv(text);
+  }
+
+  function uploadSummary(result, file) {
+    const meta = result?.uploadMeta || {};
+    const rows = meta.totalRows ?? result?.rowCount ?? result?.v104ImportTaskSync?.rowCount ?? 0;
+    const sheetText = meta.sheetCount ? `，识别 ${meta.sheetCount} 个 Sheet` : "";
+    return `备用上传完成：${file.name}，读取 ${rows} 行${sheetText}。`;
   }
 
   function setSourceMessage(text) {
@@ -189,15 +196,18 @@
       ctx.on("[data-manual-file-input]", "change", async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        setSourceMessage(`正在读取备用文件：${file.name}`);
+        setSourceMessage(`正在上传并解析备用文件：${file.name}`);
         try {
-          const rows = await parseUploadFile(file);
-          if (!rows.length) throw new Error("没有读取到有效数据行。");
-          const result = await AppApi.confirmReportImport("auto", rows, {}, "manual_upload");
-          if (!result) throw new Error("后端导入接口不可用。");
+          let result = await AppApi.uploadReportFile?.(file, "auto", "manual_upload");
+          if (!result && /\.(csv|json)$/i.test(file.name || "")) {
+            const rows = await parseUploadFile(file);
+            if (!rows.length) throw new Error("没有读取到有效数据行。");
+            result = await AppApi.confirmReportImport("auto", rows, {}, "manual_upload");
+          }
+          if (!result) throw new Error("后端导入接口不可用，或文件格式暂未被当前服务支持。");
           await AppApi.refreshAfterDataImport(result);
           lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null;
-          setSourceMessage(`备用上传完成：${file.name}，读取 ${rows.length} 行。`);
+          setSourceMessage(uploadSummary(result, file));
           AppRouter.schedule("v1012-manual-upload");
         } catch (error) {
           setSourceMessage(`备用上传失败：${error.message || error}`);
