@@ -11,10 +11,11 @@ from src.services.account_service import user_id_from_headers
 from src.services.module_projection_service import projected_products
 from src.services.module_task_service import create_task, visible_candidates
 from src.services.operating_object_store_service import list_operating_products
+from src.services.product_archive_detail_service import enrich_product_archive_detail
 from src.services.report_alert_service import attach_alert_state
 
 router = APIRouter()
-PRODUCT_ARCHIVE_VERSION = "11.17.0"
+PRODUCT_ARCHIVE_VERSION = "12.1.2"
 
 
 def _has_value(value: Any) -> bool:
@@ -112,7 +113,7 @@ def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
         "title": item.get("title") or item.get("productId") or item["id"],
         "platform": item.get("platform") or "导入数据",
         "store": item.get("storeName") or item.get("store") or "未绑定店铺",
-        "link": item.get("link") or "",
+        "link": item.get("link") or item.get("productLink") or "",
         "priority": "高" if high_risk else "中",
         "priorityLevel": "danger" if high_risk else "warning",
         "deadline": "今天内" if high_risk else "明天前",
@@ -130,11 +131,23 @@ def with_alert_state(item: Dict[str, Any], user_id: str | None = None) -> Dict[s
     return attach_alert_state(item, "商品", item["id"], user_id=user_id)
 
 
+def _visible_enriched_products(user_id: str | None, store_id: str | None = None, store_name: str | None = None) -> List[Dict[str, Any]]:
+    items = visible_candidates(product_items(user_id, store_id=store_id, store_name=store_name), product_task_payload)
+    with_alerts = [with_alert_state(item, user_id) for item in items]
+    return [enrich_product_archive_detail(item) for item in with_alerts]
+
+
 @router.get("/product")
 def product(request: Request, store_id: str | None = Query(None, alias="storeId"), store_name: str | None = Query(None, alias="storeName")) -> list[Dict[str, Any]]:
     user_id = user_id_from_headers(request.headers)
-    items = product_items(user_id, store_id=store_id, store_name=store_name)
-    return [with_alert_state(item, user_id) for item in visible_candidates(items, product_task_payload)]
+    return _visible_enriched_products(user_id, store_id=store_id, store_name=store_name)
+
+
+@router.get("/product/{product_id}")
+def product_detail(request: Request, product_id: str) -> Dict[str, Any]:
+    user_id = user_id_from_headers(request.headers)
+    item = find_or_404(_visible_enriched_products(user_id), product_id, "product")
+    return item
 
 
 @router.post("/product/{product_id}/tasks")
