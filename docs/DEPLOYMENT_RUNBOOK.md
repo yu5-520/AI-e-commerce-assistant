@@ -1,6 +1,6 @@
-# V12.3 部署 Runbook
+# V12.4 部署 Runbook
 
-本文件只保留服务器部署、版本一致性和排障边界，不写长篇架构解释。旧部署说明进入提交历史或 `docs/archive/`，不作为当前部署依据。
+本文件只保留服务器部署、版本一致性和排障边界。V12.4 的核心验收是：事实层稳定、文档治理稳定、数据源/账号契约稳定，并且经营节奏任务系统能在非红线波动下生成日报/周报素材和日常经营任务。
 
 ## 1. 部署分层
 
@@ -9,8 +9,6 @@ Demo 高频小改：scripts/deploy_fast.sh
 阶段轻量发布：scripts/deploy_atomic.sh
 客户 / 生产发布：LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/deploy_atomic.sh
 ```
-
-当前 Demo 阶段默认使用快速部署，目标是每次小改 30 秒到 2 分钟内完成验证。
 
 ## 2. Demo 快速部署行为
 
@@ -29,8 +27,6 @@ Demo 高频小改：scripts/deploy_fast.sh
 12. /api/health 版本通过后完成。
 ```
 
-适合：前端 UI、按钮跳转、字段文案、普通接口字段、普通 service 逻辑和 Demo 高频测试。
-
 ## 3. 依赖安装边界
 
 只有 requirements.txt 变化时才设置：
@@ -41,42 +37,16 @@ FORCE_INSTALL_REQUIREMENTS=1
 
 requirements.txt 没变时，Demo 快速部署禁止反复 pip install。
 
-## 4. 轻量原子部署边界
-
-阶段版本或一整天收口后使用：
-
-```bash
-bash scripts/deploy_atomic.sh
-```
-
-轻量原子部署继续使用：
-
-```text
-/opt/ai-ecommerce-assistant-deploy/releases
-/opt/ai-ecommerce-assistant-deploy/current
-/opt/ai-ecommerce-assistant-deploy/shared/.venv
-```
-
-## 5. 生产部署边界
-
-客户环境或多人使用环境再开启严格发布：
-
-```text
-LIGHT_DEPLOY=0
-ROUTE_GUARD_MODE=strict
-RUNTIME_ROUTE_GUARD=strict
-```
-
-生产默认禁止前端 mock 身份；ECS Demo 只有明确设置 `DEMO_ACCOUNT_SWITCH=true` 时才允许账号切换验证。
-
-## 6. 部署前检查项
+## 4. 部署前检查项
 
 ```text
 VERSION.md
 versioning/VERSION.md
 src/api/main.py:API_VERSION
 src/api/routes/health.py:API_VERSION
-web_demo/index.html?v=12.3.0
+web_demo/index.html?v=12.4.0
+src/services/risk_task_service.py
+src/services/operating_cadence_task_service.py
 scripts/verify_release.py
 scripts/check_repo_hygiene.py
 docs/API_CONTRACT.md
@@ -84,7 +54,7 @@ docs/MODULE_CHAIN.md
 docs/DEPLOYMENT_RUNBOOK.md
 ```
 
-## 7. 部署后验收接口
+## 5. 部署后验收接口
 
 ```bash
 curl http://127.0.0.1:8000/api/health
@@ -98,16 +68,19 @@ curl http://127.0.0.1:8000/api/system/runtime-diagnostics
 重点验收：
 
 ```text
-/api/health 返回 12.3.0。
-web_demo/index.html 只出现 12.3.0 资源版本。
+/api/health 返回 12.4.0。
+web_demo/index.html 只出现 12.4.0 资源版本。
 GET /api/data/source-connections 不返回 404。
 账号切换在 Demo 开关开启时不返回 403。
 导入真实 ERA 表后，importDiagnostics.layoutMode = sheet_block_fact_gap_staging。
 商品页事实表未命中显示“未识别”，不显示 0，不读对象缓存。
+riskTaskSync.mode = v12_4_redline_plus_operating_cadence_agent_task_generation。
+riskTaskSync.operatingCadenceSync.signalCount >= 0。
+多份报表形成 3/7/14/30/90 天趋势窗口后，应生成 daily_operating_task、候选任务或日报/周报信号。
 任务 evidenceGate 返回 metricScope / requiredFactTables / forbiddenCrossScope。
 ```
 
-## 8. Demo 数据清理
+## 6. Demo 数据清理
 
 清空的是全运行态，不只是导入行。清空范围包括：
 
@@ -124,6 +97,7 @@ report_records
 data_snapshots
 metric_snapshots
 business_signals_v6
+operating_cadence_signals
 alert_events
 imported_report_rows
 operating_products
@@ -136,7 +110,7 @@ data_gap_events
 
 账号、角色、权限和基础店铺配置必须保留。
 
-## 9. 禁止事项
+## 7. 禁止事项
 
 ```text
 不要 fetch 失败后继续 reset。
@@ -145,12 +119,12 @@ data_gap_events
 不要让 VERSION.md 和 versioning/VERSION.md 不一致。
 不要让 docs/API_CONTRACT.md 记录不存在的 FastAPI 路由。
 不要把 frontend/ 当作当前前端入口。
-不要把旧 V1-V11 文档当作当前架构依据。
 不要用对象缓存给商品页经营指标托底。
 不要用 traffic_source ROI 覆盖 product ROI。
+不要让任务生成只依赖单一基线；非红线波动必须进入经营节奏判断。
 ```
 
-## 10. 当前推荐节奏
+## 8. 当前推荐节奏
 
 ```text
 每次小改：bash scripts/deploy_fast.sh
