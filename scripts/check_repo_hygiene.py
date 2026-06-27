@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Repository hygiene checker for docs, versions, and current route contracts.
 
-V11.15 purpose:
+V11.16 purpose:
 - keep VERSION.md, FastAPI app.version, health.API_VERSION and web asset versions aligned;
-- make README the current entry index instead of a version-history dump;
+- keep README and runbook tied to the current minor version dynamically;
 - warn when API_CONTRACT routes do not map to the running FastAPI app;
 - fail only on issues that can break deployment or mislead the next code change.
 """
@@ -30,11 +30,11 @@ REQUIRED_DOCS = [
     "docs/POSTGRESQL_CUTOVER.md",
 ]
 
-MUST_CONTAIN = {
-    "README.md": ["V11.15", "scripts/check_repo_hygiene.py", "reset-runtime-data"],
-    "docs/MODULE_CHAIN.md": ["operating_object_store_service", "v116_import_closed_loop_service", "dirty_runtime_residue"],
+STATIC_MUST_CONTAIN = {
+    "README.md": ["scripts/check_repo_hygiene.py", "reset-runtime-data", "AppApi.product"],
+    "docs/MODULE_CHAIN.md": ["operating_object_store_service", "v116_import_closed_loop_service", "dirty_runtime_residue", "AppApi.product"],
     "docs/API_CONTRACT.md": ["/api/data/versions/{data_version}/detail", "/api/system/reset-runtime-data?confirm=true", "business_signals_v6"],
-    "docs/DEPLOYMENT_RUNBOOK.md": ["V11.15", "check_repo_hygiene.py", "business_signals_v6"],
+    "docs/DEPLOYMENT_RUNBOOK.md": ["check_repo_hygiene.py", "business_signals_v6", "/api/modules/product"],
 }
 
 
@@ -48,6 +48,10 @@ def read_version() -> str:
     if not match:
         raise AssertionError("versioning/VERSION.md missing `Current Version: x.y.z`")
     return match.group(1)
+
+
+def version_minor_marker(version: str) -> str:
+    return f"V{version.rsplit('.', 1)[0]}"
 
 
 def index_asset_versions() -> set[str]:
@@ -108,6 +112,7 @@ def main() -> int:
     warnings: list[str] = []
 
     version = read_version()
+    current_marker = version_minor_marker(version)
     from src.api.main import app
     from src.api.routes import health
 
@@ -121,8 +126,11 @@ def main() -> int:
         errors.append(f"web_demo/index.html asset versions are {sorted(assets)}, expected only {version}")
 
     readme = read_text("README.md")
-    if f"V{version.rsplit('.', 1)[0]}" not in readme and version not in readme:
-        errors.append("README.md does not mention the current version")
+    runbook = read_text("docs/DEPLOYMENT_RUNBOOK.md")
+    if current_marker not in readme and version not in readme:
+        errors.append(f"README.md does not mention the current version marker {current_marker}")
+    if current_marker not in runbook and version not in runbook:
+        errors.append(f"docs/DEPLOYMENT_RUNBOOK.md does not mention the current version marker {current_marker}")
 
     for doc in REQUIRED_DOCS:
         if not (ROOT / doc).exists():
@@ -130,7 +138,7 @@ def main() -> int:
         elif doc not in readme:
             errors.append(f"README.md does not index required doc: {doc}")
 
-    for path, needles in MUST_CONTAIN.items():
+    for path, needles in STATIC_MUST_CONTAIN.items():
         text = read_text(path)
         for needle in needles:
             if needle not in text:
@@ -148,6 +156,7 @@ def main() -> int:
     result: dict[str, Any] = {
         "ok": not errors,
         "version": version,
+        "versionMarker": current_marker,
         "appVersion": str(app.version),
         "healthVersion": getattr(health, "API_VERSION", None),
         "assetVersions": sorted(assets),
