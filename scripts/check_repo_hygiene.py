@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Repository hygiene checker for docs, versions, and current route contracts.
 
-V11.16 purpose:
+V11.17 purpose:
 - keep VERSION.md, FastAPI app.version, health.API_VERSION and web asset versions aligned;
 - keep README and runbook tied to the current minor version dynamically;
 - warn when API_CONTRACT routes do not map to the running FastAPI app;
