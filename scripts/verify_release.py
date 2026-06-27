@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Release consistency verifier.
 
-V11.16 rule:
+V12.3 rule:
 Version alignment is a hard gate. Route inspection is a deployability signal,
 with warning mode by default for low-spec ECS and transitional routers.
 Set --route-mode strict or ROUTE_GUARD_MODE=strict to make missing routes block
@@ -28,6 +28,10 @@ CRITICAL_ROUTES = {
     "/api/modules/operating-unit",
     "/api/modules/product",
     "/api/modules/todo",
+    "/api/data/source-connections",
+    "/api/data/metric-facts/summary",
+    "/api/data/data-gaps/summary",
+    "/api/data/import-diagnostics",
     "/api/system/runtime-diagnostics",
     "/api/system/reset-runtime-data",
     "/api/system/backfill-operating-objects",
@@ -41,9 +45,16 @@ def normalize_path(path: str) -> str:
     return text
 
 
-def read_version() -> str:
-    version_file = ROOT / "versioning" / "VERSION.md"
-    text = version_file.read_text(encoding="utf-8")
+def read_root_version() -> str:
+    text = (ROOT / "VERSION.md").read_text(encoding="utf-8")
+    match = re.search(r"```text\s*([0-9]+\.[0-9]+\.[0-9]+)\s*```", text, re.S)
+    if not match:
+        raise AssertionError("VERSION.md missing fenced semantic version")
+    return match.group(1)
+
+
+def read_versioning_version() -> str:
+    text = (ROOT / "versioning" / "VERSION.md").read_text(encoding="utf-8")
     match = re.search(r"Current Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", text)
     if not match:
         raise AssertionError("versioning/VERSION.md missing `Current Version: x.y.z`")
@@ -72,14 +83,18 @@ def route_present(routes: set[str], expected: str) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify release consistency before deployment.")
-    parser.add_argument("--expected-version", default=None, help="Optional expected semantic version, e.g. 11.16.0")
+    parser.add_argument("--expected-version", default=None, help="Optional expected semantic version, e.g. 12.3.0")
     parser.add_argument("--json", action="store_true", help="Print JSON result")
     parser.add_argument("--route-mode", choices=["warn", "strict", "off"], default=os.getenv("ROUTE_GUARD_MODE", "warn"), help="How to treat missing critical routes. Default: warn")
     args = parser.parse_args()
 
     errors: list[str] = []
     warnings: list[str] = []
-    version = read_version()
+    root_version = read_root_version()
+    versioning_version = read_versioning_version()
+    version = root_version
+    if root_version != versioning_version:
+        errors.append(f"VERSION.md is {root_version}, versioning/VERSION.md is {versioning_version}")
     if args.expected_version and version != args.expected_version:
         errors.append(f"VERSION.md is {version}, expected {args.expected_version}")
 
@@ -109,6 +124,8 @@ def main() -> int:
     result: dict[str, Any] = {
         "ok": not errors,
         "version": version,
+        "rootVersion": root_version,
+        "versioningVersion": versioning_version,
         "appVersion": str(app.version),
         "healthVersion": getattr(health, "API_VERSION", None),
         "assetVersions": sorted(asset_versions),
