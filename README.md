@@ -1,26 +1,28 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V12.1.6 报表画像 Agent、系统标准编码、独立指标事实表、Sheet 画像分流、商品事实详情页、数据缺口池、任务证据闸门和导入诊断验收。
+当前基线：V12.2.2 报表布局 Agent、行列坐标保留、Block 级事实写入、商品指标事实表 fail-closed。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、Sheet 分流、商品入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、商品定位详情、导入诊断验收、趋势信号、证据闸门、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表布局识别、单 Sheet 多区块拆分、商品入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、商品定位详情、导入诊断验收、趋势信号、证据闸门、执行任务、详情报告、复核留痕和演示运行态清空。
 
 ## 当前主链路
 
 ```text
 报表 / 接口数据导入
 → 当前账号识别
-→ 文件解析 / Sheet 保留 / 字段映射 / 校验
-→ V12 报表画像 Agent 判断 Sheet 结构和目标事实层
-→ V12.1.1 按 reportProfile.sheetProfiles + sheetRows 分 Sheet 写入事实表
+→ V12.2.1 文件解析保留 sheetRows / sheetMatrices / source_row_index / source_column_map
+→ V12.2.0 报表布局 Agent 判断 Sheet 内 blocks
+→ 一个 Sheet 可拆出 product / store / traffic_source / staging 多个区块
+→ V12.2.2 按 blockRows 写入 product_metric_facts / store_metric_facts / traffic_source_facts
 → V12.1.3 按 Sheet/指标聚合写入 data_gap_events，普通缺口只留痕
 → V12.1.5 生成 importDiagnostics 导入诊断验收
 → DataVersion / imported_report_rows / snapshots
 → operating_products / operating_stores 主档 upsert
 → 系统编码：STORE / SPU / LINK / SKU
-→ V12.1 独立事实表：product_metric_facts / store_metric_facts / traffic_source_facts
-→ V12.1.2 商品档案读取事实表，展示商品定位、指标事实、流量来源和任务摘要
+→ 商品档案只读 product_metric_facts 展示商品整体指标
+→ traffic_source_facts 只进入流量来源区
+→ store_metric_facts 只进入店铺层
 → 商品 / 店铺标签与权重
 → 趋势信号 business_signals_v6
 → V12.1.4 task_evidence_gate_service 任务证据闸门
@@ -33,7 +35,7 @@
 → v116 导入闭环反查
 ```
 
-## V12.1.6 可信展示规则
+## V12.2.2 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -51,12 +53,15 @@ API_CONTRACT 必须只记录真实可用接口。
 商品详情必须展示商品定位卡片、指标事实区、流量来源区和任务历史摘要。
 商品页只展示资产和定位；完整交叉验证、SOP 和提交证明在任务详情页处理。
 商品名称不作为商品同一性的主识别依据；系统编码、商品链接、ERP 编码、SKU、店铺编码才是主轴。
-上传解析必须保留 sheetRows，不能把多 Sheet 报表直接压平成一个单表逻辑。
-上传确认必须按 reportProfile.sheetProfiles + sheetRows 写入 product/store/traffic 三类事实表。
+上传解析必须保留 sheetRows、sheetMatrices、source_row_index、source_column_map。
+报表布局 Agent 必须输出 blocks，而不是只输出 sheet targetTable。
+上传确认必须按 block.targetTable + block.metricScope 写入 product/store/traffic 三类事实表。
 指标事实必须独立落表，不能只藏在 payload.metricFacts。
+商品整体指标只读 product_metric_facts；流量来源指标只读 traffic_source_facts；店铺指标只读 store_metric_facts。
+事实表未命中的指标显示“未识别”，不能显示 0，不能读商品对象缓存。
 普通缺口必须进入 data_gap_events 留痕，但不能生成任务。
 只有经营判断被关键证据阻塞时，任务证据闸门才允许把缺口升级为补证任务。
-导入完成必须返回 importDiagnostics，展示 Sheet、字段命中、事实写入、缺口和阻塞状态。
+导入完成必须返回 importDiagnostics，展示 Sheet、Block、字段命中、事实写入、缺口和阻塞状态。
 任务必须包含最低商品定位：商品ID / 店铺 / 系统编码或可追溯来源。
 ```
 
@@ -79,11 +84,11 @@ API_CONTRACT 必须只记录真实可用接口。
 /api/system/backfill-operating-objects 经营对象回填
 /api/system/repositories               Repository 状态
 /api/system/postgres-cutover-check     PostgreSQL 主写切换前检查
-/api/data/upload/preview               上传文件预览 + V12 报表画像
-/api/data/upload/confirm               上传确认导入 + 经营对象 / 独立指标事实 / 数据缺口 / 导入诊断同步
-/api/data/metric-facts/summary         V12.1 指标事实表统计
-/api/data/data-gaps/summary            V12.1.3 数据缺口池统计
-/api/data/import-diagnostics           V12.1.5 导入诊断验收
+/api/data/upload/preview               上传文件预览 + V12.2 报表布局画像
+/api/data/upload/confirm               上传确认导入 + 经营对象 / block事实 / 数据缺口 / 导入诊断同步
+/api/data/metric-facts/summary         指标事实表统计
+/api/data/data-gaps/summary            数据缺口池统计
+/api/data/import-diagnostics           导入诊断验收
 /api/architecture/v10/readiness         产品验收守卫
 ```
 
@@ -94,7 +99,7 @@ docs/PRODUCT_ARCHITECTURE.md      产品结构和模块边界
 docs/MODULE_CHAIN.md              AI 修改仓库的模块链定位图
 docs/API_CONTRACT.md              当前真实 API 契约
 docs/DATA_TASK_LIFECYCLE.md       数据、标签、任务、复核、日志生命周期
-docs/V12_REPORT_GATEWAY.md        V12/V12.1 报表画像 Agent 和指标事实层
+docs/V12_REPORT_GATEWAY.md        V12/V12.2 报表布局 Agent 和指标事实层
 docs/DEPLOYMENT_RUNBOOK.md        服务器部署和排障 SOP
 docs/POSTGRESQL_CUTOVER.md        PostgreSQL 主写切换边界
 scripts/deploy_fast.sh            Demo 快速部署脚本
@@ -143,4 +148,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。V12.1.1 上传文件会优先按 sheetRows 和 reportProfile.sheetProfiles 进行事实表分流。V12.1.2 商品详情页从独立事实表读取指标事实。V12.1.3 新增 data_gap_events，普通缺口只留痕，不生成任务。V12.1.4 新增任务证据闸门。V12.1.5 新增导入诊断验收。V12.1.6 对齐前端接口和产品化展示基线。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.2.2 已支持 source_block_id / source_row_index / source_column_index / metric_scope / source_block_type 写入事实表。商品对象主档只作为身份定位来源，商品经营指标展示必须从事实表读取，未命中显示“未识别”。
