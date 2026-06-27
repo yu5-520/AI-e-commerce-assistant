@@ -1,11 +1,11 @@
 """Operating object master store.
 
-V12 rule:
-- uploader is still the fallback ownership source for MVP imports;
-- report/ERP/CRM fields are treated as external identity anchors, not as the only
-  system identity;
-- product objects are keyed by store + product + sku/link/ERP anchors;
-- product cards expose structured定位字段 and metric facts instead of long titles.
+V12.2.3 rule:
+- operating_products / operating_stores are master-data identity records only;
+- ROI, payment amount, conversion, ad spend, inventory and other business metrics
+  must live in product/store/traffic fact tables;
+- product cards may be enriched from fact tables, but must not trust payload metric
+  cache or raw report rows.
 """
 
 from __future__ import annotations
@@ -17,21 +17,59 @@ from typing import Any, Dict, List, Mapping
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.account_service import current_user, default_reviewer, visible_store_ids_for_user
 from src.services.import_row_store_service import load_import_rows
-from src.services.metric_catalog_service import (
-    CATALOG_VERSION,
-    display_short_title,
-    extract_metric_facts,
-    format_metric,
-    metric_value,
-    pick,
-    product_identity,
-    stable_code,
-    system_codes,
-)
+from src.services.metric_catalog_service import CATALOG_VERSION, METRIC_ALIASES, canonical_field, display_short_title, pick, product_identity, stable_code, system_codes
 from src.services.report_alert_service import now_iso
 
-OPERATING_OBJECT_VERSION = "12.0.0"
-DATA_SCOPE_SOURCE = "uploader_account_fallback_with_v12_report_profile"
+OPERATING_OBJECT_VERSION = "12.2.3"
+DATA_SCOPE_SOURCE = "uploader_account_fallback_with_v12_2_layout_blocks"
+UNKNOWN_VALUE = "未识别"
+
+IDENTITY_PAYLOAD_KEYS = {
+    "rawStoreId",
+    "rawStoreName",
+    "normalizedStoreId",
+    "normalizedStoreName",
+    "productIdentity",
+    "systemCodes",
+    "sourceDatasets",
+    "sourceDataVersions",
+    "sourceRows",
+    "source",
+    "newStoreAutoCreated",
+    "importedByUserId",
+    "importedByRoleId",
+    "ownerUserId",
+    "assignedOperatorId",
+    "reviewerId",
+    "visibleUserIds",
+    "visibleRoleIds",
+    "dataScopeSource",
+    "identityCatalogVersion",
+    "objectStoreVersion",
+    "metricCacheDisabled",
+    "identityOnly",
+}
+
+METRIC_DISPLAY_KEYS = {
+    "inventory",
+    "sellableDays",
+    "avgOrderValue",
+    "price",
+    "paymentAmount",
+    "cost",
+    "costAmount",
+    "grossProfitAmount",
+    "grossMargin",
+    "roi",
+    "clickRate",
+    "conversionRate",
+    "refundRate",
+    "adSpend",
+    "organicVisitors",
+    "paidVisitors",
+    "metricFacts",
+    "metricCatalogVersion",
+}
 
 
 def ensure_operating_object_tables() -> None:
@@ -147,10 +185,6 @@ def _product_id(row: Dict[str, Any]) -> str | None:
     return ident.get("productId") or ident.get("erpProductCode") or ident.get("productLink") or None
 
 
-def _sku_id(row: Dict[str, Any]) -> str | None:
-    return product_identity(row).get("skuId")
-
-
 def _raw_store_id(row: Dict[str, Any]) -> str | None:
     return product_identity(row).get("storeId")
 
@@ -235,26 +269,64 @@ def _ownership(uploader_user_id: str | None, uploader_role_id: str | None) -> Di
         "visibleUserIds": list(dict.fromkeys(visible_user_ids)),
         "visibleRoleIds": list(dict.fromkeys(visible_role_ids)),
         "dataScopeSource": DATA_SCOPE_SOURCE,
-        "rule": "V12：上传人是兜底归属；ERP/CRM权限标签后续可覆盖，任务派发以最终经营对象归属为准。",
+        "rule": "V12.2.3：上传人是兜底归属；经营对象只保留身份定位，指标事实由事实表承接。",
+    }
+
+
+def _is_metric_like_key(key: str) -> bool:
+    if key in METRIC_DISPLAY_KEYS:
+        return True
+    canonical = canonical_field(key)
+    return bool(canonical and canonical in METRIC_ALIASES)
+
+
+def _strip_metric_cache(existing: Dict[str, Any]) -> Dict[str, Any]:
+    cleaned: Dict[str, Any] = {}
+    for key, value in (existing or {}).items():
+        if key in IDENTITY_PAYLOAD_KEYS and not _is_metric_like_key(str(key)):
+            cleaned[key] = value
+    return cleaned
+
+
+def _source_row_marker(row: Dict[str, Any], data_version: str | None, dataset_name: str | None) -> Dict[str, Any]:
+    return {
+        "dataVersion": data_version,
+        "datasetName": dataset_name,
+        "sourceSheet": row.get("__source_sheet"),
+        "sourceRowIndex": row.get("__source_row_index"),
+        "sourceBlockId": row.get("__source_block_id"),
+        "sourceBlockType": row.get("__source_block_type"),
+        "metricScope": row.get("__metric_scope"),
+        "rowHash": stable_code("ROW", dumps(row)),
     }
 
 
 def _merge_payload(existing: Dict[str, Any], row: Dict[str, Any], *, data_version: str | None, dataset_name: str | None, ownership: Dict[str, Any], raw_store_id: str | None, raw_store_name: str | None, normalized_store_id: str, normalized_store_name: str) -> Dict[str, Any]:
-    payload = dict(existing or {})
-    payload.update({str(key): value for key, value in row.items()})
+    payload = _strip_metric_cache(existing or {})
+    identity = product_identity(row)
+    codes = system_codes(row)
+    source_rows = list(payload.get("sourceRows") or [])
+    source_marker = _source_row_marker(row, data_version, dataset_name)
+    if source_marker not in source_rows:
+        source_rows.append(source_marker)
+    source_rows = source_rows[-20:]
     payload.update(ownership)
     payload.update({
         "rawStoreId": raw_store_id,
         "rawStoreName": raw_store_name,
         "normalizedStoreId": normalized_store_id,
         "normalizedStoreName": normalized_store_name,
-        "productIdentity": product_identity(row),
-        "systemCodes": system_codes(row),
-        "metricFacts": extract_metric_facts(row),
-        "metricCatalogVersion": CATALOG_VERSION,
+        "productIdentity": identity,
+        "systemCodes": codes,
+        "identityCatalogVersion": CATALOG_VERSION,
+        "sourceRows": source_rows,
+        "metricCacheDisabled": True,
+        "identityOnly": True,
     })
     if data_version:
         payload["latestDataVersion"] = data_version
+        versions = list(dict.fromkeys([*(payload.get("sourceDataVersions") or []), data_version]))
+        payload["sourceDataVersions"] = versions
     if dataset_name:
         datasets = list(dict.fromkeys([*(payload.get("sourceDatasets") or []), dataset_name]))
         payload["sourceDatasets"] = datasets
@@ -390,7 +462,8 @@ def upsert_operating_objects_from_import(
         "productUpsertCount": len(product_ids),
         "storeUpsertCount": len(store_keys),
         "dataScopeSource": DATA_SCOPE_SOURCE,
-        "rule": "V12：经营对象使用系统编码承接商品/店铺/SKU身份，指标事实沉淀到 payload.metricFacts。",
+        "metricCacheDisabled": True,
+        "rule": "V12.2.3：经营对象只承接身份定位；ROI等经营指标只进入独立事实表，不再写入payload.metricFacts。",
     }
 
 
@@ -412,22 +485,68 @@ def _visible_for_user(row: Mapping[str, Any] | Any, user_id: str | None) -> bool
     return store_id in set(visible_store_ids_for_user(user_id))
 
 
-def _formatted_payload_metrics(payload: Dict[str, Any]) -> Dict[str, str]:
+def _base_product_item(row: Mapping[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    identity = payload.get("productIdentity") or product_identity(payload)
+    codes = payload.get("systemCodes") or system_codes(payload)
+    title = row["title"] or identity.get("productId") or row["product_id"]
     return {
-        "inventory": format_metric("inventory_qty", metric_value(payload, "inventory_qty")),
-        "sellableDays": format_metric("sellable_days", metric_value(payload, "sellable_days")),
-        "avgOrderValue": format_metric("avg_order_value", metric_value(payload, "avg_order_value")),
-        "paymentAmount": format_metric("payment_amount", metric_value(payload, "payment_amount")),
-        "costAmount": format_metric("product_cost_amount", metric_value(payload, "product_cost_amount")),
-        "grossProfitAmount": format_metric("gross_profit_amount", metric_value(payload, "gross_profit_amount")),
-        "grossMargin": format_metric("gross_margin_rate", metric_value(payload, "gross_margin_rate")),
-        "roi": format_metric("roi", metric_value(payload, "roi")),
-        "clickRate": format_metric("click_rate", metric_value(payload, "click_rate")),
-        "conversionRate": format_metric("payment_conversion_rate", metric_value(payload, "payment_conversion_rate")),
-        "refundRate": format_metric("refund_rate", metric_value(payload, "refund_rate")),
-        "adSpend": format_metric("ad_spend", metric_value(payload, "ad_spend")),
-        "organicVisitors": format_metric("organic_visitor_count", metric_value(payload, "organic_visitor_count")),
-        "paidVisitors": format_metric("paid_visitor_count", metric_value(payload, "paid_visitor_count")),
+        "id": row["product_id"],
+        "objectId": row["object_id"],
+        "archiveId": row["object_id"],
+        "productId": row["product_id"],
+        "skuId": identity.get("skuId"),
+        "erpProductCode": identity.get("erpProductCode"),
+        "productLink": identity.get("productLink"),
+        "systemStoreCode": codes.get("systemStoreCode"),
+        "systemSpuCode": codes.get("systemSpuCode"),
+        "systemLinkCode": codes.get("systemLinkCode"),
+        "systemSkuCode": codes.get("systemSkuCode"),
+        "storeId": row["normalized_store_id"] or row["store_id"],
+        "store": row["normalized_store_name"] or row["store_name"],
+        "storeName": row["normalized_store_name"] or row["store_name"],
+        "platform": row["platform"],
+        "title": title,
+        "shortName": display_short_title({**identity, **payload}, fallback=str(row["product_id"])),
+        "category": row["category"],
+        "latestDataVersion": row["latest_data_version"],
+        "sourceDataset": row["source_dataset"],
+        "sourceDatasets": payload.get("sourceDatasets") or ([row["source_dataset"]] if row["source_dataset"] else []),
+        "sourceDataVersions": payload.get("sourceDataVersions") or ([row["latest_data_version"]] if row["latest_data_version"] else []),
+        "importedByUserId": row["imported_by_user_id"],
+        "ownerUserId": row["owner_user_id"],
+        "assignedOperatorId": row["assigned_operator_id"],
+        "reviewerId": row["reviewer_id"],
+        "visibleUserIds": _json_list(row["visible_user_ids"]),
+        "visibleRoleIds": _json_list(row["visible_role_ids"]),
+        "rawStoreId": row["raw_store_id"],
+        "rawStoreName": row["raw_store_name"],
+        "normalizedStoreId": row["normalized_store_id"],
+        "normalizedStoreName": row["normalized_store_name"],
+        "dataScopeSource": row["data_scope_source"] or DATA_SCOPE_SOURCE,
+        "imageLabel": "品",
+        "inventory": UNKNOWN_VALUE,
+        "inventoryStatus": "未识别",
+        "inventoryLevel": "watch",
+        "price": UNKNOWN_VALUE,
+        "avgOrderValue": UNKNOWN_VALUE,
+        "paymentAmount": UNKNOWN_VALUE,
+        "cost": UNKNOWN_VALUE,
+        "costAmount": UNKNOWN_VALUE,
+        "grossProfitAmount": UNKNOWN_VALUE,
+        "grossMargin": UNKNOWN_VALUE,
+        "roi": UNKNOWN_VALUE,
+        "clickRate": UNKNOWN_VALUE,
+        "conversionRate": UNKNOWN_VALUE,
+        "refundRate": UNKNOWN_VALUE,
+        "adSpend": UNKNOWN_VALUE,
+        "organicVisitors": UNKNOWN_VALUE,
+        "paidVisitors": UNKNOWN_VALUE,
+        "afterSales": "售后未识别",
+        "afterSalesLevel": "watch",
+        "suggestion": "商品档案已完成身份定位；指标展示只读取事实表，未识别不使用缓存托底。",
+        "metricFacts": [],
+        "objectStoreVersion": OPERATING_OBJECT_VERSION,
+        "payload": payload,
     }
 
 
@@ -436,72 +555,17 @@ def list_operating_products(user_id: str | None = None) -> List[Dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute("SELECT * FROM operating_products ORDER BY updated_at DESC, product_id ASC").fetchall()
     result: List[Dict[str, Any]] = []
+    from src.services.product_archive_detail_service import enrich_product_archive_detail
+
     for row in rows:
         if not _visible_for_user(row, user_id):
             continue
-        payload = loads(row["payload"])
-        identity = payload.get("productIdentity") or product_identity(payload)
-        codes = payload.get("systemCodes") or system_codes(payload)
-        metrics = _formatted_payload_metrics(payload)
-        title = row["title"] or identity.get("productId") or row["product_id"]
-        result.append({
-            "id": row["product_id"],
-            "objectId": row["object_id"],
-            "productId": row["product_id"],
-            "skuId": identity.get("skuId"),
-            "erpProductCode": identity.get("erpProductCode"),
-            "productLink": identity.get("productLink"),
-            "systemStoreCode": codes.get("systemStoreCode"),
-            "systemSpuCode": codes.get("systemSpuCode"),
-            "systemLinkCode": codes.get("systemLinkCode"),
-            "systemSkuCode": codes.get("systemSkuCode"),
-            "storeId": row["normalized_store_id"] or row["store_id"],
-            "store": row["normalized_store_name"] or row["store_name"],
-            "storeName": row["normalized_store_name"] or row["store_name"],
-            "platform": row["platform"],
-            "title": title,
-            "shortName": display_short_title(payload, fallback=str(row["product_id"])),
-            "category": row["category"],
-            "latestDataVersion": row["latest_data_version"],
-            "sourceDataset": row["source_dataset"],
-            "sourceDatasets": payload.get("sourceDatasets") or ([row["source_dataset"]] if row["source_dataset"] else []),
-            "sourceDataVersions": [row["latest_data_version"]] if row["latest_data_version"] else [],
-            "importedByUserId": row["imported_by_user_id"],
-            "ownerUserId": row["owner_user_id"],
-            "assignedOperatorId": row["assigned_operator_id"],
-            "reviewerId": row["reviewer_id"],
-            "visibleUserIds": _json_list(row["visible_user_ids"]),
-            "visibleRoleIds": _json_list(row["visible_role_ids"]),
-            "rawStoreId": row["raw_store_id"],
-            "rawStoreName": row["raw_store_name"],
-            "normalizedStoreId": row["normalized_store_id"],
-            "normalizedStoreName": row["normalized_store_name"],
-            "dataScopeSource": row["data_scope_source"] or DATA_SCOPE_SOURCE,
-            "imageLabel": "品",
-            "inventory": metrics["inventory"],
-            "inventoryStatus": "已入库" if metrics["inventory"] != "—" else "待补库存",
-            "inventoryLevel": "good",
-            "price": metrics["avgOrderValue"],
-            "avgOrderValue": metrics["avgOrderValue"],
-            "paymentAmount": metrics["paymentAmount"],
-            "cost": metrics["costAmount"],
-            "costAmount": metrics["costAmount"],
-            "grossProfitAmount": metrics["grossProfitAmount"],
-            "grossMargin": metrics["grossMargin"],
-            "roi": metrics["roi"],
-            "clickRate": metrics["clickRate"],
-            "conversionRate": metrics["conversionRate"],
-            "refundRate": metrics["refundRate"],
-            "adSpend": metrics["adSpend"],
-            "organicVisitors": metrics["organicVisitors"],
-            "paidVisitors": metrics["paidVisitors"],
-            "afterSales": "标签观察" if metrics["refundRate"] == "—" else f"退款率 {metrics['refundRate']}",
-            "afterSalesLevel": "good",
-            "suggestion": "商品档案已完成V12指标事实入库；任务由经营判断和证据闸门单独生成。",
-            "metricFacts": payload.get("metricFacts") or [],
-            "objectStoreVersion": OPERATING_OBJECT_VERSION,
-            "payload": payload,
-        })
+        payload = _strip_metric_cache(loads(row["payload"]))
+        item = _base_product_item(row, payload)
+        enriched = enrich_product_archive_detail(item)
+        enriched["objectStoreVersion"] = OPERATING_OBJECT_VERSION
+        enriched["suggestion"] = "商品指标来自独立事实表；事实表未命中显示未识别，不读对象缓存。"
+        result.append(enriched)
     return result
 
 
@@ -513,7 +577,7 @@ def list_operating_stores(user_id: str | None = None) -> List[Dict[str, Any]]:
     for row in rows:
         if not _visible_for_user(row, user_id):
             continue
-        payload = loads(row["payload"])
+        payload = _strip_metric_cache(loads(row["payload"]))
         result.append({
             "storeId": row["normalized_store_id"] or row["store_id"],
             "storeName": row["normalized_store_name"] or row["store_name"],
@@ -533,15 +597,15 @@ def list_operating_stores(user_id: str | None = None) -> List[Dict[str, Any]]:
             "normalizedStoreId": row["normalized_store_id"],
             "normalizedStoreName": row["normalized_store_name"],
             "dataScopeSource": row["data_scope_source"] or DATA_SCOPE_SOURCE,
-            "businessTags": ["已入库", "V12指标事实"],
-            "riskTags": ["已入库"],
+            "businessTags": ["已入库", "身份主档"],
+            "riskTags": ["事实表取数"],
             "productRoleTags": [f"商品 {row['product_count'] or 0}"],
             "storeWeightTag": "经营对象",
             "activeTaskCount": 0,
             "alertCount": 0,
             "taskIntensity": "标签观察",
             "level": "watch",
-            "judgment": "已完成清洗入库，店铺事实由V12画像和指标目录承接",
+            "judgment": "店铺主档只保留身份定位；店铺指标由 store_metric_facts 承接。",
             "objectStoreVersion": OPERATING_OBJECT_VERSION,
             "payload": payload,
         })
@@ -551,12 +615,13 @@ def list_operating_stores(user_id: str | None = None) -> List[Dict[str, Any]]:
 def operating_object_summary(user_id: str | None = None) -> Dict[str, Any]:
     products = list_operating_products(user_id)
     stores = list_operating_stores(user_id)
-    metric_fact_count = sum(len(item.get("metricFacts") or []) for item in products)
+    metric_fact_count = sum((item.get("metricFactSummary") or {}).get("factCount", 0) for item in products)
     return {
         "version": OPERATING_OBJECT_VERSION,
         "productCount": len(products),
         "storeCount": len(stores),
         "metricFactCount": metric_fact_count,
         "latestDataVersion": next((item.get("latestDataVersion") for item in products if item.get("latestDataVersion")), None),
-        "rule": "V12：经营对象入库优先于任务；商品页展示定位和指标事实，任务页展示交叉验证和SOP。",
+        "metricCacheDisabled": True,
+        "rule": "V12.2.3：经营对象入库优先于任务；对象主档只保留身份定位，指标展示只读事实表。",
     }
