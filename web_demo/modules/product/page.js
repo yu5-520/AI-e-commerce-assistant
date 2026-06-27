@@ -80,7 +80,7 @@
   }
   function taskButton(item) {
     const task = window.AppTaskActions?.findOpenTask?.(item);
-    return task ? `<button type="button" data-open-task="${s(task.id)}" class="ghost">查看任务</button><button type="button" data-task-report="${s(task.id)}">任务报告</button>` : `<button type="button" data-candidate-report="product:${s(item.id)}">查看详情</button>`;
+    return task ? `<button type="button" data-open-task="${s(task.id)}" class="ghost">查看任务</button><button type="button" data-task-report="${s(task.id)}">任务报告</button>` : `<button type="button" data-candidate-module="product" data-candidate-id="${s(item.id)}">查看详情</button>`;
   }
   function scopeHero(rows = []) {
     if (!currentScope?.fromStore) {
@@ -120,7 +120,7 @@
       ctx.delegate("[data-clear-filter]", "click", () => { clearScope(); AppRouter.schedule("product-filter-clear", { fromStore: false }); });
       ctx.delegate("[data-open-task]", "click", (_, node) => AppTaskActions.openTodoTask(node.dataset.openTask));
       ctx.delegate("[data-task-report]", "click", (_, node) => AppTaskActions.openTaskReport(node.dataset.taskReport));
-      ctx.delegate("[data-candidate-report]", "click", (_, node) => { const [module, id] = node.dataset.candidateReport.split(":"); AppTaskActions.openCandidateReport(module, id); });
+      ctx.delegate("[data-candidate-id]", "click", (_, node) => AppTaskActions.openCandidateReport(node.dataset.candidateModule, node.dataset.candidateId));
       ctx.addCleanup(AppTaskStore.subscribe(() => AppRouter.schedule("task-store")));
     },
   };
