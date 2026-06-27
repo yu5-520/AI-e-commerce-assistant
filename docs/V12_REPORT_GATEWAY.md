@@ -1,6 +1,6 @@
 # V12 / V12.1 报表画像 Agent 与指标事实层
 
-V12 的目标不是继续扩大任务数量，而是把报表上传从“商品壳入库”升级成“报表画像 → 系统编码 → 指标事实 → 任务证据闸门”。V12.1.0 将指标事实从 `payload.metricFacts` 兼容缓存升级为独立 SQLite 事实表；V12.1.1 将上传确认升级为按 `reportProfile.sheetProfiles + sheetRows` 分 Sheet 写入事实表。
+V12 的目标不是继续扩大任务数量，而是把报表上传从“商品壳入库”升级成“报表画像 → 系统编码 → 指标事实 → 任务证据闸门”。V12.1.0 将指标事实从 `payload.metricFacts` 兼容缓存升级为独立 SQLite 事实表；V12.1.1 将上传确认升级为按 `reportProfile.sheetProfiles + sheetRows` 分 Sheet 写入事实表；V12.1.2 将商品详情页升级为读取独立事实表的商品定位和指标事实页。
 
 ## 1. 核心原则
 
@@ -55,6 +55,20 @@ ingest_metric_facts_from_sheet_rows(result, parsed, report_profile=...)
 ```
 
 该路径读取 `parsed.sheetRows`，并按 `reportProfile.sheetProfiles[*].targetTable` 明确写入对应事实表。该服务只存证据，不生成任务。
+
+### `src/services/product_archive_detail_service.py`
+
+V12.1.2 新增。负责把商品对象和独立事实表合并为商品详情可展示的数据：
+
+```text
+productPosition：系统店铺编码 / SPU / LINK / SKU / 平台 / 店铺 / 商品ID / SKU / ERP / 链接
+metricSections：成交与投产 / 成本与利润 / 流量与广告 / 库存与售后
+trafficSourceFacts：自然搜索 / 推荐流量 / 付费推广 / 店铺首页 / 活动会场等来源
+metricFactSummary：product/store/traffic 三类事实数量
+taskHistorySummary：任务次数、当前任务、最近完成摘要
+```
+
+该服务只做商品资产展示，不生成 SOP 任务。
 
 ## 3. 上传解析变化
 
@@ -142,7 +156,36 @@ trafficSourceFactCount
 factCount
 ```
 
-## 6. 经营对象入库变化
+## 6. V12.1.2 商品详情页
+
+商品模块接口：
+
+```text
+/api/modules/product
+/api/modules/product?storeId=STORE_ID
+/api/modules/product/{product_id}
+```
+
+返回对象新增：
+
+```text
+productPosition
+metricSections
+trafficSourceFacts
+taskHistorySummary
+metricFactSummary
+```
+
+前端商品详情页展示：
+
+- 商品定位卡片：系统店铺编码、系统SPU、系统LINK、系统SKU、平台、店铺、商品ID、SKU、ERP编码、商品链接。
+- 指标事实区：成交与投产、成本与利润、流量与广告、库存与售后。
+- 流量来源区：按 traffic_source 展示访客、点击率、转化率、ROI、广告消耗。
+- 任务历史摘要：只展示任务次数和状态，不展开 SOP。
+
+商品页边界：商品页只展示“这个商品是谁、在哪、有哪些事实、做过多少任务”；完整交叉验证、SOP、提交证明在任务详情页处理。
+
+## 7. 经营对象入库变化
 
 `operating_object_store_service.py` 升级到 V12：
 
@@ -153,7 +196,7 @@ factCount
 
 从 V12.1.0 开始，`payload.metricFacts` 只是展示缓存，独立事实表才是后续趋势和任务证据的主来源。
 
-## 7. ERA 文件验收标准
+## 8. ERA 文件验收标准
 
 上传 `ERA经营数据报表` 后，系统应能识别：
 
@@ -182,10 +225,16 @@ factCount
 
 上传确认返回的 `metricFactSync.sheetSummaries` 应包含每个 Sheet 的 `targetTable`、`rowCount`、`factCount`、`confidence`。
 
+商品详情验收：
+
+- 商品定位卡片包含系统编码、平台、店铺、商品ID、SKU。
+- 指标事实区展示库存、客单价、支付金额、毛利率、ROI、点击率、转化率、退款率、广告消耗等。
+- 流量来源区能展示自然搜索、推荐流量、付费推广等来源数据。
+- 商品页不展示完整任务 SOP，只展示任务历史摘要。
+
 任务生成不得因为“某张表缺 ROI”直接生成补 ROI 任务。只有当某个商品已经形成经营异常假设，且 ROI 阻塞任务升级时，才生成补证任务。
 
-## 8. 后续 V12.1.x 方向
+## 9. 后续 V12.1.x 方向
 
-- V12.1.2：前端商品详情改为“商品定位卡片 + 指标事实区 + 任务历史摘要”。
 - V12.1.3：新增 `data_gap_events`，普通缺口只留痕，决策缺口才进入候选任务。
 - V12.1.4：新增任务证据闸门，完整展示数据比对、交叉验证、SOP 和提交证明。
