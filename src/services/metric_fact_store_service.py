@@ -1,17 +1,12 @@
-"""V12.1 independent metric fact store.
+"""V12.2 metric fact store with layout-block routing.
 
-V12 kept metric facts inside operating object payloads so the demo could validate
-field mapping quickly. V12.1 promotes those facts into queryable SQLite tables:
-product_metric_facts, store_metric_facts, and traffic_source_facts.
-
-V12.1.1 adds explicit sheet-profile routing: upload confirmation writes facts
-by reportProfile.sheetProfiles + parsed.sheetRows instead of treating a multi-sheet
-Excel as one flattened table.
+Facts are no longer routed only by Sheet.  The report layout agent can split one
+Sheet into multiple blocks; this service writes each block to its own fact table
+with source_block_id, source_row_index, source_column_index and metric_scope.
 
 Boundary:
-    This layer stores evidence. It does not generate tasks. Task creation must
-    read facts through a later evidence gate so ordinary missing fields do not
-    become task noise.
+    This layer stores evidence. It does not generate tasks and it does not use
+    operating object metric cache as truth.
 """
 
 from __future__ import annotations
@@ -32,9 +27,21 @@ from src.services.metric_catalog_service import (
 )
 from src.services.report_alert_service import now_iso
 
-METRIC_FACT_STORE_VERSION = "12.1.1"
+METRIC_FACT_STORE_VERSION = "12.2.2"
 
 FACT_TABLES = ("product_metric_facts", "store_metric_facts", "traffic_source_facts")
+
+EXTRA_COLUMNS = {
+    "source_block_id": "TEXT",
+    "source_row_index": "INTEGER",
+    "source_column_index": "INTEGER",
+    "metric_scope": "TEXT",
+    "source_block_type": "TEXT",
+}
+
+
+def _table_columns(conn: Any, table: str) -> set[str]:
+    return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
 def ensure_metric_fact_tables() -> None:
@@ -51,6 +58,11 @@ def ensure_metric_fact_tables() -> None:
                     source_system TEXT,
                     source_sheet TEXT,
                     source_report_id TEXT,
+                    source_block_id TEXT,
+                    source_row_index INTEGER,
+                    source_column_index INTEGER,
+                    metric_scope TEXT,
+                    source_block_type TEXT,
                     entity_level TEXT NOT NULL,
                     store_code TEXT,
                     spu_code TEXT,
@@ -78,9 +90,14 @@ def ensure_metric_fact_tables() -> None:
                 )
                 """
             )
+            existing = _table_columns(conn, table)
+            for column, column_type in EXTRA_COLUMNS.items():
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_entity ON {table}(store_code, spu_code, link_code, sku_code)")
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_metric ON {table}(metric_code, stat_date)")
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_version ON {table}(data_version, dataset_name)")
+            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_block ON {table}(source_block_id, metric_scope)")
         conn.commit()
 
 
@@ -131,16 +148,27 @@ def _profile_by_sheet(report_profile: Dict[str, Any] | None) -> Dict[str, Dict[s
     return result
 
 
-def _sheet_blocked(sheet_profile: Dict[str, Any] | None) -> bool:
-    if not isinstance(sheet_profile, dict):
+def _profile_blocks(report_profile: Dict[str, Any] | None) -> List[Dict[str, Any]]:
+    blocks: List[Dict[str, Any]] = []
+    for sheet in _profile_sheets(report_profile):
+        for block in sheet.get("blocks") or []:
+            if isinstance(block, dict):
+                blocks.append(block)
+    return blocks
+
+
+def _blocked(profile: Dict[str, Any] | None) -> bool:
+    if not isinstance(profile, dict):
         return False
-    for issue in sheet_profile.get("issues") or []:
+    for issue in profile.get("issues") or []:
         if isinstance(issue, dict) and issue.get("severity") == "blocked":
             return True
     return False
 
 
 def _infer_target_table(row: Dict[str, Any], routes: Dict[str, str]) -> str:
+    if row.get("__target_table") in FACT_TABLES:
+        return str(row["__target_table"])
     sheet_name = str(row.get("__source_sheet") or "")
     if sheet_name in routes:
         return routes[sheet_name]
@@ -173,12 +201,24 @@ def _raw_field_name(row: Dict[str, Any], metric_code: str) -> str | None:
     aliases = [metric_code, *(METRIC_ALIASES.get(metric_code) or [])]
     normalized_aliases = {str(alias).lower().replace(" ", "") for alias in aliases}
     for key, value in row.items():
+        if str(key).startswith("__"):
+            continue
         if value in {None, ""}:
             continue
         normalized_key = str(key).lower().replace(" ", "")
         if normalized_key in normalized_aliases:
             return str(key)
     return metric_code
+
+
+def _source_column_index(row: Dict[str, Any], raw_field_name: str | None) -> int | None:
+    column_map = row.get("__source_column_map")
+    if isinstance(column_map, dict) and raw_field_name in column_map:
+        try:
+            return int(column_map[raw_field_name])
+        except Exception:
+            return None
+    return None
 
 
 def _fact_id(table: str, row: Dict[str, Any], metric_code: str, *, data_version: str | None, dataset_name: str | None) -> str:
@@ -191,6 +231,9 @@ def _fact_id(table: str, row: Dict[str, Any], metric_code: str, *, data_version:
             data_version,
             dataset_name,
             row.get("__source_sheet"),
+            row.get("__source_block_id"),
+            row.get("__source_row_index"),
+            row.get("__metric_scope"),
             codes.get("systemStoreCode"),
             None if table == "store_metric_facts" else codes.get("systemSpuCode"),
             None if table == "store_metric_facts" else codes.get("systemLinkCode"),
@@ -208,6 +251,7 @@ def _insert_fact(conn: Any, table: str, row: Dict[str, Any], fact: Dict[str, Any
     codes = system_codes(row)
     metric_code = str(fact.get("metricCode") or "")
     raw_field_name = _raw_field_name(row, metric_code)
+    source_column_index = _source_column_index(row, raw_field_name)
     now = now_iso()
     entity_level = _entity_level(table, row)
     traffic_source = str(pick(row, "traffic_source", default="") or "").strip() or None
@@ -216,23 +260,30 @@ def _insert_fact(conn: Any, table: str, row: Dict[str, Any], fact: Dict[str, Any
     spu_code = None if table == "store_metric_facts" else codes.get("systemSpuCode")
     link_code = None if table == "store_metric_facts" else codes.get("systemLinkCode")
     sku_code = None if table == "store_metric_facts" else codes.get("systemSkuCode")
+    metric_scope = row.get("__metric_scope") or "store" if table == "store_metric_facts" else "traffic_source" if table == "traffic_source_facts" else "product"
     fact_payload = {
         "factStoreVersion": METRIC_FACT_STORE_VERSION,
         "catalogVersion": CATALOG_VERSION,
         "identity": ident,
         "systemCodes": codes,
         "sourceRowSheet": row.get("__source_sheet"),
-        "sourceRowHash": stable_code("ROW", json.dumps(row, ensure_ascii=False, sort_keys=True)),
+        "sourceRowIndex": row.get("__source_row_index"),
+        "sourceColumnIndex": source_column_index,
+        "sourceBlockId": row.get("__source_block_id"),
+        "sourceBlockType": row.get("__source_block_type"),
+        "metricScope": metric_scope,
+        "sourceRowHash": stable_code("ROW", json.dumps(row, ensure_ascii=False, sort_keys=True, default=str)),
         "targetTable": table,
     }
     conn.execute(
         f"""
         INSERT OR REPLACE INTO {table} (
             fact_id, tenant_id, org_id, data_version, dataset_name, source_system, source_sheet, source_report_id,
+            source_block_id, source_row_index, source_column_index, metric_scope, source_block_type,
             entity_level, store_code, spu_code, link_code, sku_code, platform, store_id, store_name, product_id, sku_id,
             erp_product_code, product_link, traffic_source, metric_code, metric_value, display_value, raw_field_name,
             raw_value, stat_date, time_window, confidence, payload, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM {table} WHERE fact_id = ?), ?), ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM {table} WHERE fact_id = ?), ?), ?)
         """,
         (
             fact_id,
@@ -243,6 +294,11 @@ def _insert_fact(conn: Any, table: str, row: Dict[str, Any], fact: Dict[str, Any
             source_system,
             row.get("__source_sheet"),
             source_report_id,
+            row.get("__source_block_id"),
+            row.get("__source_row_index"),
+            source_column_index,
+            metric_scope,
+            row.get("__source_block_type"),
             entity_level,
             store_code,
             spu_code,
@@ -320,32 +376,17 @@ def ingest_metric_facts_from_import(
     source_system: str | None = None,
     source_report_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Persist metric facts from normalized import rows.
-
-    Rows without recognized metric values are ignored. Missing fields are not
-    emitted as tasks or gaps here; a later data gap store will separate ordinary
-    gaps from decision-blocking gaps.
-    """
     ensure_metric_fact_tables()
     materialized = [row for row in (rows or []) if isinstance(row, dict)]
     routes = _profile_routes(report_profile)
     fallback_dataset, fallback_version = _fallback_dataset_version(result)
     with connect() as conn:
-        summary = _ingest_row_list(
-            conn,
-            materialized,
-            table=None,
-            routes=routes,
-            fallback_dataset=fallback_dataset,
-            fallback_version=fallback_version,
-            source_system=source_system,
-            source_report_id=source_report_id,
-        )
+        summary = _ingest_row_list(conn, materialized, table=None, routes=routes, fallback_dataset=fallback_dataset, fallback_version=fallback_version, source_system=source_system, source_report_id=source_report_id)
         conn.commit()
     inserted_by_table = summary["insertedByTable"]
     return {
         "version": METRIC_FACT_STORE_VERSION,
-        "mode": "independent_metric_fact_tables_flattened_rows",
+        "mode": "fallback_flattened_rows",
         "scannedRowCount": summary["scannedRowCount"],
         "skippedNoMetricRowCount": summary["skippedNoMetricRowCount"],
         "factCount": sum(inserted_by_table.values()),
@@ -353,8 +394,32 @@ def ingest_metric_facts_from_import(
         "storeMetricFactCount": inserted_by_table["store_metric_facts"],
         "trafficSourceFactCount": inserted_by_table["traffic_source_facts"],
         "targetRoutes": routes,
-        "rule": "V12.1.1：指标事实可按扁平行兜底入库；缺字段不在本层生成任务。",
+        "rule": "V12.2：无block画像时才按扁平行兜底；正式上传优先block写入。",
     }
+
+
+def _row_in_block(row: Dict[str, Any], block: Dict[str, Any]) -> bool:
+    try:
+        row_index = int(row.get("__source_row_index") or 0)
+        start = int(block.get("rowStart") or 0)
+        end = int(block.get("rowEnd") or 0)
+        return bool(row_index and start and end and start <= row_index <= end)
+    except Exception:
+        return False
+
+
+def _block_rows(raw_rows: Iterable[Dict[str, Any]], block: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for row in raw_rows:
+        if not isinstance(row, dict) or not _row_in_block(row, block):
+            continue
+        item = dict(row)
+        item["__source_block_id"] = block.get("blockId")
+        item["__source_block_type"] = block.get("blockType")
+        item["__metric_scope"] = block.get("metricScope")
+        item["__target_table"] = block.get("targetTable")
+        rows.append(item)
+    return rows
 
 
 def ingest_metric_facts_from_sheet_rows(
@@ -365,11 +430,7 @@ def ingest_metric_facts_from_sheet_rows(
     source_system: str | None = None,
     source_report_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Persist metric facts by parsed.sheetRows and reportProfile.sheetProfiles.
-
-    This is the V12.1.1 path for uploaded Excel files. It explicitly keeps the
-    business meaning of each sheet instead of relying on a flattened row stream.
-    """
+    """Persist metric facts by parsed.sheetRows and reportProfile block profiles."""
     sheet_rows = parsed.get("sheetRows") if isinstance(parsed, dict) else None
     if not isinstance(sheet_rows, dict) or not sheet_rows:
         return ingest_metric_facts_from_import(result, parsed.get("rows") if isinstance(parsed, dict) else [], report_profile=report_profile, source_system=source_system, source_report_id=source_report_id)
@@ -378,76 +439,80 @@ def ingest_metric_facts_from_sheet_rows(
     profile = report_profile if isinstance(report_profile, dict) else {}
     routes = _profile_routes(profile)
     profiles = _profile_by_sheet(profile)
+    blocks = _profile_blocks(profile)
     fallback_dataset, fallback_version = _fallback_dataset_version(result)
     inserted_by_table = {name: 0 for name in FACT_TABLES}
     scanned_rows = 0
     skipped_no_metric = 0
-    blocked_sheet_count = 0
-    staging_sheet_count = 0
-    sheet_summaries: List[Dict[str, Any]] = []
+    blocked_block_count = 0
+    staging_block_count = 0
+    block_summaries: List[Dict[str, Any]] = []
+
+    if not blocks:
+        return ingest_metric_facts_from_import(result, parsed.get("rows") or [], report_profile=report_profile, source_system=source_system, source_report_id=source_report_id)
 
     with connect() as conn:
-        sheet_names = list(sheet_rows.keys())
-        for sheet_name in sheet_names:
+        for block in blocks:
+            sheet_name = str(block.get("sheetName") or "")
             raw_rows = sheet_rows.get(sheet_name) or []
-            sheet_profile = profiles.get(sheet_name)
-            target_table = (sheet_profile or {}).get("targetTable") or routes.get(sheet_name)
-            if _sheet_blocked(sheet_profile):
-                blocked_sheet_count += 1
-                sheet_summaries.append({"sheetName": sheet_name, "targetTable": target_table, "rowCount": len(raw_rows), "factCount": 0, "skipped": True, "reason": "profile_blocked"})
+            target_table = str(block.get("targetTable") or "")
+            if _blocked(block):
+                blocked_block_count += 1
+                block_summaries.append({"sheetName": sheet_name, "blockId": block.get("blockId"), "blockType": block.get("blockType"), "targetTable": target_table, "rowCount": int(block.get("rowCount") or 0), "factCount": 0, "skipped": True, "reason": "block_profile_blocked"})
                 continue
             if target_table not in FACT_TABLES:
-                staging_sheet_count += 1
-                sheet_summaries.append({"sheetName": sheet_name, "targetTable": target_table or "staging_rows", "rowCount": len(raw_rows), "factCount": 0, "skipped": True, "reason": "target_not_fact_table"})
+                staging_block_count += 1
+                block_summaries.append({"sheetName": sheet_name, "blockId": block.get("blockId"), "blockType": block.get("blockType"), "targetTable": target_table or "staging_rows", "rowCount": int(block.get("rowCount") or 0), "factCount": 0, "skipped": True, "reason": "target_not_fact_table"})
                 continue
-            routed_rows: List[Dict[str, Any]] = []
-            for row in raw_rows:
-                if not isinstance(row, dict):
-                    continue
-                item = dict(row)
-                item.setdefault("__source_sheet", sheet_name)
-                routed_rows.append(item)
+            routed_rows = _block_rows(raw_rows, block)
             before = dict(inserted_by_table)
-            summary = _ingest_row_list(
-                conn,
-                routed_rows,
-                table=str(target_table),
-                routes=routes,
-                fallback_dataset=fallback_dataset,
-                fallback_version=fallback_version,
-                source_system=source_system,
-                source_report_id=source_report_id,
-            )
+            summary = _ingest_row_list(conn, routed_rows, table=target_table, routes=routes, fallback_dataset=fallback_dataset, fallback_version=fallback_version, source_system=source_system, source_report_id=source_report_id)
             scanned_rows += summary["scannedRowCount"]
             skipped_no_metric += summary["skippedNoMetricRowCount"]
             for table_name, count in summary["insertedByTable"].items():
                 inserted_by_table[table_name] += count
-            sheet_fact_count = sum(inserted_by_table[name] - before.get(name, 0) for name in FACT_TABLES)
-            sheet_summaries.append({
+            block_fact_count = sum(inserted_by_table[name] - before.get(name, 0) for name in FACT_TABLES)
+            block_summaries.append({
                 "sheetName": sheet_name,
-                "sheetKind": (sheet_profile or {}).get("sheetKind"),
+                "blockId": block.get("blockId"),
+                "blockType": block.get("blockType"),
+                "metricScope": block.get("metricScope"),
                 "targetTable": target_table,
+                "range": block.get("range"),
                 "rowCount": len(routed_rows),
-                "factCount": sheet_fact_count,
+                "factCount": block_fact_count,
                 "skippedNoMetricRowCount": summary["skippedNoMetricRowCount"],
-                "confidence": (sheet_profile or {}).get("confidence"),
+                "confidence": block.get("confidence"),
             })
         conn.commit()
 
+    sheet_summaries: List[Dict[str, Any]] = []
+    for sheet_name, sheet_profile in profiles.items():
+        related = [item for item in block_summaries if item.get("sheetName") == sheet_name]
+        sheet_summaries.append({
+            "sheetName": sheet_name,
+            "sheetKind": sheet_profile.get("sheetKind"),
+            "blockCount": len(related),
+            "factCount": sum(int(item.get("factCount") or 0) for item in related),
+            "blocks": related,
+            "confidence": sheet_profile.get("confidence"),
+        })
+
     return {
         "version": METRIC_FACT_STORE_VERSION,
-        "mode": "profile_sheet_rows_metric_fact_routing",
+        "mode": "layout_block_metric_fact_routing",
         "scannedRowCount": scanned_rows,
         "skippedNoMetricRowCount": skipped_no_metric,
-        "blockedSheetCount": blocked_sheet_count,
-        "stagingSheetCount": staging_sheet_count,
+        "blockedBlockCount": blocked_block_count,
+        "stagingBlockCount": staging_block_count,
         "factCount": sum(inserted_by_table.values()),
         "productMetricFactCount": inserted_by_table["product_metric_facts"],
         "storeMetricFactCount": inserted_by_table["store_metric_facts"],
         "trafficSourceFactCount": inserted_by_table["traffic_source_facts"],
         "targetRoutes": routes,
+        "blockSummaries": block_summaries,
         "sheetSummaries": sheet_summaries,
-        "rule": "V12.1.1：上传文件按 reportProfile.sheetProfiles + sheetRows 分 Sheet 写入事实表；普通缺字段不生成任务。",
+        "rule": "V12.2：上传文件按 reportProfile.sheetProfiles[].blocks 分区块写入事实表；同一Sheet可同时拆到商品/店铺/流量事实表。",
     }
 
 
@@ -459,5 +524,5 @@ def metric_fact_summary() -> Dict[str, Any]:
             row = conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
             summary[table] = row["count"] if row else 0
     summary["factCount"] = sum(summary.get(table, 0) for table in FACT_TABLES)
-    summary["rule"] = "V12.1.1：事实层可被商品详情、趋势系统、任务证据闸门复用；上传文件按 Sheet 画像分流。"
+    summary["rule"] = "V12.2：事实层可被商品详情、趋势系统、任务证据闸门复用；上传文件按block画像分流。"
     return summary
