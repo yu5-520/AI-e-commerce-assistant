@@ -14,6 +14,7 @@ from src.services.data_version_service import delete_data_version, get_data_vers
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
 from src.services.import_adapter_service import compact_upload_meta, parse_upload_file
+from src.services.metric_fact_store_service import ingest_metric_facts_from_import, metric_fact_summary
 from src.services.operating_object_store_service import upsert_operating_objects_from_import
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions
 from src.services.report_schema_service import confirm_report_import, get_report_templates, normalize_rows_with_mapping, preview_report_dataset
@@ -71,13 +72,7 @@ def _normalize_result_rows(item: Dict[str, Any], rows: List[Dict[str, Any]]) -> 
 
 
 def _materialize_import_rows(result: Dict[str, Any], rows: Any = None) -> List[Dict[str, Any]]:
-    """Make rows explicit before object upsert.
-
-    V11.9 rule: an import cannot be called successful only because snapshots or
-    alerts exist. The object-store upsert must receive concrete rows. Mock/API
-    sync results therefore attach dataset rows to each result item before the
-    closed-loop check.
-    """
+    """Make rows explicit before object/fact upsert."""
     if isinstance(rows, list) and rows:
         return _normalize_result_rows(result, rows)
     results = result.get("results") if isinstance(result.get("results"), list) else [result]
@@ -110,12 +105,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V11.9：接口/演示同步只写数据和预警，旧任务生成规则不再创建新任务。"
+        result["rule"] = "V12.1：接口/演示同步只写数据、事实和预警，旧任务生成规则不再创建新任务。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "11.9.0",
-        "mode": "v11_9_dataset_sync_without_legacy_task_rules",
+        "version": "12.1.0",
+        "mode": "v12_1_dataset_sync_without_legacy_task_rules",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -124,7 +119,7 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         "results": results,
         "rows": all_rows,
         "summary": get_v3_dashboard_summary(),
-        "rule": "导入先完成经营对象入库硬校验，再由 V11.8/V11.9 SOP 链路生成任务。",
+        "rule": "导入先完成经营对象和指标事实入库硬校验，再由证据闸门判断是否生成任务。",
     }
 
 
@@ -144,9 +139,33 @@ def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows
     return result
 
 
+def _report_profile_from_result(result: Dict[str, Any]) -> Dict[str, Any] | None:
+    upload_meta = result.get("uploadMeta") if isinstance(result.get("uploadMeta"), dict) else {}
+    profile = upload_meta.get("reportProfile") if isinstance(upload_meta, dict) else None
+    return profile if isinstance(profile, dict) else result.get("reportProfile") if isinstance(result.get("reportProfile"), dict) else None
+
+
+def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None) -> Dict[str, Any]:
+    materialized_rows = _materialize_import_rows(result, rows)
+    if materialized_rows:
+        result["rows"] = materialized_rows
+    if not materialized_rows:
+        result["metricFactSync"] = {"version": "12.1.0", "skipped": True, "reason": "rows is not a list"}
+        return result
+    result["metricFactSync"] = ingest_metric_facts_from_import(
+        result,
+        materialized_rows,
+        report_profile=_report_profile_from_result(result),
+        source_system=source_system or result.get("sourceSystem"),
+        source_report_id=source,
+    )
+    return result
+
+
 def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = True) -> Dict[str, Any]:
     if upsert_objects:
         result = _attach_operating_object_sync(request, result, rows, source=source)
+        result = _attach_v121_metric_fact_sync(result, rows, source=source)
     ctx = context_from_headers(request.headers)
     v104 = attach_v104_import_sync(result, source=source)
     v107 = attach_v107_operating_profile(v104)
@@ -155,11 +174,11 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    """Generate product snapshots, metric trends, signals, and V11.8/V11.9 SOP tasks."""
+    """Generate product snapshots, metric trends, signals, and SOP tasks."""
     materialized_rows = _materialize_import_rows(result, rows)
     if not materialized_rows:
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "11.9.0", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "12.1.0", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -181,7 +200,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
     result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "导入后先生成商品快照、指标趋势和经营信号。"}
-    result["riskTaskSync"] = {"version": "11.9.0", "mode": "ownership_first_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；旧规则不再自动推断任务。"}
+    result["riskTaskSync"] = {"version": "12.1.0", "mode": "ownership_first_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务。"}
     return result
 
 
@@ -215,7 +234,8 @@ def sync_source_connection(request: Request, source_id: str) -> Dict[str, Any]:
     result["sourceConnection"] = build_source_sync_summary(source_id, result)
     result["dataSourceSync"] = result["sourceConnection"]
     objected = _attach_operating_object_sync(request, result, result.get("rows"), source=f"{source_id}_api_sync")
-    synced = _attach_v62_trend_and_risk_sync(objected, objected.get("rows"), source_system=source_id)
+    facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
+    synced = _attach_v62_trend_and_risk_sync(facted, facted.get("rows"), source_system=source_id)
     return _attach_import_product_contracts(request, synced, synced.get("rows"), source=f"{source_id}_api_sync", upsert_objects=False)
 
 
@@ -237,6 +257,11 @@ def imports() -> List[Dict[str, Any]]:
 @router.get("/import-records")
 def import_records(limit: int = Query(default=50, ge=1, le=200)) -> Dict[str, Any]:
     return list_version_import_records(limit=limit)
+
+
+@router.get("/metric-facts/summary")
+def metric_facts_summary() -> Dict[str, Any]:
+    return metric_fact_summary()
 
 
 @router.get("/versions/{data_version}/detail")
@@ -303,7 +328,8 @@ async def confirm_upload(
         result = confirm_report_import(str(dataset_name), rows=rows, field_mapping={}, auto_create_tasks=False, source_system=source_system)
         result["uploadMeta"] = compact_upload_meta(parsed)
         objected = _attach_operating_object_sync(request, result, rows, source="upload_file_import")
-        synced = _attach_v62_trend_and_risk_sync(objected, rows, source_system=source_system)
+        facted = _attach_v121_metric_fact_sync(objected, rows, source="upload_file_import", source_system=source_system)
+        synced = _attach_v62_trend_and_risk_sync(facted, rows, source_system=source_system)
         return _attach_import_product_contracts(request, synced, rows, source="upload_file_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -328,8 +354,11 @@ def confirm_import(request: Request, body: Dict[str, Any] = Body(default_factory
     source_system = body.get("source_system") or body.get("sourceSystem")
     try:
         result = confirm_report_import(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), auto_create_tasks=False, source_system=source_system)
+        if isinstance(body.get("reportProfile"), dict):
+            result["reportProfile"] = body.get("reportProfile")
         objected = _attach_operating_object_sync(request, result, body.get("rows"), source="confirm_report_import")
-        synced = _attach_v62_trend_and_risk_sync(objected, body.get("rows"), source_system=source_system)
+        facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="confirm_report_import", source_system=source_system)
+        synced = _attach_v62_trend_and_risk_sync(facted, body.get("rows"), source_system=source_system)
         return _attach_import_product_contracts(request, synced, body.get("rows"), source="confirm_report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -343,7 +372,8 @@ def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=
     try:
         result = import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=False)
         objected = _attach_operating_object_sync(request, result, body.get("rows"), source="report_import")
-        synced = _attach_v62_trend_and_risk_sync(objected, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="report_import", source_system=body.get("source_system") or body.get("sourceSystem"))
+        synced = _attach_v62_trend_and_risk_sync(facted, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
         return _attach_import_product_contracts(request, synced, body.get("rows"), source="report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -355,7 +385,8 @@ def import_mock_alerts(request: Request, body: Dict[str, Any] = Body(default_fac
     try:
         result = _run_dataset_imports_without_legacy_tasks(dataset_names=dataset_names)
         objected = _attach_operating_object_sync(request, result, result.get("rows"), source="mock_alerts_import")
-        synced = _attach_v62_trend_and_risk_sync(objected, objected.get("rows"), source_system="mock_alerts")
+        facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
+        synced = _attach_v62_trend_and_risk_sync(facted, facted.get("rows"), source_system="mock_alerts")
         return _attach_import_product_contracts(request, synced, synced.get("rows"), source="mock_alerts_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
