@@ -1,4 +1,4 @@
-"""Operating unit route for V11.10 object-store fail-closed verification."""
+"""Operating unit route for V11.14 runtime-residue fail-closed verification."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
 
+from src.repositories.sqlite_repository import connect
 from src.services.account_service import current_user, list_stores, user_id_from_headers
 from src.services.module_projection_service import projection_summary, projected_products, projected_traffic
 from src.services.module_task_service import get_task_counters_for_user, list_tasks
@@ -14,7 +15,9 @@ from src.services.operating_object_store_service import list_operating_products,
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.10.0"
+OPERATING_UNIT_VERSION = "11.14.0"
+SOURCE_TABLES = ["import_records", "report_records", "imported_report_rows", "data_snapshots", "metric_snapshots"]
+DERIVED_TABLES = ["business_signals_v6", "operating_products", "operating_stores", "task_status", "task_assignments", "task_submissions", "task_reviews", "alert_events"]
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -32,6 +35,33 @@ def _percent(value: Any) -> float | None:
         return float(text) / 100
     except (TypeError, ValueError):
         return None
+
+
+def _table_exists(conn, table_name: str) -> bool:
+    row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,)).fetchone()
+    return bool(row)
+
+
+def _table_count(conn, table_name: str) -> int:
+    if not _table_exists(conn, table_name):
+        return 0
+    row = conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()
+    return int(row["count"] if row else 0)
+
+
+def _runtime_residue_snapshot() -> Dict[str, Any]:
+    with connect() as conn:
+        source_counts = {name: _table_count(conn, name) for name in SOURCE_TABLES}
+        derived_counts = {name: _table_count(conn, name) for name in DERIVED_TABLES}
+    source_total = sum(source_counts.values())
+    derived_total = sum(derived_counts.values())
+    return {
+        "dirty": source_total == 0 and derived_total > 0,
+        "sourceTotal": source_total,
+        "derivedTotal": derived_total,
+        "sourceCounts": source_counts,
+        "derivedCounts": derived_counts,
+    }
 
 
 def _store_map() -> Dict[str, Dict[str, Any]]:
@@ -217,6 +247,36 @@ def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Di
 def operating_unit(request: Request) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     user = current_user(user_id)
+    residue = _runtime_residue_snapshot()
+    if residue["dirty"]:
+        return {
+            "version": OPERATING_UNIT_VERSION,
+            "hasData": False,
+            "unitName": "经营单元",
+            "emptyState": "运行态残留，等待清空",
+            "syncState": {"label": "清空不完整", "status": "dirty_runtime_residue"},
+            "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
+            "metrics": [
+                {"label": "源数据", "value": residue["sourceTotal"]},
+                {"label": "残留派生", "value": residue["derivedTotal"]},
+                {"label": "店铺", "value": 0},
+                {"label": "商品", "value": 0},
+            ],
+            "storeRows": [],
+            "operatingJudgment": {
+                "title": "经营判断",
+                "summary": "检测到导入源数据已清空，但业务信号、任务或经营对象主档仍有残留。经营中心已停止读取旧对象，避免半旧半新的脏状态继续触发 500。",
+                "priority": "到数据中心或系统页执行清空演示环境后重新导入。",
+                "mainRisk": "运行态残留",
+                "taggedStoreCount": 0,
+                "activeTaskCount": 0,
+                "dirtyRuntimeResidue": True,
+            },
+            "tasks": {},
+            "objectStore": {"productCount": 0, "storeCount": 0, "latestDataVersion": None},
+            "dirtyRuntimeResidue": residue,
+            "rule": "V11.14 fail closed：源数据为 0 但派生运行态仍存在时，经营中心不再聚合旧商品/旧店铺/旧信号。",
+        }
     projection = projection_summary(user_id)
     object_summary = operating_object_summary(user_id)
     v3 = get_v3_dashboard_summary(user_id)
@@ -263,7 +323,7 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "tasks": task_counters,
             "objectStore": object_summary,
             "objectSyncFailed": True,
-            "rule": "V11.10 fail closed：有数据版本但经营对象为 0 时，不允许显示经营对象已更新。",
+            "rule": "V11.14 fail closed：有数据版本但经营对象为 0 时，不允许显示经营对象已更新。",
         }
     store_rows = _merge_store_rows(build_store_rows(products, traffic, execution_tasks), master_stores)
     tagged_store_count = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
@@ -285,5 +345,5 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "tasks": task_counters,
         "objectStore": object_summary,
         "objectSyncFailed": False,
-        "rule": "V11.10 经营单元只展示经营对象主档真实可读结果；导入成功必须绑定商品/店铺入库结果。",
+        "rule": "V11.14 经营单元只展示经营对象主档真实可读结果；导入成功必须绑定商品/店铺入库结果。",
     }
