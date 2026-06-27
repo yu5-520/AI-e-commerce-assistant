@@ -20,24 +20,35 @@
     return `<section class="page-section operating-module-section"><div class="section-header"><h3>经营模块</h3><span class="status-badge">入口</span></div><div class="quick-actions operating-simple-actions">${operationTabs.map(([route, label]) => `<button data-operation-route="${s(route)}"><strong>${s(label)}</strong></button>`).join("")}</div></section>`;
   }
 
-  function tagList(tags) {
+  function tagList(tags, cls = "") {
     const items = Array.isArray(tags) && tags.length ? tags : ["—"];
-    return `<div class="store-row-tags">${items.map((tag) => `<em>${s(tag)}</em>`).join("")}</div>`;
+    return `<div class="store-row-tags ${s(cls)}">${items.map((tag) => `<em>${s(tag)}</em>`).join("")}</div>`;
   }
 
   function storeRow(row) {
     const taskCount = Number(row.activeTaskCount || 0);
     const storeName = row.displayName || row.storeName || "店铺";
+    const storeId = row.storeId || storeName;
     const action = taskCount > 0
-      ? `<button type="button" class="secondary" data-store-task="${s(row.storeId || storeName)}">查看任务</button>`
-      : `<button type="button" class="secondary" data-store-products="${s(storeName)}">查看店铺</button>`;
-    return `<article class="operating-store-row ${s(row.level || "watch")}">
-      <div class="store-row-main"><strong>${s(storeName)}</strong><span>${s(row.platform || "平台")} · 商品 ${s(row.productCount ?? 0)}</span></div>
-      <div><span>店铺权重</span>${tagList([row.storeWeightTag || "常规店铺"])}</div>
-      <div><span>经营标签</span>${tagList(row.businessTags || row.riskTags)}</div>
-      <div><span>商品状态</span>${tagList(row.productRoleTags)}</div>
-      <div><span>执行任务</span>${tagList([`${taskCount} 个`])}</div>
-      ${action}
+      ? `<button type="button" data-store-task="${s(storeId)}">查看任务</button>`
+      : `<button type="button" data-store-products="${s(storeName)}">查看店铺</button>`;
+    return `<article class="operating-store-card ${s(row.level || "watch")}">
+      <div class="operating-store-main">
+        <div>
+          <strong>${s(storeName)}</strong>
+          <span>${s(row.platform || "平台")} · 商品 ${s(row.productCount ?? 0)}</span>
+        </div>
+        ${tagList([row.storeWeightTag || "常规店铺"], "weight")}
+      </div>
+      <div class="operating-store-meta">
+        <div><span>经营标签</span>${tagList(row.businessTags || row.riskTags)}</div>
+        <div><span>商品状态</span>${tagList(row.productRoleTags)}</div>
+      </div>
+      <div class="operating-store-action">
+        <span>执行任务</span>
+        <strong>${taskCount}</strong>
+        ${action}
+      </div>
     </article>`;
   }
 
