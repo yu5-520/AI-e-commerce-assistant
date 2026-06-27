@@ -1,7 +1,7 @@
-"""V12.1.2 product archive detail projection.
+"""V12.2 product archive detail projection.
 
-商品模块只负责商品资产、定位、指标事实和任务历史摘要。完整的任务证据、
-交叉验证和 SOP 仍然属于任务详情页。
+商品模块只负责商品资产、定位、指标事实和任务历史摘要。经营指标必须来自
+事实表；事实表没有就是未识别，不能用商品对象 payload 缓存托底。
 """
 
 from __future__ import annotations
@@ -11,7 +11,8 @@ from typing import Any, Dict, List
 from src.repositories.sqlite_repository import connect, loads
 from src.services.metric_fact_store_service import ensure_metric_fact_tables
 
-PRODUCT_ARCHIVE_DETAIL_VERSION = "12.1.2"
+PRODUCT_ARCHIVE_DETAIL_VERSION = "12.2.2"
+UNKNOWN_VALUE = "未识别"
 
 METRIC_LABELS = {
     "inventory_qty": "库存数量",
@@ -43,7 +44,6 @@ METRIC_LABELS = {
 }
 
 SECTION_RULES = [
-    ("identity", "商品定位", []),
     ("transaction", "成交与投产", ["payment_amount", "avg_order_value", "payment_order_count", "payment_unit_count", "payment_conversion_rate", "roi"]),
     ("profit", "成本与利润", ["product_cost_amount", "gross_profit_amount", "gross_margin_rate"]),
     ("traffic", "流量与广告", ["visitor_count", "page_view_count", "click_user_count", "click_rate", "ad_spend", "ad_click_count", "ad_order_count", "organic_visitor_count", "paid_visitor_count"]),
@@ -112,7 +112,7 @@ def _where_for_table(table: str, item: Dict[str, Any]) -> tuple[str, List[Any]]:
     return " OR ".join(product_clauses), product_params
 
 
-def _fetch_facts(item: Dict[str, Any], limit: int = 500) -> List[Dict[str, Any]]:
+def _fetch_facts(item: Dict[str, Any], limit: int = 800) -> List[Dict[str, Any]]:
     ensure_metric_fact_tables()
     facts: List[Dict[str, Any]] = []
     with connect() as conn:
@@ -137,10 +137,13 @@ def _fetch_facts(item: Dict[str, Any], limit: int = 500) -> List[Dict[str, Any]]
                     "metricCode": row["metric_code"],
                     "metricName": METRIC_LABELS.get(row["metric_code"], row["metric_code"]),
                     "metricValue": row["metric_value"],
-                    "displayValue": row["display_value"] or str(row["metric_value"] or "—"),
+                    "displayValue": row["display_value"] or str(row["metric_value"] if row["metric_value"] is not None else UNKNOWN_VALUE),
                     "rawFieldName": row["raw_field_name"],
                     "rawValue": row["raw_value"],
                     "sourceSheet": row["source_sheet"],
+                    "sourceBlockId": row["source_block_id"] if "source_block_id" in row.keys() else None,
+                    "sourceRowIndex": row["source_row_index"] if "source_row_index" in row.keys() else None,
+                    "metricScope": row["metric_scope"] if "metric_scope" in row.keys() else None,
                     "sourceSystem": row["source_system"],
                     "sourceReportId": row["source_report_id"],
                     "dataVersion": row["data_version"],
@@ -183,41 +186,43 @@ def _build_position(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _build_sections(item: Dict[str, Any], facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    latest = _latest_by_metric(facts)
-    fallback = {
-        "inventory_qty": item.get("inventory"),
-        "avg_order_value": item.get("avgOrderValue") or item.get("price"),
-        "payment_amount": item.get("paymentAmount"),
-        "product_cost_amount": item.get("costAmount") or item.get("cost"),
-        "gross_profit_amount": item.get("grossProfitAmount"),
-        "gross_margin_rate": item.get("grossMargin"),
-        "roi": item.get("roi"),
-        "click_rate": item.get("clickRate"),
-        "payment_conversion_rate": item.get("conversionRate"),
-        "refund_rate": item.get("refundRate"),
-        "ad_spend": item.get("adSpend"),
-        "organic_visitor_count": item.get("organicVisitors"),
-        "paid_visitor_count": item.get("paidVisitors"),
-    }
+def _product_facts(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [fact for fact in facts if fact.get("factTable") == "product_metric_facts"]
+
+
+def _traffic_facts(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [fact for fact in facts if fact.get("factTable") == "traffic_source_facts"]
+
+
+def _build_sections(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    latest = _latest_by_metric(_product_facts(facts))
     sections: List[Dict[str, Any]] = []
     for section_key, title, metrics in SECTION_RULES:
-        if section_key == "identity":
-            continue
         entries: List[Dict[str, Any]] = []
         for code in metrics:
             fact = latest.get(code)
-            value = fact.get("displayValue") if fact else fallback.get(code)
-            if value in {None, "", "—"}:
+            if not fact:
+                entries.append({
+                    "metricCode": code,
+                    "metricName": METRIC_LABELS.get(code, code),
+                    "displayValue": UNKNOWN_VALUE,
+                    "sourceSheet": "事实表未命中",
+                    "dataVersion": None,
+                    "statDate": None,
+                    "factId": None,
+                    "missing": True,
+                })
                 continue
             entries.append({
                 "metricCode": code,
                 "metricName": METRIC_LABELS.get(code, code),
-                "displayValue": value,
-                "sourceSheet": fact.get("sourceSheet") if fact else "商品对象缓存",
-                "dataVersion": fact.get("dataVersion") if fact else None,
-                "statDate": fact.get("statDate") if fact else None,
-                "factId": fact.get("factId") if fact else None,
+                "displayValue": fact.get("displayValue") or UNKNOWN_VALUE,
+                "sourceSheet": fact.get("sourceSheet"),
+                "sourceBlockId": fact.get("sourceBlockId"),
+                "sourceRowIndex": fact.get("sourceRowIndex"),
+                "dataVersion": fact.get("dataVersion"),
+                "statDate": fact.get("statDate"),
+                "factId": fact.get("factId"),
             })
         sections.append({"key": section_key, "title": title, "items": entries})
     return sections
@@ -225,7 +230,7 @@ def _build_sections(item: Dict[str, Any], facts: List[Dict[str, Any]]) -> List[D
 
 def _traffic_sources(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     grouped: Dict[str, List[Dict[str, Any]]] = {}
-    for fact in facts:
+    for fact in _traffic_facts(facts):
         source = fact.get("trafficSource")
         if not source:
             continue
@@ -235,11 +240,11 @@ def _traffic_sources(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         latest = _latest_by_metric(source_facts)
         result.append({
             "trafficSource": source,
-            "visitorCount": (latest.get("visitor_count") or {}).get("displayValue"),
-            "clickRate": (latest.get("click_rate") or {}).get("displayValue"),
-            "conversionRate": (latest.get("payment_conversion_rate") or {}).get("displayValue"),
-            "roi": (latest.get("roi") or {}).get("displayValue"),
-            "adSpend": (latest.get("ad_spend") or {}).get("displayValue"),
+            "visitorCount": (latest.get("visitor_count") or {}).get("displayValue") or UNKNOWN_VALUE,
+            "clickRate": (latest.get("click_rate") or {}).get("displayValue") or UNKNOWN_VALUE,
+            "conversionRate": (latest.get("payment_conversion_rate") or {}).get("displayValue") or UNKNOWN_VALUE,
+            "roi": (latest.get("roi") or {}).get("displayValue") or UNKNOWN_VALUE,
+            "adSpend": (latest.get("ad_spend") or {}).get("displayValue") or UNKNOWN_VALUE,
             "factCount": len(source_facts),
         })
     return sorted(result, key=lambda item: item.get("trafficSource") or "")
@@ -261,19 +266,44 @@ def _task_summary(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _metric_value(facts: List[Dict[str, Any]], code: str) -> str:
+    fact = _latest_by_metric(_product_facts(facts)).get(code)
+    return str(fact.get("displayValue")) if fact and fact.get("displayValue") not in {None, ""} else UNKNOWN_VALUE
+
+
 def enrich_product_archive_detail(item: Dict[str, Any]) -> Dict[str, Any]:
     facts = _fetch_facts(item)
+    product_facts = _product_facts(facts)
+    traffic_facts = _traffic_facts(facts)
     enriched = dict(item)
     enriched["productArchiveDetailVersion"] = PRODUCT_ARCHIVE_DETAIL_VERSION
     enriched["productPosition"] = _build_position(enriched)
-    enriched["metricSections"] = _build_sections(enriched, facts)
+    enriched["metricSections"] = _build_sections(facts)
     enriched["trafficSourceFacts"] = _traffic_sources(facts)
     enriched["taskHistorySummary"] = _task_summary(enriched)
+    # V12.2 fail-closed top-level display values. Product card must not read polluted object cache.
+    enriched["inventory"] = _metric_value(facts, "inventory_qty")
+    enriched["avgOrderValue"] = _metric_value(facts, "avg_order_value")
+    enriched["price"] = enriched["avgOrderValue"]
+    enriched["paymentAmount"] = _metric_value(facts, "payment_amount")
+    enriched["cost"] = _metric_value(facts, "product_cost_amount")
+    enriched["grossProfitAmount"] = _metric_value(facts, "gross_profit_amount")
+    enriched["grossMargin"] = _metric_value(facts, "gross_margin_rate")
+    enriched["roi"] = _metric_value(facts, "roi")
+    enriched["clickRate"] = _metric_value(facts, "click_rate")
+    enriched["conversionRate"] = _metric_value(facts, "payment_conversion_rate")
+    enriched["refundRate"] = _metric_value(facts, "refund_rate")
+    enriched["adSpend"] = _metric_value(facts, "ad_spend")
+    enriched["inventoryStatus"] = "已入库" if enriched["inventory"] != UNKNOWN_VALUE else "未识别"
+    enriched["inventoryLevel"] = "good" if enriched["inventory"] != UNKNOWN_VALUE else "watch"
+    enriched["afterSales"] = "退款率已识别" if enriched["refundRate"] != UNKNOWN_VALUE else "售后未识别"
+    enriched["afterSalesLevel"] = "good" if enriched["refundRate"] != UNKNOWN_VALUE else "watch"
     enriched["metricFactSummary"] = {
         "factCount": len(facts),
-        "productFactCount": len([fact for fact in facts if fact.get("factTable") == "product_metric_facts"]),
+        "productFactCount": len(product_facts),
         "storeFactCount": len([fact for fact in facts if fact.get("factTable") == "store_metric_facts"]),
-        "trafficFactCount": len([fact for fact in facts if fact.get("factTable") == "traffic_source_facts"]),
-        "rule": "V12.1.2：商品详情读取独立事实表，payload.metricFacts 仅作为兼容缓存。",
+        "trafficFactCount": len(traffic_facts),
+        "failClosed": True,
+        "rule": "V12.2：商品指标只读 product_metric_facts；事实表未命中显示未识别，不读对象缓存。",
     }
     return enriched
