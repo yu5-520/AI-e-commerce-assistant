@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.3.0
+12.4.0
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.3 means: V12.2 fact/layout stack + API contract patch + document governance cleanup. Current execution docs are separated from historical archive docs, `web_demo/` is the only active frontend, `frontend/` is marked deprecated, and deployment checks block version/document drift before ECS runs the wrong chain.
+- V12.4 means: V12.3 document governance + V12.2 fact/layout stack + upload-frequency and trend-window driven operating cadence tasks. Daily/weekly reports are seeded by tasks, candidate tasks, trend signals, and observation items. Redlines remain hard rules; non-redline movement is judged by Agent within 3/7/14/30/90 day trend windows and still passes through evidence gates.
