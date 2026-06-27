@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.2.7
+12.2.8
 ```
 
 ## Release Contract
@@ -9,4 +9,4 @@
 - FastAPI `app.version` must match this file.
 - `/api/health` version must match this file.
 - README baseline must match this file.
-- V12.2.7 means: report layout agent block profile + row coordinates / source_block_id / metric_scope preservation + blockRows written to product/store/traffic fact tables + operating_products identity-only + product page fail-closed + product/traffic/store ROI scope isolation + import diagnostics Sheet→Block→Fact→Gap→Staging + strict metric_scope evidence gate.
+- V12.2.8 means: V12.2 fact/layout stack + API contract patch for GET /api/data/source-connections + explicit DEMO_ACCOUNT_SWITCH override for ECS demo account switching + frontend account switch commits local state only after backend validation.
