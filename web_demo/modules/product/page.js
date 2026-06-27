@@ -8,6 +8,10 @@
   function status(level) { return AppShell.statusClass(level); }
   function normalizeStoreName(item = {}) { return item.storeName || item.store || item.platform || "未绑定店铺"; }
   function normalizeScope(state = {}) {
+    if (Object.prototype.hasOwnProperty.call(state, "fromStore") && !state.fromStore && !state.storeId && !state.storeName) {
+      clearScope();
+      return currentScope;
+    }
     if (state?.fromStore || state?.storeId || state?.storeName) {
       currentScope = {
         fromStore: Boolean(state.fromStore || state.storeId || state.storeName),
