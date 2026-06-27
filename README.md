@@ -1,10 +1,10 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V12.1.1 报表画像 Agent、系统标准编码、独立指标事实表与 Sheet 画像分流。
+当前基线：V12.1.2 报表画像 Agent、系统标准编码、独立指标事实表、Sheet 画像分流与商品事实详情页。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、Sheet 分流、商品入库、店铺聚合、系统编码、独立指标事实、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、Sheet 分流、商品入库、店铺聚合、系统编码、独立指标事实、商品定位详情、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
 
 ## 当前主链路
 
@@ -18,6 +18,7 @@
 → operating_products / operating_stores 主档 upsert
 → 系统编码：STORE / SPU / LINK / SKU
 → V12.1 独立事实表：product_metric_facts / store_metric_facts / traffic_source_facts
+→ V12.1.2 商品档案读取事实表，展示商品定位、指标事实、流量来源和任务摘要
 → 商品 / 店铺标签与权重
 → 趋势信号 business_signals_v6
 → risk_task_service 任务门控
@@ -28,7 +29,7 @@
 → v116 导入闭环反查
 ```
 
-## V12.1.1 可信展示规则
+## V12.1.2 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -43,6 +44,8 @@ API_CONTRACT 必须只记录真实可用接口。
 店铺进入商品档案时必须带 storeId / storeName 作用域，不再共用全局商品列表。
 商品档案必须使用 objectId / archiveId 作为唯一档案 ID，避免不同店铺同商品 ID 串联。
 商品列表必须使用产品化商品卡片视觉，不回退成字段堆叠。
+商品详情必须展示商品定位卡片、指标事实区、流量来源区和任务历史摘要。
+商品页只展示资产和定位；完整交叉验证、SOP 和提交证明在任务详情页处理。
 商品名称不作为商品同一性的主识别依据；系统编码、商品链接、ERP 编码、SKU、店铺编码才是主轴。
 上传解析必须保留 sheetRows，不能把多 Sheet 报表直接压平成一个单表逻辑。
 上传确认必须按 reportProfile.sheetProfiles + sheetRows 写入 product/store/traffic 三类事实表。
@@ -60,6 +63,7 @@ API_CONTRACT 必须只记录真实可用接口。
 /api/modules/operating-unit            经营
 /api/modules/product                   商品
 /api/modules/product?storeId=STORE_ID  店铺商品档案
+/api/modules/product/{product_id}      单商品事实详情
 /api/modules/todo                      任务
 /api/modules/log                       日志
 /api/accounts                          账号
@@ -130,4 +134,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。V12.1.1 上传文件会优先按 sheetRows 和 reportProfile.sheetProfiles 进行事实表分流。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。V12.1.1 上传文件会优先按 sheetRows 和 reportProfile.sheetProfiles 进行事实表分流。V12.1.2 商品详情页从独立事实表读取指标事实。
