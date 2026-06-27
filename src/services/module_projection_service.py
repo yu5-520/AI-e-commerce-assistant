@@ -1,4 +1,7 @@
-"""V11.4 data-driven module projection service with strict scope gate."""
+"""V12 data-driven module projection service with strict scope gate.
+
+商品模块只做商品资产和定位展示；任务模块负责交叉验证和SOP。
+"""
 
 from __future__ import annotations
 
@@ -11,9 +14,19 @@ from src.repositories.sqlite_repository import connect, loads
 from src.services.account_service import current_user, list_stores, visible_store_ids_for_user
 from src.services.backend_isolation_service import DEFAULT_ORG_ID, DEFAULT_TENANT_ID, row_scope_status, strict_data_scope_enabled
 from src.services.import_row_store_service import load_import_rows
+from src.services.metric_catalog_service import (
+    display_short_title,
+    extract_metric_facts,
+    format_metric,
+    metric_value,
+    pick,
+    product_identity,
+    stable_code,
+    system_codes,
+)
 from src.services.module_data_service import REPORT_GROUPS
 
-PROJECTION_VERSION = "11.4.0"
+PROJECTION_VERSION = "12.0.0"
 DATASET_LABELS = {"products": "商品报表", "inventory": "库存报表", "orders": "订单报表", "refunds": "退款报表", "customers": "客户报表"}
 DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "ERP", "refunds": "CRM", "customers": "CRM"}
 
@@ -35,12 +48,6 @@ def _as_float(value: Any, default: float | None = None) -> float | None:
         return default
 
 
-def _format_number(value: float | None, default: str = "—") -> str:
-    if value is None:
-        return default
-    return str(int(value)) if float(value).is_integer() else f"{value:.2f}"
-
-
 def _store_index() -> Dict[str, Dict[str, Any]]:
     mapping: Dict[str, Dict[str, Any]] = {}
     for store in list_stores():
@@ -51,11 +58,12 @@ def _store_index() -> Dict[str, Dict[str, Any]]:
 
 
 def _resolve_store_id(row: Dict[str, Any]) -> str | None:
-    mapping = _store_index()
-    explicit = str(_pick(row, "store_id", "storeId", "店铺ID", "店铺id", "店铺编号", "店铺编码", default="") or "").strip()
+    ident = product_identity(row)
+    explicit = str(ident.get("storeId") or "").strip()
     if explicit:
-        return explicit if explicit in mapping else explicit
-    name = str(_pick(row, "store_name", "store", "店铺", "店铺名称", "店铺名", default="") or "").strip()
+        return explicit
+    name = str(ident.get("storeName") or "").strip()
+    mapping = _store_index()
     if name and name in mapping:
         return mapping[name]["id"]
     return None
@@ -73,38 +81,6 @@ def _store_platform(store_id: str | None, fallback: str = "导入数据") -> str
 
 def _visible_store_ids(user_id: str | None) -> set[str]:
     return set(visible_store_ids_for_user(user_id)) if user_id else set()
-
-
-def _raw_dataset_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
-    full_rows = load_import_rows(dataset_name)
-    return full_rows if full_rows else _snapshot_rows(dataset_name)
-
-
-def _scope_decision(row: Dict[str, Any], store_id: str | None = None) -> Dict[str, Any]:
-    return row_scope_status(row, tenant_id=DEFAULT_TENANT_ID, org_id=DEFAULT_ORG_ID, store_id=store_id, require_store=True)
-
-
-def _row_visible(row: Dict[str, Any], user_id: str | None) -> bool:
-    store_id = row.get("storeId") or row.get("store_id") or _resolve_store_id(row)
-    if store_id:
-        row.setdefault("storeId", store_id)
-    if strict_data_scope_enabled():
-        decision = _scope_decision(row, store_id)
-        if decision.get("status") != "ok":
-            row["scopeStatus"] = "quarantined"
-            row["scopeMissing"] = decision.get("missing", [])
-            row["scopeErrors"] = decision.get("errors", [])
-            return False
-    if not user_id:
-        return True
-    if not store_id:
-        # Demo-only compatibility. Strict mode already quarantines rows without a
-        # store ownership field, so production cannot leak unassigned data here.
-        return True
-    role = current_user(user_id).get("roleId")
-    if role in {"owner", "manager", "finance"}:
-        return True
-    return store_id in _visible_store_ids(user_id)
 
 
 def _snapshot_payloads() -> List[Dict[str, Any]]:
@@ -146,6 +122,36 @@ def _snapshot_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
     return rows
 
 
+def _raw_dataset_rows(dataset_name: str | None = None) -> List[Dict[str, Any]]:
+    full_rows = load_import_rows(dataset_name)
+    return full_rows if full_rows else _snapshot_rows(dataset_name)
+
+
+def _scope_decision(row: Dict[str, Any], store_id: str | None = None) -> Dict[str, Any]:
+    return row_scope_status(row, tenant_id=DEFAULT_TENANT_ID, org_id=DEFAULT_ORG_ID, store_id=store_id, require_store=True)
+
+
+def _row_visible(row: Dict[str, Any], user_id: str | None) -> bool:
+    store_id = row.get("storeId") or row.get("store_id") or _resolve_store_id(row)
+    if store_id:
+        row.setdefault("storeId", store_id)
+    if strict_data_scope_enabled():
+        decision = _scope_decision(row, store_id)
+        if decision.get("status") != "ok":
+            row["scopeStatus"] = "quarantined"
+            row["scopeMissing"] = decision.get("missing", [])
+            row["scopeErrors"] = decision.get("errors", [])
+            return False
+    if not user_id:
+        return True
+    if not store_id:
+        return True
+    role = current_user(user_id).get("roleId")
+    if role in {"owner", "manager", "finance"}:
+        return True
+    return store_id in _visible_store_ids(user_id)
+
+
 def dataset_rows(dataset_name: str | None = None, user_id: str | None = None) -> List[Dict[str, Any]]:
     rows = _raw_dataset_rows(dataset_name)
     return [row for row in rows if _row_visible(row, user_id)]
@@ -168,133 +174,166 @@ def has_runtime_data(user_id: str | None = None) -> bool:
     return bool(dataset_rows(user_id=user_id))
 
 
-def _product_key(product_id: str, store_id: str | None) -> str:
-    return f"{store_id or 'global'}::{product_id}"
-
-
 def _product_id(row: Dict[str, Any]) -> str:
-    return str(_pick(row, "product_id", "productId", "商品ID", "商品id", "sku", "SKU", "商品编码", "商家编码", default="") or "").strip()
+    ident = product_identity(row)
+    return str(ident.get("productId") or ident.get("skuId") or ident.get("erpProductCode") or ident.get("productLink") or "").strip()
 
 
-def _ensure_product(products: Dict[str, Dict[str, Any]], product_id: str, store_id: str | None) -> Dict[str, Any]:
-    key = _product_key(product_id, store_id)
+def _product_key(row: Dict[str, Any], store_id: str | None) -> str:
+    product_id = _product_id(row)
+    sku = product_identity(row).get("skuId") or "NO-SKU"
+    ext = stable_code("EXT", product_identity(row).get("productLink"), product_identity(row).get("erpProductCode"))
+    return f"{store_id or 'global'}::{product_id}::{sku}::{ext}"
+
+
+def _fmt(row: Dict[str, Any], metric_code: str) -> str:
+    return format_metric(metric_code, metric_value(row, metric_code))
+
+
+def _ensure_product(products: Dict[str, Dict[str, Any]], row: Dict[str, Any], store_id: str | None) -> Dict[str, Any]:
+    product_id = _product_id(row)
+    key = _product_key(row, store_id)
+    ident = product_identity(row)
+    codes = system_codes(row)
     if key not in products:
+        title = str(pick(row, "product_name", default=f"导入商品 {product_id}") or f"导入商品 {product_id}")
         products[key] = {
             "id": product_id,
+            "objectId": key,
+            "productId": product_id,
+            "skuId": ident.get("skuId"),
+            "erpProductCode": ident.get("erpProductCode"),
+            "productLink": ident.get("productLink"),
+            "systemStoreCode": codes.get("systemStoreCode"),
+            "systemSpuCode": codes.get("systemSpuCode"),
+            "systemLinkCode": codes.get("systemLinkCode"),
+            "systemSkuCode": codes.get("systemSkuCode"),
             "storeId": store_id,
-            "shortName": product_id,
-            "title": f"导入商品 {product_id}",
-            "platform": _store_platform(store_id),
-            "store": _store_name(store_id),
+            "shortName": display_short_title(row, fallback=product_id),
+            "title": title,
+            "platform": ident.get("platform") or _store_platform(store_id),
+            "store": ident.get("storeName") or _store_name(store_id),
             "imageLabel": "品",
-            "link": "",
+            "link": ident.get("productLink") or "",
             "inventory": "—",
             "inventoryStatus": "待导入库存",
             "inventoryLevel": "good",
             "price": "—",
+            "avgOrderValue": "—",
+            "paymentAmount": "—",
             "cost": "—",
+            "costAmount": "—",
+            "grossProfitAmount": "—",
             "grossMargin": "—",
-            "afterSales": "正常",
+            "roi": "—",
+            "clickRate": "—",
+            "conversionRate": "—",
+            "refundRate": "—",
+            "adSpend": "—",
+            "organicVisitors": "—",
+            "paidVisitors": "—",
+            "afterSales": "标签观察",
             "afterSalesLevel": "good",
-            "suggestion": "根据导入数据生成经营判断。",
+            "suggestion": "V12商品档案：定位商品和指标事实；任务SOP在任务详情页处理。",
             "sourceDataVersions": [],
             "sourceDatasets": [],
+            "metricFacts": [],
         }
     return products[key]
 
 
+def _apply_metric_display(item: Dict[str, Any], row: Dict[str, Any]) -> None:
+    mapping = {
+        "inventory": "inventory_qty",
+        "sellableDays": "sellable_days",
+        "avgOrderValue": "avg_order_value",
+        "price": "avg_order_value",
+        "paymentAmount": "payment_amount",
+        "cost": "product_cost_amount",
+        "costAmount": "product_cost_amount",
+        "grossProfitAmount": "gross_profit_amount",
+        "grossMargin": "gross_margin_rate",
+        "roi": "roi",
+        "clickRate": "click_rate",
+        "conversionRate": "payment_conversion_rate",
+        "refundRate": "refund_rate",
+        "adSpend": "ad_spend",
+        "organicVisitors": "organic_visitor_count",
+        "paidVisitors": "paid_visitor_count",
+    }
+    for target, metric_code in mapping.items():
+        value = _fmt(row, metric_code)
+        if value != "—":
+            item[target] = value
+    if item.get("inventory") != "—":
+        item["inventoryStatus"] = "已入库"
+    if item.get("refundRate") and item["refundRate"] != "—":
+        item["afterSales"] = f"退款率 {item['refundRate']}"
+
+
 def projected_products(user_id: str | None = None) -> List[Dict[str, Any]]:
     products: Dict[str, Dict[str, Any]] = {}
-    refund_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"count": 0, "amount": 0.0, "reasons": []})
-    order_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"orders": 0, "paid": 0.0, "quantity": 0})
     for row in dataset_rows(user_id=user_id):
-        dataset = row.get("datasetName")
         product_id = _product_id(row)
         if not product_id:
             continue
         store_id = row.get("storeId") or _resolve_store_id(row)
-        item = _ensure_product(products, product_id, store_id)
+        item = _ensure_product(products, row, store_id)
         data_version = row.get("dataVersion")
+        dataset = row.get("datasetName")
         if data_version and data_version not in item["sourceDataVersions"]:
             item["sourceDataVersions"].append(data_version)
         if dataset and dataset not in item["sourceDatasets"]:
             item["sourceDatasets"].append(dataset)
-        title = _pick(row, "product_name", "productTitle", "商品名称", "商品名", "title", "标题")
-        if title:
-            item["title"] = str(title)
-            item["shortName"] = str(title)[:8]
-        platform = _pick(row, "platform", "平台")
-        if platform:
-            item["platform"] = str(platform)
-        store_name = _pick(row, "store_name", "store", "店铺", "店铺名称")
-        if store_name:
-            item["store"] = str(store_name)
-        link = _pick(row, "link", "url", "商品链接", "链接")
-        if link:
-            item["link"] = str(link)
-        stock = _as_float(_pick(row, "stock", "available_stock", "current_stock", "库存", "可用库存", "当前库存"))
-        safety = _as_float(_pick(row, "safety_stock", "安全库存", "预警库存"))
-        if stock is not None:
-            item["inventory"] = _format_number(stock)
-            if safety is not None and stock <= safety:
-                item["inventoryStatus"] = "库存不足" if stock < safety else "触达安全线"
-                item["inventoryLevel"] = "danger" if stock < safety else "warning"
-            else:
-                item["inventoryStatus"] = "库存正常"
-                item["inventoryLevel"] = "good"
-        sale_price = _as_float(_pick(row, "sale_price", "售价", "销售价", "活动价", "成交价"))
-        cost_price = _as_float(_pick(row, "cost_price", "成本", "成本价", "采购价"))
-        if sale_price is not None:
-            item["price"] = _format_number(sale_price)
-        if cost_price is not None:
-            item["cost"] = _format_number(cost_price)
-        if sale_price is not None and cost_price is not None and sale_price > 0:
-            margin = (sale_price - cost_price) / sale_price
-            item["grossMargin"] = f"{margin:.0%}"
-            if margin < 0.2:
-                item["suggestion"] = "毛利低于安全线，先复核活动价、成本和投放预算。"
-        key = _product_key(product_id, store_id)
-        if dataset == "refunds":
-            refund_stats[key]["count"] += 1
-            refund_stats[key]["amount"] += _as_float(_pick(row, "refund_amount", "退款金额", default=0), 0) or 0
-            refund_stats[key]["reasons"].append(str(_pick(row, "refund_reason", "退款原因", "售后原因", default="未填写")))
-        if dataset == "orders":
-            order_stats[key]["orders"] += 1
-            order_stats[key]["quantity"] += int(_as_float(_pick(row, "quantity", "数量", default=1), 1) or 1)
-            order_stats[key]["paid"] += _as_float(_pick(row, "actual_paid", "实付金额", "订单金额", default=0), 0) or 0
-    for key, stat in refund_stats.items():
-        item = products.get(key)
-        if item:
-            item["afterSales"] = f"退款 {stat['count']} 笔"
-            item["afterSalesLevel"] = "danger" if stat["count"] >= 2 or stat["amount"] >= 100 else "warning"
-            top_reason = stat["reasons"][0] if stat["reasons"] else "售后异常"
-            item["suggestion"] = f"复查退款原因：{top_reason}。售后归因完成前不继续放量。"
-    for key, stat in order_stats.items():
-        item = products.get(key)
-        if item and stat["orders"]:
-            item["orderSummary"] = f"订单 {stat['orders']} 笔 / ¥{stat['paid']:.2f}"
+        _apply_metric_display(item, row)
+        facts = extract_metric_facts(row)
+        if facts:
+            seen = {fact.get("metricCode") for fact in item.get("metricFacts", [])}
+            for fact in facts:
+                if fact.get("metricCode") not in seen:
+                    item["metricFacts"].append(fact)
     return sorted((deepcopy(item) for item in products.values()), key=lambda item: (item.get("storeId") or "", item.get("id") or ""))
 
 
 def projected_traffic(user_id: str | None = None) -> List[Dict[str, Any]]:
     cards: Dict[str, Dict[str, Any]] = {}
-    products = {_product_key(item["id"], item.get("storeId")): item for item in projected_products(user_id)}
-    for row in dataset_rows("orders", user_id=user_id):
+    products = {_product_key(item, item.get("storeId")): item for item in projected_products(user_id)}
+    for row in dataset_rows(user_id=user_id):
         product_id = _product_id(row)
         if not product_id:
             continue
         store_id = row.get("storeId") or _resolve_store_id(row)
-        key = _product_key(product_id, store_id)
-        product = products.get(key) or _ensure_product({}, product_id, store_id)
-        card = cards.setdefault(key, {"id": f"TR-{store_id or 'GLOBAL'}-{product_id}", "storeId": store_id, "productId": product_id, "title": product.get("title") or f"导入商品 {product_id}", "platform": product.get("platform") or _store_platform(store_id), "store": product.get("store") or _store_name(store_id), "imageLabel": "流", "channel": "订单数据", "source": "报表导入", "exposure": "—", "ctr": "—", "conversion": "—", "roi": "—", "refundRate": "—", "inventory": product.get("inventory") or "—", "status": "观察", "statusLevel": "warning", "backflow": "流量承接复查", "nextStep": "根据订单放大信号，复核库存、售后和承接能力。", "link": product.get("link") or "", "orderCount": 0, "paidAmount": 0.0})
-        card["orderCount"] += 1
-        card["paidAmount"] += _as_float(_pick(row, "actual_paid", "实付金额", "订单金额", default=0), 0) or 0
-    for card in cards.values():
-        if card["paidAmount"] >= 300:
-            card["status"] = "放量前复核"
-            card["statusLevel"] = "danger"
-        card["source"] = f"订单 {card['orderCount']} 笔"
-        card["roi"] = f"¥{card['paidAmount']:.2f}"
+        key = _product_key(row, store_id)
+        product = products.get(key) or _ensure_product({}, row, store_id)
+        source = str(pick(row, "traffic_source", default="报表数据") or "报表数据")
+        card = cards.setdefault(key, {
+            "id": f"TR-{store_id or 'GLOBAL'}-{product_id}",
+            "storeId": store_id,
+            "productId": product_id,
+            "title": product.get("title") or f"导入商品 {product_id}",
+            "platform": product.get("platform") or _store_platform(store_id),
+            "store": product.get("store") or _store_name(store_id),
+            "imageLabel": "流",
+            "channel": source,
+            "source": "报表导入",
+            "exposure": _fmt(row, "visitor_count"),
+            "ctr": _fmt(row, "click_rate"),
+            "conversion": _fmt(row, "payment_conversion_rate"),
+            "roi": _fmt(row, "roi"),
+            "refundRate": _fmt(row, "refund_rate"),
+            "inventory": product.get("inventory") or "—",
+            "status": "观察",
+            "statusLevel": "warning",
+            "backflow": "流量承接复查",
+            "nextStep": "流量来源明细只作为交叉验证证据，正式动作由任务闸门决定。",
+            "link": product.get("link") or "",
+            "trafficSources": [],
+        })
+        if source not in card["trafficSources"]:
+            card["trafficSources"].append(source)
+        if card["roi"] != "—":
+            card["status"] = "流量结构已入库"
+            card["statusLevel"] = "good"
     return list(cards.values())
 
 
@@ -332,4 +371,5 @@ def projection_summary(user_id: str | None = None) -> Dict[str, Any]:
     traffic = projected_traffic(user_id)
     reports = projected_report_groups(user_id)
     quarantined = quarantined_dataset_rows() if strict_data_scope_enabled() else []
-    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "scopedStoreIds": sorted(_visible_store_ids(user_id)), "strictDataScope": strict_data_scope_enabled(), "quarantinedRowCount": len(quarantined)}
+    metric_fact_count = sum(len(item.get("metricFacts") or []) for item in products)
+    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "metricFactCount": metric_fact_count, "scopedStoreIds": sorted(_visible_store_ids(user_id)), "strictDataScope": strict_data_scope_enabled(), "quarantinedRowCount": len(quarantined)}
