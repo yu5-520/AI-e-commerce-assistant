@@ -1,9 +1,9 @@
-"""Operating unit route for V11.14 runtime-residue fail-closed verification."""
+"""Operating unit route with runtime-residue fail-closed and safe partial aggregation."""
 
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, TypeVar
 
 from fastapi import APIRouter, Request
 
@@ -15,9 +15,10 @@ from src.services.operating_object_store_service import list_operating_products,
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.14.0"
+OPERATING_UNIT_VERSION = "11.15.1"
 SOURCE_TABLES = ["import_records", "report_records", "imported_report_rows", "data_snapshots", "metric_snapshots"]
 DERIVED_TABLES = ["business_signals_v6", "operating_products", "operating_stores", "task_status", "task_assignments", "task_submissions", "task_reviews", "alert_events"]
+T = TypeVar("T")
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -35,6 +36,28 @@ def _percent(value: Any) -> float | None:
         return float(text) / 100
     except (TypeError, ValueError):
         return None
+
+
+def _has_value(value: Any) -> bool:
+    """Return whether a merge value is meaningful without building unsafe sets.
+
+    V11.15 bug source: `_merge_store_rows` used `{None, "", [], "—"}`.
+    A list inside a set raises `TypeError: unhashable type: 'list'` when duplicate
+    store rows are merged, which surfaced as `/api/modules/operating-unit` 500.
+    """
+    if value is None or value == "" or value == "—":
+        return False
+    if isinstance(value, (list, tuple, set, dict)) and len(value) == 0:
+        return False
+    return True
+
+
+def _safe(name: str, fn: Callable[[], T], fallback: T, errors: List[Dict[str, str]]) -> T:
+    try:
+        return fn()
+    except Exception as exc:
+        errors.append({"stage": name, "error": str(exc)})
+        return fallback
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -55,13 +78,7 @@ def _runtime_residue_snapshot() -> Dict[str, Any]:
         derived_counts = {name: _table_count(conn, name) for name in DERIVED_TABLES}
     source_total = sum(source_counts.values())
     derived_total = sum(derived_counts.values())
-    return {
-        "dirty": source_total == 0 and derived_total > 0,
-        "sourceTotal": source_total,
-        "derivedTotal": derived_total,
-        "sourceCounts": source_counts,
-        "derivedCounts": derived_counts,
-    }
+    return {"dirty": source_total == 0 and derived_total > 0, "sourceTotal": source_total, "derivedTotal": derived_total, "sourceCounts": source_counts, "derivedCounts": derived_counts}
 
 
 def _store_map() -> Dict[str, Dict[str, Any]]:
@@ -81,7 +98,7 @@ def _clean_store_name(item: Dict[str, Any] | None, fallback: str = "未命名店
     store = _store_map().get(store_id)
     if store and store.get("name") and store.get("name") != store_id:
         return str(store["name"])
-    return fallback if not store_id else fallback
+    return fallback
 
 
 def _store_platform(item: Dict[str, Any] | None, fallback: str = "平台") -> str:
@@ -153,7 +170,7 @@ def _merge_products(projected: List[Dict[str, Any]], master: List[Dict[str, Any]
         if key not in seen:
             seen[key] = dict(item)
         else:
-            seen[key].update({key2: value for key2, value in item.items() if value not in {None, "", "—"}})
+            seen[key].update({key2: value for key2, value in item.items() if _has_value(value)})
     return list(seen.values())
 
 
@@ -224,7 +241,7 @@ def _merge_store_rows(generated: List[Dict[str, Any]], master: List[Dict[str, An
             seen[key] = dict(row)
         else:
             existing = seen[key]
-            existing.update({k: v for k, v in row.items() if v not in {None, "", [], "—"}})
+            existing.update({k: v for k, v in row.items() if _has_value(v)})
             existing["productCount"] = max(_as_int(existing.get("productCount")), _as_int(row.get("productCount")))
     return list(seen.values())
 
@@ -247,8 +264,9 @@ def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Di
 def operating_unit(request: Request) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     user = current_user(user_id)
-    residue = _runtime_residue_snapshot()
-    if residue["dirty"]:
+    errors: List[Dict[str, str]] = []
+    residue = _safe("runtime_residue", _runtime_residue_snapshot, {"dirty": False, "sourceTotal": 0, "derivedTotal": 0, "sourceCounts": {}, "derivedCounts": {}}, errors)
+    if residue.get("dirty"):
         return {
             "version": OPERATING_UNIT_VERSION,
             "hasData": False,
@@ -256,54 +274,33 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "emptyState": "运行态残留，等待清空",
             "syncState": {"label": "清空不完整", "status": "dirty_runtime_residue"},
             "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-            "metrics": [
-                {"label": "源数据", "value": residue["sourceTotal"]},
-                {"label": "残留派生", "value": residue["derivedTotal"]},
-                {"label": "店铺", "value": 0},
-                {"label": "商品", "value": 0},
-            ],
+            "metrics": [{"label": "源数据", "value": residue.get("sourceTotal", 0)}, {"label": "残留派生", "value": residue.get("derivedTotal", 0)}, {"label": "店铺", "value": 0}, {"label": "商品", "value": 0}],
             "storeRows": [],
-            "operatingJudgment": {
-                "title": "经营判断",
-                "summary": "检测到导入源数据已清空，但业务信号、任务或经营对象主档仍有残留。经营中心已停止读取旧对象，避免半旧半新的脏状态继续触发 500。",
-                "priority": "到数据中心或系统页执行清空演示环境后重新导入。",
-                "mainRisk": "运行态残留",
-                "taggedStoreCount": 0,
-                "activeTaskCount": 0,
-                "dirtyRuntimeResidue": True,
-            },
+            "operatingJudgment": {"title": "经营判断", "summary": "检测到导入源数据已清空，但业务信号、任务或经营对象主档仍有残留。经营中心已停止读取旧对象。", "priority": "清空演示环境后重新导入。", "mainRisk": "运行态残留", "taggedStoreCount": 0, "activeTaskCount": 0, "dirtyRuntimeResidue": True},
             "tasks": {},
             "objectStore": {"productCount": 0, "storeCount": 0, "latestDataVersion": None},
             "dirtyRuntimeResidue": residue,
-            "rule": "V11.14 fail closed：源数据为 0 但派生运行态仍存在时，经营中心不再聚合旧商品/旧店铺/旧信号。",
+            "diagnostics": {"errors": errors},
         }
-    projection = projection_summary(user_id)
-    object_summary = operating_object_summary(user_id)
-    v3 = get_v3_dashboard_summary(user_id)
-    master_products = list_operating_products(user_id)
-    master_stores = list_operating_stores(user_id)
-    products = _merge_products(projected_products(user_id), master_products)
-    traffic = projected_traffic(user_id)
-    task_counters = get_task_counters_for_user(user_id)
-    active_tasks = list_tasks(viewer_id=user_id, active_only=True)
-    execution_tasks = [task for task in active_tasks if task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag", "observe_candidate"}]
+
+    projection = _safe("projection_summary", lambda: projection_summary(user_id), {}, errors)
+    object_summary = _safe("operating_object_summary", lambda: operating_object_summary(user_id), {}, errors)
+    v3 = _safe("v3_dashboard_summary", lambda: get_v3_dashboard_summary(user_id), {}, errors)
+    master_products = _safe("list_operating_products", lambda: list_operating_products(user_id), [], errors)
+    master_stores = _safe("list_operating_stores", lambda: list_operating_stores(user_id), [], errors)
+    projected = _safe("projected_products", lambda: projected_products(user_id), [], errors)
+    products = _merge_products(projected, master_products)
+    traffic = _safe("projected_traffic", lambda: projected_traffic(user_id), [], errors)
+    task_counters = _safe("task_counters", lambda: get_task_counters_for_user(user_id), {}, errors)
+    active_tasks = _safe("active_tasks", lambda: list_tasks(viewer_id=user_id, active_only=True), [], errors)
+    execution_tasks = [task for task in active_tasks if isinstance(task, dict) and task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag", "observe_candidate"}]
+
     has_source_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or traffic or execution_tasks)
     has_objects = bool(master_products or master_stores or object_summary.get("productCount") or object_summary.get("storeCount"))
     has_data = bool(has_objects or has_source_data)
     object_missing = bool(has_source_data and not has_objects and not products)
     if not has_data:
-        return {
-            "version": OPERATING_UNIT_VERSION,
-            "hasData": False,
-            "emptyState": "暂无数据",
-            "syncState": {"label": "等待数据", "status": "empty"},
-            "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-            "metrics": [],
-            "storeRows": [],
-            "operatingJudgment": None,
-            "tasks": task_counters,
-            "objectStore": object_summary,
-        }
+        return {"version": OPERATING_UNIT_VERSION, "hasData": False, "emptyState": "暂无数据", "syncState": {"label": "等待数据", "status": "empty"}, "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")}, "metrics": [], "storeRows": [], "operatingJudgment": None, "tasks": task_counters, "objectStore": object_summary, "diagnostics": {"errors": errors}}
     if object_missing:
         return {
             "version": OPERATING_UNIT_VERSION,
@@ -312,19 +309,15 @@ def operating_unit(request: Request) -> Dict[str, Any]:
             "syncState": {"label": "经营对象未入库", "status": "object_sync_failed", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
             "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
             "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-            "metrics": [
-                {"label": "店铺", "value": 0},
-                {"label": "商品", "value": 0},
-                {"label": "标签店铺", "value": 0},
-                {"label": "执行任务", "value": len(execution_tasks)},
-            ],
+            "metrics": [{"label": "店铺", "value": 0}, {"label": "商品", "value": 0}, {"label": "标签店铺", "value": 0}, {"label": "执行任务", "value": len(execution_tasks)}],
             "storeRows": [],
             "operatingJudgment": build_operating_judgment([], task_counters, object_missing=True),
             "tasks": task_counters,
             "objectStore": object_summary,
             "objectSyncFailed": True,
-            "rule": "V11.14 fail closed：有数据版本但经营对象为 0 时，不允许显示经营对象已更新。",
+            "diagnostics": {"errors": errors},
         }
+
     store_rows = _merge_store_rows(build_store_rows(products, traffic, execution_tasks), master_stores)
     tagged_store_count = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
     return {
@@ -334,16 +327,12 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": object_summary.get("latestDataVersion") or projection.get("latestDataVersion") or v3.get("latestDataVersion")},
         "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
         "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-        "metrics": [
-            {"label": "店铺", "value": len(store_rows)},
-            {"label": "商品", "value": len(products)},
-            {"label": "标签店铺", "value": tagged_store_count},
-            {"label": "执行任务", "value": len(execution_tasks)},
-        ],
+        "metrics": [{"label": "店铺", "value": len(store_rows)}, {"label": "商品", "value": len(products)}, {"label": "标签店铺", "value": tagged_store_count}, {"label": "执行任务", "value": len(execution_tasks)}],
         "storeRows": store_rows,
         "operatingJudgment": build_operating_judgment(store_rows, task_counters),
         "tasks": task_counters,
         "objectStore": object_summary,
         "objectSyncFailed": False,
-        "rule": "V11.14 经营单元只展示经营对象主档真实可读结果；导入成功必须绑定商品/店铺入库结果。",
+        "diagnostics": {"errors": errors},
+        "rule": "V11.15.1 经营单元合并店铺行时不再使用包含 list 的非法 set，重复店铺不会触发 500。",
     }
