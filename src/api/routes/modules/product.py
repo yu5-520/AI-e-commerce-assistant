@@ -1,10 +1,10 @@
-"""Product module routes."""
+"""Product module routes with store-scoped archive support."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 
 from src.api.routes.modules.common import find_or_404
 from src.services.account_service import user_id_from_headers
@@ -14,25 +14,80 @@ from src.services.operating_object_store_service import list_operating_products
 from src.services.report_alert_service import attach_alert_state
 
 router = APIRouter()
+PRODUCT_ARCHIVE_VERSION = "11.17.0"
+
+
+def _has_value(value: Any) -> bool:
+    if value is None or value == "" or value == "—":
+        return False
+    if isinstance(value, (list, tuple, set, dict)) and len(value) == 0:
+        return False
+    return True
+
+
+def _text(value: Any) -> str:
+    return str(value or "").strip()
 
 
 def _merge_products(projected: List[Dict[str, Any]], master: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen: Dict[str, Dict[str, Any]] = {}
     for item in [*master, *projected]:
-        product_id = str(item.get("id") or item.get("productId") or "").strip()
+        product_id = _text(item.get("productId") or item.get("id"))
         if not product_id:
             continue
-        store_id = str(item.get("storeId") or item.get("store") or item.get("storeName") or "GLOBAL").strip()
-        key = f"{store_id}::{product_id}"
+        store_id = _text(item.get("storeId") or item.get("normalizedStoreId") or item.get("store") or item.get("storeName") or "GLOBAL")
+        key = _text(item.get("objectId")) or f"{store_id}::{product_id}"
         if key not in seen:
             seen[key] = dict(item)
         else:
-            seen[key].update({key2: value for key2, value in item.items() if value not in {None, "", "—"}})
+            seen[key].update({key2: value for key2, value in item.items() if _has_value(value)})
     return list(seen.values())
 
 
-def product_items(user_id: str | None) -> List[Dict[str, Any]]:
-    return _merge_products(projected_products(user_id), list_operating_products(user_id))
+def _archive_id(item: Dict[str, Any]) -> str:
+    product_id = _text(item.get("productId") or item.get("id") or item.get("skuId") or item.get("title")) or "PRODUCT"
+    store_id = _text(item.get("storeId") or item.get("normalizedStoreId") or item.get("store") or item.get("storeName") or "GLOBAL") or "GLOBAL"
+    return _text(item.get("objectId")) or f"{store_id}::{product_id}"
+
+
+def _normalize_archive_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    product_id = _text(item.get("productId") or item.get("id") or item.get("skuId") or item.get("title")) or "PRODUCT"
+    store_id = _text(item.get("storeId") or item.get("normalizedStoreId") or item.get("store") or item.get("storeName") or "GLOBAL") or "GLOBAL"
+    store_name = _text(item.get("storeName") or item.get("store") or item.get("normalizedStoreName") or store_id) or "未绑定店铺"
+    archive_id = _archive_id(item)
+    normalized = dict(item)
+    normalized.update({
+        "id": archive_id,
+        "objectId": archive_id,
+        "archiveId": archive_id,
+        "productId": product_id,
+        "rawProductId": product_id,
+        "storeId": store_id,
+        "storeName": store_name,
+        "store": store_name,
+        "productArchiveVersion": PRODUCT_ARCHIVE_VERSION,
+    })
+    return normalized
+
+
+def _matches_store(item: Dict[str, Any], store_id: str | None = None, store_name: str | None = None) -> bool:
+    wanted_id = _text(store_id)
+    wanted_name = _text(store_name)
+    if not wanted_id and not wanted_name:
+        return True
+    ids = {_text(item.get("storeId")), _text(item.get("normalizedStoreId")), _text(item.get("rawStoreId"))}
+    names = {_text(item.get("storeName")), _text(item.get("store")), _text(item.get("normalizedStoreName")), _text(item.get("rawStoreName"))}
+    if wanted_id and wanted_id in ids:
+        return True
+    if wanted_name and wanted_name in names:
+        return True
+    return False
+
+
+def product_items(user_id: str | None, store_id: str | None = None, store_name: str | None = None) -> List[Dict[str, Any]]:
+    merged = _merge_products(projected_products(user_id), list_operating_products(user_id))
+    scoped = [item for item in merged if _matches_store(item, store_id=store_id, store_name=store_name)]
+    return [_normalize_archive_item(item) for item in scoped]
 
 
 def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,15 +102,16 @@ def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
         "sourceModule": "商品模块",
         "source": "导入数据触发",
         "sourceRoute": "business-products",
-        "productId": item["id"],
+        "productId": item.get("productId") or item["id"],
+        "objectId": item["id"],
         "storeIds": [store_id] if store_id else [],
         "visibleStoreIds": [store_id] if store_id else [],
         "imageLabel": item.get("imageLabel") or "品",
-        "productShort": item.get("shortName") or item["id"],
-        "productTitle": item.get("title") or item["id"],
-        "title": item.get("title") or item["id"],
+        "productShort": item.get("shortName") or item.get("title") or item.get("productId") or item["id"],
+        "productTitle": item.get("title") or item.get("productId") or item["id"],
+        "title": item.get("title") or item.get("productId") or item["id"],
         "platform": item.get("platform") or "导入数据",
-        "store": item.get("store") or "未绑定店铺",
+        "store": item.get("storeName") or item.get("store") or "未绑定店铺",
         "link": item.get("link") or "",
         "priority": "高" if high_risk else "中",
         "priorityLevel": "danger" if high_risk else "warning",
@@ -75,9 +131,9 @@ def with_alert_state(item: Dict[str, Any], user_id: str | None = None) -> Dict[s
 
 
 @router.get("/product")
-def product(request: Request) -> list[Dict[str, Any]]:
+def product(request: Request, store_id: str | None = Query(None, alias="storeId"), store_name: str | None = Query(None, alias="storeName")) -> list[Dict[str, Any]]:
     user_id = user_id_from_headers(request.headers)
-    items = product_items(user_id)
+    items = product_items(user_id, store_id=store_id, store_name=store_name)
     return [with_alert_state(item, user_id) for item in visible_candidates(items, product_task_payload)]
 
 
