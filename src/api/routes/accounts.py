@@ -26,7 +26,7 @@ from src.services.account_service import (
     update_user_stores,
     user_has_permission,
 )
-from src.services.backend_isolation_service import production_mode
+from src.services.backend_isolation_service import demo_account_switch_enabled, production_mode
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -45,7 +45,7 @@ def require_role_manager(request: Request) -> str:
 
 def _scrub_account_summary_for_production(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Account center must not leak organization membership in production."""
-    if not production_mode():
+    if not production_mode() or demo_account_switch_enabled():
         return payload
     return {
         **payload,
@@ -72,10 +72,10 @@ def me(request: Request) -> Dict[str, Any]:
 @router.post("/switch")
 def switch_account(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     """Return a validated mock user context for frontend role switching."""
-    if production_mode():
-        raise HTTPException(status_code=403, detail="MVP account switch is disabled in production")
+    if production_mode() and not demo_account_switch_enabled():
+        raise HTTPException(status_code=403, detail="MVP account switch is disabled in production. Set DEMO_ACCOUNT_SWITCH=true for ECS demo validation.")
     user_id = resolve_user_id(body.get("user_id") or body.get("userId"))
-    return {"currentUser": current_user(user_id), "account": account_summary(user_id)}
+    return {"currentUser": current_user(user_id), "account": account_summary(user_id), "demoAccountSwitchEnabled": demo_account_switch_enabled()}
 
 
 @router.get("/users")
