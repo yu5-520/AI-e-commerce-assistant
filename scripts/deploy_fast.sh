@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# V11.16 demo fast deployment script.
+# V11.17 demo fast deployment script.
 # Goal: high-frequency Demo iteration. No release clone, no venv rebuild, no pip install by default.
 # Repo hygiene verification keeps docs, API contract and version files from drifting.
 # Use deploy_atomic.sh for milestone releases and production-like verification.
