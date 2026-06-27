@@ -1,109 +1,138 @@
-# V11.12 轻量原子部署 Runbook
+# V11.13 Demo 快速部署 Runbook
 
 本文件只保留服务器部署和排障命令，不写长篇架构解释。
 
-## 1. 部署原则
+## 1. 部署分层
 
 ```text
-GitHub 是唯一代码源。
-ECS 只运行已验证 release。
-不在运行目录里原地 git pull + reset + restart。
-fetch 失败必须停止，不能继续 reset 到旧 origin/main。
-前端、后端、health、VERSION 必须同一版本。
-低配 ECS 默认使用 shared/.venv，不每次重建虚拟环境。
+Demo 快速部署：scripts/deploy_fast.sh
+阶段轻量发布：scripts/deploy_atomic.sh
+客户 / 生产发布：LIGHT_DEPLOY=0 的完整原子部署
 ```
 
-## 2. 目录结构
+当前 Demo 阶段默认使用快速部署，目标是每次小改 30 秒到 2 分钟内完成验证。
+
+## 2. Demo 快速部署
+
+```bash
+cd /opt/ai-ecommerce-assistant || exit 1
+bash scripts/deploy_fast.sh
+```
+
+快速部署行为：
 
 ```text
-/opt/ai-ecommerce-assistant-deploy/
-├── releases/
-│   ├── 20260626035000_abcd1234/
-│   └── 20260626041000_efgh5678/
-├── current -> releases/20260626041000_efgh5678
-├── shared/
-│   ├── .venv
-│   ├── .env
-│   ├── requirements.sha256
-│   └── logs/
-└── deploy.log
+1. fetch GitHub 最新 main。
+2. fetch 失败立即停止，不 reset 到旧缓存。
+3. reset bootstrap 仓库到 origin/main。
+4. 不创建 release。
+5. 不重建 venv。
+6. 默认不 pip install。
+7. 检查 VERSION / app.version / health.API_VERSION / 前端资源版本。
+8. systemd 指回 /opt/ai-ecommerce-assistant。
+9. 重启后端。
+10. /api/health 版本通过后完成。
 ```
 
-systemd 运行：
+适合：
 
 ```text
-WorkingDirectory=/opt/ai-ecommerce-assistant-deploy/current
-ExecStart=/opt/ai-ecommerce-assistant-deploy/shared/.venv/bin/uvicorn src.api.main:app --host 127.0.0.1 --port 3000
+前端 UI 调整
+按钮跳转
+字段文案
+普通接口字段
+普通 service 逻辑
+Demo 高频测试
 ```
 
-## 3. 一键部署
+## 3. 强制安装依赖
+
+只有 requirements.txt 变化时使用：
+
+```bash
+FORCE_INSTALL_REQUIREMENTS=1 bash scripts/deploy_fast.sh
+```
+
+## 4. 轻量原子部署
+
+阶段版本或一整天收口后使用：
 
 ```bash
 cd /opt/ai-ecommerce-assistant || exit 1
 git fetch --prune origin main
 git reset --hard origin/main
-bash scripts/deploy_atomic.sh
+LIGHT_DEPLOY=1 ROUTE_GUARD_MODE=warn RUNTIME_ROUTE_GUARD=warn bash scripts/deploy_atomic.sh
 ```
 
-低配 ECS 默认：
+轻量原子部署目录：
 
 ```text
-LIGHT_DEPLOY=1
-ROUTE_GUARD_MODE=warn
-RUNTIME_ROUTE_GUARD=warn
+/opt/ai-ecommerce-assistant-deploy/
+├── releases/
+├── current -> releases/<当前版本>
+├── shared/.venv
+└── deploy.log
 ```
 
-## 4. 轻量部署行为
+适合：
 
 ```text
-1. clone 新代码到 releases 独立目录。
-2. 复用 /opt/ai-ecommerce-assistant-deploy/shared/.venv。
-3. requirements.txt hash 未变化时跳过 pip install。
-4. VERSION / app.version / health / 前端资源版本仍强校验。
-5. 路由检查默认 warn，不误杀低配 ECS。
-6. /api/health 运行时健康检查仍为硬闸门。
-7. 成功后切换 current。
-8. 失败时不污染当前运行版本。
+导入链路重构
+账号隔离重构
+系统页重构
+阶段版本验收
+给别人临时试用
 ```
 
-## 5. 严格部署模式
+## 5. 完整生产部署
 
-生产或中配服务器可启用严格模式：
+客户环境或中配服务器使用：
 
 ```bash
 LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/deploy_atomic.sh
 ```
 
-## 6. 手动检查
+适合：
+
+```text
+客户服务器
+私有部署
+正式 SaaS 环境
+多人使用环境
+```
+
+## 6. 快速部署检查
+
+```bash
+cat /opt/ai-ecommerce-assistant/versioning/VERSION.md
+curl -sS http://127.0.0.1:3000/api/health ; echo
+curl -sS -H 'X-Mock-User-Id: U004' http://127.0.0.1:3000/api/system/runtime-diagnostics ; echo
+sudo systemctl status ai-operating-advisor --no-pager -l
+sudo journalctl -u ai-operating-advisor -n 80 --no-pager
+```
+
+## 7. 原子部署检查
 
 ```bash
 readlink -f /opt/ai-ecommerce-assistant-deploy/current
 cat /opt/ai-ecommerce-assistant-deploy/current/versioning/VERSION.md
 /opt/ai-ecommerce-assistant-deploy/shared/.venv/bin/python /opt/ai-ecommerce-assistant-deploy/current/scripts/verify_release.py
-sudo systemctl status ai-operating-advisor --no-pager -l
-sudo journalctl -u ai-operating-advisor -n 120 --no-pager
-curl -sS http://127.0.0.1:3000/api/health ; echo
-curl -sS -H 'X-Mock-User-Id: U004' http://127.0.0.1:3000/api/system/runtime-diagnostics ; echo
-```
-
-## 7. 回滚
-
-脚本失败会尽量自动回滚。需要手动回滚时：
-
-```bash
-ls -1 /opt/ai-ecommerce-assistant-deploy/releases
-sudo ln -sfn /opt/ai-ecommerce-assistant-deploy/releases/<上一版目录> /opt/ai-ecommerce-assistant-deploy/current
-sudo systemctl restart ai-operating-advisor
-```
-
-## 8. 前端缓存检查
-
-```bash
-grep -o "v=[0-9.]*" /opt/ai-ecommerce-assistant-deploy/current/web_demo/index.html | sort -u
 curl -sS http://127.0.0.1:3000/api/health ; echo
 ```
 
-前端资源版本必须与 `/api/health` 版本一致。
+## 8. GitHub 网络慢时
+
+快速部署脚本会重试 fetch。手动排查：
+
+```bash
+cd /opt/ai-ecommerce-assistant || exit 1
+git config --global http.version HTTP/1.1
+git config --global http.lowSpeedLimit 0
+git config --global http.lowSpeedTime 999999
+timeout 300 git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+```
+
+如果连续失败，不要 reset，不要部署，等待网络恢复或切换镜像源。
 
 ## 9. Demo 数据清理
 
@@ -116,20 +145,18 @@ curl -X POST 'http://127.0.0.1:3000/api/system/reset-runtime-data?confirm=true&i
 ## 10. 禁止事项
 
 ```text
-不要在运行目录里原地 git pull + reset + restart。
+不要 fetch 失败后继续 reset。
 不要 sudo git fetch / sudo git reset。
 不要在 ECS 手动 patch src/ 后不提交 GitHub。
-不要 fetch 失败后继续 reset。
 不要让前端静态文件和后端 app.version 来自不同提交。
-不要在低配 ECS 上每次重建 release .venv。
+Demo 小改不要每次走完整原子部署。
+requirements.txt 没变不要 pip install。
 ```
 
-## 11. 旧目录用途
-
-`/opt/ai-ecommerce-assistant` 只作为 bootstrap 目录使用。正式运行态以：
+## 11. 当前推荐节奏
 
 ```text
-/opt/ai-ecommerce-assistant-deploy/current
+每次小改：bash scripts/deploy_fast.sh
+阶段收口：bash scripts/deploy_atomic.sh
+客户部署：LIGHT_DEPLOY=0 严格发布
 ```
-
-为准。
