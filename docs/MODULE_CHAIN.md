@@ -1,6 +1,6 @@
 # MODULE_CHAIN
 
-本文件是 AI 修改仓库时的模块定位地图。只记录当前主架构链路，不记录历史版本。
+本文件是 AI 修改仓库时的模块定位地图。只记录当前主架构链路，不记录历史版本流水账。
 
 ## 0. 全局入口链
 
@@ -14,45 +14,39 @@ web_demo/index.html
 → src/repositories/* 或 src/db/*
 ```
 
-适用问题：页面打不开、切页崩溃、接口 fallback、缓存版本混乱、前后端入口不一致。
+适用问题：页面打不开、切页崩溃、接口异常、缓存版本混乱、前后端入口不一致。
 
-## 1. 总览模块链
+## 1. 版本一致性链
+
+```text
+versioning/VERSION.md
+→ src/api/main.py:API_VERSION
+→ src/api/routes/health.py:API_VERSION
+→ web_demo/index.html?v=x.y.z
+→ scripts/verify_release.py
+→ scripts/check_repo_hygiene.py
+```
+
+验收点：版本不一致时禁止部署；不能出现 main.py 是新版本、health 或 VERSION 仍是旧版本的半更新状态。
+
+## 2. 总览模块链
 
 ```text
 web_demo/modules/dashboard/page.js
 → AppApi.dashboard()
 → GET /api/modules/dashboard
 → src/api/routes/modules/dashboard.py
-→ dashboard_service
-→ module_projection_service / module_task_service / report_alert_service
-```
-
-V11.1 验收点：总览不展示“已入库多少条记录”等后端明细，只展示经营同步结果和执行任务；没有任务时说明低风险信号已沉淀为商品 / 店铺标签。
-
-## 2. 数据 / 报表导入模块链
-
-### 2.1 JSON rows 旧链路
-
-```text
-web_demo/modules/report/page.js
-→ AppApi.previewReportRows()
-→ POST /api/data/preview
-
-web_demo/modules/report/page.js
-→ AppApi.confirmReportImport()
-→ POST /api/data/import/confirm
-→ src/api/routes/data_import.py
-→ report_schema_service
+→ module_projection_service
+→ module_task_service
 → report_alert_service
-→ v11_mvp_governance_service
-→ trend_signal_service
-→ risk_task_service
-→ v104_import_task_sync_service
-→ v107_operating_profile_service
-→ v108_tag_change_task_service
+→ operating_object_store_service
 ```
 
-### 2.2 Excel / CSV / JSON 文件上传链路
+验收点：总览展示经营同步结果、今日执行任务、风险事项和复核进度；不展示后端入库明细流水账。
+
+## 3. 数据 / 报表导入模块链
+
+### 3.1 文件上传链路
 
 ```text
 web_demo/modules/report/page.js
@@ -61,61 +55,86 @@ web_demo/modules/report/page.js
 → src/api/routes/data_import.py
 → import_adapter_service
 → Excel / CSV / JSON parser
-→ Sheet 识别
-→ 原始事实 rows
 → report_schema_service
-→ report_alert_service
-→ v11_mvp_governance_service
-→ 商品入库ID识别
-→ 商品标签 / 店铺标签 / 店铺权重
-→ trend_signal_service
-→ risk_task_service
+→ confirm_report_import
+→ imported_report_rows / data_snapshots / metric_snapshots / alert_events
+→ operating_object_store_service.upsert_operating_objects_from_import
+→ trend_signal_service.ingest_product_trends
+→ risk_task_service.generate_risk_tasks_for_signals
 → v104_import_task_sync_service
 → v107_operating_profile_service
 → v108_tag_change_task_service
+→ v116_import_closed_loop_service
+→ dashboard / operating-unit / product / todo / log 反查
+```
+
+### 3.2 接口同步链路
+
+```text
+web_demo/modules/report/page.js
+→ AppApi.syncDataSource(sourceId)
+→ POST /api/data/source-connections/{source_id}/sync
+→ src/api/routes/data_import.py
+→ data_source_connection_service
+→ _run_dataset_imports_without_legacy_tasks
+→ operating_object_store_service
+→ trend_signal_service
+→ risk_task_service
+→ v116_import_closed_loop_service
+```
+
+### 3.3 JSON rows 链路
+
+```text
+web_demo/modules/report/page.js
+→ AppApi.confirmReportImport() / AppApi.importReportRows()
+→ POST /api/data/import/confirm 或 /api/data/import/report
+→ src/api/routes/data_import.py
+→ report_schema_service / report_alert_service
+→ operating_object_store_service
+→ trend_signal_service
+→ risk_task_service
+→ v116_import_closed_loop_service
 ```
 
 边界：`import_adapter_service` 只能做文件读取、Sheet 识别、字段读取和单元格格式标准化，不能提前写风险判断、任务线索、售后归因或经营建议。
 
-V11 边界：报表导入后的低风险结果不进入任务栏，必须沉淀为商品标签、店铺标签或观察信号；只有高风险、高时效、需要人处理的问题进入执行队列。
+验收点：导入成功必须能反查商品入库数、店铺入库数、业务信号数和可执行任务数；rows > 0 但经营对象为 0 时必须显示失败或阻断，不能假成功。
 
-## 3. 商品 / 店铺标签治理链
+## 4. 经营对象主档链
 
 ```text
 报表 rows
-→ v11_mvp_governance_service.product_runtime_id()
-→ product_runtime_profiles_v11
-→ product_metric_snapshots_v11
-→ product_tags_v11
-
-报表 rows
-→ store_id + platform 聚合
-→ store_weight_profiles_v11
-→ store_tags_v11
+→ operating_object_store_service.ensure_operating_object_tables
+→ operating_products
+→ operating_stores
+→ list_operating_products(user_id)
+→ list_operating_stores(user_id)
+→ operating_object_summary(user_id)
 ```
 
 核心规则：
 
 ```text
-报表是批次，商品入库ID才是分析主体。
-新商品 → 建档 + 基线校验 + 标签。
-老商品 → 历史比对 + 趋势信号 + 任务判断。
-低风险 → 商品/店铺标签。
-高风险高时效 → 执行任务。
+上传账号决定正常报表导入归属。
+新店铺直接创建并归属上传账号。
+商品继承店铺归属。
+任务继承商品 / 店铺归属。
+任务不能反向制造商品 / 店铺权限。
 ```
 
-验收点：同一份报表中，新商品和老商品必须分别走不同分析路径；首次入库商品禁止生成环比、同比、连比、连续下滑类任务。
-
-## 4. 经营模块链
+## 5. 经营模块链
 
 ```text
 web_demo/modules/operating-unit/page.js
 → AppApi.operatingUnit()
 → GET /api/modules/operating-unit
 → src/api/routes/modules/operating_unit.py
+→ operating_object_store_service
 → module_projection_service
 → report_alert_service
-→ v11_mvp_governance_service
+→ module_task_service
+→ runtime residue fail-closed
 ```
 
 经营对象入口：
@@ -125,9 +144,8 @@ web_demo/modules/operating-unit/page.js
 web_demo/modules/operating-unit/page.js
 → AppRouter.navigate("business-products")
 → web_demo/modules/product/page.js
-→ AppMockData.products / AppApi.product()
+→ AppApi.product()
 → src/api/routes/modules/product.py
-→ module_projection_service
 
 竞品信号
 web_demo/modules/operating-unit/page.js
@@ -145,11 +163,9 @@ web_demo/modules/operating-unit/page.js
 → web_demo/modules/traffic/page.js
 ```
 
-V11.1 前端规则：经营模块不直接跳任务栏；商品 / 竞品 / 上新 / 流量进入各自经营对象页。店铺前端只显示真实店铺名称，不显示工程 ID。工程 ID 只用于后端匹配、权限、日志和审计。
+验收点：经营模块只展示当前账号可见店铺和商品；源数据为 0 但派生运行态残留时返回 dirty_runtime_residue，不聚合旧对象。
 
-验收点：经营模块只展示当前账号可见店铺和商品；低风险信号以标签方式进入商品/店铺档案，高风险高时效才进入统一任务池。
-
-## 5. 任务模块链
+## 6. 任务模块链
 
 ```text
 web_demo/modules/todo/page.js
@@ -158,7 +174,6 @@ web_demo/modules/todo/page.js
 → src/api/routes/modules/todo.py
 → module_task_service
 → risk_task_service
-→ v11_mvp_governance_service
 → task_repository_write_service
 → task_state_machine_service
 → TaskRepository
@@ -175,11 +190,9 @@ web_demo/modules/todo/page.js
 写入复盘 → task_written_to_recap
 ```
 
-V11 前端规则：任务栏只展示执行任务，不展示“跨账号生命周期”工程标注，也不展示低优先级数量；低风险信号沉淀到后端标签。
+验收点：任务页默认只展示高风险 / 高时效的执行队列；低风险和观察信号不制造前端待办。
 
-验收点：任务页默认只展示高风险/高时效的执行队列；低风险和观察信号不制造运营心理压力。
-
-## 6. 任务详情 / 报告模块链
+## 7. 任务详情 / 报告模块链
 
 ```text
 web_demo/modules/task-report/page.js
@@ -190,11 +203,23 @@ web_demo/modules/task-report/page.js
 → report_alert_service
 ```
 
-关联模块：任务、经营、数据、Agent。
+验收点：任务详情必须说明为什么预警、关联了哪些数据版本、建议怎么处理、需要什么证据。只要任务进入执行队列，详情页必须能打开。
 
-验收点：任务详情必须说明为什么预警、关联了哪些数据版本、建议怎么处理、需要什么证据。V11 要求只要任务进入执行队列，详情页必须能打开；深度报告未同步时返回基础兜底报告，禁止前端显示“报告加载失败”。
+## 8. 系统诊断 / 清空演示运行态链
 
-## 7. 账号权限模块链
+```text
+web_demo/modules/system-status/page.js
+→ AppApi.resetRuntimeData()
+→ POST /api/system/reset-runtime-data?confirm=true
+→ src/api/routes/system.py
+→ system_service.clear_runtime_data
+→ 删除导入行、快照、业务信号、任务、日志、经营商品、经营店铺
+→ 保留账号、角色、权限、基础店铺配置
+```
+
+验收点：清空后 imported_report_rows、data_snapshots、metric_snapshots、business_signals_v6、operating_products、operating_stores、task_status、alert_events 都应为 0。
+
+## 9. 账号权限模块链
 
 ```text
 web_demo/modules/account/page.js
@@ -207,7 +232,7 @@ web_demo/modules/account/page.js
 
 验收点：老板可见全局；总管可见经营单元；运营只可见分配店铺；店铺归属修改必须进入权限和迁移链路。
 
-## 8. SaaS 数据隔离链
+## 10. SaaS 数据隔离链
 
 ```text
 Request Headers / Session
@@ -217,9 +242,9 @@ Request Headers / Session
 → tenant_id + org_id + store scope + deleted_at
 ```
 
-验收点：任何业务查询不得绕过 UserContext 和数据范围过滤。
+验收点：任何业务查询不得绕过 UserContext 和数据范围过滤。Demo 可用 X-Mock-User-Id；生产禁止信任前端 mock 身份。
 
-## 9. LLM / Agent 模块链
+## 11. LLM / Agent 模块链
 
 ```text
 /api/modules/agents
@@ -234,7 +259,7 @@ Request Headers / Session
 
 验收点：LLM 可降级；LLM 不可用时核心任务链路不阻断；所有 LLM 调用必须可追踪。
 
-## 10. 数据库迁移链
+## 12. 数据库迁移链
 
 ```text
 SQLite runtime
