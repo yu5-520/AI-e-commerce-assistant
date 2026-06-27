@@ -19,6 +19,7 @@ JSONL_LOG_FILES = [
 
 V5_RUNTIME_RESET_MARKER = "v5_0_3_runtime_empty_state_applied"
 V1114_RUNTIME_RESET_MARKER = "v11_14_runtime_full_demo_reset_applied"
+V121_RUNTIME_RESET_MARKER = "v12_1_metric_fact_runtime_reset_applied"
 
 TABLES = [
     {"table_name": "workflow_runs", "time_expression": "COALESCE(MAX(finished_at), MAX(started_at))"},
@@ -37,6 +38,9 @@ TABLES = [
     {"table_name": "imported_report_rows", "time_expression": "MAX(created_at)"},
     {"table_name": "operating_products", "time_expression": "MAX(updated_at)"},
     {"table_name": "operating_stores", "time_expression": "MAX(updated_at)"},
+    {"table_name": "product_metric_facts", "time_expression": "MAX(updated_at)"},
+    {"table_name": "store_metric_facts", "time_expression": "MAX(updated_at)"},
+    {"table_name": "traffic_source_facts", "time_expression": "MAX(updated_at)"},
 ]
 
 # Demo reset must remove the whole import-derived graph, not only raw report rows.
@@ -50,6 +54,9 @@ RUNTIME_TABLES = [
     "alert_events",
     "business_signals_v6",
     "metric_snapshots",
+    "product_metric_facts",
+    "store_metric_facts",
+    "traffic_source_facts",
     "data_snapshots",
     "imported_report_rows",
     "report_records",
@@ -61,7 +68,7 @@ RUNTIME_TABLES = [
 ]
 
 
-RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、快照、信号、任务、日志和导入生成的经营对象主档；账号、角色、权限和基础店铺配置保留。"
+RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、快照、业务信号、任务、日志、导入生成的经营对象主档和指标事实；账号、角色、权限和基础店铺配置保留。"
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -141,6 +148,7 @@ def get_db_status() -> Dict[str, Any]:
     with connect() as conn:
         reset_marker = _meta_get(conn, V5_RUNTIME_RESET_MARKER)
         full_reset_marker = _meta_get(conn, V1114_RUNTIME_RESET_MARKER)
+        metric_fact_reset_marker = _meta_get(conn, V121_RUNTIME_RESET_MARKER)
     return {
         "ok": True,
         "database": {"type": "sqlite", "path": str(db_path), "exists": db_path.exists(), "size_bytes": db_path.stat().st_size if db_path.exists() else 0},
@@ -149,6 +157,7 @@ def get_db_status() -> Dict[str, Any]:
         "runtime_boundary": {"real_erp_connected": False, "real_crm_connected": False, "real_shop_backend_connected": False, "auto_high_risk_execution": False, "note": RUNTIME_BOUNDARY_NOTE},
         "v5RuntimeReset": {"marker": V5_RUNTIME_RESET_MARKER, "applied": reset_marker == "done"},
         "v1114RuntimeFullReset": {"marker": V1114_RUNTIME_RESET_MARKER, "applied": full_reset_marker == "done"},
+        "v121MetricFactRuntimeReset": {"marker": V121_RUNTIME_RESET_MARKER, "applied": metric_fact_reset_marker == "done"},
     }
 
 
@@ -162,6 +171,8 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
         _meta_set(conn, f"{V5_RUNTIME_RESET_MARKER}_reason", reason)
         _meta_set(conn, V1114_RUNTIME_RESET_MARKER, "done")
         _meta_set(conn, f"{V1114_RUNTIME_RESET_MARKER}_reason", reason)
+        _meta_set(conn, V121_RUNTIME_RESET_MARKER, "done")
+        _meta_set(conn, f"{V121_RUNTIME_RESET_MARKER}_reason", reason)
         conn.commit()
 
     reset_tasks()
@@ -174,7 +185,7 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
 
     return {
         "ok": True,
-        "message": "演示运行态已全链路清空：导入行、快照、业务信号、任务、日志、经营商品和经营店铺均回到空状态。",
+        "message": "演示运行态已全链路清空：导入行、快照、业务信号、任务、日志、经营商品、经营店铺和指标事实均回到空状态。",
         "reason": reason,
         "deletedTables": deleted_tables,
         "removedFiles": removed_files,
@@ -197,8 +208,8 @@ def reset_legacy_runtime_once() -> Dict[str, Any]:
     """
     init_db()
     with connect() as conn:
-        if _meta_get(conn, V1114_RUNTIME_RESET_MARKER) == "done" or _meta_get(conn, V5_RUNTIME_RESET_MARKER) == "done":
-            return {"ok": True, "skipped": True, "marker": V1114_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
+        if _meta_get(conn, V121_RUNTIME_RESET_MARKER) == "done" or _meta_get(conn, V1114_RUNTIME_RESET_MARKER) == "done" or _meta_get(conn, V5_RUNTIME_RESET_MARKER) == "done":
+            return {"ok": True, "skipped": True, "marker": V121_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
         stale_count = sum(_table_count(conn, table_name) for table_name in RUNTIME_TABLES)
     if stale_count <= 0:
         with connect() as conn:
@@ -206,10 +217,12 @@ def reset_legacy_runtime_once() -> Dict[str, Any]:
             _meta_set(conn, f"{V5_RUNTIME_RESET_MARKER}_reason", "empty_runtime_noop")
             _meta_set(conn, V1114_RUNTIME_RESET_MARKER, "done")
             _meta_set(conn, f"{V1114_RUNTIME_RESET_MARKER}_reason", "empty_runtime_noop")
+            _meta_set(conn, V121_RUNTIME_RESET_MARKER, "done")
+            _meta_set(conn, f"{V121_RUNTIME_RESET_MARKER}_reason", "empty_runtime_noop")
             conn.commit()
         reset_tasks()
-        return {"ok": True, "skipped": True, "marker": V1114_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
-    result = clear_runtime_data(include_audit_logs=False, reason="v1114_startup_one_time_full_runtime_cleanup")
+        return {"ok": True, "skipped": True, "marker": V121_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
+    result = clear_runtime_data(include_audit_logs=False, reason="v121_startup_one_time_full_runtime_cleanup")
     result["staleRecordCount"] = stale_count
-    result["marker"] = V1114_RUNTIME_RESET_MARKER
+    result["marker"] = V121_RUNTIME_RESET_MARKER
     return result
