@@ -5,6 +5,10 @@ Boundary:
     raw fact rows. It must not create risk judgments, task leads, advice, or report
     explanations. All trend, cross-validation, and task generation logic belongs to
     the downstream data import services.
+
+V12 update:
+    Keep per-sheet rows in addition to the flattened row list so the report profile
+    agent can route 商品经营明细 / 店铺经营汇总 / 流量来源明细 into different fact tables.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm", ".xls", ".csv", ".json"}
+ADAPTER_VERSION = "12.0.0"
 
 
 def _extension(filename: str | None) -> str:
@@ -95,6 +100,7 @@ def _parse_csv(content: bytes) -> Dict[str, Any]:
     return {
         "format": "csv",
         "rows": rows,
+        "sheetRows": {"CSV": rows},
         "totalRows": len(rows),
         "sheetCount": 1,
         "sheets": [{"sheetName": "CSV", "headers": headers, "rowCount": len(rows)}],
@@ -112,14 +118,17 @@ def _parse_json(content: bytes) -> Dict[str, Any]:
         rows = []
     if not rows:
         raise ValueError("JSON 需要是对象数组，或包含 rows/data 数组。")
-    headers = []
+    headers: List[str] = []
     for row in rows[:20]:
         for key in row.keys():
             if key not in headers:
                 headers.append(str(key))
+    for row in rows:
+        row.setdefault("__source_sheet", "JSON")
     return {
         "format": "json",
         "rows": rows,
+        "sheetRows": {"JSON": rows},
         "totalRows": len(rows),
         "sheetCount": 1,
         "sheets": [{"sheetName": "JSON", "headers": headers, "rowCount": len(rows)}],
@@ -134,17 +143,19 @@ def _parse_xlsx(content: bytes) -> Dict[str, Any]:
 
     workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     rows: List[Dict[str, Any]] = []
+    sheet_rows: Dict[str, List[Dict[str, Any]]] = {}
     sheets: List[Dict[str, Any]] = []
     for worksheet in workbook.worksheets:
         matrix = [list(row) for row in worksheet.iter_rows(values_only=True)]
-        headers, sheet_rows = _matrix_to_rows(matrix, source_sheet=worksheet.title)
-        if not headers and not sheet_rows:
+        headers, current_rows = _matrix_to_rows(matrix, source_sheet=worksheet.title)
+        if not headers and not current_rows:
             continue
-        rows.extend(sheet_rows)
-        sheets.append({"sheetName": worksheet.title, "headers": headers, "rowCount": len(sheet_rows)})
+        rows.extend(current_rows)
+        sheet_rows[worksheet.title] = current_rows
+        sheets.append({"sheetName": worksheet.title, "headers": headers, "rowCount": len(current_rows)})
     if not rows:
         raise ValueError("Excel 文件没有读取到有效数据行。")
-    return {"format": "xlsx", "rows": rows, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
+    return {"format": "xlsx", "rows": rows, "sheetRows": sheet_rows, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
 
 
 def _parse_xls(content: bytes) -> Dict[str, Any]:
@@ -155,6 +166,7 @@ def _parse_xls(content: bytes) -> Dict[str, Any]:
 
     book = xlrd.open_workbook(file_contents=content)
     rows: List[Dict[str, Any]] = []
+    sheet_rows: Dict[str, List[Dict[str, Any]]] = {}
     sheets: List[Dict[str, Any]] = []
     for sheet in book.sheets():
         matrix: List[List[Any]] = []
@@ -170,14 +182,15 @@ def _parse_xls(content: bytes) -> Dict[str, Any]:
                         pass
                 row.append(value)
             matrix.append(row)
-        headers, sheet_rows = _matrix_to_rows(matrix, source_sheet=sheet.name)
-        if not headers and not sheet_rows:
+        headers, current_rows = _matrix_to_rows(matrix, source_sheet=sheet.name)
+        if not headers and not current_rows:
             continue
-        rows.extend(sheet_rows)
-        sheets.append({"sheetName": sheet.name, "headers": headers, "rowCount": len(sheet_rows)})
+        rows.extend(current_rows)
+        sheet_rows[sheet.name] = current_rows
+        sheets.append({"sheetName": sheet.name, "headers": headers, "rowCount": len(current_rows)})
     if not rows:
         raise ValueError("Excel 文件没有读取到有效数据行。")
-    return {"format": "xls", "rows": rows, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
+    return {"format": "xls", "rows": rows, "sheetRows": sheet_rows, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
 
 
 def parse_upload_file(filename: str | None, content: bytes, content_type: str | None = None) -> Dict[str, Any]:
@@ -196,12 +209,18 @@ def parse_upload_file(filename: str | None, content: bytes, content_type: str | 
         raise ValueError("不支持的文件格式。")
     parsed["fileName"] = filename or "upload"
     parsed["contentType"] = content_type or ""
-    parsed["adapterVersion"] = "10.10.0"
-    parsed["boundary"] = "raw_fact_rows_only_no_task_judgement"
+    parsed["adapterVersion"] = ADAPTER_VERSION
+    parsed["boundary"] = "raw_fact_rows_only_no_task_judgement_v12_sheet_rows_preserved"
     return parsed
 
 
 def compact_upload_meta(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from src.services.report_profile_agent_service import build_report_profile
+
+        report_profile = build_report_profile(parsed)
+    except Exception as exc:  # profile failure must not block raw parsing
+        report_profile = {"version": "12.0.0", "status": "profile_failed", "error": str(exc)}
     return {
         "adapterVersion": parsed.get("adapterVersion"),
         "fileName": parsed.get("fileName"),
@@ -210,5 +229,6 @@ def compact_upload_meta(parsed: Dict[str, Any]) -> Dict[str, Any]:
         "totalRows": parsed.get("totalRows", 0),
         "sheetCount": parsed.get("sheetCount", 0),
         "sheets": parsed.get("sheets", []),
+        "reportProfile": report_profile,
         "boundary": parsed.get("boundary"),
     }
