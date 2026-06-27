@@ -13,6 +13,7 @@ V12.2 的目标不是继续扩大任务数量，而是把报表上传从“Sheet
 - 指标事实必须可查询、可复用、可被任务证据闸门引用，不能只藏在商品 payload 里。
 - 商品指标展示必须 fail-closed：事实表没有就是未识别，不能读对象缓存，不能用 0 伪装成功。
 - ROI 必须按 product / traffic_source / store 三个口径隔离，不能互相覆盖。
+- importDiagnostics 必须解释 Sheet → Block → Fact → Gap → Staging 的完整链路。
 
 ## 2. V12.2.0：报表布局 Agent
 
@@ -186,7 +187,60 @@ traffic_source_facts.roi        → 流量来源 ROI
 store_metric_facts.roi          → 店铺汇总 ROI
 ```
 
-任务证据闸门也按 `metric_scope` 取证：
+任何一层 ROI 都不能覆盖另一层。
+
+## 8. V12.2.6：导入诊断升级为布局诊断
+
+`import_diagnostics_service.py` 现在输出：
+
+```text
+layoutMode = sheet_block_fact_gap_staging
+stageTrace = Sheet → Block → Fact → Gap → Staging → EvidenceGate
+sheets[].blocks[]
+```
+
+每个 block 会展示：
+
+```text
+blockId
+blockType
+targetTable
+metricScope
+range / rowStart / rowEnd / columnStart / columnEnd
+factCount
+gapCount
+blockingGapCount
+recognizedMetrics
+rawFields
+issues
+acceptanceStatus
+```
+
+这一步专门解决 Demo 的信任问题：上传后可以直接看到系统到底把哪个 Sheet、哪个 block、哪个字段写进了哪张事实表，哪些只是普通缺口，哪些进入暂存。
+
+暂存规则：
+
+```text
+无法路由 / 低置信 / 未知口径 / staging_unknown
+→ Staging
+→ 不进入商品页事实展示
+→ 不生成经营任务
+```
+
+## 9. V12.2.7：任务证据闸门严格按 metric_scope 取证
+
+`task_evidence_gate_service.py` 现在返回：
+
+```text
+metricScope
+scopeLabel
+requiredFactTables
+forbiddenCrossScope
+presentMetrics[].metricScope
+presentMetrics[].factTable
+```
+
+取证规则：
 
 ```text
 商品降投 / 商品投产任务 → 只查 product_metric_facts, metric_scope=product
@@ -194,9 +248,17 @@ store_metric_facts.roi          → 店铺汇总 ROI
 店铺经营任务 → 只查 store_metric_facts, metric_scope=store
 ```
 
-任何一层 ROI 都不能覆盖另一层。
+这意味着：
 
-## 8. 上传导入链路
+```text
+product ROI 缺失时，不能拿 traffic_source ROI 补。
+traffic_source ROI 缺失时，不能拿 product ROI 补。
+store ROI 缺失时，不能拿 product ROI 补。
+```
+
+证据缺失时，任务会降级为“经营证据补齐任务”，不会直接进入高风险执行。
+
+## 10. 上传导入链路
 
 ```text
 /api/data/upload/confirm
@@ -208,13 +270,13 @@ store_metric_facts.roi          → 店铺汇总 ROI
 → ingest_data_gaps_from_import
 → ingest_product_trends
 → generate_risk_tasks_for_signals
-→ task_evidence_gate_service，按metric_scope取证
-→ importDiagnostics
+→ task_evidence_gate_service，严格按 metric_scope 取证
+→ importDiagnostics，输出 Sheet → Block → Fact → Gap → Staging
 ```
 
 旧规则不得因为字段缺失直接创建任务。
 
-## 9. 验收接口
+## 11. 验收接口
 
 ```text
 /api/health
@@ -231,14 +293,19 @@ reportProfile.sheetProfiles[].blocks 存在
 metricFactSync.mode = layout_block_metric_fact_routing
 metricFactSync.blockSummaries 存在
 operatingObjectSync.metricCacheDisabled = true
+importDiagnostics.layoutMode = sheet_block_fact_gap_staging
+importDiagnostics.stageTrace 存在
+importDiagnostics.sheets[].blocks[] 存在
 product_metric_facts 中 ROI 不被 traffic_source_facts 的 ROI 覆盖
 商品详情 ROI 未命中时显示“未识别”，不显示 0 或缓存
-任务 evidenceGate.metricScope 存在，且 requiredFactTables 与口径一致
+任务 evidenceGate.metricScope 存在
+任务 evidenceGate.requiredFactTables 与 metricScope 一致
+任务 evidenceGate.forbiddenCrossScope 不为空
 ```
 
-## 10. 当前版本边界
+## 12. 当前版本边界
 
-V12.2.5 已完成：
+V12.2.7 已完成：
 
 ```text
 V12.2.0：报表布局 Agent，Sheet Profile → Block Profile
@@ -247,6 +314,8 @@ V12.2.2：事实表按 block 写入 product/store/traffic facts
 V12.2.3：经营对象只保留身份定位，取消商品指标对象缓存托底
 V12.2.4：商品页 fail-closed，事实表没有就显示未识别
 V12.2.5：ROI 口径隔离，product ROI / traffic ROI / store ROI 不互相替代
+V12.2.6：导入诊断升级为 Sheet → Block → Fact → Gap → Staging 布局诊断
+V12.2.7：任务证据闸门严格按 metric_scope 取证，禁止跨口径 ROI
 ```
 
-下一步建议进入 V12.2.6：把 importDiagnostics 升级成前端布局诊断页，让你直接在页面上看到 Sheet → Block → Fact → Gap 的识别结果。
+下一步建议进入 V12.2.8：把 importDiagnostics 的布局诊断做成前端诊断卡片，让你在“数据”页面直接看到 Sheet → Block → Fact → Gap 的识别结果。
