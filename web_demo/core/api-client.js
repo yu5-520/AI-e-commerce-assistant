@@ -57,6 +57,13 @@
       throw error;
     }
   }
+  async function optionalRequest(path, fallback = {}) {
+    try {
+      return await request(path);
+    } catch (error) {
+      return { ...fallback, optionalError: error?.message || String(error || "接口异常"), optionalPath: path };
+    }
+  }
   async function uploadRequest(path, file, fields = {}) {
     try {
       const form = new FormData();
@@ -78,10 +85,6 @@
     window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } }));
     return result;
   }
-  function applyRecapData(recap) {
-    window.AppMockData.recapCandidates = Array.isArray(recap?.items) ? recap.items : [];
-    window.AppMockData.recapSummary = recap?.summary || { total: 0, daily: 0, weekly: 0, monthly: 0, highRisk: 0 };
-  }
   function clearViewState() { ["manager_task_state_v241", "manager_task_sort_v241", "manager_selected_task_v241", "owner_review_state", "owner_dashboard_state"].forEach((key) => localStorage.removeItem(key)); }
   function clearClientRuntime() {
     clearViewState();
@@ -91,20 +94,20 @@
     window.AppMockData.traffic = [];
     window.AppMockData.reportGroups = [];
     window.AppMockData.reportDetails = {};
-    window.AppMockData.v3 = { version: "12.1.6", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
+    window.AppMockData.v3 = { version: "12.2.8", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
     window.AppMockData.recentAlerts = [];
     status.lastImportSync = null;
     window.AppTaskStore?.hydrate?.([], [], [], {});
   }
   function rememberImportSync(result) {
-    status.lastImportSync = result?.v104ImportTaskSync || null;
+    status.lastImportSync = result?.v104ImportTaskSync || result?.importDiagnostics || null;
     window.dispatchEvent(new CustomEvent("v104-import-sync", { detail: { result, sync: status.lastImportSync } }));
     return result;
   }
   function productFormatters() {
     return {
-      money(value) { return value === null || value === undefined || value === "" || value === "—" ? "—" : String(value).startsWith("¥") ? String(value) : `¥${value}`; },
-      percent(value) { return value === null || value === undefined || value === "" || value === "—" ? "—" : String(value).includes("%") ? String(value) : `${value}%`; },
+      money(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).startsWith("¥") ? String(value) : `¥${value}`; },
+      percent(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).includes("%") ? String(value) : `${value}%`; },
     };
   }
 
@@ -115,8 +118,10 @@
     accounts: loadAccount,
     me: () => request("/api/accounts/me"),
     switchAccount: async (userId) => {
-      setCurrentUserId(userId);
+      const previousUserId = getCurrentUserId();
       const switched = await request("/api/accounts/switch", null, { method: "POST", body: { userId } });
+      const nextUserId = switched?.currentUser?.id || userId || previousUserId;
+      setCurrentUserId(nextUserId);
       account = switched?.account || (await loadAccount());
       window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } }));
       return account;
@@ -153,7 +158,7 @@
     v3Summary: () => request("/api/data/v3-summary"),
     v3Alerts: () => request("/api/data/alerts?active_only=true"),
     reportTemplates: () => request("/api/data/templates"),
-    dataSourceConnections: () => request("/api/data/source-connections"),
+    dataSourceConnections: () => optionalRequest("/api/data/source-connections", { sources: [], degraded: true, rule: "辅助数据源接口未接通，不阻塞数据主页面。" }),
     metricFactsSummary: () => request("/api/data/metric-facts/summary"),
     dataGapSummary: () => request("/api/data/data-gaps/summary"),
     importDiagnostics: (dataVersion = "") => request(`/api/data/import-diagnostics${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`),
@@ -168,6 +173,13 @@
     isolation: () => request("/api/system/isolation"),
     resetRuntimeData: async (includeAuditLogs = true) => { const result = await api.post(`/api/system/reset-runtime-data?confirm=true&include_audit_logs=${includeAuditLogs ? "true" : "false"}`, null, {}); clearClientRuntime(); return result; },
     resetLegacyRuntimeOnce: () => api.post("/api/system/reset-legacy-runtime-once", null, {}),
+    refreshAfterDataImport: async (result = {}) => {
+      rememberImportSync(result);
+      const [products, competitors, listings, traffic, report] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report()]);
+      api.applyModuleData({ products, competitors, listings, traffic, report });
+      window.dispatchEvent(new CustomEvent("v1228-data-refresh", { detail: { result } }));
+      return { products, competitors, listings, traffic, report };
+    },
     todo: (params = {}) => { const query = new URLSearchParams(); if (params.scope) query.set("scope", params.scope); if (params.assigneeId) query.set("assignee_id", params.assigneeId); const suffix = query.toString() ? `?${query.toString()}` : ""; return request(`/api/modules/todo${suffix}`); },
     todoEvents: () => request("/api/modules/todo/events"),
     todoCounters: () => request("/api/modules/todo/counters"),
