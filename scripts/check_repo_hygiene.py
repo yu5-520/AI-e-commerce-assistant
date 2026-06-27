@@ -52,7 +52,7 @@ STATIC_MUST_CONTAIN = {
     "docs/PRODUCT_ARCHITECTURE.md": ["product_metric_facts", "traffic_source_facts", "data_gap_events", "未识别"],
     "docs/DATA_TASK_LIFECYCLE.md": ["Sheet → Block → Fact → Gap → Staging", "requiredFactTables", "forbiddenCrossScope"],
     "src/services/risk_task_service.py": ["operating_cadence_task_service", "v12_4_redline_plus_operating_cadence_agent_task_generation"],
-    "src/services/operating_cadence_task_service.py": ["CADENCE_WINDOWS", "daily_operating_task", "日报/周报", "upload_frequency"],
+    "src/services/operating_cadence_task_service.py": ["CADENCE_WINDOWS", "daily_operating_task", "日报/周报", "_upload_cadence"],
 }
 
 FORBIDDEN_CURRENT_DOC_SNIPPETS = [
