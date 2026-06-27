@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V11.16 仓库版本统一与前端链路收口基线。
+当前基线：V11.17 店铺商品档案作用域与商品视觉修复。
 
 ## 产品定位
 
@@ -24,7 +24,7 @@
 → v116 导入闭环反查
 ```
 
-## V11.16 可信展示规则
+## V11.17 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -36,6 +36,9 @@ API_CONTRACT 必须只记录真实可用接口。
 经营中心发现源数据为 0 但派生运行态仍残留时，必须 fail-closed，不聚合旧对象。
 前端接口失败时显示明确错误态，不展示本地业务兜底。
 商品档案必须走 AppApi.product 真实接口，不再读取 AppMockData.products。
+店铺进入商品档案时必须带 storeId / storeName 作用域，不再共用全局商品列表。
+商品档案必须使用 objectId / archiveId 作为唯一档案 ID，避免不同店铺同商品 ID 串联。
+商品列表必须使用产品化商品卡片视觉，不回退成字段堆叠。
 店铺经营状态必须以一店一行产品化卡片展示，不回退成字段堆叠。
 后端正常返回空数组 / 空对象时显示真实空态。
 ```
@@ -49,6 +52,7 @@ API_CONTRACT 必须只记录真实可用接口。
 /api/modules/report                    数据 / 报表
 /api/modules/operating-unit            经营
 /api/modules/product                   商品
+/api/modules/product?storeId=STORE_ID  店铺商品档案
 /api/modules/todo                      任务
 /api/modules/log                       日志
 /api/accounts                          账号
