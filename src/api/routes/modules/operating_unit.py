@@ -15,7 +15,7 @@ from src.services.operating_object_store_service import list_operating_products,
 from src.services.report_alert_service import get_v3_dashboard_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.15.1"
+OPERATING_UNIT_VERSION = "11.16.0"
 SOURCE_TABLES = ["import_records", "report_records", "imported_report_rows", "data_snapshots", "metric_snapshots"]
 DERIVED_TABLES = ["business_signals_v6", "operating_products", "operating_stores", "task_status", "task_assignments", "task_submissions", "task_reviews", "alert_events"]
 T = TypeVar("T")
@@ -39,12 +39,7 @@ def _percent(value: Any) -> float | None:
 
 
 def _has_value(value: Any) -> bool:
-    """Return whether a merge value is meaningful without building unsafe sets.
-
-    V11.15 bug source: `_merge_store_rows` used `{None, "", [], "—"}`.
-    A list inside a set raises `TypeError: unhashable type: 'list'` when duplicate
-    store rows are merged, which surfaced as `/api/modules/operating-unit` 500.
-    """
+    """Return whether a merge value is meaningful without building unsafe sets."""
     if value is None or value == "" or value == "—":
         return False
     if isinstance(value, (list, tuple, set, dict)) and len(value) == 0:
@@ -334,5 +329,5 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "objectStore": object_summary,
         "objectSyncFailed": False,
         "diagnostics": {"errors": errors},
-        "rule": "V11.15.1 经营单元合并店铺行时不再使用包含 list 的非法 set，重复店铺不会触发 500。",
+        "rule": "V11.16 经营单元合并店铺行使用安全空值判断，重复店铺不会触发 500。",
     }
