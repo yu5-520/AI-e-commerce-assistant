@@ -15,6 +15,7 @@ from src.services.data_version_service import delete_data_version, get_data_vers
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
 from src.services.import_adapter_service import compact_upload_meta, parse_upload_file
+from src.services.import_diagnostics_service import import_diagnostics
 from src.services.metric_fact_store_service import ingest_metric_facts_from_import, ingest_metric_facts_from_sheet_rows, metric_fact_summary
 from src.services.operating_object_store_service import upsert_operating_objects_from_import
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions
@@ -106,12 +107,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.1.3：接口/演示同步只写数据、事实、缺口和预警，旧任务生成规则不再创建新任务。"
+        result["rule"] = "V12.1.6：接口/演示同步只写数据、事实、缺口和预警，旧任务生成规则不再创建新任务。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "12.1.3",
-        "mode": "v12_1_3_dataset_sync_without_legacy_task_rules",
+        "version": "12.1.6",
+        "mode": "v12_1_6_dataset_sync_without_legacy_task_rules",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -160,7 +161,7 @@ def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: 
         )
         return result
     if not materialized_rows:
-        result["metricFactSync"] = {"version": "12.1.3", "skipped": True, "reason": "rows is not a list"}
+        result["metricFactSync"] = {"version": "12.1.6", "skipped": True, "reason": "rows is not a list"}
         return result
     result["metricFactSync"] = ingest_metric_facts_from_import(
         result,
@@ -187,6 +188,14 @@ def _attach_v1213_data_gap_sync(result: Dict[str, Any], rows: Any, *, source: st
     return result
 
 
+def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
+    version = result.get("dataVersion")
+    if not version and isinstance(result.get("results"), list) and result["results"]:
+        version = next((item.get("dataVersion") for item in result["results"] if isinstance(item, dict) and item.get("dataVersion")), None)
+    result["importDiagnostics"] = import_diagnostics(str(version) if version else None)
+    return result
+
+
 def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = True) -> Dict[str, Any]:
     if upsert_objects:
         result = _attach_operating_object_sync(request, result, rows, source=source)
@@ -196,15 +205,16 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
     v104 = attach_v104_import_sync(result, source=source)
     v107 = attach_v107_operating_profile(v104)
     v108 = attach_v108_tag_change_tasks(v107, ctx)
-    return attach_v116_import_closed_loop(v108, ctx, source=source)
+    closed = attach_v116_import_closed_loop(v108, ctx, source=source)
+    return _attach_import_diagnostics(closed)
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    """Generate product snapshots, metric trends, signals, and SOP tasks."""
+    """Generate product snapshots, metric trends, signals, and evidence-gated SOP tasks."""
     materialized_rows = _materialize_import_rows(result, rows)
     if not materialized_rows:
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "12.1.3", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "12.1.6", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -226,7 +236,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
     result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "导入后先生成商品快照、指标趋势和经营信号。"}
-    result["riskTaskSync"] = {"version": "12.1.3", "mode": "ownership_first_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务。"}
+    result["riskTaskSync"] = {"version": "12.1.6", "mode": "evidence_gated_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务；关键证据缺失时降级为补证任务。"}
     return result
 
 
@@ -294,6 +304,11 @@ def metric_facts_summary() -> Dict[str, Any]:
 @router.get("/data-gaps/summary")
 def data_gaps_summary() -> Dict[str, Any]:
     return data_gap_summary()
+
+
+@router.get("/import-diagnostics")
+def import_diagnostics_endpoint(data_version: str | None = Query(default=None, alias="dataVersion")) -> Dict[str, Any]:
+    return import_diagnostics(data_version)
 
 
 @router.get("/versions/{data_version}/detail")
