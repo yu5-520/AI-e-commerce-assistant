@@ -1,11 +1,8 @@
 """Tenant-aware request context for the P0 SaaS runtime.
 
-This module is intentionally dependency-light so it can be introduced without
-breaking the current demo runtime. In production, the same UserContext contract
-must be populated from verified JWT / Session claims instead of mock headers.
-
-V11.4 safety rule: X-Mock-User-Id is demo-only. Production mode must use a
-trusted auth identity header until the real session/JWT adapter is connected.
+V12.2.8 keeps the production isolation model, but lets an ECS demo explicitly
+allow mock identity with DEMO_ACCOUNT_SWITCH=true.  This is only for demo role
+validation; production remains strict by default.
 """
 
 from __future__ import annotations
@@ -19,6 +16,7 @@ from src.services.account_service import current_user, get_user, user_id_from_he
 from src.services.backend_isolation_service import (
     DEFAULT_ORG_ID,
     DEFAULT_TENANT_ID,
+    demo_mock_identity_allowed,
     mock_user_header_value,
     production_mode,
     request_org_id,
@@ -86,7 +84,7 @@ class UserContext:
 
 def _resolve_request_user(headers: Mapping[str, str]) -> tuple[str, str]:
     """Resolve user identity with different demo/production trust rules."""
-    if production_mode():
+    if production_mode() and not demo_mock_identity_allowed():
         if mock_user_header_value(headers):
             raise HTTPException(status_code=403, detail="X-Mock-User-Id is disabled in production")
         user_id = trusted_user_header_value(headers)
@@ -111,7 +109,7 @@ def context_from_headers(headers: Mapping[str, str] | None = None) -> UserContex
     user = current_user(user_id)
     tenant_id = request_tenant_id(headers)
     org_id = request_org_id(headers)
-    if production_mode():
+    if production_mode() and not demo_mock_identity_allowed():
         if tenant_id == DEFAULT_TENANT_ID and not headers.get(TENANT_HEADER):
             raise HTTPException(status_code=401, detail="missing tenant scope")
         if org_id == DEFAULT_ORG_ID and not headers.get(ORG_HEADER):
@@ -126,7 +124,7 @@ def context_from_headers(headers: Mapping[str, str] | None = None) -> UserContex
         store_group_ids=list(user.get("storeGroupIds") or []),
         store_ids=list(visible_store_ids_for_user(user.get("id"))),
         visible_modules=list(user.get("visibleModules") or []),
-        demo_mode=not production_mode(),
+        demo_mode=demo_mock_identity_allowed(),
         auth_source=auth_source,
         strict_scope=strict_data_scope_enabled(),
     )
@@ -138,5 +136,4 @@ async def get_current_context(request: Request) -> UserContext:
     Do not manually parse tenant/user scope inside handlers. Add this dependency
     and pass ctx into services/repositories.
     """
-
     return context_from_headers(request.headers)
