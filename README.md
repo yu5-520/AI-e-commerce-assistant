@@ -1,30 +1,33 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V11.17 店铺商品档案作用域与商品视觉修复。
+当前基线：V12.0 报表画像 Agent、系统标准编码与指标事实层。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：商品入库、店铺聚合、标签沉淀、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、商品入库、店铺聚合、系统编码、指标事实、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
 
 ## 当前主链路
 
 ```text
 报表 / 接口数据导入
 → 当前账号识别
-→ 文件解析 / 字段映射 / 校验
+→ 文件解析 / Sheet 保留 / 字段映射 / 校验
+→ V12 报表画像 Agent 判断 Sheet 结构和目标事实层
 → DataVersion / imported_report_rows / snapshots
 → operating_products / operating_stores 主档 upsert
+→ 系统编码：STORE / SPU / LINK / SKU
+→ metricFacts 指标事实沉淀
 → 商品 / 店铺标签与权重
 → 趋势信号 business_signals_v6
 → risk_task_service 任务门控
-→ 高风险高时效进入任务队列
+→ 仅高风险高时效或经营判断缺证进入任务队列
 → 任务详情结构化报告
 → 证据提交 / 总管复核
 → 日志留痕 / RAG 记忆候选
 → v116 导入闭环反查
 ```
 
-## V11.17 可信展示规则
+## V12 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -39,8 +42,9 @@ API_CONTRACT 必须只记录真实可用接口。
 店铺进入商品档案时必须带 storeId / storeName 作用域，不再共用全局商品列表。
 商品档案必须使用 objectId / archiveId 作为唯一档案 ID，避免不同店铺同商品 ID 串联。
 商品列表必须使用产品化商品卡片视觉，不回退成字段堆叠。
-店铺经营状态必须以一店一行产品化卡片展示，不回退成字段堆叠。
-后端正常返回空数组 / 空对象时显示真实空态。
+商品名称不作为商品同一性的主识别依据；系统编码、商品链接、ERP 编码、SKU、店铺编码才是主轴。
+上传解析必须保留 sheetRows，不能把多 Sheet 报表直接压平成一个单表逻辑。
+缺字段不直接生成任务；只有经营判断被关键证据阻塞时才生成补证任务。
 ```
 
 ## 当前主入口
@@ -61,6 +65,8 @@ API_CONTRACT 必须只记录真实可用接口。
 /api/system/backfill-operating-objects 经营对象回填
 /api/system/repositories               Repository 状态
 /api/system/postgres-cutover-check     PostgreSQL 主写切换前检查
+/api/data/upload/preview               上传文件预览 + V12 报表画像
+/api/data/upload/confirm               上传确认导入 + 经营对象 / 指标事实同步
 /api/architecture/v10/readiness         产品验收守卫
 ```
 
@@ -71,6 +77,7 @@ docs/PRODUCT_ARCHITECTURE.md      产品结构和模块边界
 docs/MODULE_CHAIN.md              AI 修改仓库的模块链定位图
 docs/API_CONTRACT.md              当前真实 API 契约
 docs/DATA_TASK_LIFECYCLE.md       数据、标签、任务、复核、日志生命周期
+docs/V12_REPORT_GATEWAY.md        V12 报表画像 Agent 和指标事实层
 docs/DEPLOYMENT_RUNBOOK.md        服务器部署和排障 SOP
 docs/POSTGRESQL_CUTOVER.md        PostgreSQL 主写切换边界
 scripts/deploy_fast.sh            Demo 快速部署脚本
@@ -119,4 +126,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-默认运行仍以 SQLite-first Demo 为主。PostgreSQL 是生产迁移目标，需要通过 cutover check 和抽样对账后再进入主写切换。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12 新增的指标事实目前先沉淀在经营对象 payload.metricFacts，V12.1 再独立落表为 product_metric_facts / store_metric_facts / traffic_source_facts。
