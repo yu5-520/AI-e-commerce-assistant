@@ -1,5 +1,5 @@
-Current Version: 11.13.0
+Current Version: 11.15.0
 
-V11.13｜Demo 快速部署模式
+V11.15｜文档治理与链路一致性修复
 
-主线：Demo 阶段高频小改不再走 releases/current 原子发布 → 新增 scripts/deploy_fast.sh → 日常更新只执行 fetch / reset / 版本一致性检查 / systemd 重启 / health 检查 → 不 clone release、不重建 venv、不默认 pip install → 阶段版本仍保留 deploy_atomic.sh，客户环境再走完整发布。
+主线：收口 V11.14 半更新后的版本断点 → 统一 VERSION / FastAPI app.version / health.API_VERSION / 前端资源版本 → 压缩 README 为当前入口文档 → 对齐 MODULE_CHAIN、API_CONTRACT 和真实 data_import 主链路 → 增加 scripts/check_repo_hygiene.py 仓库卫生检查 → Demo 清空链路以全运行态清空为准。
