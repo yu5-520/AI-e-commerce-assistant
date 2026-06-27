@@ -1,4 +1,4 @@
-"""V11.10 operating object backfill and runtime diagnostics.
+"""V11.14 operating object backfill and runtime diagnostics.
 
 This service fixes deployments where historical report rows or demo/API sync rows
 exist, but operating_products / operating_stores were not filled by older chains.
@@ -17,9 +17,11 @@ from src.services.import_row_store_service import load_import_rows
 from src.services.operating_object_store_service import list_operating_products, list_operating_stores, operating_object_summary, upsert_operating_objects_from_import
 from src.services.report_alert_service import now_iso
 
-BACKFILL_VERSION = "11.10.0"
+BACKFILL_VERSION = "11.14.0"
 BACKFILL_DATASETS = ["products", "orders", "inventory", "refunds"]
 DIAGNOSTIC_TABLES = [
+    "import_records",
+    "report_records",
     "imported_report_rows",
     "data_snapshots",
     "metric_snapshots",
@@ -27,8 +29,13 @@ DIAGNOSTIC_TABLES = [
     "operating_products",
     "operating_stores",
     "task_status",
+    "task_assignments",
+    "task_submissions",
+    "task_reviews",
     "alert_events",
 ]
+SOURCE_TABLES = ["import_records", "report_records", "imported_report_rows", "data_snapshots", "metric_snapshots"]
+DERIVED_TABLES = ["business_signals_v6", "operating_products", "operating_stores", "task_status", "task_assignments", "task_submissions", "task_reviews", "alert_events"]
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -78,7 +85,7 @@ def _materialize_backfill_rows() -> Dict[str, Any]:
         rows = _fallback_example_rows()
         source = "examples_fallback"
     normalized: List[Dict[str, Any]] = []
-    for index, row in enumerate(rows):
+    for row in rows:
         if not isinstance(row, dict):
             continue
         dataset_name = str(row.get("datasetName") or row.get("dataset_name") or "backfill")
@@ -109,11 +116,22 @@ def runtime_diagnostics(ctx: UserContext) -> Dict[str, Any]:
     object_summary = operating_object_summary(ctx.user_id)
     imported_rows = table_counts.get("imported_report_rows", 0)
     total_object_rows = table_counts.get("operating_products", 0) + table_counts.get("operating_stores", 0)
+    source_rows = sum(table_counts.get(name, 0) for name in SOURCE_TABLES)
+    derived_rows = sum(table_counts.get(name, 0) for name in DERIVED_TABLES)
+    dirty_runtime_residue = source_rows == 0 and derived_rows > 0
     object_sync_failed = imported_rows > 0 and total_object_rows == 0
     visible_object_empty = imported_rows > 0 and not visible_products and not visible_stores
+    if dirty_runtime_residue:
+        status = "dirty_runtime_residue"
+    elif object_sync_failed:
+        status = "object_sync_failed"
+    elif visible_object_empty:
+        status = "visible_empty"
+    else:
+        status = "ok"
     return {
         "version": BACKFILL_VERSION,
-        "status": "object_sync_failed" if object_sync_failed else "visible_empty" if visible_object_empty else "ok",
+        "status": status,
         "database": {"type": "sqlite", "path": str(DB_PATH)},
         "currentContext": ctx.audit_meta(),
         "tableCounts": table_counts,
@@ -122,20 +140,36 @@ def runtime_diagnostics(ctx: UserContext) -> Dict[str, Any]:
         "latest": latest,
         "objectSyncFailed": object_sync_failed,
         "visibleObjectEmpty": visible_object_empty,
-        "canBackfill": imported_rows > 0 or total_object_rows == 0,
-        "rule": "系统运行态以 operating_products / operating_stores 为准；历史导入需要显式回填经营对象主档。",
+        "dirtyRuntimeResidue": dirty_runtime_residue,
+        "orphanDerivedCount": derived_rows if dirty_runtime_residue else 0,
+        "orphanSignalCount": table_counts.get("business_signals_v6", 0) if dirty_runtime_residue else 0,
+        "canBackfill": (not dirty_runtime_residue) and (imported_rows > 0 or total_object_rows == 0),
+        "canClearRuntime": dirty_runtime_residue or derived_rows > 0 or source_rows > 0,
+        "rule": "系统运行态以完整导入链路为准；清空测试数据必须同步删除导入行、快照、信号、任务、日志和经营对象主档。",
     }
 
 
 def backfill_operating_objects(ctx: UserContext) -> Dict[str, Any]:
     before = runtime_diagnostics(ctx)
+    if before.get("dirtyRuntimeResidue"):
+        return {
+            "version": BACKFILL_VERSION,
+            "status": "blocked_dirty_runtime_residue",
+            "source": "runtime_diagnostics",
+            "rowCount": 0,
+            "datasetCount": 0,
+            "operatingObjectSync": {"productUpsertCount": 0, "storeUpsertCount": 0},
+            "before": before,
+            "after": before,
+            "rule": "检测到报表源数据已清空但派生经营对象/信号仍残留。先执行清空演示环境，不允许用回填继续叠脏数据。",
+        }
     materialized = _materialize_backfill_rows()
     rows: List[Dict[str, Any]] = materialized["rows"]
     result = {"version": BACKFILL_VERSION, "mode": "operating_object_backfill", "results": _group_results(rows), "rows": rows}
     sync = upsert_operating_objects_from_import(
         result,
         rows,
-        source=f"v1110_backfill_{materialized['source']}",
+        source=f"v1114_backfill_{materialized['source']}",
         uploader_user_id=ctx.user_id,
         uploader_role_id=ctx.role_id,
     )
