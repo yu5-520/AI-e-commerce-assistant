@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# V11.13 demo fast deployment script.
+# V11.15 demo fast deployment script.
 # Goal: high-frequency Demo iteration. No release clone, no venv rebuild, no pip install by default.
+# V11.15 adds repo hygiene verification so docs, API contract and version files do not drift.
 # Use deploy_atomic.sh for milestone releases and production-like verification.
 
 APP_NAME="${APP_NAME:-ai-ecommerce-assistant}"
@@ -134,6 +135,16 @@ verify_release() {
   "$PYTHON_BIN" scripts/verify_release.py --route-mode "$ROUTE_GUARD_MODE"
 }
 
+check_repo_hygiene() {
+  cd "$APP_DIR"
+  if [ -f scripts/check_repo_hygiene.py ]; then
+    log "check repo hygiene"
+    "$PYTHON_BIN" scripts/check_repo_hygiene.py
+  else
+    log "skip repo hygiene: scripts/check_repo_hygiene.py not found"
+  fi
+}
+
 install_systemd_override() {
   [ "$INSTALL_SYSTEMD_OVERRIDE" = "1" ] || return 0
   log "install systemd override for demo fast deploy"
@@ -212,6 +223,7 @@ main() {
   reset_to_latest
   install_requirements_if_forced
   verify_release
+  check_repo_hygiene
   install_systemd_override
   health_check
   reload_nginx
