@@ -91,7 +91,7 @@
     window.AppMockData.traffic = [];
     window.AppMockData.reportGroups = [];
     window.AppMockData.reportDetails = {};
-    window.AppMockData.v3 = { version: "11.5.0", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
+    window.AppMockData.v3 = { version: "12.1.6", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
     window.AppMockData.recentAlerts = [];
     status.lastImportSync = null;
     window.AppTaskStore?.hydrate?.([], [], [], {});
@@ -101,9 +101,15 @@
     window.dispatchEvent(new CustomEvent("v104-import-sync", { detail: { result, sync: status.lastImportSync } }));
     return result;
   }
+  function productFormatters() {
+    return {
+      money(value) { return value === null || value === undefined || value === "" || value === "—" ? "—" : String(value).startsWith("¥") ? String(value) : `¥${value}`; },
+      percent(value) { return value === null || value === undefined || value === "" || value === "—" ? "—" : String(value).includes("%") ? String(value) : `${value}%`; },
+    };
+  }
 
   const api = {
-    status, failureSummary, getCurrentUserId, setCurrentUserId, currentUser, currentPermissions, can,
+    status, failureSummary, getCurrentUserId, setCurrentUserId, currentUser, currentPermissions, can, productFormatters,
     dashboard: () => request("/api/modules/dashboard"),
     operatingUnit: () => request("/api/modules/operating-unit"),
     accounts: loadAccount,
@@ -148,6 +154,9 @@
     v3Alerts: () => request("/api/data/alerts?active_only=true"),
     reportTemplates: () => request("/api/data/templates"),
     dataSourceConnections: () => request("/api/data/source-connections"),
+    metricFactsSummary: () => request("/api/data/metric-facts/summary"),
+    dataGapSummary: () => request("/api/data/data-gaps/summary"),
+    importDiagnostics: (dataVersion = "") => request(`/api/data/import-diagnostics${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`),
     previewReportRows: (datasetName, rows, fieldMapping = {}, sourceSystem = "manual") => api.post("/api/data/preview", null, { datasetName, rows, fieldMapping, sourceSystem }),
     confirmReportImport: async (datasetName, rows, fieldMapping = {}, sourceSystem = "manual") => rememberImportSync(await api.post("/api/data/import/confirm", null, { datasetName, rows, fieldMapping, sourceSystem, autoCreateTasks: true })),
     uploadReportFile: async (file, datasetName = "auto", sourceSystem = "manual_upload") => rememberImportSync(await uploadRequest("/api/data/upload/confirm", file, { dataset_name: datasetName, source_system: sourceSystem, auto_create_tasks: "true" })),
