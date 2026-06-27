@@ -1,10 +1,10 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V12.1.0 报表画像 Agent、系统标准编码与独立指标事实表。
+当前基线：V12.1.1 报表画像 Agent、系统标准编码、独立指标事实表与 Sheet 画像分流。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、商品入库、店铺聚合、系统编码、独立指标事实、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、Sheet 分流、商品入库、店铺聚合、系统编码、独立指标事实、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
 
 ## 当前主链路
 
@@ -13,6 +13,7 @@
 → 当前账号识别
 → 文件解析 / Sheet 保留 / 字段映射 / 校验
 → V12 报表画像 Agent 判断 Sheet 结构和目标事实层
+→ V12.1.1 按 reportProfile.sheetProfiles + sheetRows 分 Sheet 写入事实表
 → DataVersion / imported_report_rows / snapshots
 → operating_products / operating_stores 主档 upsert
 → 系统编码：STORE / SPU / LINK / SKU
@@ -27,7 +28,7 @@
 → v116 导入闭环反查
 ```
 
-## V12.1 可信展示规则
+## V12.1.1 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -44,6 +45,7 @@ API_CONTRACT 必须只记录真实可用接口。
 商品列表必须使用产品化商品卡片视觉，不回退成字段堆叠。
 商品名称不作为商品同一性的主识别依据；系统编码、商品链接、ERP 编码、SKU、店铺编码才是主轴。
 上传解析必须保留 sheetRows，不能把多 Sheet 报表直接压平成一个单表逻辑。
+上传确认必须按 reportProfile.sheetProfiles + sheetRows 写入 product/store/traffic 三类事实表。
 指标事实必须独立落表，不能只藏在 payload.metricFacts。
 缺字段不直接生成任务；只有经营判断被关键证据阻塞时才生成补证任务。
 ```
@@ -128,4 +130,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。V12.1.1 上传文件会优先按 sheetRows 和 reportProfile.sheetProfiles 进行事实表分流。
