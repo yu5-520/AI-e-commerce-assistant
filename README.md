@@ -1,10 +1,10 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V12.2.5 报表布局 Agent、Block 级事实写入、经营对象身份主档、商品页 fail-closed、ROI 三口径隔离。
+当前基线：V12.2.7 报表布局诊断、Block 级事实写入、经营对象身份主档、商品页 fail-closed、ROI 三口径隔离、任务证据闸门严格按 metric_scope 取证。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表布局识别、单 Sheet 多区块拆分、商品身份入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、商品定位详情、导入诊断验收、趋势信号、证据闸门、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表布局识别、单 Sheet 多区块拆分、商品身份入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、Sheet→Block→Fact→Gap→Staging 导入诊断、商品定位详情、趋势信号、证据闸门、执行任务、详情报告、复核留痕和演示运行态清空。
 
 ## 当前主链路
 
@@ -17,14 +17,14 @@
 → V12.2.2 按 blockRows 写入 product_metric_facts / store_metric_facts / traffic_source_facts
 → V12.2.3 operating_products / operating_stores 只作为身份主档，不写指标缓存
 → V12.1.3 按 Sheet/指标聚合写入 data_gap_events，普通缺口只留痕
-→ V12.1.5 生成 importDiagnostics 导入诊断验收
+→ V12.2.6 生成 Sheet → Block → Fact → Gap → Staging 布局诊断
 → DataVersion / imported_report_rows / snapshots
 → 系统编码：STORE / SPU / LINK / SKU
 → V12.2.4 商品页 fail-closed，事实表未命中显示未识别
 → V12.2.5 product ROI / traffic ROI / store ROI 三口径隔离
 → 商品 / 店铺标签与权重
 → 趋势信号 business_signals_v6
-→ task_evidence_gate_service 按 metric_scope 取证
+→ V12.2.7 task_evidence_gate_service 严格按 metric_scope 取证
 → 证据完整：经营执行任务
 → 关键证据缺失：补证任务
 → 普通缺口：只留痕，不进入任务池
@@ -34,7 +34,7 @@
 → v116 导入闭环反查
 ```
 
-## V12.2.5 可信展示规则
+## V12.2.7 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -60,8 +60,11 @@ operating_products / operating_stores 只保留身份定位、权限归属和来
 商品整体指标只读 product_metric_facts；流量来源指标只读 traffic_source_facts；店铺指标只读 store_metric_facts。
 事实表未命中的指标显示“未识别”，不能显示 0，不能读商品对象缓存。
 product ROI、traffic_source ROI、store ROI 互相隔离，任何一层 ROI 都不能覆盖另一层。
+importDiagnostics 必须返回 stageTrace 和 sheets[].blocks[]，能解释 Sheet → Block → Fact → Gap → Staging。
+暂存区块和低置信区块不能进入正式事实展示，也不能伪装成成功。
 普通缺口必须进入 data_gap_events 留痕，但不能生成任务。
 只有经营判断被关键证据阻塞时，任务证据闸门才允许把缺口升级为补证任务。
+任务证据闸门必须返回 metricScope / requiredFactTables / forbiddenCrossScope，禁止跨口径取 ROI。
 导入完成必须返回 importDiagnostics，展示 Sheet、Block、字段命中、事实写入、缺口和阻塞状态。
 任务必须包含最低商品定位：商品ID / 店铺 / 系统编码或可追溯来源。
 ```
@@ -86,10 +89,10 @@ product ROI、traffic_source ROI、store ROI 互相隔离，任何一层 ROI 都
 /api/system/repositories               Repository 状态
 /api/system/postgres-cutover-check     PostgreSQL 主写切换前检查
 /api/data/upload/preview               上传文件预览 + V12.2 报表布局画像
-/api/data/upload/confirm               上传确认导入 + 经营对象 / block事实 / 数据缺口 / 导入诊断同步
+/api/data/upload/confirm               上传确认导入 + 经营对象 / block事实 / 数据缺口 / 布局诊断同步
 /api/data/metric-facts/summary         指标事实表统计
 /api/data/data-gaps/summary            数据缺口池统计
-/api/data/import-diagnostics           导入诊断验收
+/api/data/import-diagnostics           V12.2.6 布局诊断验收
 /api/architecture/v10/readiness         产品验收守卫
 ```
 
@@ -149,4 +152,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.2.5 已支持 source_block_id / source_row_index / source_column_index / metric_scope / source_block_type 写入事实表。商品对象主档只作为身份定位来源，经营指标展示必须从事实表读取，未命中显示“未识别”。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.2.7 已支持 source_block_id / source_row_index / source_column_index / metric_scope / source_block_type 写入事实表。商品对象主档只作为身份定位来源，经营指标展示必须从事实表读取，未命中显示“未识别”。导入诊断以 Sheet→Block→Fact→Gap→Staging 为验收主线，任务证据闸门以 metric_scope 为取证边界。
