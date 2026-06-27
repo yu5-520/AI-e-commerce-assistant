@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Release consistency verifier.
 
-V11.12 rule:
-Version alignment is still a hard gate. Route inspection is a deployability
-signal, but defaults to warning mode for low-spec ECS and transitional routers.
+V11.16 rule:
+Version alignment is a hard gate. Route inspection is a deployability signal,
+with warning mode by default for low-spec ECS and transitional routers.
 Set --route-mode strict or ROUTE_GUARD_MODE=strict to make missing routes block
 deployment.
 """
@@ -71,7 +71,7 @@ def route_present(routes: set[str], expected: str) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify release consistency before deployment.")
-    parser.add_argument("--expected-version", default=None, help="Optional expected semantic version, e.g. 11.12.0")
+    parser.add_argument("--expected-version", default=None, help="Optional expected semantic version, e.g. 11.16.0")
     parser.add_argument("--json", action="store_true", help="Print JSON result")
     parser.add_argument("--route-mode", choices=["warn", "strict", "off"], default=os.getenv("ROUTE_GUARD_MODE", "warn"), help="How to treat missing critical routes. Default: warn")
     args = parser.parse_args()
