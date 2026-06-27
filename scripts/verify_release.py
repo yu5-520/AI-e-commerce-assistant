@@ -29,6 +29,7 @@ CRITICAL_ROUTES = {
     "/api/modules/product",
     "/api/modules/todo",
     "/api/system/runtime-diagnostics",
+    "/api/system/reset-runtime-data",
     "/api/system/backfill-operating-objects",
 }
 
