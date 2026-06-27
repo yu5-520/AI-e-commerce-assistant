@@ -14,7 +14,7 @@ from src.services.data_version_service import delete_data_version, get_data_vers
 from src.services.data_version_service import list_import_records as list_version_import_records
 from src.services.data_version_service import rollback_data_version
 from src.services.import_adapter_service import compact_upload_meta, parse_upload_file
-from src.services.metric_fact_store_service import ingest_metric_facts_from_import, metric_fact_summary
+from src.services.metric_fact_store_service import ingest_metric_facts_from_import, ingest_metric_facts_from_sheet_rows, metric_fact_summary
 from src.services.operating_object_store_service import upsert_operating_objects_from_import
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions
 from src.services.report_schema_service import confirm_report_import, get_report_templates, normalize_rows_with_mapping, preview_report_dataset
@@ -105,12 +105,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.1：接口/演示同步只写数据、事实和预警，旧任务生成规则不再创建新任务。"
+        result["rule"] = "V12.1.1：接口/演示同步只写数据、事实和预警，旧任务生成规则不再创建新任务。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "12.1.0",
-        "mode": "v12_1_dataset_sync_without_legacy_task_rules",
+        "version": "12.1.1",
+        "mode": "v12_1_1_dataset_sync_without_legacy_task_rules",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -145,12 +145,21 @@ def _report_profile_from_result(result: Dict[str, Any]) -> Dict[str, Any] | None
     return profile if isinstance(profile, dict) else result.get("reportProfile") if isinstance(result.get("reportProfile"), dict) else None
 
 
-def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None) -> Dict[str, Any]:
+def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None, parsed: Dict[str, Any] | None = None) -> Dict[str, Any]:
     materialized_rows = _materialize_import_rows(result, rows)
     if materialized_rows:
         result["rows"] = materialized_rows
+    if parsed and isinstance(parsed.get("sheetRows"), dict) and parsed.get("sheetRows"):
+        result["metricFactSync"] = ingest_metric_facts_from_sheet_rows(
+            result,
+            parsed,
+            report_profile=_report_profile_from_result(result),
+            source_system=source_system or result.get("sourceSystem"),
+            source_report_id=source,
+        )
+        return result
     if not materialized_rows:
-        result["metricFactSync"] = {"version": "12.1.0", "skipped": True, "reason": "rows is not a list"}
+        result["metricFactSync"] = {"version": "12.1.1", "skipped": True, "reason": "rows is not a list"}
         return result
     result["metricFactSync"] = ingest_metric_facts_from_import(
         result,
@@ -178,7 +187,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
     materialized_rows = _materialize_import_rows(result, rows)
     if not materialized_rows:
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "12.1.0", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "12.1.1", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -200,7 +209,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
     result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "导入后先生成商品快照、指标趋势和经营信号。"}
-    result["riskTaskSync"] = {"version": "12.1.0", "mode": "ownership_first_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务。"}
+    result["riskTaskSync"] = {"version": "12.1.1", "mode": "ownership_first_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务。"}
     return result
 
 
@@ -328,7 +337,7 @@ async def confirm_upload(
         result = confirm_report_import(str(dataset_name), rows=rows, field_mapping={}, auto_create_tasks=False, source_system=source_system)
         result["uploadMeta"] = compact_upload_meta(parsed)
         objected = _attach_operating_object_sync(request, result, rows, source="upload_file_import")
-        facted = _attach_v121_metric_fact_sync(objected, rows, source="upload_file_import", source_system=source_system)
+        facted = _attach_v121_metric_fact_sync(objected, rows, source="upload_file_import", source_system=source_system, parsed=parsed)
         synced = _attach_v62_trend_and_risk_sync(facted, rows, source_system=source_system)
         return _attach_import_product_contracts(request, synced, rows, source="upload_file_import", upsert_objects=False)
     except ValueError as exc:
