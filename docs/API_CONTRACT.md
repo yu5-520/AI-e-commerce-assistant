@@ -27,6 +27,7 @@ GET /api/modules/operating-unit
 GET /api/modules/product
 GET /api/modules/product?storeId={store_id}
 GET /api/modules/product?storeName={store_name}
+GET /api/modules/product/{product_id}
 GET /api/modules/competitor
 GET /api/modules/listing
 GET /api/modules/traffic
@@ -34,7 +35,7 @@ GET /api/modules/report
 GET /api/modules/log
 ```
 
-用途：总览、经营、商品、店铺商品档案、竞品、上新、流量、数据、日志页面数据。
+用途：总览、经营、商品、店铺商品档案、单商品事实详情、竞品、上新、流量、数据、日志页面数据。
 
 商品模块规则：
 
@@ -43,6 +44,7 @@ GET /api/modules/log
 带 storeId / storeName → 当前店铺商品档案。
 商品列表必须返回 objectId / archiveId / productId / storeId / storeName。
 前端唯一档案 ID 使用 objectId / archiveId，不使用裸 productId。
+商品详情必须包含 productPosition / metricSections / trafficSourceFacts / taskHistorySummary / metricFactSummary。
 ```
 
 ## 任务
@@ -66,7 +68,7 @@ POST /api/modules/todo/reset
 
 用途：执行队列、证据提交、总管复核、任务完成。
 
-V11 边界：任务栏只承接高风险 / 高时效 / 需要人工执行的事项；低风险和观察信号不作为前端待办展示。
+V12.1.6 边界：任务栏只承接高风险 / 高时效 / 需要人工执行的事项；低风险和观察信号不作为前端待办展示。任务生成必须先来自经营判断，再由 task_evidence_gate_service 检查关键证据。缺关键证据时降级为“经营证据补齐任务”。
 
 ## 任务详情 / 报告
 
@@ -90,6 +92,10 @@ POST   /api/data/preview
 POST   /api/data/import/confirm
 POST   /api/data/import/report
 POST   /api/data/import/mock-alerts
+GET    /api/data/metric-facts/summary
+GET    /api/data/data-gaps/summary
+GET    /api/data/import-diagnostics
+GET    /api/data/import-diagnostics?dataVersion={data_version}
 GET    /api/data/import-records
 GET    /api/data/versions
 GET    /api/data/latest-version
@@ -98,23 +104,20 @@ POST   /api/data/versions/{data_version}/rollback
 DELETE /api/data/versions/{data_version}?confirm=true
 ```
 
-用途：Excel / CSV / JSON 上传、报表模板、字段映射、报表导入、数据版本、测试记录清理、回滚。
+用途：Excel / CSV / JSON 上传、报表画像、字段映射、事实入库、缺口留痕、导入诊断、数据版本、测试记录清理、回滚。
 
-边界：`/api/data/upload/*` 只负责文件解析、Sheet 识别、字段读取和标准化入库，不提前写风险判断、任务线索或经营建议。
+边界：`/api/data/upload/*` 只负责文件解析、Sheet 识别、字段读取、经营对象同步、指标事实入库、数据缺口留痕和导入诊断；不得提前写死经营建议。任务只能由趋势/经营信号触发，并经过证据闸门。
 
 导入结果必须携带或同步生成：
 
 ```text
-商品入库ID识别
 经营商品主档 operating_products
 经营店铺主档 operating_stores
-商品标签
-店铺聚合
-店铺权重
-店铺标签
+独立事实表 product_metric_facts / store_metric_facts / traffic_source_facts
+数据缺口池 data_gap_events
+导入诊断 importDiagnostics
 业务信号 business_signals_v6
-高风险执行任务
-中低风险标签 / 观察信号
+任务证据闸门结果 evidenceGateSync
 v116 闭环反查结果
 ```
 
@@ -128,7 +131,7 @@ POST /api/trends/task-sop
 
 用途：指标趋势、信号证据、任务 SOP。
 
-V11 边界：趋势信号可以完整保留，但低风险趋势只进入后端标签和观察，不进入前端任务栏。
+V12.1.6 边界：趋势信号可以完整保留，但任务进入待办前必须经过证据闸门；普通缺口不得直接生成任务。
 
 ## LLM / Agent
 
@@ -182,6 +185,10 @@ alert_events
 imported_report_rows
 operating_products
 operating_stores
+product_metric_facts
+store_metric_facts
+traffic_source_facts
+data_gap_events
 ```
 
 ## 架构验收
@@ -191,4 +198,4 @@ GET /api/architecture/v10/task-driven-product
 GET /api/architecture/v10/readiness
 ```
 
-用途：当前产品基线和验收守卫。V11 MVP 测验阶段以真实报表导入后的经营对象、标签、队列和详情页稳定性为主验收。
+用途：当前产品基线和验收守卫。V12.1.6 MVP 验收以真实报表导入后的经营对象、指标事实、缺口池、导入诊断、证据闸门、队列和详情页稳定性为主。
