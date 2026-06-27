@@ -1,132 +1,153 @@
-# V12 / V12.1 报表画像 Agent 与指标事实层
+# V12.2 报表布局 Agent 与指标事实层
 
-V12 的目标不是继续扩大任务数量，而是把报表上传从“商品壳入库”升级成“报表画像 → 系统编码 → 指标事实 → 数据缺口池 → 任务证据闸门 → 导入诊断验收”。V12.1.6 已合并 V12.1.4、V12.1.5、V12.1.6 三个补丁：任务证据闸门、导入诊断接口、前端产品化基线。
+V12.2 的目标不是继续扩大任务数量，而是把报表上传从“Sheet 画像”升级成“Sheet 内 Block 画像”：系统不只判断这个 Sheet 是什么表，还要判断这个 Sheet 里有哪些数据区块、每个区块属于什么经营口径。
 
 ## 1. 核心原则
 
-- Agent 负责判断报表结构，不负责逐行读取全表。
-- 代码脚本按 Agent 输出的画像批量读取数据。
+- Agent 负责判断报表布局、区块边界和经营口径，不负责逐行读取全表。
+- 代码脚本按 Agent 输出的 block 合同批量读取和入库。
+- 一个 Sheet 可以同时拆出商品经营区、店铺汇总区、流量来源区和暂存区。
 - 商品名称完整保留，但不作为商品同一性主键。
 - 商品页负责商品定位和指标事实；任务页负责交叉验证、SOP 和复盘。
 - 缺字段不直接生成任务；只有经营判断被关键证据阻塞时，任务证据闸门才允许生成补证任务。
 - 指标事实必须可查询、可复用、可被任务证据闸门引用，不能只藏在商品 payload 里。
-- 多 Sheet 报表必须按 Sheet 画像分流，不能用扁平 rows 代替业务结构。
-- 数据缺口必须聚合留痕，不能按商品逐条打扰运营。
+- 商品指标展示必须 fail-closed：事实表没有就是未识别，不能读对象缓存，不能用 0 伪装成功。
 
-## 2. 服务边界
+## 2. V12.2.0：报表布局 Agent
 
-### `metric_catalog_service.py`
+`report_profile_agent_service.py` 从 Sheet Profile 升级为 Block Profile。
 
-统一字段字典和指标格式化，覆盖库存、客单价、支付金额、成本、毛利、ROI、广告、点击率、转化率、退款率、自然/付费流量等经营指标。
-
-### `report_profile_agent_service.py`
-
-读取上传文件的 sheet、表头、样本行，输出结构化画像：
+旧结构：
 
 ```text
-商品经营明细 → product_metric_facts
-店铺经营汇总 → store_metric_facts
-流量来源明细 → traffic_source_facts
-未知或低置信 Sheet → staging / gap log
+Sheet → targetTable
 ```
 
-它只判断“怎么读”，不生成任务。
-
-### `metric_fact_store_service.py`
-
-负责创建并写入独立事实表：
+新结构：
 
 ```text
-product_metric_facts
-store_metric_facts
-traffic_source_facts
+Sheet → blocks[] → targetTable / metricScope
 ```
 
-V12.1.1 后上传确认优先走：
+Agent 输出示例：
 
 ```text
-ingest_metric_facts_from_sheet_rows(result, parsed, report_profile=...)
+sheetProfiles[].blocks[] = {
+  blockId,
+  sheetName,
+  blockType,
+  targetTable,
+  metricScope,
+  range,
+  rowStart,
+  rowEnd,
+  headerRows,
+  confidence,
+  issues
+}
 ```
 
-也就是按 `parsed.sheetRows + reportProfile.sheetProfiles[*].targetTable` 明确分流。
-
-### `product_archive_detail_service.py`
-
-V12.1.2 新增。把商品对象和独立事实表合并为商品详情：
+区块类型：
 
 ```text
-productPosition      商品定位
-metricSections       成交与投产 / 成本与利润 / 流量与广告 / 库存与售后
-trafficSourceFacts   流量来源事实
-metricFactSummary    三类事实数量
-taskHistorySummary   任务历史摘要
+product_metric_detail  → product_metric_facts    → metricScope=product
+store_summary          → store_metric_facts      → metricScope=store
+traffic_source_detail  → traffic_source_facts    → metricScope=traffic_source
+staging_unknown        → staging_rows            → metricScope=unknown
 ```
 
-商品页只做资产展示，不展开 SOP。
+## 3. V12.2.1：导入解析器保留行列坐标
 
-### `data_gap_event_service.py`
-
-V12.1.3 新增。创建并写入：
+`import_adapter_service.py` 现在保留：
 
 ```text
-data_gap_events
+sheetRows
+sheetMatrices
+__source_sheet
+__source_row_index
+__source_header_row_index
+__source_column_map
 ```
 
-它只记录缺口，不创建任务。普通缺口默认为：
+意义：每一条事实都能追溯到：
 
 ```text
-is_decision_blocking = 0
-status = logged
+来自哪个 Sheet
+来自哪一行
+来自哪个字段列
+属于哪个 block
+属于什么经营口径
 ```
 
-### `task_evidence_gate_service.py`
+这一步为导入诊断、审计、RAG 留痕和任务证据闸门提供来源坐标。
 
-V12.1.4 新增。它不主动创建任务，只评估已经由经营异常 / 趋势信号产生的任务候选。
+## 4. V12.2.2：事实表按 Block 写入
 
-规则：
+`metric_fact_store_service.py` 现在优先读取：
 
 ```text
-经营判断成立
-→ 读取任务类型需要的关键证据
-→ 查询 product/store/traffic facts
-→ 证据完整：保留经营执行任务
-→ 关键证据缺失：降级为经营证据补齐任务
-→ 同步把相关 data_gap_events 标记为 decision_blocking
+reportProfile.sheetProfiles[].blocks
 ```
 
-这一步把任务生成从“字段缺失驱动”改成“经营判断缺证驱动”。
-
-### `import_diagnostics_service.py`
-
-V12.1.5 新增。输出导入验收报告：
+写入流程：
 
 ```text
-/api/data/import-diagnostics
+blockRows + block.targetTable + block.metricScope
+→ product_metric_facts / store_metric_facts / traffic_source_facts
 ```
 
-返回：
+事实表新增兼容列：
 
 ```text
-sheetCount
-factSummary
-gapSummary
-sheets[].targetTables
-sheets[].recognizedMetrics
-sheets[].issues
-acceptance.status
+source_block_id
+source_row_index
+source_column_index
+metric_scope
+source_block_type
 ```
 
-它用于回答 Demo 中最关键的问题：系统到底读到了哪些 Sheet、识别了哪些字段、写入了多少事实、哪些问题只是普通缺口、哪些问题真的阻塞判断。
+这解决了同一张 Sheet 同时命中三种口径的问题：
 
-## 3. 上传导入链路
+```text
+商品经营区 ROI → product_metric_facts.roi, metric_scope=product
+流量来源区 ROI → traffic_source_facts.roi, metric_scope=traffic_source
+店铺汇总区 ROI → store_metric_facts.roi, metric_scope=store
+```
+
+## 5. 商品详情 fail-closed
+
+`product_archive_detail_service.py` 已收紧：
+
+```text
+商品整体指标区只读 product_metric_facts
+流量来源区只读 traffic_source_facts
+店铺层指标只读 store_metric_facts
+```
+
+如果事实表未命中：
+
+```text
+显示：未识别
+```
+
+不再显示：
+
+```text
+0
+商品对象缓存
+payload.metricFacts
+流量来源 ROI 冒充商品 ROI
+```
+
+## 6. 上传导入链路
 
 ```text
 /api/data/upload/confirm
-→ parse_upload_file
-→ compact_upload_meta(reportProfile + sheetRows)
+→ parse_upload_file，保留 row/column 坐标
+→ compact_upload_meta，生成 Sheet + Block profile
 → confirm_report_import(auto_create_tasks=False)
 → upsert_operating_objects_from_import
-→ ingest_metric_facts_from_sheet_rows
+→ ingest_metric_facts_from_sheet_rows，按 blocks 写事实表
 → ingest_data_gaps_from_import
 → ingest_product_trends
 → generate_risk_tasks_for_signals
@@ -136,86 +157,35 @@ acceptance.status
 
 旧规则不得因为字段缺失直接创建任务。
 
-## 4. 数据缺口池规则
-
-会记录：
+## 7. 验收接口
 
 ```text
-metric_not_in_sheet
-metric_sparse_values
-identity_not_in_sheet
-profile_issue
-unrouted_sheet
-```
-
-不会做：
-
-```text
-商品A缺ROI → 任务
-商品B缺ROI → 任务
-商品C缺ROI → 任务
-```
-
-只有任务证据闸门判断“该缺口阻塞当前经营判断”时，才会升级为补证任务。
-
-## 5. 任务证据闸门规则
-
-不同任务需要不同证据：
-
-```text
-流量 / 投产高风险：ROI、广告消耗、点击率、转化率、支付金额、毛利率
-库存高风险：库存数量、支付金额、转化率
-利润高风险：毛利率、成本、支付金额
-售后高风险：退款率、退款金额、退款订单数
-趋势高风险：ROI、支付金额、毛利率、库存
-```
-
-证据缺失时，任务会变成：
-
-```text
-经营证据补齐任务
-24小时内补充缺失指标
-补齐前禁止降投、下架、加预算、调库存或调价格
-补齐后重新触发任务证据闸门
-```
-
-## 6. 验收接口
-
-```text
-/api/data/metric-facts/summary      指标事实表统计
-/api/data/data-gaps/summary         数据缺口池统计
-/api/data/import-diagnostics        导入诊断验收
-/api/health                         版本和入口检查
+/api/health
+/api/data/metric-facts/summary
+/api/data/data-gaps/summary
+/api/data/import-diagnostics
 ```
 
 ERA 文件上传后，至少检查：
 
 ```text
-factCount > 0
-gapCount >= 0
-importDiagnostics.acceptance.status 存在
-metricFactSync.sheetSummaries 存在
-dataGapSync.sheetSummaries 存在
-riskTaskSync.evidenceBlockedTaskCount 存在
+reportProfile.profileMode = sheet_to_block_profile
+reportProfile.sheetProfiles[].blocks 存在
+metricFactSync.mode = layout_block_metric_fact_routing
+metricFactSync.blockSummaries 存在
+product_metric_facts 中 ROI 不被 traffic_source_facts 的 ROI 覆盖
+商品详情 ROI 未命中时显示“未识别”，不显示 0 或缓存
 ```
-
-## 7. V12.1.6 前端产品化基线
-
-- 前端资源版本统一到 12.1.6。
-- `AppApi` 增加 metricFactsSummary、dataGapSummary、importDiagnostics。
-- 商品详情继续使用产品化卡片，不回退字段堆叠。
-- 金额和百分比以格式化结果为准，后端事实层输出 `displayValue`。
-- 任务必须保留最低商品定位：商品ID、店铺、系统编码或事实来源。
-- 前端接口失败时显示错误态，不展示本地业务兜底。
 
 ## 8. 当前版本边界
 
-V12.1.6 已完成：
+V12.2.2 已完成：
 
 ```text
-V12.1.4 task_evidence_gate_service
-V12.1.5 import_diagnostics_service
-V12.1.6 frontend/api baseline
+V12.2.0：报表布局 Agent，Sheet Profile → Block Profile
+V12.2.1：导入解析器保留行列坐标和 block 可追溯字段
+V12.2.2：事实表按 block 写入 product/store/traffic facts
+附加收紧：商品指标展示 fail-closed，只读事实表
 ```
 
-下一步再做时，应该进入 V12.2：把导入诊断做成前端诊断页，并把任务详情页的证据闸门区做成可读报告。
+下一步建议进入 V12.2.3：把 importDiagnostics 升级成前端布局诊断页，让你直接在页面上看到 Sheet → Block → Fact → Gap 的识别结果。
