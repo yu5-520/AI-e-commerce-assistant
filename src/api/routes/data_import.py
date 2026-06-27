@@ -107,12 +107,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.1.6：接口/演示同步只写数据、事实、缺口和预警，旧任务生成规则不再创建新任务。"
+        result["rule"] = "V12.2.7：接口/演示同步只写数据、事实、缺口和预警，旧任务生成规则不再创建新任务。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "12.1.6",
-        "mode": "v12_1_6_dataset_sync_without_legacy_task_rules",
+        "version": "12.2.7",
+        "mode": "v12_2_7_dataset_sync_without_legacy_task_rules",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -161,7 +161,7 @@ def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: 
         )
         return result
     if not materialized_rows:
-        result["metricFactSync"] = {"version": "12.1.6", "skipped": True, "reason": "rows is not a list"}
+        result["metricFactSync"] = {"version": "12.2.7", "skipped": True, "reason": "rows is not a list"}
         return result
     result["metricFactSync"] = ingest_metric_facts_from_import(
         result,
@@ -192,7 +192,13 @@ def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
     version = result.get("dataVersion")
     if not version and isinstance(result.get("results"), list) and result["results"]:
         version = next((item.get("dataVersion") for item in result["results"] if isinstance(item, dict) and item.get("dataVersion")), None)
-    result["importDiagnostics"] = import_diagnostics(str(version) if version else None)
+    result["importDiagnostics"] = import_diagnostics(
+        str(version) if version else None,
+        report_profile=_report_profile_from_result(result),
+        metric_fact_sync=result.get("metricFactSync") if isinstance(result.get("metricFactSync"), dict) else None,
+        data_gap_sync=result.get("dataGapSync") if isinstance(result.get("dataGapSync"), dict) else None,
+        risk_task_sync=result.get("riskTaskSync") if isinstance(result.get("riskTaskSync"), dict) else None,
+    )
     return result
 
 
@@ -214,7 +220,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
     materialized_rows = _materialize_import_rows(result, rows)
     if not materialized_rows:
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "12.1.6", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "12.2.7", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -236,7 +242,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
     result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "导入后先生成商品快照、指标趋势和经营信号。"}
-    result["riskTaskSync"] = {"version": "12.1.6", "mode": "evidence_gated_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务；关键证据缺失时降级为补证任务。"}
+    result["riskTaskSync"] = {"version": "12.2.7", "mode": "strict_scoped_evidence_gated_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务；关键证据缺失时按metric_scope降级为补证任务。"}
     return result
 
 
@@ -251,11 +257,6 @@ async def _rows_from_uploaded_file(file: UploadFile) -> Dict[str, Any]:
 @router.get("/sources")
 def data_sources() -> List[Dict[str, Any]]:
     return list_import_sources()
-
-
-@router.get("/source-connections")
-def source_connections() -> Dict[str, Any]:
-    return list_data_source_connections()
 
 
 @router.post("/source-connections/{source_id}/sync")
@@ -430,39 +431,36 @@ def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=
 
 
 @router.post("/import/mock-alerts")
-def import_mock_alerts(request: Request, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    dataset_names = body.get("dataset_names") or body.get("datasetNames")
-    try:
-        result = _run_dataset_imports_without_legacy_tasks(dataset_names=dataset_names)
-        objected = _attach_operating_object_sync(request, result, result.get("rows"), source="mock_alerts_import")
-        facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
-        gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
-        synced = _attach_v62_trend_and_risk_sync(gapped, gapped.get("rows"), source_system="mock_alerts")
-        return _attach_import_product_contracts(request, synced, synced.get("rows"), source="mock_alerts_import", upsert_objects=False)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+def import_mock_alerts(request: Request) -> Dict[str, Any]:
+    result = _run_dataset_imports_without_legacy_tasks()
+    result["v3Summary"] = get_v3_dashboard_summary()
+    objected = _attach_operating_object_sync(request, result, result.get("rows"), source="mock_alerts_import")
+    facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
+    gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
+    synced = _attach_v62_trend_and_risk_sync(gapped, gapped.get("rows"), source_system="mock_alerts")
+    return _attach_import_product_contracts(request, synced, synced.get("rows"), source="mock_alerts_import", upsert_objects=False)
 
 
 @router.get("/v3-summary")
-def v3_dashboard_summary(request: Request) -> Dict[str, Any]:
-    return get_v3_dashboard_summary(request_user_id(request))
+def v3_summary() -> Dict[str, Any]:
+    return get_v3_dashboard_summary()
 
 
 @router.get("/alerts")
-def alerts(request: Request, active_only: bool = Query(default=False), limit: int = Query(default=50, ge=1, le=200)) -> List[Dict[str, Any]]:
-    return list_alert_events(limit=limit, active_only=active_only, user_id=request_user_id(request))
+def alerts(active_only: bool = Query(default=True)) -> List[Dict[str, Any]]:
+    return list_alerts_for_entity(active_only=active_only)
 
 
-@router.get("/alerts/{entity_type}/{entity_id}")
-def entity_alerts(request: Request, entity_type: str, entity_id: str, limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
-    return list_alerts_for_entity(entity_type, entity_id, limit, user_id=request_user_id(request))
+@router.get("/alerts/events")
+def alert_events(active_only: bool = Query(default=True)) -> List[Dict[str, Any]]:
+    return list_alert_events(active_only=active_only)
 
 
 @router.get("/versions")
-def versions(limit: int = Query(default=20, ge=1, le=100)) -> List[Dict[str, Any]]:
-    return list_data_versions(limit=limit)
+def versions() -> List[Dict[str, Any]]:
+    return list_data_versions()
 
 
 @router.get("/latest-version")
-def latest_version() -> Dict[str, Any] | None:
+def latest_version() -> Dict[str, Any]:
     return latest_data_version()
