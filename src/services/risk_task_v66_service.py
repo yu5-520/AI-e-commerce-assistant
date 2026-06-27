@@ -1,4 +1,4 @@
-"""V12.2.5 risk task wrapper with scoped evidence gate and approval lifecycle sync."""
+"""V12.2.7 risk task wrapper with strict scoped evidence gate and approval lifecycle sync."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from src.services.risk_task_v65_service import ensure_risk_task_tables, risk_tas
 from src.services.risk_task_v65_service import generate_risk_tasks_for_signals as _generate_v65
 from src.services.task_evidence_gate_service import TASK_EVIDENCE_GATE_VERSION, apply_evidence_gate_to_created_task, task_evidence_gate_summary
 
-RISK_TASK_VERSION = "12.2.5"
+RISK_TASK_VERSION = "12.2.7"
 
 
 def _gate_created_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -42,7 +42,7 @@ def _gate_created_tasks(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         "passedTaskCount": passed_count,
         "degradedTaskCount": degraded_count,
         "tasks": gated_tasks,
-        "rule": "任务必须先来自经营判断；证据按product/traffic/store口径校验；关键证据不足时降级为补证任务。",
+        "rule": "任务必须先来自经营判断；证据按 metric_scope 严格校验；关键证据不足时降级为补证任务。",
     }
 
 
@@ -59,16 +59,16 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         if task.get("queueType") in {"urgent_execution", "today_execution"} and (task.get("riskGrade") == "高" or budget.get("needsApproval") or task.get("approvalChain")):
             flows.append(create_approval_flow_for_task(task, requester_role_id=requester_role_id))
     result["version"] = RISK_TASK_VERSION
-    result["mode"] = "v12_2_5_scoped_evidence_gated_sop_task_generation"
+    result["mode"] = "v12_2_7_strict_scoped_evidence_gated_sop_task_generation"
     result["createdTaskCount"] = len(result.get("tasks") or [])
     result["evidenceGateSync"] = evidence_gate_sync
     result["approvalLifecycleSync"] = {
         "version": RISK_TASK_VERSION,
         "createdFlowCount": len(flows),
         "flows": flows,
-        "rule": "V12.2.5 只有证据闸门通过的高风险结构化任务包进入审批生命周期；补证任务不走高风险审批。",
+        "rule": "V12.2.7 只有证据闸门通过的高风险结构化任务包进入审批生命周期；补证任务不走高风险审批。",
     }
-    result["rule"] = "任务生成从经营判断开始；缺字段只在阻塞当前判断时升级为补证任务；ROI按口径隔离取证。"
+    result["rule"] = "任务生成从经营判断开始；缺字段只在阻塞当前判断时升级为补证任务；ROI按 product/traffic/store 口径隔离取证。"
     return result
 
 
