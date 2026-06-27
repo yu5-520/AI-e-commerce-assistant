@@ -1,4 +1,4 @@
-# V11.16 Demo 快速部署 Runbook
+# V11.17 Demo 快速部署 Runbook
 
 本文件只保留服务器部署和排障边界，不写长篇架构解释。
 
@@ -68,13 +68,14 @@ scripts/check_repo_hygiene.py
 /api/system/runtime-diagnostics
 /api/modules/operating-unit
 /api/modules/product
+/api/modules/product?storeId=STORE_ID
 systemd 服务状态
 后端日志
 ```
 
 ## 7. Demo 数据清理
 
-V11.16 清空的是全运行态，不只是导入行。清空范围包括：
+V11.17 清空的是全运行态，不只是导入行。清空范围包括：
 
 ```text
 workflow_runs
@@ -110,13 +111,16 @@ alert_events
 
 账号、角色、权限和基础店铺配置必须保留。
 
-## 8. V11.16 部署后重点验收
+## 8. V11.17 部署后重点验收
 
 ```text
-/api/health 返回 11.16.0。
-web_demo/index.html 只出现 11.16.0 资源版本。
+/api/health 返回 11.17.0。
+web_demo/index.html 只出现 11.17.0 资源版本。
 经营页店铺状态为横向一店一行卡片。
-商品档案页面可打开，且通过 /api/modules/product 返回真实商品。
+点击不同店铺进入商品档案时，URL 请求应包含 storeId 或 storeName。
+不同店铺商品档案不再共用全局商品列表。
+商品档案页面顶部显示当前店铺名、平台、店铺标签、商品数和执行任务数。
+商品列表使用 product-ui.css 产品化卡片，不再字段堆叠。
 商品详情和候选报告跳转不再出现 AppTaskActions.findOpenTask 缺失。
 系统页清空演示环境后完整派生运行态归零。
 ```
@@ -130,6 +134,7 @@ web_demo/index.html 只出现 11.16.0 资源版本。
 Demo 小改不要每次走完整原子部署。
 requirements.txt 没变不要安装依赖。
 清空演示数据不能只删 imported_report_rows，必须删完整派生运行态。
+店铺商品档案不能回退到全局 /api/modules/product 商品列表。
 ```
 
 ## 10. 当前推荐节奏
