@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "12.1.0"
+API_VERSION = "12.1.1"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -24,4 +24,5 @@ def health() -> Dict[str, Any]:
         "v121MetricFacts": "/api/data/metric-facts/summary",
         "v12Rule": "report_profile_agent_system_code_metric_facts",
         "v121Rule": "independent_metric_fact_tables_no_task_noise",
+        "v1211Rule": "sheetRows_routed_by_reportProfile_sheetProfiles",
     }
