@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "11.15.0"
+API_VERSION = "11.15.2"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -15,6 +15,7 @@ def health() -> Dict[str, Any]:
         "currentEntry": "/",
         "dashboardEntry": "/api/modules/dashboard",
         "operatingUnitEntry": "/api/modules/operating-unit",
+        "productEntry": "/api/modules/product",
         "runtimeDiagnosticsEntry": "/api/system/runtime-diagnostics",
         "runtimeResetEntry": "/api/system/reset-runtime-data?confirm=true",
         "repositoryModeEntry": "/api/system/repositories",
