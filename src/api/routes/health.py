@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "12.2.7"
+API_VERSION = "12.2.8"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -25,6 +25,7 @@ def health() -> Dict[str, Any]:
         "v121MetricFacts": "/api/data/metric-facts/summary",
         "v1213DataGaps": "/api/data/data-gaps/summary",
         "v1215ImportDiagnostics": "/api/data/import-diagnostics",
+        "v1228SourceConnections": "/api/data/source-connections",
         "v12Rule": "report_profile_agent_system_code_metric_facts",
         "v121Rule": "independent_metric_fact_tables_no_task_noise",
         "v1211Rule": "sheetRows_routed_by_reportProfile_sheetProfiles",
@@ -41,4 +42,5 @@ def health() -> Dict[str, Any]:
         "v1225Rule": "roi_scope_isolation_product_traffic_store",
         "v1226Rule": "import_diagnostics_sheet_block_fact_gap_staging",
         "v1227Rule": "task_evidence_gate_strict_metric_scope_no_cross_roi",
+        "v1228Rule": "api_contract_patch_source_connections_and_demo_account_switch",
     }
