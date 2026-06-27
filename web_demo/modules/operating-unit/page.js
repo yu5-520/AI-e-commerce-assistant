@@ -6,6 +6,7 @@
     ["business-listing", "上新"],
     ["business-traffic", "流量"],
   ];
+  let latestStoreRows = [];
 
   function hero(title, syncState = {}) {
     const side = syncState?.label || "数据已同步";
@@ -25,13 +26,17 @@
     return `<div class="store-row-tags ${s(cls)}">${items.map((tag) => `<em>${s(tag)}</em>`).join("")}</div>`;
   }
 
+  function rowByStoreId(storeId) {
+    return latestStoreRows.find((row) => String(row.storeId || row.displayName || row.storeName || "") === String(storeId || ""));
+  }
+
   function storeRow(row) {
     const taskCount = Number(row.activeTaskCount || 0);
     const storeName = row.displayName || row.storeName || "店铺";
     const storeId = row.storeId || storeName;
     const action = taskCount > 0
       ? `<button type="button" data-store-task="${s(storeId)}">查看任务</button>`
-      : `<button type="button" data-store-products="${s(storeName)}">查看店铺</button>`;
+      : `<button type="button" data-store-products="${s(storeId)}">查看店铺</button>`;
     return `<article class="operating-store-card ${s(row.level || "watch")}">
       <div class="operating-store-main">
         <div>
@@ -64,17 +69,30 @@
       const payload = await AppApi.operatingUnit();
       if (!payload?.hasData) return `${hero("暂无数据", payload?.syncState || { label: "等待数据" })}${tabs()}`;
       const metrics = (payload.metrics || []).slice(0, 4);
-      const storeRows = payload.storeRows || [];
+      latestStoreRows = payload.storeRows || [];
       return `${hero(payload.unitName || "经营单元", payload.syncState)}
         ${tabs()}
         <section class="kpi-grid unit-metrics operating-metrics">${metrics.map(metricCard).join("")}</section>
-        <section class="page-section unit-store-section operating-store-section"><div class="section-header"><h3>店铺经营状态</h3><span class="status-badge">一店一行</span></div><div class="operating-store-list">${storeRows.map(storeRow).join("")}</div></section>
+        <section class="page-section unit-store-section operating-store-section"><div class="section-header"><h3>店铺经营状态</h3><span class="status-badge">一店一行</span></div><div class="operating-store-list">${latestStoreRows.map(storeRow).join("")}</div></section>
         ${judgmentCard(payload.operatingJudgment)}`;
     },
     mount(ctx) {
       ctx.delegate("[data-operation-route]", "click", (_event, target) => AppRouter.navigate(target.dataset.operationRoute));
       ctx.delegate("[data-store-task]", "click", (_event, target) => AppRouter.navigate("business-actions", { storeId: target.dataset.storeTask }));
-      ctx.delegate("[data-store-products]", "click", (_event, target) => AppRouter.navigate("business-products", { storeName: target.dataset.storeProducts }));
+      ctx.delegate("[data-store-products]", "click", (_event, target) => {
+        const row = rowByStoreId(target.dataset.storeProducts) || {};
+        AppRouter.navigate("business-products", {
+          fromStore: true,
+          storeId: row.storeId || target.dataset.storeProducts,
+          storeName: row.displayName || row.storeName || target.dataset.storeProducts,
+          platform: row.platform || "平台",
+          productCount: row.productCount || 0,
+          storeWeightTag: row.storeWeightTag || "常规店铺",
+          businessTags: row.businessTags || row.riskTags || [],
+          productRoleTags: row.productRoleTags || [],
+          activeTaskCount: row.activeTaskCount || 0,
+        });
+      });
     },
   };
 })();
