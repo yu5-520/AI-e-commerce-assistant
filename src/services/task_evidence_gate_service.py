@@ -1,4 +1,4 @@
-"""V12.2.5 task evidence gate with metric-scope isolation.
+"""V12.2.7 task evidence gate with strict metric-scope isolation.
 
 任务生成不再从“字段缺失”出发，而从“经营判断是否被关键证据阻塞”出发。
 
@@ -8,8 +8,8 @@ high-risk or time-sensitive task lacks critical evidence, it downgrades the task
 into an evidence-completion task and marks matching data_gap_events as decision
 blocking.
 
-V12.2.5 adds ROI口径隔离：product ROI / traffic ROI / store ROI cannot replace
-each other.
+V12.2.7 hard rule:
+    product ROI / traffic_source ROI / store ROI cannot replace each other.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from src.services.data_gap_event_service import ensure_data_gap_tables
 from src.services.metric_fact_store_service import ensure_metric_fact_tables
 from src.services.report_alert_service import now_iso
 
-TASK_EVIDENCE_GATE_VERSION = "12.2.5"
+TASK_EVIDENCE_GATE_VERSION = "12.2.7"
 
 EVIDENCE_REQUIREMENTS = {
     "流量": {
@@ -56,6 +56,12 @@ SCOPE_TABLES = {
     "store": ("store_metric_facts",),
 }
 
+SCOPE_LABELS = {
+    "product": "商品整体口径",
+    "traffic_source": "流量来源口径",
+    "store": "店铺汇总口径",
+}
+
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
@@ -86,7 +92,7 @@ def _metric_scope(task: Dict[str, Any]) -> str:
     if explicit in SCOPE_TABLES:
         return explicit
     domain_text = _text(task.get("riskDomain") or task.get("taskType") or task.get("title") or task.get("task"))
-    if task.get("trafficSource") or "流量来源" in domain_text or "渠道" in domain_text or "来源" in domain_text:
+    if task.get("trafficSource") or "流量来源" in domain_text or "渠道来源" in domain_text:
         return "traffic_source"
     product_id = _text(task.get("productId") or task.get("entityId"))
     store_id = _text(task.get("storeId") or next(iter(task.get("storeIds") or []), ""))
@@ -125,9 +131,10 @@ def _present_metrics(task: Dict[str, Any], required: Iterable[str]) -> Dict[str,
     if not required_set:
         return {}
     scope = _metric_scope(task)
+    tables = SCOPE_TABLES.get(scope, ("product_metric_facts",))
     present: Dict[str, Dict[str, Any]] = {}
     with connect() as conn:
-        for table in SCOPE_TABLES.get(scope, ("product_metric_facts",)):
+        for table in tables:
             where, params = _where_clause(task, table)
             if where == "1 = 0":
                 continue
@@ -153,6 +160,7 @@ def _present_metrics(task: Dict[str, Any], required: Iterable[str]) -> Dict[str,
                         "factId": row["fact_id"],
                         "factTable": row["fact_table"],
                         "metricScope": scope,
+                        "scopeLabel": SCOPE_LABELS.get(scope),
                         "sourceSheet": row["source_sheet"],
                         "sourceBlockId": row["source_block_id"] if "source_block_id" in row.keys() else None,
                         "dataVersion": row["data_version"],
@@ -220,12 +228,14 @@ def evaluate_task_evidence(task: Dict[str, Any]) -> Dict[str, Any]:
         "domain": _domain(task),
         "requirementLevel": _requirement_level(task),
         "metricScope": scope,
+        "scopeLabel": SCOPE_LABELS.get(scope),
         "requiredFactTables": list(SCOPE_TABLES.get(scope, ("product_metric_facts",))),
+        "forbiddenCrossScope": [table for key, tables in SCOPE_TABLES.items() if key != scope for table in tables],
         "requiredMetrics": required,
         "presentMetrics": list(present.values()),
         "missingMetrics": missing,
         "decisionBlockingGapCount": blocking_count,
-        "rule": "先有经营判断，再按metric_scope检查关键证据；product/traffic/store ROI 不可互相替代。",
+        "rule": "先有经营判断，再按 metric_scope 检查关键证据；product/traffic/store ROI 不可互相替代。",
     }
 
 
@@ -234,8 +244,9 @@ def evidence_completion_patch(task: Dict[str, Any], gate: Dict[str, Any]) -> Dic
     missing_text = "、".join(missing) if missing else "关键指标"
     original_type = task.get("taskType") or "经营任务"
     scope = gate.get("metricScope") or "product"
+    scope_label = gate.get("scopeLabel") or SCOPE_LABELS.get(scope) or scope
     actions = [
-        f"24小时内补充当前经营对象近7日 {missing_text} 数据，并确认口径为 {scope}，且与本次报表时间区间一致。",
+        f"24小时内补充当前经营对象近7日 {missing_text} 数据，并确认口径为 {scope_label}，且与本次报表时间区间一致。",
         "补齐前只允许做低风险排查，不允许自动降投、下架、加预算、调库存或调整价格。",
         "补齐后重新触发任务证据闸门，由系统判断是否恢复为经营执行任务。",
     ]
@@ -243,12 +254,12 @@ def evidence_completion_patch(task: Dict[str, Any], gate: Dict[str, Any]) -> Dic
     report.update({
         "version": TASK_EVIDENCE_GATE_VERSION,
         "title": f"补证任务｜{task.get('title') or task.get('productId') or '经营对象'}",
-        "warningSummary": f"原候选任务为「{original_type}」，但缺少 {scope} 口径下的 {missing_text}，暂不进入高风险执行。",
+        "warningSummary": f"原候选任务为「{original_type}」，但缺少 {scope_label} 下的 {missing_text}，暂不进入高风险执行。",
         "evidenceGate": gate,
         "sopSteps": actions,
         "completionGate": ["补充缺失指标截图或数据文件", "确认指标时间区间和口径", "重新生成/复核经营任务"],
     })
-    tags = list(dict.fromkeys([*(task.get("judgmentTags") or []), "V12.2.5证据闸门", "补证任务", "ROI口径隔离", "禁止高风险自动执行"]))
+    tags = list(dict.fromkeys([*(task.get("judgmentTags") or []), "V12.2.7证据闸门", "补证任务", "ROI口径隔离", "禁止高风险自动执行"]))
     return {
         "taskGenerationMode": task.get("taskGenerationMode") or "v11_8_sop_package",
         "taskType": "经营证据补齐任务",
@@ -272,8 +283,8 @@ def evidence_completion_patch(task: Dict[str, Any], gate: Dict[str, Any]) -> Dic
         "visibleRoleIds": list(dict.fromkeys([*(task.get("visibleRoleIds") or []), "owner", "manager", "operator"])),
         "judgmentTags": tags,
         "reason": report["warningSummary"],
-        "agentJudgment": {**(task.get("agentJudgment") or {}), "status": "v12_2_5_evidence_gate_blocked", "evidenceGate": gate, "boundary": "缺证时只生成补证任务，不生成高风险经营动作。"},
-        "sourceTrail": list(dict.fromkeys([*(task.get("sourceTrail") or []), "V12.2.5任务证据闸门"])),
+        "agentJudgment": {**(task.get("agentJudgment") or {}), "status": "v12_2_7_evidence_gate_blocked", "evidenceGate": gate, "boundary": "缺证时只生成补证任务，不生成高风险经营动作。"},
+        "sourceTrail": list(dict.fromkeys([*(task.get("sourceTrail") or []), "V12.2.7任务证据闸门"])),
     }
 
 
@@ -287,7 +298,7 @@ def apply_evidence_gate_to_created_task(task: Dict[str, Any]) -> Dict[str, Any]:
         report["evidenceGate"] = gate
         task["taskDetailReport"] = report
         task["agentJudgment"] = {**(task.get("agentJudgment") or {}), "evidenceGate": gate}
-        task["judgmentTags"] = list(dict.fromkeys([*(task.get("judgmentTags") or []), "V12.2.5证据闸门通过" if gate.get("gateStatus") == "passed" else "V12.2.5证据不足降级观察"]))
+        task["judgmentTags"] = list(dict.fromkeys([*(task.get("judgmentTags") or []), "V12.2.7证据闸门通过" if gate.get("gateStatus") == "passed" else "V12.2.7证据不足降级观察"]))
     task["taskEvidenceGateVersion"] = TASK_EVIDENCE_GATE_VERSION
     return task
 
