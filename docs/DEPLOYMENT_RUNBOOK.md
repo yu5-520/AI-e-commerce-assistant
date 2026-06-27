@@ -1,4 +1,4 @@
-# V11.15 Demo 快速部署 Runbook
+# V11.16 Demo 快速部署 Runbook
 
 本文件只保留服务器部署和排障边界，不写长篇架构解释。
 
@@ -66,13 +66,15 @@ scripts/verify_release.py
 scripts/check_repo_hygiene.py
 /api/health
 /api/system/runtime-diagnostics
+/api/modules/operating-unit
+/api/modules/product
 systemd 服务状态
 后端日志
 ```
 
 ## 7. Demo 数据清理
 
-V11.15 清空的是全运行态，不只是导入行。清空范围包括：
+V11.16 清空的是全运行态，不只是导入行。清空范围包括：
 
 ```text
 workflow_runs
@@ -108,7 +110,18 @@ alert_events
 
 账号、角色、权限和基础店铺配置必须保留。
 
-## 8. 禁止事项
+## 8. V11.16 部署后重点验收
+
+```text
+/api/health 返回 11.16.0。
+web_demo/index.html 只出现 11.16.0 资源版本。
+经营页店铺状态为横向一店一行卡片。
+商品档案页面可打开，且通过 /api/modules/product 返回真实商品。
+商品详情和候选报告跳转不再出现 AppTaskActions.findOpenTask 缺失。
+系统页清空演示环境后完整派生运行态归零。
+```
+
+## 9. 禁止事项
 
 ```text
 不要 fetch 失败后继续 reset。
@@ -119,7 +132,7 @@ requirements.txt 没变不要安装依赖。
 清空演示数据不能只删 imported_report_rows，必须删完整派生运行态。
 ```
 
-## 9. 当前推荐节奏
+## 10. 当前推荐节奏
 
 ```text
 每次小改：scripts/deploy_fast.sh
