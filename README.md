@@ -1,10 +1,10 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V12.1.3 报表画像 Agent、系统标准编码、独立指标事实表、Sheet 画像分流、商品事实详情页与数据缺口池。
+当前基线：V12.1.6 报表画像 Agent、系统标准编码、独立指标事实表、Sheet 画像分流、商品事实详情页、数据缺口池、任务证据闸门和导入诊断验收。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、Sheet 分流、商品入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、商品定位详情、趋势信号、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表画像、Sheet 分流、商品入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、商品定位详情、导入诊断验收、趋势信号、证据闸门、执行任务、详情报告、复核留痕和演示运行态清空。
 
 ## 当前主链路
 
@@ -15,6 +15,7 @@
 → V12 报表画像 Agent 判断 Sheet 结构和目标事实层
 → V12.1.1 按 reportProfile.sheetProfiles + sheetRows 分 Sheet 写入事实表
 → V12.1.3 按 Sheet/指标聚合写入 data_gap_events，普通缺口只留痕
+→ V12.1.5 生成 importDiagnostics 导入诊断验收
 → DataVersion / imported_report_rows / snapshots
 → operating_products / operating_stores 主档 upsert
 → 系统编码：STORE / SPU / LINK / SKU
@@ -22,15 +23,17 @@
 → V12.1.2 商品档案读取事实表，展示商品定位、指标事实、流量来源和任务摘要
 → 商品 / 店铺标签与权重
 → 趋势信号 business_signals_v6
-→ risk_task_service 任务门控
-→ 仅高风险高时效或经营判断缺证进入任务队列
+→ V12.1.4 task_evidence_gate_service 任务证据闸门
+→ 证据完整：经营执行任务
+→ 关键证据缺失：补证任务
+→ 普通缺口：只留痕，不进入任务池
 → 任务详情结构化报告
 → 证据提交 / 总管复核
 → 日志留痕 / RAG 记忆候选
 → v116 导入闭环反查
 ```
 
-## V12.1.3 可信展示规则
+## V12.1.6 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
@@ -52,7 +55,9 @@ API_CONTRACT 必须只记录真实可用接口。
 上传确认必须按 reportProfile.sheetProfiles + sheetRows 写入 product/store/traffic 三类事实表。
 指标事实必须独立落表，不能只藏在 payload.metricFacts。
 普通缺口必须进入 data_gap_events 留痕，但不能生成任务。
-只有经营判断被关键证据阻塞时，后续证据闸门才允许把缺口升级为补证任务。
+只有经营判断被关键证据阻塞时，任务证据闸门才允许把缺口升级为补证任务。
+导入完成必须返回 importDiagnostics，展示 Sheet、字段命中、事实写入、缺口和阻塞状态。
+任务必须包含最低商品定位：商品ID / 店铺 / 系统编码或可追溯来源。
 ```
 
 ## 当前主入口
@@ -75,9 +80,10 @@ API_CONTRACT 必须只记录真实可用接口。
 /api/system/repositories               Repository 状态
 /api/system/postgres-cutover-check     PostgreSQL 主写切换前检查
 /api/data/upload/preview               上传文件预览 + V12 报表画像
-/api/data/upload/confirm               上传确认导入 + 经营对象 / 独立指标事实 / 数据缺口同步
+/api/data/upload/confirm               上传确认导入 + 经营对象 / 独立指标事实 / 数据缺口 / 导入诊断同步
 /api/data/metric-facts/summary         V12.1 指标事实表统计
 /api/data/data-gaps/summary            V12.1.3 数据缺口池统计
+/api/data/import-diagnostics           V12.1.5 导入诊断验收
 /api/architecture/v10/readiness         产品验收守卫
 ```
 
@@ -137,4 +143,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。V12.1.1 上传文件会优先按 sheetRows 和 reportProfile.sheetProfiles 进行事实表分流。V12.1.2 商品详情页从独立事实表读取指标事实。V12.1.3 新增 data_gap_events，普通缺口只留痕，不生成任务。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.1 已新增 product_metric_facts / store_metric_facts / traffic_source_facts 独立事实表，payload.metricFacts 仅作为商品对象的兼容展示缓存，不再作为唯一事实来源。V12.1.1 上传文件会优先按 sheetRows 和 reportProfile.sheetProfiles 进行事实表分流。V12.1.2 商品详情页从独立事实表读取指标事实。V12.1.3 新增 data_gap_events，普通缺口只留痕，不生成任务。V12.1.4 新增任务证据闸门。V12.1.5 新增导入诊断验收。V12.1.6 对齐前端接口和产品化展示基线。
