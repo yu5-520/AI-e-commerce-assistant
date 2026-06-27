@@ -77,7 +77,10 @@
         ${judgmentCard(payload.operatingJudgment)}`;
     },
     mount(ctx) {
-      ctx.delegate("[data-operation-route]", "click", (_event, target) => AppRouter.navigate(target.dataset.operationRoute));
+      ctx.delegate("[data-operation-route]", "click", (_event, target) => {
+        const route = target.dataset.operationRoute;
+        AppRouter.navigate(route, route === "business-products" ? { fromStore: false } : null);
+      });
       ctx.delegate("[data-store-task]", "click", (_event, target) => AppRouter.navigate("business-actions", { storeId: target.dataset.storeTask }));
       ctx.delegate("[data-store-products]", "click", (_event, target) => {
         const row = rowByStoreId(target.dataset.storeProducts) || {};
