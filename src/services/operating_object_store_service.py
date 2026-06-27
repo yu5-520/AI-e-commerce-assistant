@@ -1,12 +1,11 @@
 """Operating object master store.
 
-V11.8 rule:
-
-- report content is business data, not the permission source;
-- the uploading account is the source of data ownership for normal operator imports;
-- a new store discovered in a report is created directly under the uploader's
-  operating scope;
-- store migration between operators is a separate permission workflow.
+V12 rule:
+- uploader is still the fallback ownership source for MVP imports;
+- report/ERP/CRM fields are treated as external identity anchors, not as the only
+  system identity;
+- product objects are keyed by store + product + sku/link/ERP anchors;
+- product cards expose structured定位字段 and metric facts instead of long titles.
 """
 
 from __future__ import annotations
@@ -18,10 +17,21 @@ from typing import Any, Dict, List, Mapping
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.account_service import current_user, default_reviewer, visible_store_ids_for_user
 from src.services.import_row_store_service import load_import_rows
+from src.services.metric_catalog_service import (
+    CATALOG_VERSION,
+    display_short_title,
+    extract_metric_facts,
+    format_metric,
+    metric_value,
+    pick,
+    product_identity,
+    stable_code,
+    system_codes,
+)
 from src.services.report_alert_service import now_iso
 
-OPERATING_OBJECT_VERSION = "11.8.0"
-DATA_SCOPE_SOURCE = "uploader_account"
+OPERATING_OBJECT_VERSION = "12.0.0"
+DATA_SCOPE_SOURCE = "uploader_account_fallback_with_v12_report_profile"
 
 
 def ensure_operating_object_tables() -> None:
@@ -128,35 +138,27 @@ def _row_get(row: Mapping[str, Any] | Any, *names: str, default: Any = None) -> 
     return default
 
 
-def _pick(row: Dict[str, Any], *fields: str, default: Any = None) -> Any:
-    for field in fields:
-        value = row.get(field)
-        if value not in {None, ""}:
-            return value
-    return default
-
-
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
 def _product_id(row: Dict[str, Any]) -> str | None:
-    value = _pick(row, "product_id", "productId", "商品ID", "商品id", "sku", "SKU", "商品编码", "商家编码", "商品编号", "宝贝ID", "货号")
-    text = _text(value)
-    return text or None
+    ident = product_identity(row)
+    return ident.get("productId") or ident.get("erpProductCode") or ident.get("productLink") or None
+
+
+def _sku_id(row: Dict[str, Any]) -> str | None:
+    return product_identity(row).get("skuId")
 
 
 def _raw_store_id(row: Dict[str, Any]) -> str | None:
-    value = _pick(row, "store_id", "storeId", "店铺ID", "店铺id", "店铺编号", "店铺编码")
-    text = _text(value)
-    return text or None
+    return product_identity(row).get("storeId")
 
 
 def _raw_store_name(row: Dict[str, Any]) -> str | None:
-    value = _pick(row, "store_name", "store", "storeName", "店铺", "店铺名称", "店铺名", "门店", "店名")
-    text = _text(value)
-    if text and text not in {"未绑定店铺", "导入数据店铺", "GLOBAL"}:
-        return text
+    value = product_identity(row).get("storeName")
+    if value and value not in {"未绑定店铺", "导入数据店铺", "GLOBAL"}:
+        return value
     return None
 
 
@@ -165,30 +167,35 @@ def _fallback_store_key(uploader_user_id: str | None) -> str:
 
 
 def _store_key(row: Dict[str, Any], uploader_user_id: str | None = None) -> str:
-    raw_id = _raw_store_id(row)
-    if raw_id:
-        return raw_id
-    name = _raw_store_name(row)
-    if name:
-        digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:10].upper()
+    ident = product_identity(row)
+    if ident.get("storeId"):
+        return str(ident["storeId"])
+    if ident.get("storeName"):
+        digest = hashlib.sha1(str(ident["storeName"]).encode("utf-8")).hexdigest()[:10].upper()
         return f"STORE_{digest}"
     return _fallback_store_key(uploader_user_id)
 
 
 def _platform(row: Dict[str, Any]) -> str:
-    return _text(_pick(row, "platform", "平台", "渠道", "来源平台", default="导入平台")) or "导入平台"
+    return _text(product_identity(row).get("platform") or "导入平台") or "导入平台"
 
 
 def _title(row: Dict[str, Any], product_id: str) -> str:
-    return _text(_pick(row, "product_name", "productTitle", "商品名称", "商品名", "title", "标题", "宝贝标题", default=f"导入商品 {product_id}")) or f"导入商品 {product_id}"
+    title = _text(pick(row, "product_name", default=""))
+    return title or f"导入商品 {product_id}"
 
 
 def _category(row: Dict[str, Any]) -> str:
-    return _text(_pick(row, "category", "类目", "商品类目", "垂直类目", "品类", "平台类目", default="未分类")) or "未分类"
+    value = pick(row, "category_l2") or pick(row, "category_l1") or pick(row, "category")
+    return _text(value or "未分类") or "未分类"
 
 
-def _object_id(product_id: str, store_key: str | None) -> str:
-    return f"{store_key or 'GLOBAL'}::{product_id}"
+def _object_id(row: Dict[str, Any], product_id: str, store_key: str | None) -> str:
+    ident = product_identity(row)
+    sku = ident.get("skuId") or "NO-SKU"
+    link = ident.get("productLink") or "NO-LINK"
+    erp = ident.get("erpProductCode") or "NO-ERP"
+    return f"{store_key or 'GLOBAL'}::{product_id}::{sku}::{stable_code('EXT', link, erp)}"
 
 
 def _import_result_items(result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -228,7 +235,7 @@ def _ownership(uploader_user_id: str | None, uploader_role_id: str | None) -> Di
         "visibleUserIds": list(dict.fromkeys(visible_user_ids)),
         "visibleRoleIds": list(dict.fromkeys(visible_role_ids)),
         "dataScopeSource": DATA_SCOPE_SOURCE,
-        "rule": "正常报表导入由上传账号决定商品/店铺归属；新店铺直接创建，权限迁移才需要接收确认。",
+        "rule": "V12：上传人是兜底归属；ERP/CRM权限标签后续可覆盖，任务派发以最终经营对象归属为准。",
     }
 
 
@@ -241,6 +248,10 @@ def _merge_payload(existing: Dict[str, Any], row: Dict[str, Any], *, data_versio
         "rawStoreName": raw_store_name,
         "normalizedStoreId": normalized_store_id,
         "normalizedStoreName": normalized_store_name,
+        "productIdentity": product_identity(row),
+        "systemCodes": system_codes(row),
+        "metricFacts": extract_metric_facts(row),
+        "metricCatalogVersion": CATALOG_VERSION,
     })
     if data_version:
         payload["latestDataVersion"] = data_version
@@ -323,7 +334,7 @@ def upsert_operating_objects_from_import(
                 store_keys.add(store_key)
                 if product_id:
                     classified_rows += 1
-                    object_id = _object_id(product_id, store_key)
+                    object_id = _object_id(row, product_id, store_key)
                     existing_product = conn.execute("SELECT payload, first_seen_at FROM operating_products WHERE object_id = ?", (object_id,)).fetchone()
                     product_payload = _merge_payload(loads(existing_product["payload"]) if existing_product else {}, row, data_version=data_version, dataset_name=dataset_name, ownership=ownership, raw_store_id=raw_store_id, raw_store_name=raw_store_name, normalized_store_id=normalized_store_id, normalized_store_name=normalized_store_name)
                     product_payload["source"] = source
@@ -379,7 +390,7 @@ def upsert_operating_objects_from_import(
         "productUpsertCount": len(product_ids),
         "storeUpsertCount": len(store_keys),
         "dataScopeSource": DATA_SCOPE_SOURCE,
-        "rule": "上传账号决定导入数据归属；报表出现新店铺时直接创建并归属上传账号，权限迁移才需要确认接收。",
+        "rule": "V12：经营对象使用系统编码承接商品/店铺/SKU身份，指标事实沉淀到 payload.metricFacts。",
     }
 
 
@@ -401,6 +412,25 @@ def _visible_for_user(row: Mapping[str, Any] | Any, user_id: str | None) -> bool
     return store_id in set(visible_store_ids_for_user(user_id))
 
 
+def _formatted_payload_metrics(payload: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        "inventory": format_metric("inventory_qty", metric_value(payload, "inventory_qty")),
+        "sellableDays": format_metric("sellable_days", metric_value(payload, "sellable_days")),
+        "avgOrderValue": format_metric("avg_order_value", metric_value(payload, "avg_order_value")),
+        "paymentAmount": format_metric("payment_amount", metric_value(payload, "payment_amount")),
+        "costAmount": format_metric("product_cost_amount", metric_value(payload, "product_cost_amount")),
+        "grossProfitAmount": format_metric("gross_profit_amount", metric_value(payload, "gross_profit_amount")),
+        "grossMargin": format_metric("gross_margin_rate", metric_value(payload, "gross_margin_rate")),
+        "roi": format_metric("roi", metric_value(payload, "roi")),
+        "clickRate": format_metric("click_rate", metric_value(payload, "click_rate")),
+        "conversionRate": format_metric("payment_conversion_rate", metric_value(payload, "payment_conversion_rate")),
+        "refundRate": format_metric("refund_rate", metric_value(payload, "refund_rate")),
+        "adSpend": format_metric("ad_spend", metric_value(payload, "ad_spend")),
+        "organicVisitors": format_metric("organic_visitor_count", metric_value(payload, "organic_visitor_count")),
+        "paidVisitors": format_metric("paid_visitor_count", metric_value(payload, "paid_visitor_count")),
+    }
+
+
 def list_operating_products(user_id: str | None = None) -> List[Dict[str, Any]]:
     ensure_operating_object_tables()
     with connect() as conn:
@@ -410,15 +440,27 @@ def list_operating_products(user_id: str | None = None) -> List[Dict[str, Any]]:
         if not _visible_for_user(row, user_id):
             continue
         payload = loads(row["payload"])
+        identity = payload.get("productIdentity") or product_identity(payload)
+        codes = payload.get("systemCodes") or system_codes(payload)
+        metrics = _formatted_payload_metrics(payload)
+        title = row["title"] or identity.get("productId") or row["product_id"]
         result.append({
             "id": row["product_id"],
+            "objectId": row["object_id"],
             "productId": row["product_id"],
+            "skuId": identity.get("skuId"),
+            "erpProductCode": identity.get("erpProductCode"),
+            "productLink": identity.get("productLink"),
+            "systemStoreCode": codes.get("systemStoreCode"),
+            "systemSpuCode": codes.get("systemSpuCode"),
+            "systemLinkCode": codes.get("systemLinkCode"),
+            "systemSkuCode": codes.get("systemSkuCode"),
             "storeId": row["normalized_store_id"] or row["store_id"],
             "store": row["normalized_store_name"] or row["store_name"],
             "storeName": row["normalized_store_name"] or row["store_name"],
             "platform": row["platform"],
-            "title": row["title"],
-            "shortName": str(row["title"] or row["product_id"])[:8],
+            "title": title,
+            "shortName": display_short_title(payload, fallback=str(row["product_id"])),
             "category": row["category"],
             "latestDataVersion": row["latest_data_version"],
             "sourceDataset": row["source_dataset"],
@@ -436,15 +478,27 @@ def list_operating_products(user_id: str | None = None) -> List[Dict[str, Any]]:
             "normalizedStoreName": row["normalized_store_name"],
             "dataScopeSource": row["data_scope_source"] or DATA_SCOPE_SOURCE,
             "imageLabel": "品",
-            "inventory": _text(_pick(payload, "stock", "available_stock", "current_stock", "库存", "可用库存", "当前库存", default="—")) or "—",
-            "inventoryStatus": "已入库",
+            "inventory": metrics["inventory"],
+            "inventoryStatus": "已入库" if metrics["inventory"] != "—" else "待补库存",
             "inventoryLevel": "good",
-            "price": _text(_pick(payload, "sale_price", "售价", "销售价", "活动价", "成交价", default="—")) or "—",
-            "cost": _text(_pick(payload, "cost_price", "成本", "成本价", "采购价", default="—")) or "—",
-            "grossMargin": _text(_pick(payload, "gross_margin", "毛利率", default="—")) or "—",
-            "afterSales": "标签观察",
+            "price": metrics["avgOrderValue"],
+            "avgOrderValue": metrics["avgOrderValue"],
+            "paymentAmount": metrics["paymentAmount"],
+            "cost": metrics["costAmount"],
+            "costAmount": metrics["costAmount"],
+            "grossProfitAmount": metrics["grossProfitAmount"],
+            "grossMargin": metrics["grossMargin"],
+            "roi": metrics["roi"],
+            "clickRate": metrics["clickRate"],
+            "conversionRate": metrics["conversionRate"],
+            "refundRate": metrics["refundRate"],
+            "adSpend": metrics["adSpend"],
+            "organicVisitors": metrics["organicVisitors"],
+            "paidVisitors": metrics["paidVisitors"],
+            "afterSales": "标签观察" if metrics["refundRate"] == "—" else f"退款率 {metrics['refundRate']}",
             "afterSalesLevel": "good",
-            "suggestion": "已完成清洗入库；是否生成任务由风险判断单独决定。",
+            "suggestion": "商品档案已完成V12指标事实入库；任务由经营判断和证据闸门单独生成。",
+            "metricFacts": payload.get("metricFacts") or [],
             "objectStoreVersion": OPERATING_OBJECT_VERSION,
             "payload": payload,
         })
@@ -479,7 +533,7 @@ def list_operating_stores(user_id: str | None = None) -> List[Dict[str, Any]]:
             "normalizedStoreId": row["normalized_store_id"],
             "normalizedStoreName": row["normalized_store_name"],
             "dataScopeSource": row["data_scope_source"] or DATA_SCOPE_SOURCE,
-            "businessTags": ["已入库"],
+            "businessTags": ["已入库", "V12指标事实"],
             "riskTags": ["已入库"],
             "productRoleTags": [f"商品 {row['product_count'] or 0}"],
             "storeWeightTag": "经营对象",
@@ -487,7 +541,7 @@ def list_operating_stores(user_id: str | None = None) -> List[Dict[str, Any]]:
             "alertCount": 0,
             "taskIntensity": "标签观察",
             "level": "watch",
-            "judgment": "已完成清洗入库",
+            "judgment": "已完成清洗入库，店铺事实由V12画像和指标目录承接",
             "objectStoreVersion": OPERATING_OBJECT_VERSION,
             "payload": payload,
         })
@@ -497,10 +551,12 @@ def list_operating_stores(user_id: str | None = None) -> List[Dict[str, Any]]:
 def operating_object_summary(user_id: str | None = None) -> Dict[str, Any]:
     products = list_operating_products(user_id)
     stores = list_operating_stores(user_id)
+    metric_fact_count = sum(len(item.get("metricFacts") or []) for item in products)
     return {
         "version": OPERATING_OBJECT_VERSION,
         "productCount": len(products),
         "storeCount": len(stores),
+        "metricFactCount": metric_fact_count,
         "latestDataVersion": next((item.get("latestDataVersion") for item in products if item.get("latestDataVersion")), None),
-        "rule": "经营对象入库优先于标签和任务；上传账号决定正常报表导入归属。",
+        "rule": "V12：经营对象入库优先于任务；商品页展示定位和指标事实，任务页展示交叉验证和SOP。",
     }
