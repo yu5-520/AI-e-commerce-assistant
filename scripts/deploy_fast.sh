@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# V11.15 demo fast deployment script.
+# V11.16 demo fast deployment script.
 # Goal: high-frequency Demo iteration. No release clone, no venv rebuild, no pip install by default.
-# V11.15 adds repo hygiene verification so docs, API contract and version files do not drift.
+# Repo hygiene verification keeps docs, API contract and version files from drifting.
 # Use deploy_atomic.sh for milestone releases and production-like verification.
 
 APP_NAME="${APP_NAME:-ai-ecommerce-assistant}"
