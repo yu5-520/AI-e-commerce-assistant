@@ -1,11 +1,8 @@
 """Backend account and data-scope isolation guards.
 
-V11.4 adds a production safety gate without breaking the demo runtime:
-
-- Demo mode may still use X-Mock-User-Id for MVP role testing.
-- Production mode must not trust frontend supplied mock identity headers.
-- Imported rows missing tenant/org/store ownership are treated as quarantined and
-  must not enter business projections when strict data scope is enabled.
+V12.2.8 keeps production safety, but lets an ECS demo explicitly allow account
+switching with DEMO_ACCOUNT_SWITCH=true.  This fixes demo role testing without
+turning off the production isolation model.
 """
 
 from __future__ import annotations
@@ -24,6 +21,16 @@ TRUTHY = {"1", "true", "yes", "on", "strict", "production"}
 
 def production_mode() -> bool:
     return os.getenv("APP_ENV", "demo").strip().lower() == "production"
+
+
+def demo_account_switch_enabled() -> bool:
+    """Allow demo role switching only when explicitly enabled."""
+    raw = os.getenv("DEMO_ACCOUNT_SWITCH", "")
+    return raw.strip().lower() in TRUTHY
+
+
+def demo_mock_identity_allowed() -> bool:
+    return not production_mode() or demo_account_switch_enabled()
 
 
 def strict_data_scope_enabled() -> bool:
@@ -122,11 +129,12 @@ def row_scope_status(row: Mapping[str, Any], *, tenant_id: str = DEFAULT_TENANT_
 
 def isolation_runtime_summary() -> dict[str, Any]:
     return {
-        "version": "11.4.0",
+        "version": "12.2.8",
         "appEnv": os.getenv("APP_ENV", "demo"),
         "productionMode": production_mode(),
         "strictDataScope": strict_data_scope_enabled(),
-        "demoMockIdentityAllowed": not production_mode(),
-        "identityRule": "production ignores X-Mock-User-Id and requires trusted auth identity headers",
+        "demoAccountSwitchEnabled": demo_account_switch_enabled(),
+        "demoMockIdentityAllowed": demo_mock_identity_allowed(),
+        "identityRule": "production ignores mock identity unless DEMO_ACCOUNT_SWITCH=true is explicitly set for ECS demo validation",
         "dataRule": "strict mode quarantines rows missing tenant_id/org_id/store_id ownership before business projection",
     }
