@@ -12,6 +12,7 @@ V12.2 的目标不是继续扩大任务数量，而是把报表上传从“Sheet
 - 缺字段不直接生成任务；只有经营判断被关键证据阻塞时，任务证据闸门才允许生成补证任务。
 - 指标事实必须可查询、可复用、可被任务证据闸门引用，不能只藏在商品 payload 里。
 - 商品指标展示必须 fail-closed：事实表没有就是未识别，不能读对象缓存，不能用 0 伪装成功。
+- ROI 必须按 product / traffic_source / store 三个口径隔离，不能互相覆盖。
 
 ## 2. V12.2.0：报表布局 Agent
 
@@ -114,7 +115,43 @@ source_block_type
 店铺汇总区 ROI → store_metric_facts.roi, metric_scope=store
 ```
 
-## 5. 商品详情 fail-closed
+## 5. V12.2.3：经营对象只保留身份定位
+
+`operating_object_store_service.py` 已收紧：
+
+```text
+operating_products
+operating_stores
+```
+
+只保留：
+
+```text
+商品ID / SKU / ERP编码 / 链接
+店铺ID / 店铺名称 / 平台
+系统 STORE / SPU / LINK / SKU 编码
+权限归属
+来源 Sheet / 行号 / block_id
+sourceDatasets / sourceDataVersions
+```
+
+不再保留：
+
+```text
+ROI
+支付金额
+广告消耗
+点击率
+转化率
+退款率
+毛利率
+库存
+payload.metricFacts
+```
+
+这一步是把“对象主档”和“经营账本”彻底拆开：对象主档是身份证，事实表才是经营账本。
+
+## 6. V12.2.4：商品页 fail-closed
 
 `product_archive_detail_service.py` 已收紧：
 
@@ -139,25 +176,45 @@ payload.metricFacts
 流量来源 ROI 冒充商品 ROI
 ```
 
-## 6. 上传导入链路
+## 7. V12.2.5：ROI 口径隔离
+
+ROI 不再是一个全局字段，而是三种不同事实：
+
+```text
+product_metric_facts.roi        → 商品整体 ROI
+traffic_source_facts.roi        → 流量来源 ROI
+store_metric_facts.roi          → 店铺汇总 ROI
+```
+
+任务证据闸门也按 `metric_scope` 取证：
+
+```text
+商品降投 / 商品投产任务 → 只查 product_metric_facts, metric_scope=product
+流量来源任务 → 只查 traffic_source_facts, metric_scope=traffic_source
+店铺经营任务 → 只查 store_metric_facts, metric_scope=store
+```
+
+任何一层 ROI 都不能覆盖另一层。
+
+## 8. 上传导入链路
 
 ```text
 /api/data/upload/confirm
 → parse_upload_file，保留 row/column 坐标
 → compact_upload_meta，生成 Sheet + Block profile
 → confirm_report_import(auto_create_tasks=False)
-→ upsert_operating_objects_from_import
+→ upsert_operating_objects_from_import，只写身份主档
 → ingest_metric_facts_from_sheet_rows，按 blocks 写事实表
 → ingest_data_gaps_from_import
 → ingest_product_trends
 → generate_risk_tasks_for_signals
-→ task_evidence_gate_service
+→ task_evidence_gate_service，按metric_scope取证
 → importDiagnostics
 ```
 
 旧规则不得因为字段缺失直接创建任务。
 
-## 7. 验收接口
+## 9. 验收接口
 
 ```text
 /api/health
@@ -173,19 +230,23 @@ reportProfile.profileMode = sheet_to_block_profile
 reportProfile.sheetProfiles[].blocks 存在
 metricFactSync.mode = layout_block_metric_fact_routing
 metricFactSync.blockSummaries 存在
+operatingObjectSync.metricCacheDisabled = true
 product_metric_facts 中 ROI 不被 traffic_source_facts 的 ROI 覆盖
 商品详情 ROI 未命中时显示“未识别”，不显示 0 或缓存
+任务 evidenceGate.metricScope 存在，且 requiredFactTables 与口径一致
 ```
 
-## 8. 当前版本边界
+## 10. 当前版本边界
 
-V12.2.2 已完成：
+V12.2.5 已完成：
 
 ```text
 V12.2.0：报表布局 Agent，Sheet Profile → Block Profile
 V12.2.1：导入解析器保留行列坐标和 block 可追溯字段
 V12.2.2：事实表按 block 写入 product/store/traffic facts
-附加收紧：商品指标展示 fail-closed，只读事实表
+V12.2.3：经营对象只保留身份定位，取消商品指标对象缓存托底
+V12.2.4：商品页 fail-closed，事实表没有就显示未识别
+V12.2.5：ROI 口径隔离，product ROI / traffic ROI / store ROI 不互相替代
 ```
 
-下一步建议进入 V12.2.3：把 importDiagnostics 升级成前端布局诊断页，让你直接在页面上看到 Sheet → Block → Fact → Gap 的识别结果。
+下一步建议进入 V12.2.6：把 importDiagnostics 升级成前端布局诊断页，让你直接在页面上看到 Sheet → Block → Fact → Gap 的识别结果。
