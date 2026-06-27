@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# V11.12 lightweight atomic deployment script.
+# V12.3 lightweight atomic deployment script.
 # Goal: keep atomic code switching, but avoid rebuilding venv on low-spec ECS.
+# Release verification and repo hygiene must pass before switching current.
 
 APP_NAME="${APP_NAME:-ai-ecommerce-assistant}"
 SERVICE_NAME="${SERVICE_NAME:-ai-operating-advisor}"
@@ -20,6 +21,7 @@ INSTALL_SYSTEMD_OVERRIDE="${INSTALL_SYSTEMD_OVERRIDE:-1}"
 LIGHT_DEPLOY="${LIGHT_DEPLOY:-1}"
 ROUTE_GUARD_MODE="${ROUTE_GUARD_MODE:-warn}"
 RUNTIME_ROUTE_GUARD="${RUNTIME_ROUTE_GUARD:-warn}"
+DEMO_ACCOUNT_SWITCH="${DEMO_ACCOUNT_SWITCH:-false}"
 PIP_INDEX_URLS="${PIP_INDEX_URLS:-https://pypi.org/simple https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple https://pypi.mirrors.ustc.edu.cn/simple}"
 PIP_TIMEOUT="${PIP_TIMEOUT:-60}"
 PIP_RETRIES="${PIP_RETRIES:-3}"
@@ -36,18 +38,9 @@ PREVIOUS_RELEASE=""
 NEW_RELEASE=""
 SERVICE_VENV=""
 
-log() {
-  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"
-}
-
-fail() {
-  log "ERROR: $*"
-  exit 1
-}
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"
-}
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG_FILE"; }
+fail() { log "ERROR: $*"; exit 1; }
+require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
 python_version_ok() {
   local candidate="$1"
@@ -71,14 +64,9 @@ resolve_python() {
     python_version_ok "$PYTHON_BIN" || fail "PYTHON_BIN must be Python >= 3.10, got $(python_version_text "$PYTHON_BIN") at $PYTHON_BIN"
     return 0
   fi
-
   local candidate resolved
   for candidate in "$BOOTSTRAP_DIR/.venv/bin/python" "$SHARED_VENV/bin/python" python3.12 python3.11 python3.10 python3 python; do
-    if [ -x "$candidate" ]; then
-      resolved="$candidate"
-    else
-      resolved="$(command -v "$candidate" 2>/dev/null || true)"
-    fi
+    if [ -x "$candidate" ]; then resolved="$candidate"; else resolved="$(command -v "$candidate" 2>/dev/null || true)"; fi
     [ -n "$resolved" ] || continue
     if python_version_ok "$resolved"; then
       PYTHON_BIN="$resolved"
@@ -107,9 +95,7 @@ retry() {
   local delay="$1"; shift
   local n=1
   until "$@"; do
-    if [ "$n" -ge "$attempts" ]; then
-      return 1
-    fi
+    if [ "$n" -ge "$attempts" ]; then return 1; fi
     log "retry $n/$attempts failed: $*"
     n=$((n + 1))
     sleep "$delay"
@@ -127,11 +113,7 @@ rollback() {
   fi
 }
 
-on_error() {
-  local line="$1"
-  log "deployment failed at line $line"
-  rollback
-}
+on_error() { local line="$1"; log "deployment failed at line $line"; rollback; }
 trap 'on_error $LINENO' ERR
 
 preflight() {
@@ -143,7 +125,6 @@ preflight() {
   sudo chown -R "$RUN_USER:$RUN_GROUP" "$DEPLOY_ROOT"
   touch "$LOG_FILE"
   resolve_python
-
   git config --global --add safe.directory "$DEPLOY_ROOT" >/dev/null 2>&1 || true
   git config --global http.version HTTP/1.1
   git config --global http.lowSpeedLimit 0
@@ -152,25 +133,17 @@ preflight() {
   git config --global --unset https.proxy >/dev/null 2>&1 || true
 }
 
-remote_commit() {
-  git ls-remote "$REPO_URL" "refs/heads/$BRANCH" | awk '{print $1}'
-}
+remote_commit() { git ls-remote "$REPO_URL" "refs/heads/$BRANCH" | awk '{print $1}'; }
 
 pip_install_with_fallback() {
   local pip_args=("$@")
-  local index_url
-  local success=0
+  local index_url success=0
   for index_url in $PIP_INDEX_URLS; do
     log "pip install via index: $index_url"
-    if python -m pip install --no-cache-dir --timeout "$PIP_TIMEOUT" --retries "$PIP_RETRIES" --index-url "$index_url" "${pip_args[@]}"; then
-      success=1
-      break
-    fi
+    if python -m pip install --no-cache-dir --timeout "$PIP_TIMEOUT" --retries "$PIP_RETRIES" --index-url "$index_url" "${pip_args[@]}"; then success=1; break; fi
     log "pip index failed: $index_url"
   done
-  if [ "$success" != "1" ]; then
-    return 1
-  fi
+  [ "$success" = "1" ]
 }
 
 ensure_shared_venv() {
@@ -187,10 +160,7 @@ ensure_shared_venv() {
 }
 
 install_requirements_if_needed() {
-  if [ ! -f requirements.txt ]; then
-    log "requirements.txt not found; skip dependency install"
-    return 0
-  fi
+  if [ ! -f requirements.txt ]; then log "requirements.txt not found; skip dependency install"; return 0; fi
   local current_hash previous_hash
   current_hash="$(file_hash requirements.txt)"
   previous_hash="$(cat "$REQUIREMENTS_HASH_FILE" 2>/dev/null || true)"
@@ -224,31 +194,22 @@ prepare_release_venv() {
 }
 
 create_release() {
-  local commit="$1"
-  local stamp
+  local commit="$1" stamp checked_commit
   stamp="$(date '+%Y%m%d%H%M%S')"
   NEW_RELEASE="$RELEASES_DIR/${stamp}_${commit:0:8}"
   log "clone release: $NEW_RELEASE"
   git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$NEW_RELEASE"
   cd "$NEW_RELEASE"
-  local checked_commit
   checked_commit="$(git rev-parse HEAD)"
   [ "$checked_commit" = "$commit" ] || fail "cloned commit $checked_commit does not match remote $commit"
-
   rm -rf logs
   ln -s "$SHARED_DIR/logs" logs
-  if [ -f "$SHARED_DIR/.env" ]; then
-    ln -sfn "$SHARED_DIR/.env" .env
-  fi
-
+  if [ -f "$SHARED_DIR/.env" ]; then ln -sfn "$SHARED_DIR/.env" .env; fi
   prepare_release_venv
-
   log "verify release consistency"
-  if [ -n "$EXPECTED_VERSION" ]; then
-    python scripts/verify_release.py --expected-version "$EXPECTED_VERSION" --route-mode "$ROUTE_GUARD_MODE"
-  else
-    python scripts/verify_release.py --route-mode "$ROUTE_GUARD_MODE"
-  fi
+  if [ -n "$EXPECTED_VERSION" ]; then python scripts/verify_release.py --expected-version "$EXPECTED_VERSION" --route-mode "$ROUTE_GUARD_MODE"; else python scripts/verify_release.py --route-mode "$ROUTE_GUARD_MODE"; fi
+  log "check repo hygiene"
+  python scripts/check_repo_hygiene.py
 }
 
 install_systemd_override() {
@@ -261,6 +222,7 @@ install_systemd_override() {
 WorkingDirectory=$CURRENT_LINK
 Environment=APP_HOST=$APP_HOST
 Environment=APP_PORT=$APP_PORT
+Environment=DEMO_ACCOUNT_SWITCH=$DEMO_ACCOUNT_SWITCH
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-$SHARED_DIR/.env
 ExecStart=
@@ -286,7 +248,6 @@ health_check() {
   expected_version="$(awk -F': ' '/Current Version:/ {print $2; exit}' "$CURRENT_LINK/versioning/VERSION.md")"
   log "restart service: $SERVICE_NAME"
   sudo systemctl restart "$SERVICE_NAME"
-
   log "wait for health $APP_HOST:$APP_PORT expected=$expected_version"
   for i in $(seq 1 30); do
     if curl -fsS "http://$APP_HOST:$APP_PORT/api/health" >/tmp/${APP_NAME}_health.json 2>/dev/null; then
@@ -299,10 +260,7 @@ if payload.get("ok") and payload.get("version") == expected:
 print(payload)
 raise SystemExit(1)
 PY
-      then
-        log "health ok"
-        return 0
-      fi
+      then log "health ok"; return 0; fi
     fi
     sleep 1
   done
@@ -316,20 +274,16 @@ route_check() {
   local failures=0
   curl -fsS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/system/runtime-diagnostics" >/dev/null || failures=$((failures + 1))
   curl -fsS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/modules/operating-unit" >/dev/null || failures=$((failures + 1))
+  curl -fsS "http://$APP_HOST:$APP_PORT/api/data/source-connections" >/dev/null || failures=$((failures + 1))
+  curl -fsS "http://$APP_HOST:$APP_PORT/api/data/import-diagnostics" >/dev/null || failures=$((failures + 1))
   if [ "$failures" -gt 0 ]; then
-    if [ "$RUNTIME_ROUTE_GUARD" = "strict" ]; then
-      fail "runtime route check failed: $failures"
-    fi
+    if [ "$RUNTIME_ROUTE_GUARD" = "strict" ]; then fail "runtime route check failed: $failures"; fi
     log "WARN: runtime route check failed: $failures; continue because RUNTIME_ROUTE_GUARD=$RUNTIME_ROUTE_GUARD"
   fi
 }
 
 reload_nginx() {
-  if command -v nginx >/dev/null 2>&1; then
-    log "reload nginx"
-    sudo nginx -t
-    sudo systemctl reload nginx || true
-  fi
+  if command -v nginx >/dev/null 2>&1; then log "reload nginx"; sudo nginx -t; sudo systemctl reload nginx || true; fi
 }
 
 cleanup_old_releases() {
