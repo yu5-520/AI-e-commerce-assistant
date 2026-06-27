@@ -6,9 +6,9 @@ Boundary:
     explanations. All trend, cross-validation, and task generation logic belongs to
     the downstream data import services.
 
-V12 update:
-    Keep per-sheet rows in addition to the flattened row list so the report profile
-    agent can route 商品经营明细 / 店铺经营汇总 / 流量来源明细 into different fact tables.
+V12.2 update:
+    Preserve row coordinates and sheet matrices so the report layout agent can split
+    one sheet into multiple blocks: 商品经营区、店铺汇总区、流量来源区、暂存区。
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm", ".xls", ".csv", ".json"}
-ADAPTER_VERSION = "12.0.0"
+ADAPTER_VERSION = "12.2.2"
 
 
 def _extension(filename: str | None) -> str:
@@ -74,20 +74,35 @@ def _dedupe_headers(headers: List[Any]) -> List[str]:
     return result
 
 
+def _matrix_payload(matrix: List[List[Any]]) -> List[Dict[str, Any]]:
+    payload: List[Dict[str, Any]] = []
+    for row_index, row in enumerate(matrix, start=1):
+        payload.append({
+            "rowIndex": row_index,
+            "cells": [_normalize_cell(cell) for cell in row],
+            "isEmpty": not any(not _is_empty(cell) for cell in row),
+        })
+    return payload
+
+
 def _matrix_to_rows(matrix: List[List[Any]], *, source_sheet: str | None = None) -> Tuple[List[str], List[Dict[str, Any]]]:
-    non_empty = [row for row in matrix if any(not _is_empty(cell) for cell in row)]
+    non_empty = [(index, row) for index, row in enumerate(matrix, start=1) if any(not _is_empty(cell) for cell in row)]
     if not non_empty:
         return [], []
-    header_index = 0
-    headers = _dedupe_headers(non_empty[header_index])
+    header_row_index, header_row = non_empty[0]
+    headers = _dedupe_headers(header_row)
+    column_map = {header: index + 1 for index, header in enumerate(headers)}
     rows: List[Dict[str, Any]] = []
-    for raw in non_empty[header_index + 1 :]:
+    for source_row_index, raw in non_empty[1:]:
         item: Dict[str, Any] = {}
         for index, header in enumerate(headers):
             item[header] = _normalize_cell(raw[index]) if index < len(raw) else ""
         if source_sheet:
             item["__source_sheet"] = source_sheet
-        if any(not _is_empty(value) for key, value in item.items() if key != "__source_sheet"):
+        item["__source_row_index"] = source_row_index
+        item["__source_header_row_index"] = header_row_index
+        item["__source_column_map"] = column_map
+        if any(not _is_empty(value) for key, value in item.items() if not str(key).startswith("__")):
             rows.append(item)
     return headers, rows
 
@@ -101,9 +116,10 @@ def _parse_csv(content: bytes) -> Dict[str, Any]:
         "format": "csv",
         "rows": rows,
         "sheetRows": {"CSV": rows},
+        "sheetMatrices": {"CSV": _matrix_payload(matrix)},
         "totalRows": len(rows),
         "sheetCount": 1,
-        "sheets": [{"sheetName": "CSV", "headers": headers, "rowCount": len(rows)}],
+        "sheets": [{"sheetName": "CSV", "headers": headers, "rowCount": len(rows), "rawRowCount": len(matrix)}],
     }
 
 
@@ -123,15 +139,20 @@ def _parse_json(content: bytes) -> Dict[str, Any]:
         for key in row.keys():
             if key not in headers:
                 headers.append(str(key))
-    for row in rows:
+    column_map = {header: index + 1 for index, header in enumerate(headers)}
+    for index, row in enumerate(rows, start=2):
         row.setdefault("__source_sheet", "JSON")
+        row.setdefault("__source_row_index", index)
+        row.setdefault("__source_header_row_index", 1)
+        row.setdefault("__source_column_map", column_map)
     return {
         "format": "json",
         "rows": rows,
         "sheetRows": {"JSON": rows},
+        "sheetMatrices": {"JSON": [{"rowIndex": 1, "cells": headers, "isEmpty": False}]},
         "totalRows": len(rows),
         "sheetCount": 1,
-        "sheets": [{"sheetName": "JSON", "headers": headers, "rowCount": len(rows)}],
+        "sheets": [{"sheetName": "JSON", "headers": headers, "rowCount": len(rows), "rawRowCount": len(rows) + 1}],
     }
 
 
@@ -144,6 +165,7 @@ def _parse_xlsx(content: bytes) -> Dict[str, Any]:
     workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     rows: List[Dict[str, Any]] = []
     sheet_rows: Dict[str, List[Dict[str, Any]]] = {}
+    sheet_matrices: Dict[str, List[Dict[str, Any]]] = {}
     sheets: List[Dict[str, Any]] = []
     for worksheet in workbook.worksheets:
         matrix = [list(row) for row in worksheet.iter_rows(values_only=True)]
@@ -152,10 +174,11 @@ def _parse_xlsx(content: bytes) -> Dict[str, Any]:
             continue
         rows.extend(current_rows)
         sheet_rows[worksheet.title] = current_rows
-        sheets.append({"sheetName": worksheet.title, "headers": headers, "rowCount": len(current_rows)})
+        sheet_matrices[worksheet.title] = _matrix_payload(matrix)
+        sheets.append({"sheetName": worksheet.title, "headers": headers, "rowCount": len(current_rows), "rawRowCount": len(matrix)})
     if not rows:
         raise ValueError("Excel 文件没有读取到有效数据行。")
-    return {"format": "xlsx", "rows": rows, "sheetRows": sheet_rows, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
+    return {"format": "xlsx", "rows": rows, "sheetRows": sheet_rows, "sheetMatrices": sheet_matrices, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
 
 
 def _parse_xls(content: bytes) -> Dict[str, Any]:
@@ -167,6 +190,7 @@ def _parse_xls(content: bytes) -> Dict[str, Any]:
     book = xlrd.open_workbook(file_contents=content)
     rows: List[Dict[str, Any]] = []
     sheet_rows: Dict[str, List[Dict[str, Any]]] = {}
+    sheet_matrices: Dict[str, List[Dict[str, Any]]] = {}
     sheets: List[Dict[str, Any]] = []
     for sheet in book.sheets():
         matrix: List[List[Any]] = []
@@ -187,10 +211,11 @@ def _parse_xls(content: bytes) -> Dict[str, Any]:
             continue
         rows.extend(current_rows)
         sheet_rows[sheet.name] = current_rows
-        sheets.append({"sheetName": sheet.name, "headers": headers, "rowCount": len(current_rows)})
+        sheet_matrices[sheet.name] = _matrix_payload(matrix)
+        sheets.append({"sheetName": sheet.name, "headers": headers, "rowCount": len(current_rows), "rawRowCount": len(matrix)})
     if not rows:
         raise ValueError("Excel 文件没有读取到有效数据行。")
-    return {"format": "xls", "rows": rows, "sheetRows": sheet_rows, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
+    return {"format": "xls", "rows": rows, "sheetRows": sheet_rows, "sheetMatrices": sheet_matrices, "totalRows": len(rows), "sheetCount": len(sheets), "sheets": sheets}
 
 
 def parse_upload_file(filename: str | None, content: bytes, content_type: str | None = None) -> Dict[str, Any]:
@@ -210,7 +235,7 @@ def parse_upload_file(filename: str | None, content: bytes, content_type: str | 
     parsed["fileName"] = filename or "upload"
     parsed["contentType"] = content_type or ""
     parsed["adapterVersion"] = ADAPTER_VERSION
-    parsed["boundary"] = "raw_fact_rows_only_no_task_judgement_v12_sheet_rows_preserved"
+    parsed["boundary"] = "raw_fact_rows_only_no_task_judgement_v12_2_row_coordinates_preserved"
     return parsed
 
 
@@ -220,7 +245,7 @@ def compact_upload_meta(parsed: Dict[str, Any]) -> Dict[str, Any]:
 
         report_profile = build_report_profile(parsed)
     except Exception as exc:  # profile failure must not block raw parsing
-        report_profile = {"version": "12.0.0", "status": "profile_failed", "error": str(exc)}
+        report_profile = {"version": "12.2.2", "status": "profile_failed", "error": str(exc)}
     return {
         "adapterVersion": parsed.get("adapterVersion"),
         "fileName": parsed.get("fileName"),
