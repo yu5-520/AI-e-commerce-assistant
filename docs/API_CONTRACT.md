@@ -25,6 +25,8 @@ POST /api/accounts/roles/{role_id}/permissions
 GET /api/modules/dashboard
 GET /api/modules/operating-unit
 GET /api/modules/product
+GET /api/modules/product?storeId={store_id}
+GET /api/modules/product?storeName={store_name}
 GET /api/modules/competitor
 GET /api/modules/listing
 GET /api/modules/traffic
@@ -32,7 +34,16 @@ GET /api/modules/report
 GET /api/modules/log
 ```
 
-用途：总览、经营、商品、竞品、上新、流量、数据、日志页面数据。
+用途：总览、经营、商品、店铺商品档案、竞品、上新、流量、数据、日志页面数据。
+
+商品模块规则：
+
+```text
+不带参数 → 当前账号可见全局商品档案。
+带 storeId / storeName → 当前店铺商品档案。
+商品列表必须返回 objectId / archiveId / productId / storeId / storeName。
+前端唯一档案 ID 使用 objectId / archiveId，不使用裸 productId。
+```
 
 ## 任务
 
