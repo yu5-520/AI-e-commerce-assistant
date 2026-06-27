@@ -25,6 +25,13 @@
     window.dispatchEvent(new CustomEvent("api-client-error", { detail: status.lastError }));
     console.error(`[api-client] request failed for ${path}`, error);
   }
+  function buildQuery(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") query.set(key, value);
+    });
+    return query.toString() ? `?${query.toString()}` : "";
+  }
   async function parseError(response) {
     let detail = "";
     try {
@@ -112,7 +119,7 @@
     updateUserStores: (userId, storeIds) => applyAccountMutation(`/api/accounts/users/${encodeURIComponent(userId)}/stores`, { storeIds }),
     updateStoreAssignment: (storeId, primaryOperatorId, reviewerId = "U002") => applyAccountMutation(`/api/accounts/store-assignments/${encodeURIComponent(storeId)}`, { primaryOperatorId, reviewerId }),
     updateRolePermissions: (roleId, permissions) => applyAccountMutation(`/api/accounts/roles/${encodeURIComponent(roleId)}/permissions`, { permissions }),
-    product: () => request("/api/modules/product"),
+    product: (params = {}) => request(`/api/modules/product${buildQuery(params)}`),
     competitor: () => request("/api/modules/competitor"),
     listing: () => request("/api/modules/listing"),
     traffic: () => request("/api/modules/traffic"),
@@ -161,11 +168,11 @@
     candidateReport: (module, id) => request(`/api/modules/task-reports/candidates/${encodeURIComponent(module)}/${encodeURIComponent(id)}`),
     alertReport: (id) => request(`/api/modules/task-reports/alerts/${encodeURIComponent(id)}`),
     post: (path, _fallback, body) => request(path, null, { method: "POST", body }),
-    createProductTask: (id) => api.post(`/api/modules/product/${id}/tasks`, null, {}),
-    createCompetitorTask: (id) => api.post(`/api/modules/competitor/${id}/tasks`, null, {}),
-    createListingTask: (id) => api.post(`/api/modules/listing/${id}/tasks`, null, {}),
-    createTrafficTask: (id) => api.post(`/api/modules/traffic/${id}/tasks`, null, {}),
-    createReportTask: (id) => api.post(`/api/modules/report/${id}/tasks`, null, {}),
+    createProductTask: (id) => api.post(`/api/modules/product/${encodeURIComponent(id)}/tasks`, null, {}),
+    createCompetitorTask: (id) => api.post(`/api/modules/competitor/${encodeURIComponent(id)}/tasks`, null, {}),
+    createListingTask: (id) => api.post(`/api/modules/listing/${encodeURIComponent(id)}/tasks`, null, {}),
+    createTrafficTask: (id) => api.post(`/api/modules/traffic/${encodeURIComponent(id)}/tasks`, null, {}),
+    createReportTask: (id) => api.post(`/api/modules/report/${encodeURIComponent(id)}/tasks`, null, {}),
     splitTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/split`, null, body),
     assignTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/assign`, null, body),
     acceptTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/accept`, null, body),
@@ -187,36 +194,10 @@
       window.AppMockData.reportGroups = Array.isArray(report?.reportGroups) ? report.reportGroups : [];
       window.AppMockData.reportDetails = report?.reportDetails || {};
       window.AppMockData.v3 = report?.v3 || null;
-      window.AppMockData.recentAlerts = Array.isArray(report?.recentAlerts) ? report.recentAlerts : [];
-      if (report?.v104ImportTaskSync) status.lastImportSync = report.v104ImportTaskSync;
     },
-    async refreshModuleData() {
-      const [products, competitors, listings, traffic, report] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report()]);
-      api.applyModuleData({ products, competitors, listings, traffic, report });
-      return window.AppMockData;
-    },
-    async refreshTaskState() {
-      const [todo, logs, recap] = await Promise.all([api.todo(), api.log(), api.recapCandidates()]);
-      applyRecapData(recap);
-      window.AppTaskStore?.hydrate?.(todo?.tasks || [], Array.isArray(logs) ? logs : [], todo?.events || [], todo?.counters || {});
-      await api.refreshModuleData();
-      return { todo, logs, recap };
-    },
-    async refreshAfterDataImport(importResult = null) {
-      if (importResult?.v104ImportTaskSync) status.lastImportSync = importResult.v104ImportTaskSync;
-      const [taskState, summary, dashboard, report] = await Promise.all([api.refreshTaskState(), api.v3Summary(), api.dashboard(), api.report()]);
-      window.AppMockData.v3 = summary;
-      window.dispatchEvent(new CustomEvent("v104-import-refreshed", { detail: { importResult, sync: status.lastImportSync, dashboard, report } }));
-      return { importResult, sync: status.lastImportSync, taskState, summary, dashboard, report };
-    },
-    async prefetch() {
-      await loadAccount();
-      const [products, competitors, listings, traffic, report, todo, logs, recap] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report(), api.todo(), api.log(), api.recapCandidates()]);
-      api.applyModuleData({ products, competitors, listings, traffic, report });
-      applyRecapData(recap);
-      window.AppTaskStore?.hydrate?.(todo?.tasks || [], Array.isArray(logs) ? logs : [], todo?.events || [], todo?.counters || {});
-      return window.AppMockData;
-    },
+    runtimeDiagnostics: () => request("/api/system/runtime-diagnostics"),
+    backfillOperatingObjects: () => api.post("/api/system/backfill-operating-objects", null, {}),
   };
+
   window.AppApi = api;
 })();
