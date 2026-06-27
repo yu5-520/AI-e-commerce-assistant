@@ -82,14 +82,54 @@
     return () => listeners.delete(listener);
   }
 
+  function normalizeId(value) { return String(value || "").trim(); }
+  function candidateIds(entity = {}) {
+    const ids = new Set();
+    [entity.id, entity.productId, entity.entityId, entity.skuId, entity.storeId, entity.storeName, entity.store, entity.title].forEach((value) => {
+      const text = normalizeId(value);
+      if (text) ids.add(text);
+    });
+    return ids;
+  }
+
+  function taskMatches(task = {}, entity = {}) {
+    const ids = candidateIds(entity);
+    if (!ids.size) return false;
+    const taskIds = [
+      task.id,
+      task.taskId,
+      task.productId,
+      task.entityId,
+      task.entity_id,
+      task.sourceEntityId,
+      task.productShort,
+      task.productTitle,
+      task.title,
+      task.store,
+      task.storeName,
+      ...(task.storeIds || []),
+      ...(task.visibleStoreIds || []),
+    ].map(normalizeId).filter(Boolean);
+    return taskIds.some((value) => ids.has(value));
+  }
+
+  function findOpenTask(entity) {
+    return listActiveTasks().find((task) => taskMatches(task, entity)) || null;
+  }
+
   window.AppTaskStore = { hydrate, snapshot, listTasks, listActiveTasks, listLogs, listEvents, counters, upsert, subscribe };
 
   window.AppTaskActions = {
+    findOpenTask,
     openTodoTask(taskId) {
       window.AppRouter?.navigate?.("business-actions", taskId ? { focusTaskId: taskId } : null);
     },
     openTaskReport(taskId) {
       window.AppRouter?.navigate?.("task-report", taskId ? { taskId } : null);
+    },
+    openCandidateReport(module, entityId) {
+      if (!module || !entityId) return;
+      window.AppRouter?.navigate?.("task-report", { module, entityId });
     },
     async createTaskFromReport(module, entityId) {
       if (!window.AppApi) return null;
