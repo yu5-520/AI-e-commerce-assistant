@@ -1,7 +1,12 @@
-"""V12.2 product archive detail projection.
+"""V12.2.4 product archive detail projection.
 
 商品模块只负责商品资产、定位、指标事实和任务历史摘要。经营指标必须来自
-事实表；事实表没有就是未识别，不能用商品对象 payload 缓存托底。
+独立事实表；事实表没有就是未识别，不能用商品对象 payload 缓存托底。
+
+V12.2.5 ROI scope rule:
+    product ROI comes only from product_metric_facts;
+    traffic ROI comes only from traffic_source_facts;
+    store ROI comes only from store_metric_facts.
 """
 
 from __future__ import annotations
@@ -11,7 +16,7 @@ from typing import Any, Dict, List
 from src.repositories.sqlite_repository import connect, loads
 from src.services.metric_fact_store_service import ensure_metric_fact_tables
 
-PRODUCT_ARCHIVE_DETAIL_VERSION = "12.2.2"
+PRODUCT_ARCHIVE_DETAIL_VERSION = "12.2.5"
 UNKNOWN_VALUE = "未识别"
 
 METRIC_LABELS = {
@@ -112,6 +117,13 @@ def _where_for_table(table: str, item: Dict[str, Any]) -> tuple[str, List[Any]]:
     return " OR ".join(product_clauses), product_params
 
 
+def _safe_row_value(row: Any, key: str) -> Any:
+    try:
+        return row[key]
+    except Exception:
+        return None
+
+
 def _fetch_facts(item: Dict[str, Any], limit: int = 800) -> List[Dict[str, Any]]:
     ensure_metric_fact_tables()
     facts: List[Dict[str, Any]] = []
@@ -141,9 +153,9 @@ def _fetch_facts(item: Dict[str, Any], limit: int = 800) -> List[Dict[str, Any]]
                     "rawFieldName": row["raw_field_name"],
                     "rawValue": row["raw_value"],
                     "sourceSheet": row["source_sheet"],
-                    "sourceBlockId": row["source_block_id"] if "source_block_id" in row.keys() else None,
-                    "sourceRowIndex": row["source_row_index"] if "source_row_index" in row.keys() else None,
-                    "metricScope": row["metric_scope"] if "metric_scope" in row.keys() else None,
+                    "sourceBlockId": _safe_row_value(row, "source_block_id"),
+                    "sourceRowIndex": _safe_row_value(row, "source_row_index"),
+                    "metricScope": _safe_row_value(row, "metric_scope"),
                     "sourceSystem": row["source_system"],
                     "sourceReportId": row["source_report_id"],
                     "dataVersion": row["data_version"],
@@ -187,11 +199,15 @@ def _build_position(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _product_facts(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [fact for fact in facts if fact.get("factTable") == "product_metric_facts"]
+    return [fact for fact in facts if fact.get("factTable") == "product_metric_facts" and (fact.get("metricScope") in {None, "", "product"})]
 
 
 def _traffic_facts(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [fact for fact in facts if fact.get("factTable") == "traffic_source_facts"]
+    return [fact for fact in facts if fact.get("factTable") == "traffic_source_facts" and (fact.get("metricScope") in {None, "", "traffic_source"})]
+
+
+def _store_facts(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [fact for fact in facts if fact.get("factTable") == "store_metric_facts" and (fact.get("metricScope") in {None, "", "store"})]
 
 
 def _build_sections(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -220,6 +236,7 @@ def _build_sections(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "sourceSheet": fact.get("sourceSheet"),
                 "sourceBlockId": fact.get("sourceBlockId"),
                 "sourceRowIndex": fact.get("sourceRowIndex"),
+                "metricScope": fact.get("metricScope"),
                 "dataVersion": fact.get("dataVersion"),
                 "statDate": fact.get("statDate"),
                 "factId": fact.get("factId"),
@@ -275,13 +292,13 @@ def enrich_product_archive_detail(item: Dict[str, Any]) -> Dict[str, Any]:
     facts = _fetch_facts(item)
     product_facts = _product_facts(facts)
     traffic_facts = _traffic_facts(facts)
+    store_facts = _store_facts(facts)
     enriched = dict(item)
     enriched["productArchiveDetailVersion"] = PRODUCT_ARCHIVE_DETAIL_VERSION
     enriched["productPosition"] = _build_position(enriched)
     enriched["metricSections"] = _build_sections(facts)
     enriched["trafficSourceFacts"] = _traffic_sources(facts)
     enriched["taskHistorySummary"] = _task_summary(enriched)
-    # V12.2 fail-closed top-level display values. Product card must not read polluted object cache.
     enriched["inventory"] = _metric_value(facts, "inventory_qty")
     enriched["avgOrderValue"] = _metric_value(facts, "avg_order_value")
     enriched["price"] = enriched["avgOrderValue"]
@@ -301,9 +318,10 @@ def enrich_product_archive_detail(item: Dict[str, Any]) -> Dict[str, Any]:
     enriched["metricFactSummary"] = {
         "factCount": len(facts),
         "productFactCount": len(product_facts),
-        "storeFactCount": len([fact for fact in facts if fact.get("factTable") == "store_metric_facts"]),
+        "storeFactCount": len(store_facts),
         "trafficFactCount": len(traffic_facts),
         "failClosed": True,
-        "rule": "V12.2：商品指标只读 product_metric_facts；事实表未命中显示未识别，不读对象缓存。",
+        "roiScopeIsolation": True,
+        "rule": "V12.2.5：商品指标只读 product_metric_facts；流量来源指标只读 traffic_source_facts；店铺指标只读 store_metric_facts；未命中显示未识别，不读对象缓存。",
     }
     return enriched
