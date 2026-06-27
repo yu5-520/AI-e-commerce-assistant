@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# V11.17 demo fast deployment script.
+# V12.3 demo fast deployment script.
 # Goal: high-frequency Demo iteration. No release clone, no venv rebuild, no pip install by default.
-# Repo hygiene verification keeps docs, API contract and version files from drifting.
+# Release verification + repo hygiene verification keep docs, API contract, active frontend and version files from drifting.
 # Use deploy_atomic.sh for milestone releases and production-like verification.
 
 APP_NAME="${APP_NAME:-ai-ecommerce-assistant}"
@@ -115,6 +115,7 @@ reset_to_latest() {
   log "reset bootstrap repo to origin/$BRANCH"
   git reset --hard "origin/$BRANCH"
   log "current commit: $(git log -1 --oneline)"
+  cat VERSION.md || true
   cat versioning/VERSION.md
 }
 
@@ -156,6 +157,7 @@ Environment=APP_HOST=$APP_HOST
 Environment=APP_PORT=$APP_PORT
 Environment=APP_ENV=demo
 Environment=STRICT_DATA_SCOPE=false
+Environment=DEMO_ACCOUNT_SWITCH=true
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-$APP_DIR/.env
 ExecStart=
@@ -209,6 +211,7 @@ reload_nginx() {
 final_check() {
   log "final version check"
   curl -sS "http://$APP_HOST:$APP_PORT/api/health" ; echo
+  curl -sS "http://$APP_HOST:$APP_PORT/api/data/source-connections" ; echo || true
   curl -sS -H 'X-Mock-User-Id: U004' "http://$APP_HOST:$APP_PORT/api/system/runtime-diagnostics" ; echo || true
 }
 
