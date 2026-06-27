@@ -1,16 +1,17 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：V12.2.7 报表布局诊断、Block 级事实写入、经营对象身份主档、商品页 fail-closed、ROI 三口径隔离、任务证据闸门严格按 metric_scope 取证。
+当前基线：V12.2.8 报表布局诊断、Block 级事实写入、经营对象身份主档、商品页 fail-closed、ROI 三口径隔离、任务证据闸门严格按 metric_scope 取证、数据源接口契约修复和 ECS Demo 账号切换开关。
 
 ## 产品定位
 
-这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表布局识别、单 Sheet 多区块拆分、商品身份入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、Sheet→Block→Fact→Gap→Staging 导入诊断、商品定位详情、趋势信号、证据闸门、执行任务、详情报告、复核留痕和演示运行态清空。
+这是一个任务驱动型 AI 电商经营系统。当前 Demo 重点不是生成更多任务，而是验证真实报表或接口数据进入系统后，能否稳定完成：报表布局识别、单 Sheet 多区块拆分、商品身份入库、店铺聚合、系统编码、独立指标事实、数据缺口留痕、Sheet→Block→Fact→Gap→Staging 导入诊断、商品定位详情、趋势信号、证据闸门、执行任务、详情报告、复核留痕、账号角色切换和演示运行态清空。
 
 ## 当前主链路
 
 ```text
 报表 / 接口数据导入
 → 当前账号识别
+→ V12.2.8 数据源契约：GET /api/data/source-connections 必须存在
 → V12.2.1 文件解析保留 sheetRows / sheetMatrices / source_row_index / source_column_map
 → V12.2.0 报表布局 Agent 判断 Sheet 内 blocks
 → 一个 Sheet 可拆出 product / store / traffic_source / staging 多个区块
@@ -34,13 +35,16 @@
 → v116 导入闭环反查
 ```
 
-## V12.2.7 可信展示规则
+## V12.2.8 可信展示规则
 
 ```text
 VERSION.md、FastAPI app.version、health.API_VERSION、前端资源版本必须一致。
 README 只记录当前入口，不堆历史流水账。
 MODULE_CHAIN 必须对齐真实代码链路。
 API_CONTRACT 必须只记录真实可用接口。
+GET /api/data/source-connections 必须存在，数据源辅助接口不能 404 导致数据页整页停摆。
+账号切换必须先通过后端验证，再写入前端 localStorage。
+APP_ENV=production 时默认禁止 demo 账号切换；ECS Demo 允许通过 DEMO_ACCOUNT_SWITCH=true 显式开启。
 清空演示环境必须删除导入行、快照、业务信号、任务、日志、经营商品、经营店铺、指标事实和数据缺口。
 账号、角色、权限和基础店铺配置不能被演示清空误删。
 经营中心发现源数据为 0 但派生运行态仍残留时，必须 fail-closed，不聚合旧对象。
@@ -83,11 +87,13 @@ importDiagnostics 必须返回 stageTrace 和 sheets[].blocks[]，能解释 Shee
 /api/modules/todo                      任务
 /api/modules/log                       日志
 /api/accounts                          账号
+/api/accounts/switch                   ECS Demo 账号切换验证
 /api/system/runtime-diagnostics        运行态诊断
 /api/system/reset-runtime-data          清空演示运行态
 /api/system/backfill-operating-objects 经营对象回填
 /api/system/repositories               Repository 状态
 /api/system/postgres-cutover-check     PostgreSQL 主写切换前检查
+/api/data/source-connections           数据源接口契约
 /api/data/upload/preview               上传文件预览 + V12.2 报表布局画像
 /api/data/upload/confirm               上传确认导入 + 经营对象 / block事实 / 数据缺口 / 布局诊断同步
 /api/data/metric-facts/summary         指标事实表统计
@@ -152,4 +158,4 @@ LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/d
 
 ## 当前数据库边界
 
-SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.2.7 已支持 source_block_id / source_row_index / source_column_index / metric_scope / source_block_type 写入事实表。商品对象主档只作为身份定位来源，经营指标展示必须从事实表读取，未命中显示“未识别”。导入诊断以 Sheet→Block→Fact→Gap→Staging 为验收主线，任务证据闸门以 metric_scope 为取证边界。
+SQLite 仍是 Demo 主写运行态；PostgreSQL 主写切换必须通过 cutover check。V12.2.8 保留 V12.2.7 的 source_block_id / source_row_index / source_column_index / metric_scope / source_block_type 事实表边界，同时修复数据源 GET 契约和 ECS Demo 账号切换边界。
