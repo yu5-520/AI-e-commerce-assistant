@@ -1,5 +1,5 @@
-Current Version: 11.12.0
+Current Version: 11.13.0
 
-V11.12｜轻量原子部署 + 共享 venv
+V11.13｜Demo 快速部署模式
 
-主线：保留 releases / current 原子切换，但默认使用 shared/.venv 共享虚拟环境 → requirements 未变化时跳过 pip install → 版本一致性仍强校验，路由守卫默认 warn 不误杀低配 ECS → systemd 固定运行 current 代码 + shared venv → 运行时 health 仍为硬闸门，路由检查默认警告。
+主线：Demo 阶段高频小改不再走 releases/current 原子发布 → 新增 scripts/deploy_fast.sh → 日常更新只执行 fetch / reset / 版本一致性检查 / systemd 重启 / health 检查 → 不 clone release、不重建 venv、不默认 pip install → 阶段版本仍保留 deploy_atomic.sh，客户环境再走完整发布。
