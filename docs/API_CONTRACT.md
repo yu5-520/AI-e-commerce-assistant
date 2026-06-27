@@ -45,6 +45,8 @@ GET /api/modules/log
 商品列表必须返回 objectId / archiveId / productId / storeId / storeName。
 前端唯一档案 ID 使用 objectId / archiveId，不使用裸 productId。
 商品详情必须包含 productPosition / metricSections / trafficSourceFacts / taskHistorySummary / metricFactSummary。
+商品整体指标只读 product_metric_facts；流量来源指标只读 traffic_source_facts；店铺指标只读 store_metric_facts。
+事实表未命中显示“未识别”，不能显示 0，不能读对象缓存。
 ```
 
 ## 任务
@@ -68,7 +70,7 @@ POST /api/modules/todo/reset
 
 用途：执行队列、证据提交、总管复核、任务完成。
 
-V12.1.6 边界：任务栏只承接高风险 / 高时效 / 需要人工执行的事项；低风险和观察信号不作为前端待办展示。任务生成必须先来自经营判断，再由 task_evidence_gate_service 检查关键证据。缺关键证据时降级为“经营证据补齐任务”。
+V12.2.7 边界：任务栏只承接高风险 / 高时效 / 需要人工执行的事项；低风险和观察信号不作为前端待办展示。任务生成必须先来自经营判断，再由 task_evidence_gate_service 检查关键证据。证据闸门必须返回 metricScope / requiredFactTables / forbiddenCrossScope，禁止跨口径取 ROI。缺关键证据时降级为“经营证据补齐任务”。
 
 ## 任务详情 / 报告
 
@@ -104,9 +106,9 @@ POST   /api/data/versions/{data_version}/rollback
 DELETE /api/data/versions/{data_version}?confirm=true
 ```
 
-用途：Excel / CSV / JSON 上传、报表画像、字段映射、事实入库、缺口留痕、导入诊断、数据版本、测试记录清理、回滚。
+用途：Excel / CSV / JSON 上传、报表画像、字段映射、事实入库、缺口留痕、布局诊断、数据版本、测试记录清理、回滚。
 
-边界：`/api/data/upload/*` 只负责文件解析、Sheet 识别、字段读取、经营对象同步、指标事实入库、数据缺口留痕和导入诊断；不得提前写死经营建议。任务只能由趋势/经营信号触发，并经过证据闸门。
+边界：`/api/data/upload/*` 只负责文件解析、Sheet/Block 识别、字段读取、经营对象同步、指标事实入库、数据缺口留痕和布局诊断；不得提前写死经营建议。任务只能由趋势/经营信号触发，并经过证据闸门。
 
 导入结果必须携带或同步生成：
 
@@ -115,10 +117,21 @@ DELETE /api/data/versions/{data_version}?confirm=true
 经营店铺主档 operating_stores
 独立事实表 product_metric_facts / store_metric_facts / traffic_source_facts
 数据缺口池 data_gap_events
-导入诊断 importDiagnostics
+布局诊断 importDiagnostics：layoutMode / stageTrace / sheets[].blocks[]
 业务信号 business_signals_v6
 任务证据闸门结果 evidenceGateSync
 v116 闭环反查结果
+```
+
+importDiagnostics 验收重点：
+
+```text
+layoutMode = sheet_block_fact_gap_staging
+stageTrace = Sheet → Block → Fact → Gap → Staging → EvidenceGate
+sheets[].blocks[].targetTable
+sheets[].blocks[].metricScope
+sheets[].blocks[].factCount / gapCount / staging
+acceptance.status
 ```
 
 ## 趋势
@@ -131,7 +144,7 @@ POST /api/trends/task-sop
 
 用途：指标趋势、信号证据、任务 SOP。
 
-V12.1.6 边界：趋势信号可以完整保留，但任务进入待办前必须经过证据闸门；普通缺口不得直接生成任务。
+V12.2.7 边界：趋势信号可以完整保留，但任务进入待办前必须经过证据闸门；普通缺口不得直接生成任务；ROI 必须按 product / traffic_source / store 口径取证。
 
 ## LLM / Agent
 
@@ -198,4 +211,4 @@ GET /api/architecture/v10/task-driven-product
 GET /api/architecture/v10/readiness
 ```
 
-用途：当前产品基线和验收守卫。V12.1.6 MVP 验收以真实报表导入后的经营对象、指标事实、缺口池、导入诊断、证据闸门、队列和详情页稳定性为主。
+用途：当前产品基线和验收守卫。V12.2.7 MVP 验收以真实报表导入后的经营对象、指标事实、缺口池、布局诊断、证据闸门、队列和详情页稳定性为主。
