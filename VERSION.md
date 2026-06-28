@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.4.0
+12.4.1
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.4 means: V12.3 document governance + V12.2 fact/layout stack + upload-frequency and trend-window driven operating cadence tasks. Daily/weekly reports are seeded by tasks, candidate tasks, trend signals, and observation items. Redlines remain hard rules; non-redline movement is judged by Agent within 3/7/14/30/90 day trend windows and still passes through evidence gates.
+- V12.4.1 means: V12.4 operating cadence task system + ROI/GMV centred task priority. ROI and GMV/payment amount are the primary operating axes; inventory, traffic, click rate, conversion rate, refund rate, margin, and ad spend explain why ROI/GMV moved and which operating action should be tested. Daily/weekly reports prioritize ROI, GMV and ad spend before secondary evidence.
