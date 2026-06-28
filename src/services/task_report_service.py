@@ -1,9 +1,4 @@
-"""Task report service for V12.7.2.
-
-The report page supports backend batch tasks and returns a usable report for any
-existing task. A missing taskDetailReport becomes a structured fallback report;
-it is not an HTTP 500 path.
-"""
+"""Task report service for V12.8 lifecycle reports."""
 
 from __future__ import annotations
 
@@ -12,11 +7,14 @@ from typing import Any, Dict, List
 
 from src.services.account_service import get_user
 from src.services.module_task_service import find_task, list_tasks
+from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_snapshot
+
+REPORT_VERSION = "12.8.0"
 
 ROLE_INSIGHTS = {
     "owner": {"title": "Owner view", "summary": "Focus on budget, margin and accountability.", "focus": ["margin", "budget", "accountability"], "hidden": []},
-    "manager": {"title": "Manager view", "summary": "Focus on assignment, progress and review quality.", "focus": ["assignment", "progress", "review"], "hidden": []},
-    "operator": {"title": "Operator view", "summary": "Focus on what to do, what data to check, and what proof to submit.", "focus": ["steps", "evidence", "submission"], "hidden": []},
+    "manager": {"title": "Manager view", "summary": "Focus on assignment, progress, recap cycle and RAG candidate quality.", "focus": ["assignment", "progress", "review", "recap", "RAG"], "hidden": []},
+    "operator": {"title": "Operator view", "summary": "Focus on what to do, what proof to submit, and what system will recap later.", "focus": ["steps", "evidence", "submission", "recap window"], "hidden": []},
     "finance": {"title": "Finance view", "summary": "Focus on margin, refunds, ad spend and inventory cash.", "focus": ["margin", "refund", "ad spend", "inventory"], "hidden": []},
     "observer": {"title": "Read-only view", "summary": "Focus on status and archive result.", "focus": ["status", "result"], "hidden": []},
 }
@@ -48,10 +46,12 @@ def _task_lookup(task_id: str, user_id: str | None = None) -> Dict[str, Any] | N
 
 def _structure_missing_report(task_id: str, user_id: str | None = None, task: Dict[str, Any] | None = None) -> Dict[str, Any]:
     title = (task or {}).get("title") or task_id
+    lifecycle = lifecycle_snapshot(task or {"id": task_id, "status": "structure_missing"})
     report = {
         "reportId": f"RPT-STRUCTURE-MISSING-{task_id}",
         "reportType": "structure_missing",
-        "version": "12.7.2",
+        "version": REPORT_VERSION,
+        "lifecycleVersion": TASK_LIFECYCLE_VERSION,
         "module": "task",
         "sourceModule": "task_report_service",
         "sourceRoute": "business-actions",
@@ -63,14 +63,17 @@ def _structure_missing_report(task_id: str, user_id: str | None = None, task: Di
         "warningSummary": "The task exists but has no complete taskDetailReport. The page returns a structured fallback instead of failing.",
         "riskLevel": (task or {}).get("priority") or "medium",
         "evidence": (task or {}).get("evidencePack") or [],
-        "suggestedActions": (task or {}).get("sopSteps") or ["Accept the task", "Submit execution proof", "Retry detail report after refresh"],
+        "suggestedActions": (task or {}).get("sopSteps") or ["Accept the task", "Submit execution proof", "Wait for system recap"],
         "operationChecklist": (task or {}).get("sopSteps") or ["Check store and product ownership", "Check metric evidence", "Submit execution note"],
         "affectedProducts": (task or {}).get("affectedProducts") or [],
         "affectedProductCount": (task or {}).get("affectedProductCount") or 0,
         "actionAuthorization": (task or {}).get("actionAuthorization"),
         "actionImpactEstimate": (task or {}).get("actionImpactEstimate"),
         "ragBusinessMemory": (task or {}).get("ragBusinessMemory"),
-        "nextStep": "Continue from the task queue. Detail gaps do not block task lifecycle actions.",
+        "taskLifecycle": lifecycle,
+        "recapCycles": lifecycle.get("recapCycles") or [],
+        "ragCandidate": lifecycle.get("ragCandidate"),
+        "nextStep": lifecycle.get("nextExpected") or "Continue from the task queue.",
         "fallbackDetail": True,
         "structureMissing": True,
         "failClosed": False,
@@ -83,9 +86,11 @@ def _report_from_structured_task(task: Dict[str, Any], task_id: str, user_id: st
     detail = dict(task.get("taskDetailReport") or {})
     card = task.get("taskCard") or {}
     title = card.get("title") or task.get("title") or task_id
+    lifecycle = lifecycle_snapshot(task)
     detail.setdefault("reportId", f"RPT-TASK-{task_id}")
     detail.setdefault("reportType", "task")
-    detail["version"] = "12.7.2"
+    detail["version"] = REPORT_VERSION
+    detail["lifecycleVersion"] = TASK_LIFECYCLE_VERSION
     detail.setdefault("module", "task")
     detail.setdefault("sourceModule", task.get("sourceModule") or "SOP task package")
     detail.setdefault("sourceRoute", task.get("sourceRoute") or "business-actions")
@@ -114,6 +119,10 @@ def _report_from_structured_task(task: Dict[str, Any], task_id: str, user_id: st
     detail["affectedProductCount"] = task.get("affectedProductCount") or len(detail["affectedProducts"])
     detail["batchTask"] = bool(task.get("batchTask"))
     detail["taskClusterVersion"] = task.get("taskClusterVersion") or detail.get("taskClusterVersion")
+    detail["taskLifecycle"] = lifecycle
+    detail["recapCycles"] = lifecycle.get("recapCycles") or []
+    detail["ragCandidate"] = task.get("ragCandidate") or lifecycle.get("ragCandidate")
+    detail["autoRecapResult"] = task.get("autoRecapResult")
     detail["relatedTask"] = task
     detail["fallbackDetail"] = False
     detail["structureMissing"] = False
