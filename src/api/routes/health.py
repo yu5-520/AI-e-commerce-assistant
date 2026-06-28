@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "12.6.0"
+API_VERSION = "12.6.1"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -49,4 +49,5 @@ def health() -> Dict[str, Any]:
         "v1241Rule": "roi_gmv_centered_operating_task_priority_and_report_seeds",
         "v1250Rule": "first_report_baseline_only_comparison_required_for_operating_tasks_unified_todo_source",
         "v1260Rule": "rag_operating_action_permission_gate_system_estimation_manager_approval_flow",
+        "v1261Rule": "task_store_find_open_task_bridge_hotfix",
     }
