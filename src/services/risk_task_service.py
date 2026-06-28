@@ -1,4 +1,4 @@
-"""V12.8 task generation facade."""
+"""V12.8.1 task generation facade."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open
 from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_summary
 from src.services.task_recap_scheduler_service import RECAP_SCHEDULER_VERSION, recap_schedule_summary
 
-RISK_TASK_VERSION = "12.8.0"
+RISK_TASK_VERSION = "12.8.1"
 
 
 def _action_gate_counts(tasks: list[Dict[str, Any]]) -> Dict[str, int]:
@@ -47,7 +47,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
     return {
         **risk_result,
         "version": RISK_TASK_VERSION,
-        "mode": "v12_8_task_lifecycle_closed_loop_generation",
+        "mode": "v12_8_1_lifecycle_contract_aligned_task_generation",
         "dataVersion": data_version,
         "strictRiskTaskVersion": STRICT_RISK_TASK_VERSION,
         "operatingCadenceVersion": OPERATING_CADENCE_VERSION,
@@ -78,7 +78,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "strictRiskSync": risk_result,
         "operatingCadenceSync": cadence_result,
         "dailyReportSeedCount": len(cadence_result.get("topSignals") or []),
-        "rule": "V12.8：生成任务、接收、提交材料、复核、自动复盘、RAG候选和RAG增强共用同一生命周期。",
+        "rule": "V12.8.1：任务生命周期闭环 + 前后端契约收口，前端不再二次聚合后端任务。",
     }
 
 
@@ -99,5 +99,5 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
     summary["operatingCadenceSummary"] = cadence
     summary["lifecycleSummary"] = lifecycle_summary(limit=limit)
     summary["recapScheduleSummary"] = recap_schedule_summary()
-    summary["rule"] = "V12.8 closes the task lifecycle loop and lets approved RAG experience enhance future tasks."
+    summary["rule"] = "V12.8.1 aligns frontend/backend task lifecycle contracts and keeps approved RAG experience as the only generation enhancer."
     return summary
