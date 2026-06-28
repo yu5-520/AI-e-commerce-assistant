@@ -74,7 +74,6 @@ def _normalize_result_rows(item: Dict[str, Any], rows: List[Dict[str, Any]]) -> 
 
 
 def _materialize_import_rows(result: Dict[str, Any], rows: Any = None) -> List[Dict[str, Any]]:
-    """Make rows explicit before object/fact/gap upsert."""
     if isinstance(rows, list) and rows:
         return _normalize_result_rows(result, rows)
     results = result.get("results") if isinstance(result.get("results"), list) else [result]
@@ -97,7 +96,6 @@ def _materialize_import_rows(result: Dict[str, Any], rows: Any = None) -> List[D
 
 
 def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | None = None) -> Dict[str, Any]:
-    """Run demo/API sync imports without the removed legacy task generator."""
     selected = [str(name) for name in (dataset_names or DEFAULT_SYNC_DATASETS)]
     results: List[Dict[str, Any]] = []
     all_rows: List[Dict[str, Any]] = []
@@ -107,12 +105,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.2.7：接口/演示同步只写数据、事实、缺口和预警，旧任务生成规则不再创建新任务。"
+        result["rule"] = "V12.4.1：接口/演示同步只写事实和缺口，任务由红线 + ROI/GMV 经营节奏 + 证据闸门生成。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "12.2.7",
-        "mode": "v12_2_7_dataset_sync_without_legacy_task_rules",
+        "version": "12.4.1",
+        "mode": "v12_4_1_dataset_sync_without_legacy_task_rules",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -121,12 +119,11 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         "results": results,
         "rows": all_rows,
         "summary": get_v3_dashboard_summary(),
-        "rule": "导入先完成经营对象、指标事实和缺口留痕，再由证据闸门判断是否生成任务。",
+        "rule": "导入先完成经营对象、指标事实和缺口留痕，再由 ROI/GMV 经营节奏和证据闸门判断是否生成任务。",
     }
 
 
 def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
-    """Upsert store/product objects before any tag/task generation."""
     materialized_rows = _materialize_import_rows(result, rows)
     if materialized_rows:
         result["rows"] = materialized_rows
@@ -161,7 +158,7 @@ def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: 
         )
         return result
     if not materialized_rows:
-        result["metricFactSync"] = {"version": "12.2.7", "skipped": True, "reason": "rows is not a list"}
+        result["metricFactSync"] = {"version": "12.4.1", "skipped": True, "reason": "rows is not a list"}
         return result
     result["metricFactSync"] = ingest_metric_facts_from_import(
         result,
@@ -216,11 +213,10 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    """Generate product snapshots, metric trends, signals, and evidence-gated SOP tasks."""
     materialized_rows = _materialize_import_rows(result, rows)
     if not materialized_rows:
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "12.2.7", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "12.4.1", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -241,8 +237,31 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         item["riskTaskSync"] = risk_summary
         summaries.append(trend_summary)
         risk_summaries.append(risk_summary)
-    result["trendSync"] = {"version": "6.2.0", "mode": "product_snapshot_metric_trend_signal_sync", "datasetCount": len(summaries), "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries), "trendCount": sum(item.get("trendCount", 0) for item in summaries), "signalCount": sum(item.get("signalCount", 0) for item in summaries), "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries), "summaries": summaries, "rule": "导入后先生成商品快照、指标趋势和经营信号。"}
-    result["riskTaskSync"] = {"version": "12.2.7", "mode": "strict_scoped_evidence_gated_sop_task_generation", "datasetCount": len(risk_summaries), "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries), "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries), "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries), "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries), "summaries": risk_summaries, "rule": "任务生成继承经营对象归属；字段缺口不直接创建任务；关键证据缺失时按metric_scope降级为补证任务。"}
+    result["trendSync"] = {
+        "version": "6.2.0",
+        "mode": "product_snapshot_metric_trend_signal_sync",
+        "datasetCount": len(summaries),
+        "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries),
+        "trendCount": sum(item.get("trendCount", 0) for item in summaries),
+        "signalCount": sum(item.get("signalCount", 0) for item in summaries),
+        "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries),
+        "summaries": summaries,
+        "rule": "导入后先生成商品快照、指标趋势和经营信号。",
+    }
+    result["riskTaskSync"] = {
+        "version": "12.4.1",
+        "mode": "v12_4_1_redline_plus_roi_gmv_operating_cadence_task_generation",
+        "primaryAxis": "ROI_GMV",
+        "datasetCount": len(risk_summaries),
+        "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries),
+        "strictRiskCreatedTaskCount": sum(item.get("strictRiskCreatedTaskCount", 0) for item in risk_summaries),
+        "operatingCadenceCreatedTaskCount": sum(item.get("operatingCadenceCreatedTaskCount", 0) for item in risk_summaries),
+        "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries),
+        "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries),
+        "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries),
+        "summaries": risk_summaries,
+        "rule": "V12.4.1：任务生成以 ROI/GMV 为主轴；库存、流量、点击、转化、退款、毛利用于解释原因；关键证据缺失时按 metric_scope 降级为补证任务。",
+    }
     return result
 
 
@@ -363,13 +382,7 @@ async def preview_upload(file: UploadFile = File(...), dataset_name: str = Form(
 
 
 @router.post("/upload/confirm")
-async def confirm_upload(
-    request: Request,
-    file: UploadFile = File(...),
-    dataset_name: str = Form(default="auto"),
-    source_system: str = Form(default="manual_upload"),
-    auto_create_tasks: bool = Form(default=True),
-) -> Dict[str, Any]:
+async def confirm_upload(request: Request, file: UploadFile = File(...), dataset_name: str = Form(default="auto"), source_system: str = Form(default="manual_upload"), auto_create_tasks: bool = Form(default=True)) -> Dict[str, Any]:
     parsed = await _rows_from_uploaded_file(file)
     rows = parsed.get("rows")
     try:
@@ -462,5 +475,5 @@ def versions() -> List[Dict[str, Any]]:
 
 
 @router.get("/latest-version")
-def latest_version() -> Dict[str, Any]:
+def latest_version_endpoint() -> Dict[str, Any]:
     return latest_data_version()
