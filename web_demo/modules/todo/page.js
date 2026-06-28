@@ -8,6 +8,10 @@
     const map = { owner_decision: "老板决策", review_audit: "复盘审计", cycle_draft: "周期草案", manager_dispatch: "总管调度", operator_execution: "运营执行", finance_check: "财务复核" };
     return map[task.taskLayer] || task.taskLayer || "任务流";
   }
+  function queueName(task) {
+    const map = { urgent_execution: "紧急执行", today_execution: "今日处理", daily_operating_task: "今日经营", weekly_review_task: "周期复盘", candidate_only: "候选任务", report_seed_only: "报告素材" };
+    return map[task.queueType] || "执行队列";
+  }
   function evidenceSummary(task) {
     const item = task.latestEvidenceRecord || (task.evidenceRecords || [])[0];
     if (!item) return "暂无处理证据";
@@ -24,7 +28,6 @@
     if (!rows.length) return "";
     return `<div class="todo-supplement-list">${rows.map(([key, value]) => `<span>${s(key)}：${s(value)}</span>`).join("")}</div>`;
   }
-
   function actionButton(task, item, fallbackClass = "") {
     if (!item?.action) return "";
     const cls = item.primary ? "primary" : fallbackClass;
@@ -46,17 +49,16 @@
     const detail = task.primaryTaskAction?.action === "view" ? "" : `<button type="button" data-task-report="${s(task.id)}">查看详情</button>`;
     return [primary, secondary, detail].filter(Boolean).join("");
   }
-
   function sopPanel(task) {
     const sop = task.taskExecutionSop || {};
-    const steps = a(sop.executionSteps);
+    const directSteps = a(task.sopSteps).map((item, index) => typeof item === "string" ? { stepNo: index + 1, action: item, deadlineLabel: task.deadline || "今日内", ownerRole: "运营", requiredEvidence: a(task.reviewMetrics?.primaryMetrics).concat(a(task.reviewMetrics?.explainMetrics)).slice(0, 4) } : item);
+    const steps = a(sop.executionSteps).length ? a(sop.executionSteps) : directSteps;
     if (!steps.length) return "";
     const rows = steps.map((item) => `<article class="todo-sop-step"><strong>${s(item.stepNo)}、${s(item.deadlineLabel || `${item.deadlineHours || "—"} 小时内`)} · ${s(item.ownerRole || "运营")}</strong><p>${s(item.action)}</p><div class="action-chip-list">${a(item.requiredEvidence).map((x) => `<span>${s(x)}</span>`).join("")}</div><small>复核：${s(item.reviewRule || "按证据复核")}</small></article>`).join("");
     const gate = task.completionGate || sop.completionGate || {};
-    const gateText = gate.rule ? `<div class="todo-sop-gate"><strong>完成门槛</strong><span>${s(gate.rule)}</span></div>` : "";
-    return `<div class="todo-sop-panel"><div class="section-header compact"><h3>${s(sop.sopName || "执行 SOP")}</h3><span class="status-badge">V11</span></div>${rows}${gateText}</div>`;
+    const gateText = Array.isArray(gate) ? `<div class="todo-sop-gate"><strong>完成门槛</strong><span>${s(gate.join(" / "))}</span></div>` : gate.rule ? `<div class="todo-sop-gate"><strong>完成门槛</strong><span>${s(gate.rule)}</span></div>` : "";
+    return `<div class="todo-sop-panel"><div class="section-header compact"><h3>${s(sop.sopName || "执行 SOP")}</h3><span class="status-badge">V12.5</span></div>${rows}${gateText}</div>`;
   }
-
   function evidencePanel(task) {
     if (!hasAction(task, "submit") && !hasAction(task, "review") && !(task.evidenceRecords || []).length) return "";
     const sopFields = a(task.executionSteps).flatMap((step) => a(step.submitFields)).slice(0, 8);
@@ -70,7 +72,6 @@
     const latest = (task.evidenceRecords || []).length ? `<div class="task-evidence-history"><strong>最近证据</strong><span>${s(evidenceSummary(task))}</span></div>` : "";
     return `<div class="task-evidence-panel">${latest}${submitForm}${reviewForm}</div>`;
   }
-
   function taskBasis(task) {
     const evidence = a(task.evidence).slice(0, 3).map((item) => item.reason || item.metric || item.title || item.label || item.value).filter(Boolean);
     if (evidence.length) return evidence.join(" / ");
@@ -79,7 +80,7 @@
   function row(task, index, focusTaskId = "") {
     const focused = focusTaskId && task.id === focusTaskId;
     const workflow = task.displayStatus || task.workflowStatus || task.status || "待派发";
-    const queue = task.queueType === "urgent_execution" ? "紧急执行" : task.queueType === "today_execution" ? "今日处理" : "执行队列";
+    const queue = queueName(task);
     return `<article class="todo-card ${focused ? "focused-task" : ""}" data-task-card="${s(task.id)}">
       <div class="todo-rank ${AppShell.statusClass(task.priorityLevel)}">${index + 1}</div>
       <div class="todo-title-cell"><div class="todo-thumb">${s(task.imageLabel || "任")}</div><div class="todo-title-block"><strong>${s(task.title || task.productTitle)}</strong><small>${s(task.productId || task.entityId || task.id)} · ${s(task.platform || "经营单元")} · ${s(task.store || task.storeName || "任务池")}</small><span>${s(queue)} · ${s(layerName(task))} · ${s(workflow)}</span></div></div>
@@ -88,10 +89,10 @@
       ${sopPanel(task)}${evidencePanel(task)}<div class="todo-actions v106-minimal-actions">${actionButtons(task)}</div>
     </article>`;
   }
-  function visibleTaskQueue(tasks) { return tasks.filter((task) => !["backend_tag", "store_product_tag", "observe_candidate"].includes(task.queueType) && task.displayState !== "backend_only"); }
+  function visibleTaskQueue(tasks) { return tasks.filter((task) => !["backend_tag", "store_product_tag", "observe_candidate", "candidate_only", "report_seed_only"].includes(task.queueType) && task.displayState !== "backend_only"); }
   function metrics(allTasks, activeTasks, counters = {}) {
     const visible = visibleTaskQueue(activeTasks);
-    return [["执行任务", counters.visibleActive ?? visible.length, "高风险/高时效"], ["处理中", counters.processing ?? visible.filter((t) => t.status === "处理中").length, "执行中"], ["待复核", counters.reviewing ?? visible.filter((t) => t.status === "待复核").length, "总管复核"], ["已退回", counters.returned ?? visible.filter((t) => t.workflowStatus === "已退回" || t.status === "已退回").length, "需补充"], ["已完成", allTasks.filter((t) => t.status === "已完成" || t.status === "已写入复盘").length, "进入日志"]];
+    return [["执行任务", counters.visibleActive ?? visible.length, "后端任务池"], ["处理中", counters.processing ?? visible.filter((t) => t.status === "处理中").length, "执行中"], ["待复核", counters.reviewing ?? visible.filter((t) => t.status === "待复核").length, "总管复核"], ["已退回", counters.returned ?? visible.filter((t) => t.workflowStatus === "已退回" || t.status === "已退回").length, "需补充"], ["已完成", allTasks.filter((t) => t.status === "已完成" || t.status === "已写入复盘").length, "进入日志"]];
   }
   async function refresh(message) { await AppApi.refreshTaskState(); notice = message; AppRouter.schedule("todo-refresh"); }
   function focusTask(taskId) { if (!taskId) return; requestAnimationFrame(() => { const card = document.querySelector(`[data-task-card="${CSS.escape(taskId)}"]`); if (!card) return; card.scrollIntoView({ behavior: "smooth", block: "center" }); card.style.boxShadow = "0 0 0 4px rgba(67, 56, 202, 0.18)"; setTimeout(() => { card.style.boxShadow = ""; }, 1800); }); }
@@ -111,14 +112,16 @@
   window.TodoPage = {
     route: "business-actions",
     title: "待办",
-    render(ctx) {
+    async render(ctx) {
       const focusTaskId = ctx?.state?.focusTaskId || "";
+      try { await AppApi.refreshTaskState(); } catch (error) { console.error("[todo] refresh task state failed", error); }
       const allTasks = AppTaskStore.listTasks();
       const active = AppTaskStore.listActiveTasks();
       const tasks = visibleTaskQueue(active);
       const counters = AppTaskStore.counters?.() || {};
       const user = AppApi.currentUser?.() || {};
-      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V11 MVP</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看执行任务。低风险结果已沉淀为商品/店铺标签，不进入任务栏制造压力。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(allTasks, active, counters).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个可执行任务</span></div><div class="todo-card-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">当前账号没有需要立即处理的执行任务。低风险信号已进入商品/店铺标签。</div>`}</div></section>`;
+      const empty = "当前账号没有需要立即处理的执行任务。首份报表只建立基线；候选任务、趋势信号和观察项进入日报/周报素材。";
+      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.5</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端任务池。总览与任务栏共用 /api/modules/todo，不再只读本地空队列。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(allTasks, active, counters).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个可执行任务</span></div><div class="todo-card-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
     },
     mount(ctx) {
       focusTask(ctx.state?.focusTaskId);
