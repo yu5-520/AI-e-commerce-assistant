@@ -48,7 +48,8 @@ web_demo/modules/report/page.js
 → module_task_service.apply_v126_task_governance
 → rag_business_memory_service 读取 RAG 公司基线和历史经营记忆
 → action_impact_estimation_service 系统估算活动/标题/主图/投放影响
-→ action_authorization_gate_service 校验账号权限、店铺权重、商品权重、动作风险
+→ operating_weight_policy_service 判断权重来源、权重置信度、是否可触发审批
+→ action_authorization_gate_service 校验账号权限、动作风险和审批路径
 → task_evidence_gate_service 按 metric_scope 取证
 → import_diagnostics_service.import_diagnostics
 → AppApi.refreshTaskState()
@@ -56,20 +57,7 @@ web_demo/modules/report/page.js
 → dashboard / operating-unit / product / todo / log 反查
 ```
 
-## 3. 报表布局 Agent 与事实表链
-
-```text
-Excel / CSV / JSON
-→ sheetRows / sheetMatrices / source_row_index / source_column_map
-→ reportProfile.sheetProfiles[].blocks[]
-→ block.targetTable + block.metricScope
-→ product_metric_facts / store_metric_facts / traffic_source_facts
-→ source_block_id / source_row_index / source_column_index / metric_scope / source_block_type
-```
-
-验收点：一个 Sheet 可以拆出 product / store / traffic_source / staging 多个区块；staging 区块不能进入商品页事实展示，也不能生成经营任务。
-
-## 4. 商品档案链
+## 3. 商品档案链
 
 ```text
 web_demo/modules/product/page.js
@@ -83,7 +71,7 @@ web_demo/modules/product/page.js
 
 事实表未命中显示“未识别”，不能显示 0，不能回读对象缓存。
 
-## 5. 基线优先任务链
+## 4. 基线优先任务链
 
 ```text
 product_metric_facts
@@ -99,14 +87,14 @@ product_metric_facts
 → 日报 / 周报素材
 ```
 
-## 6. V12.6 经营动作权限闸门
+## 5. V12.7 权重置信度链
 
 ```text
 经营任务 payload
-→ module_task_service.normalize_task
-→ apply_v126_task_governance
-→ rag_business_memory_service.business_memory_context
-→ action_impact_estimation_service.estimate_action_impact
+→ operating_weight_policy_service.infer_operating_weight
+→ weightLevel / weightConfidence / weightSource / canTriggerApproval
+→ report-only markers ignored: 高ROI / 高GMV / 点击率 / 转化率 / 商品生命周期标签 / 首份报表标签
+→ explicit governance sources only: RAG配置 / 主管标记 / 老板标记 / 多期历史贡献
 → action_authorization_gate_service.authorize_action
 → auto_execute / manager_approval_required / owner_approval_required
 ```
@@ -114,10 +102,23 @@ product_metric_facts
 边界：
 
 ```text
-运营只补充客观事实，不填写ROI、GMV、销量、库存消耗、毛利率预测。
-系统生成保守 / 正常 / 乐观估算。
-自动确认只看保守估算下限。
-高权重店铺/商品的标题、主图、预算、价格、主推位等动作必须走主管/老板确认。
+经营表现不等于权限权重。
+任务优先级不等于商品权重。
+首份报表不能直接判高权重。
+高权重审批必须有明确 weightSource 和足够 weightConfidence。
+```
+
+## 6. V12.7 经营动作权限闸门
+
+```text
+经营任务 payload
+→ module_task_service.normalize_task
+→ apply_v126_task_governance
+→ rag_business_memory_service.business_memory_context
+→ action_impact_estimation_service.estimate_action_impact
+→ operating_weight_policy_service.infer_operating_weight
+→ action_authorization_gate_service.authorize_action
+→ auto_execute / manager_approval_required / owner_approval_required
 ```
 
 ## 7. 总览 / 任务栏统一任务源
@@ -154,7 +155,7 @@ web_demo/core/task-actions.js
 → /api/modules/task-reports/*
 → src/api/routes/modules/task_report.py
 → task_report_service
-→ evidenceGate / metricFacts / cadence / ROI-GMV quadrant / actionAuthorization / actionImpactEstimate / ragBusinessMemory
+→ evidenceGate / metricFacts / cadence / ROI-GMV quadrant / actionAuthorization / actionImpactEstimate / ragBusinessMemory / objectWeight
 ```
 
 ## 10. 系统诊断 / 清空运行态链
@@ -168,30 +169,3 @@ web_demo/modules/system-status/page.js
 ```
 
 清空后 `operating_cadence_signals` 也必须被清理。
-
-## 11. 账号权限链
-
-```text
-web_demo/modules/account/page.js
-→ /api/accounts
-→ /api/accounts/switch
-→ account_service
-→ src/core/context.py
-→ backend_isolation_service
-→ scoped_repository.py
-```
-
-ECS Demo 只有 `DEMO_ACCOUNT_SWITCH=true` 时允许切换账号。
-
-## 12. LLM / Agent 链
-
-```text
-/api/modules/agents
-→ /api/llm/generate
-→ llm_gateway_service
-→ prompt_template_service
-→ llm_provider_service
-→ llm_trace_service
-```
-
-LLM 可降级；LLM 不可用时核心事实、缺口、ROI/GMV节奏任务、V12.6经营动作权限闸门和证据闸门链路不阻断。
