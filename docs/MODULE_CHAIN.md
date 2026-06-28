@@ -46,7 +46,7 @@ web_demo/modules/report/page.js
 → trend_signal_service.ingest_product_trends
 → risk_task_service.generate_risk_tasks_for_signals
 → risk_task_v66_service 红线 / 证据闸门任务
-→ operating_cadence_task_service 上传频率 + 3/7/14/30/90 天节奏任务
+→ operating_cadence_task_service ROI/GMV主轴 + 上传频率 + 3/7/14/30/90 天节奏任务
 → task_evidence_gate_service 按 metric_scope 取证
 → import_diagnostics_service.import_diagnostics
 → v116_import_closed_loop_service
@@ -91,20 +91,7 @@ Excel / CSV / JSON
 
 验收点：一个 Sheet 可以拆出 product / store / traffic_source / staging 多个区块；staging 区块不能进入商品页事实展示，也不能生成经营任务。
 
-## 4. 经营对象主档链
-
-```text
-报表 rows / blockRows
-→ operating_object_store_service.ensure_operating_object_tables
-→ operating_products / operating_stores
-→ 只保留身份定位、权限归属和来源坐标
-→ list_operating_products(user_id)
-→ list_operating_stores(user_id)
-```
-
-经营指标不能写入 operating_products / operating_stores 缓存。
-
-## 5. 商品档案链
+## 4. 商品档案链
 
 ```text
 web_demo/modules/product/page.js
@@ -118,14 +105,20 @@ web_demo/modules/product/page.js
 
 事实表未命中显示“未识别”，不能显示 0，不能回读对象缓存。
 
-## 6. 经营节奏任务链
+## 5. ROI/GMV 经营节奏任务链
 
-V12.4 后，任务不再只来自单一基线报警。
+V12.4.1 后，任务不再平铺所有指标，也不只来自单一基线报警。运营主轴是 ROI 和 GMV。
 
 ```text
 product_metric_facts
 → operating_cadence_task_service._upload_cadence
 → 3 / 7 / 14 / 30 / 90 天窗口判断
+→ ROI + GMV/payment_amount 四象限
+→ 高 ROI + 高 GMV：放量承接
+→ 高 ROI + 低 GMV：扩流测试
+→ 低 ROI + 高 GMV：效率复核
+→ 低 ROI + 低 GMV：降投排查
+→ 库存 / 流量 / 点击 / 转化 / 退款 / 毛利 / 广告消耗解释原因
 → 红线硬规则：urgent_execution
 → 非红线波动：daily_operating_task / weekly_review_task / candidate_only / report_seed_only
 → task_evidence_gate_service.apply_evidence_gate_to_created_task
@@ -138,17 +131,19 @@ product_metric_facts
 
 ```text
 红线由硬规则控制，Agent 不允许降级。
-非红线波动由上传频率、趋势周期和 Agent 判断控制任务积极度。
+ROI/GMV 是任务优先级主轴。
+库存、流量、点击率、转化率、退款率、毛利率、广告消耗是解释指标。
 日报/周报基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项。
+日报/周报优先围绕 ROI、GMV、广告消耗组织。
 ```
 
-## 7. 任务模块链
+## 6. 任务模块链
 
 ```text
 business_signals_v6
 → risk_task_service.generate_risk_tasks_for_signals
 → risk_task_v66_service 严格红线与风险任务
-→ operating_cadence_task_service 经营节奏任务
+→ operating_cadence_task_service ROI/GMV经营节奏任务
 → task_evidence_gate_service.evaluate_task_evidence
 → product / traffic_source / store metric_scope 取证
 → module_task_service
@@ -159,7 +154,7 @@ business_signals_v6
 
 任务页默认承接高风险、高时效和 daily_operating_task；普通缺口只留在 data_gap_events，不制造前端待办。
 
-## 8. 任务详情 / 报告链
+## 7. 任务详情 / 报告链
 
 ```text
 web_demo/modules/task-report/page.js
@@ -167,10 +162,10 @@ web_demo/modules/task-report/page.js
 → /api/modules/task-reports/*
 → src/api/routes/modules/task_report.py
 → task_report_service
-→ evidenceGate / metricFacts / cadence / dataVersion
+→ evidenceGate / metricFacts / cadence / ROI-GMV quadrant / dataVersion
 ```
 
-## 9. 系统诊断 / 清空运行态链
+## 8. 系统诊断 / 清空运行态链
 
 ```text
 web_demo/modules/system-status/page.js
@@ -182,7 +177,7 @@ web_demo/modules/system-status/page.js
 
 清空后 `operating_cadence_signals` 也必须被清理。
 
-## 10. 账号权限链
+## 9. 账号权限链
 
 ```text
 web_demo/modules/account/page.js
@@ -196,7 +191,7 @@ web_demo/modules/account/page.js
 
 ECS Demo 只有 `DEMO_ACCOUNT_SWITCH=true` 时允许切换账号。
 
-## 11. SaaS 数据隔离链
+## 10. SaaS 数据隔离链
 
 ```text
 Request Headers / Session
@@ -206,7 +201,7 @@ Request Headers / Session
 → tenant_id + org_id + store scope + deleted_at
 ```
 
-## 12. LLM / Agent 链
+## 11. LLM / Agent 链
 
 ```text
 /api/modules/agents
@@ -217,4 +212,4 @@ Request Headers / Session
 → llm_trace_service
 ```
 
-LLM 可降级；LLM 不可用时核心事实、缺口、节奏任务和证据闸门链路不阻断。
+LLM 可降级；LLM 不可用时核心事实、缺口、ROI/GMV节奏任务和证据闸门链路不阻断。
