@@ -4,20 +4,16 @@
 
   function hasAction(task, action) { return (task.availableActions || []).includes(action); }
   function queueName(task) {
-    const map = { urgent_execution: "紧急", today_execution: "今日", daily_operating_task: "今日经营", weekly_review_task: "周期复盘", candidate_only: "候选", report_seed_only: "报告素材" };
+    const map = { urgent_execution: "紧急", today_execution: "今日", daily_operating_task: "今日", weekly_review_task: "复盘", candidate_only: "候选", report_seed_only: "素材" };
     return map[task.queueType] || "执行";
   }
-  function layerName(task) {
-    const map = { manager_dispatch: "主管确认", operator_execution: "运营执行", owner_decision: "老板确认", finance_check: "财务复核" };
-    return map[task.taskLayer] || task.taskLayer || "任务";
-  }
   function actionDecision(task) {
-    const gate = task.actionAuthorization || task.v126ActionGate || {};
-    const map = { auto_execute: "自动执行", manager_approval_required: "主管确认", owner_approval_required: "老板确认" };
-    return map[gate.decision] || layerName(task);
+    const gate = task.actionAuthorization || task.v127ActionGate || task.v126ActionGate || {};
+    const map = { auto_execute: "运营执行", manager_approval_required: "主管审批", owner_approval_required: "老板确认" };
+    return map[gate.decision] || (task.taskLayer === "manager_approval" ? "主管审批" : task.taskLayer === "operator_execution" ? "运营执行" : "任务");
   }
   function visibleTaskQueue(tasks) {
-    return tasks.filter((task) => !["backend_tag", "store_product_tag", "observe_candidate", "candidate_only", "report_seed_only"].includes(task.queueType) && task.displayState !== "backend_only");
+    return tasks.filter((task) => !["backend_tag", "store_product_tag", "observe_candidate", "candidate_only", "report_seed_only", "merged_duplicate"].includes(task.queueType) && task.displayState !== "backend_only");
   }
   function deadlineRank(task) {
     const text = String(task.deadline || task.timeBucket || "");
@@ -31,33 +27,68 @@
   }
   function priorityRank(task) { return { 高: 1, 中: 2, 低: 3 }[task.priority] || 9; }
   function sortTasks(tasks) { return [...tasks].sort((a, b) => priorityRank(a) - priorityRank(b) || deadlineRank(a) - deadlineRank(b) || String(a.createdAt || "").localeCompare(String(b.createdAt || ""))); }
-  function metrics(allTasks, activeTasks, counters = {}) {
-    const visible = visibleTaskQueue(activeTasks);
-    return [["执行任务", counters.visibleActive ?? visible.length, "后端任务池"], ["紧急/高", visible.filter((t) => t.priority === "高").length, "优先处理"], ["主管确认", visible.filter((t) => t.taskLayer === "manager_dispatch").length, "权限闸门"], ["处理中", counters.processing ?? visible.filter((t) => t.status === "处理中").length, "执行中"], ["待复核", counters.reviewing ?? visible.filter((t) => t.status === "待复核").length, "总管复核"]];
+  function reasonFamily(task) {
+    const text = [task.riskDomain, task.reason, task.task, task.actionType, (task.taskDetailReport || {}).warningSummary].join(" ");
+    if (text.includes("点击") || text.includes("素材") || text.includes("主图")) return "点击素材";
+    if (text.includes("转化") || text.includes("详情") || text.includes("评价") || text.includes("客服")) return "转化承接";
+    if (text.includes("广告") || text.includes("预算") || text.includes("投放") || text.includes("人群") || text.includes("关键词")) return "投放效率";
+    if (text.includes("库存") || text.includes("补货") || text.includes("可售")) return "库存承接";
+    if (text.includes("退款") || text.includes("售后")) return "售后退款";
+    return task.riskDomain || "经营判断";
+  }
+  function clusterKey(task) {
+    const gate = task.actionAuthorization || task.v127ActionGate || task.v126ActionGate || {};
+    return [task.store || task.storeName || "店铺", gate.actionType || task.actionType || "action", reasonFamily(task), task.assigneeId || "operator", task.deadline || task.timeBucket || "today"].join("|");
+  }
+  function clusterTasks(tasks) {
+    const groups = new Map();
+    const result = [];
+    tasks.forEach((task) => {
+      const groupable = task.priority !== "高" && task.taskLayer !== "manager_approval" && ["daily_operating_task", "weekly_review_task"].includes(task.queueType);
+      if (!groupable) { result.push(task); return; }
+      const key = clusterKey(task);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(task);
+    });
+    groups.forEach((items) => {
+      if (items.length === 1) { result.push(items[0]); return; }
+      const base = { ...items[0] };
+      const family = reasonFamily(base);
+      const store = base.store || base.storeName || "店铺";
+      base.batchTask = true;
+      base.affectedProductCount = items.length;
+      base.affectedProducts = items.map((item) => ({ taskId: item.id, productId: item.productId || item.entityId, title: item.title || item.productTitle, reason: item.reason }));
+      base.title = `${store}｜${family}｜${items.length}个商品`;
+      base.productTitle = base.title;
+      base.productId = `${items.length}个商品`;
+      base.taskCard = { ...(base.taskCard || {}), title: base.title, subtitle: `${family}｜同类任务聚合` };
+      base.taskDetailReport = { ...(base.taskDetailReport || {}), affectedProducts: base.affectedProducts, affectedProductCount: items.length, taskClusterVersion: "12.7.1" };
+      result.push(base);
+    });
+    return sortTasks(result);
+  }
+  function metrics(activeTasks, visibleTasks) {
+    return [["执行任务", visibleTasks.length, "聚合队列"], ["紧急/高", visibleTasks.filter((t) => t.priority === "高").length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "权限闸门"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "执行中"], ["待复核", activeTasks.filter((t) => t.status === "待复核").length, "总管复核"]];
   }
   function openTaskReport(taskId) { AppRouter.navigate("task-report", { taskId }); }
-  function taskBasis(task) {
-    const gate = task.actionAuthorization || task.v126ActionGate || {};
-    if (gate.approvalReason) return gate.approvalReason;
-    return task.reason || task.taskSignal || "由服务端任务队列按风险和时效排序生成。";
-  }
   function actionButtons(task) {
     const id = s(task.id);
-    const buttons = [`<button type="button" data-task-report="${id}">查看详情</button>`];
+    const buttons = [`<button type="button" data-task-report="${id}">详情</button>`];
     if (hasAction(task, "accept")) buttons.unshift(`<button type="button" class="primary" data-accept="${id}">接收</button>`);
-    if (hasAction(task, "submit")) buttons.unshift(`<button type="button" class="primary" data-task-report="${id}">提交证据</button>`);
-    if (hasAction(task, "assign")) buttons.unshift(`<button type="button" class="primary" data-assign="${id}">派发</button>`);
+    if (hasAction(task, "submit")) buttons.unshift(`<button type="button" class="primary" data-task-report="${id}">提交</button>`);
     if (hasAction(task, "review")) buttons.unshift(`<button type="button" class="primary" data-task-report="${id}">复核</button>`);
     return buttons.join("");
   }
   function row(task, index, focusTaskId = "") {
     const focused = focusTaskId && task.id === focusTaskId;
+    const gate = task.actionAuthorization || task.v127ActionGate || task.v126ActionGate || {};
     const workflow = task.displayStatus || task.workflowStatus || task.status || "待处理";
-    const gate = task.actionAuthorization || task.v126ActionGate || {};
-    return `<article class="todo-card compact-task-card ${focused ? "focused-task" : ""}" data-task-card="${s(task.id)}">
-      <div class="todo-rank ${AppShell.statusClass(task.priorityLevel)}">${index + 1}</div>
-      <div class="todo-title-cell"><div class="todo-thumb">${s(task.imageLabel || "任")}</div><div class="todo-title-block"><strong>${s(task.title || task.productTitle)}</strong><small>${s(task.store || task.storeName || "任务池")} · ${s(task.platform || "经营单元")} · ${s(task.productId || task.entityId || task.id)}</small><span>${s(queueName(task))} · ${s(actionDecision(task))} · ${s(workflow)}</span></div></div>
-      <div class="todo-meta-strip"><div class="todo-number-cell ${AppShell.statusClass(task.priorityLevel)}"><span>优先级</span><strong>${s(task.priority)}</strong><small>${s(task.deadline)}</small></div><div class="todo-number-cell"><span>执行人</span><strong>${s(task.assigneeName || "未派发")}</strong><small>${s(task.reviewerName || "待复核")}</small></div><div class="todo-number-cell warning"><span>动作权限</span><strong>${s(gate.actionLabel || task.actionType || "经营动作")}</strong><small>${s(taskBasis(task))}</small></div></div>
+    const batch = task.batchTask ? `<em>${s(task.affectedProductCount)}品</em>` : "";
+    return `<article class="todo-queue-row ${focused ? "focused-task" : ""}" data-task-card="${s(task.id)}">
+      <div class="todo-queue-rank">${index + 1}</div>
+      <div class="todo-queue-main"><strong>${s(task.title || task.productTitle)}</strong><span>${s(task.store || task.storeName || "任务池")} · ${s(task.platform || "经营单元")} · ${s(gate.actionLabel || task.actionType || reasonFamily(task))}</span></div>
+      <div class="todo-queue-badges"><em>${s(task.priority || "中")}</em><em>${s(task.deadline || task.timeBucket || "今日内")}</em><em>${s(queueName(task))}</em>${batch}</div>
+      <div class="todo-queue-status"><strong>${s(actionDecision(task))}</strong><span>${s(workflow)} · ${s(task.assigneeName || "运营账号")}</span></div>
       <div class="todo-actions v106-minimal-actions">${actionButtons(task)}</div>
     </article>`;
   }
@@ -70,18 +101,16 @@
     async render(ctx) {
       const focusTaskId = ctx?.state?.focusTaskId || "";
       try { await AppApi.refreshTaskState(); } catch (error) { console.error("[todo] refresh task state failed", error); }
-      const allTasks = AppTaskStore.listTasks();
       const active = AppTaskStore.listActiveTasks();
-      const tasks = sortTasks(visibleTaskQueue(active));
-      const counters = AppTaskStore.counters?.() || {};
+      const raw = sortTasks(visibleTaskQueue(active));
+      const tasks = clusterTasks(raw);
       const user = AppApi.currentUser?.() || {};
       const empty = "当前账号没有需要立即处理的执行任务。候选任务、趋势信号和观察项进入日报/周报素材。";
-      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.6</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端任务池。列表只按紧急程度和时间排序，完整SOP进入详情页。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(allTasks, active, counters).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个可执行任务</span></div><div class="todo-card-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
+      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.7.1</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看聚合后的执行队列。列表只放排序、时限和状态；完整SOP进入详情页。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
     },
     mount(ctx) {
       focusTask(ctx.state?.focusTaskId);
       ctx.delegate("[data-task-report]", "click", (_, node) => openTaskReport(node.dataset.taskReport));
-      ctx.delegate("[data-assign]", "click", async (_, node) => { await AppApi.assignTodo(node.dataset.assign, { note: "派发任务给运营账号" }); await refresh("任务已派发。"); });
       ctx.delegate("[data-accept]", "click", async (_, node) => { await AppApi.acceptTodo(node.dataset.accept, { note: "运营已接收任务" }); await refresh("任务已接收，进入处理中。"); });
     },
   };
