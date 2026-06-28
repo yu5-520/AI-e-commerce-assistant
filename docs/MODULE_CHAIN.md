@@ -45,16 +45,16 @@ web_demo/modules/report/page.js
 → risk_task_service.generate_risk_tasks_for_signals
 → risk_task_v66_service 红线 / 证据闸门任务
 → operating_cadence_task_service 首份报表基线 + ROI/GMV 对比任务
+→ module_task_service.apply_v126_task_governance
+→ rag_business_memory_service 读取 RAG 公司基线和历史经营记忆
+→ action_impact_estimation_service 系统估算活动/标题/主图/投放影响
+→ action_authorization_gate_service 校验账号权限、店铺权重、商品权重、动作风险
 → task_evidence_gate_service 按 metric_scope 取证
 → import_diagnostics_service.import_diagnostics
-→ v116_import_closed_loop_service
-→ AppApi.refreshAfterDataImport()
 → AppApi.refreshTaskState()
 → /api/modules/todo
 → dashboard / operating-unit / product / todo / log 反查
 ```
-
-数据源同步链路同样经过 `operating_cadence_task_service`，并在导入后刷新 `/api/modules/todo`。
 
 ## 3. 报表布局 Agent 与事实表链
 
@@ -83,34 +83,44 @@ web_demo/modules/product/page.js
 
 事实表未命中显示“未识别”，不能显示 0，不能回读对象缓存。
 
-## 5. V12.5 基线优先任务链
+## 5. 基线优先任务链
 
 ```text
 product_metric_facts
 → operating_cadence_task_service._upload_cadence
 → baselineMode / comparisonReady / trendReady
-→ 1份报表：baseline_snapshot，只建商品/店铺/ROI/GMV/库存/广告/转化基线
+→ 1份报表：baseline_snapshot
 → 2份报表：允许环比 ROI/GMV 经营任务
 → 3份报表或7天窗口：允许 3/7/14/30/90 天趋势任务
 → 红线硬规则：urgent_execution
 → 非红线波动：daily_operating_task / weekly_review_task / candidate_only / report_seed_only
-→ task_evidence_gate_service.apply_evidence_gate_to_created_task
 → module_task_service.create_task
 → operating_cadence_signals
 → 日报 / 周报素材
 ```
 
+## 6. V12.6 经营动作权限闸门
+
+```text
+经营任务 payload
+→ module_task_service.normalize_task
+→ apply_v126_task_governance
+→ rag_business_memory_service.business_memory_context
+→ action_impact_estimation_service.estimate_action_impact
+→ action_authorization_gate_service.authorize_action
+→ auto_execute / manager_approval_required / owner_approval_required
+```
+
 边界：
 
 ```text
-首份报表不生成扩流、加投、降投、转化排查等经营测试任务。
-红线由硬规则控制，Agent 不允许降级。
-ROI/GMV 是任务优先级主轴。
-库存、流量、点击率、转化率、退款率、毛利率、广告消耗是解释指标。
-日报/周报基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项。
+运营只补充客观事实，不填写ROI、GMV、销量、库存消耗、毛利率预测。
+系统生成保守 / 正常 / 乐观估算。
+自动确认只看保守估算下限。
+高权重店铺/商品的标题、主图、预算、价格、主推位等动作必须走主管/老板确认。
 ```
 
-## 6. 总览 / 任务栏统一任务源
+## 7. 总览 / 任务栏统一任务源
 
 ```text
 /api/modules/dashboard
@@ -123,37 +133,31 @@ web_demo/modules/todo/page.js
 → visibleTaskQueue(activeTasks)
 ```
 
-验收点：总览能看到的任务，进入任务栏后必须从 `/api/modules/todo` 同步到 `AppTaskStore`，不能只读本地空队列。
+任务列表只显示紧急程度、截止时间、店铺、商品、状态、负责人和详情入口；完整 SOP、证据链、估算结果、权限判断放到任务详情页。
 
-## 7. 任务模块链
+## 8. 经营页入口链
 
 ```text
-business_signals_v6
-→ risk_task_service.generate_risk_tasks_for_signals
-→ risk_task_v66_service 严格红线与风险任务
-→ operating_cadence_task_service ROI/GMV经营节奏任务
-→ task_evidence_gate_service.evaluate_task_evidence
-→ product / traffic_source / store metric_scope 取证
-→ module_task_service
-→ task_repository_write_service
-→ task_state_machine_service
-→ web_demo/modules/todo/page.js
+web_demo/modules/operating-unit/page.js
+→ 店铺卡片永远保留“查看商品”
+→ 有任务时追加“查看任务”
+→ 不能因为生成任务替换商品入口
 ```
 
-任务页默认承接高风险、高时效和 daily_operating_task；普通缺口只留在 data_gap_events，不制造前端待办。
-
-## 8. 任务详情 / 报告链
+## 9. 任务详情 / 报告链
 
 ```text
-web_demo/modules/task-report/page.js
+web_demo/core/task-actions.js
+→ AppTaskActions.openTaskReport()
+→ web_demo/modules/task-report/page.js
 → AppApi.taskReport() / candidateReport() / alertReport()
 → /api/modules/task-reports/*
 → src/api/routes/modules/task_report.py
 → task_report_service
-→ evidenceGate / metricFacts / cadence / ROI-GMV quadrant / dataVersion
+→ evidenceGate / metricFacts / cadence / ROI-GMV quadrant / actionAuthorization / actionImpactEstimate / ragBusinessMemory
 ```
 
-## 9. 系统诊断 / 清空运行态链
+## 10. 系统诊断 / 清空运行态链
 
 ```text
 web_demo/modules/system-status/page.js
@@ -165,7 +169,7 @@ web_demo/modules/system-status/page.js
 
 清空后 `operating_cadence_signals` 也必须被清理。
 
-## 10. 账号权限链
+## 11. 账号权限链
 
 ```text
 web_demo/modules/account/page.js
@@ -179,16 +183,6 @@ web_demo/modules/account/page.js
 
 ECS Demo 只有 `DEMO_ACCOUNT_SWITCH=true` 时允许切换账号。
 
-## 11. SaaS 数据隔离链
-
-```text
-Request Headers / Session
-→ UserContext
-→ ScopedRepositoryBase
-→ TaskRepository / ProductionRepository
-→ tenant_id + org_id + store scope + deleted_at
-```
-
 ## 12. LLM / Agent 链
 
 ```text
@@ -200,4 +194,4 @@ Request Headers / Session
 → llm_trace_service
 ```
 
-LLM 可降级；LLM 不可用时核心事实、缺口、ROI/GMV节奏任务和证据闸门链路不阻断。
+LLM 可降级；LLM 不可用时核心事实、缺口、ROI/GMV节奏任务、V12.6经营动作权限闸门和证据闸门链路不阻断。
