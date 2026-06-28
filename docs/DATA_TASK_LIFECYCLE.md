@@ -1,6 +1,6 @@
 # DATA_TASK_LIFECYCLE
 
-本文件只记录当前产品从数据到事实、缺口、任务、复核、复盘和演示清空的主链路。后续 AI 修改任务系统、报表系统、经营模块时，以本文件为定位依据。
+本文件只记录当前产品从数据到事实、缺口、ROI/GMV 经营判断、任务、复核、复盘和演示清空的主链路。
 
 ## 1. 主生命周期
 
@@ -14,12 +14,15 @@
 → operating_products / operating_stores 身份主档 upsert
 → product_metric_facts / store_metric_facts / traffic_source_facts 指标事实写入
 → data_gap_events 普通缺口留痕
-→ importDiagnostics 布局诊断
+→ importDiagnostics 布局诊断：Sheet → Block → Fact → Gap → Staging
 → 商品 / 店铺 / 流量来源事实展示
 → 趋势计算
 → business_signals_v6 经营信号
+→ operating_cadence_task_service 计算上传频率和趋势周期
+→ ROI/GMV 四象限判断
+→ 库存、流量、点击、转化、退款、毛利、广告消耗解释 ROI/GMV 变化
 → task_evidence_gate_service 按 metric_scope 取证
-→ 高风险高时效执行任务 或 关键证据缺失补证任务
+→ 高风险红线任务 / ROI-GMV 日常经营任务 / 周期复盘候选 / 补证任务
 → 运营接收
 → 运营提交证据
 → 总管复核
@@ -53,6 +56,7 @@ web_demo/modules/report/page.js
 - 将普通缺口写入 `data_gap_events`。
 - 生成 `importDiagnostics`，解释 Sheet → Block → Fact → Gap → Staging。
 - 生成趋势信号和风险信号。
+- 触发 ROI/GMV 经营节奏判断。
 - 触发任务证据闸门。
 - 触发模块刷新契约。
 - 执行 v116 闭环反查。
@@ -87,25 +91,26 @@ staging_unknown        → staging / gap only     → metric_scope=unknown
 product ROI、traffic_source ROI、store ROI 不可互相替代。
 ```
 
-## 4. 经营对象阶段
+## 4. ROI/GMV 主轴阶段
+
+运营每天最关注的是 ROI 投产比和 GMV/支付金额。
 
 ```text
-rows / blockRows
-→ operating_object_store_service
-→ operating_products / operating_stores
-→ 当前账号可见商品 / 店铺
-→ 经营中心展示
+ROI = 投放效率主指标
+GMV / 支付金额 = 经营规模主指标
+广告消耗 = ROI 是否被预算拉低或放大的解释指标
+库存 / 可售天数 = GMV 能不能承接的解释指标
+流量 / 点击率 / 转化率 = ROI/GMV 变化原因的解释指标
+退款率 / 毛利率 = ROI/GMV 是否安全的解释指标
 ```
 
-规则：
+四象限：
 
 ```text
-上传账号决定正常报表导入归属。
-新店铺直接创建并归属上传账号。
-商品继承店铺归属。
-任务继承商品 / 店铺归属。
-任务不能反向制造商品 / 店铺权限。
-经营对象只保留身份定位、权限归属、来源 Sheet / 行 / block 坐标。
+高 ROI + 高 GMV → 放量承接任务
+高 ROI + 低 GMV → 扩流测试任务
+低 ROI + 高 GMV → 效率复核任务
+低 ROI + 低 GMV → 降投排查任务
 ```
 
 ## 5. 数据缺口阶段
@@ -114,7 +119,7 @@ rows / blockRows
 
 ```text
 普通缺口 = 缺了但暂时不用，只进入 data_gap_events。
-决策缺口 = 缺了导致系统不能继续判断，才被证据闸门升级为补证任务。
+决策缺口 = 缺了导致系统不能继续判断 ROI/GMV 动作，才被证据闸门升级为补证任务。
 ```
 
 补证任务必须说明：
@@ -124,22 +129,25 @@ rows / blockRows
 - 这个证据影响哪个动作。
 - 补齐前系统不会生成什么高风险建议。
 
-## 6. 标签、趋势和风险阶段
+## 6. 标签、趋势和经营节奏阶段
 
 趋势不是单点指标，必须支持变化判断：
 
-- 环比。
-- 同比。
-- 趋势方向。
-- 波动幅度。
-- 指标联动。
-- 数据版本对比。
+- 3天短波动。
+- 7天小趋势。
+- 14天中短趋势。
+- 30天中趋势。
+- 90天大趋势。
+- 上传频率。
+- ROI / GMV 变化方向。
+- 广告、库存、流量、点击、转化、退款、毛利的解释联动。
 
-风险信号进入任务前，必须能说明：
+经营信号进入任务前，必须能说明：
 
 - 哪个商品、店铺或流量来源触发。
 - 来自哪个数据版本。
-- 哪个指标异常。
+- ROI 和 GMV 如何变化。
+- 解释指标是什么。
 - metric_scope 是 product、traffic_source 还是 store。
 - 为什么需要人工介入。
 - 是否具备关键证据。
@@ -163,15 +171,18 @@ rows / blockRows
 - metricScope。
 - requiredFactTables。
 - forbiddenCrossScope。
+- ROI/GMV 四象限或解释标签。
 
 任务生成规则：
 
 ```text
-低风险 → 商品 / 店铺标签或观察项。
-中风险 → 观察候选或标签。
-高风险 + 证据完整 + 高时效 → 执行队列。
-高风险 + 证据缺失 → 经营证据补齐任务。
-高风险 + 需审批 → 审批生命周期。
+红线风险 → 强制任务。
+高 ROI + 高 GMV → 放量承接任务。
+高 ROI + 低 GMV → 扩流测试任务。
+低 ROI + 高 GMV → 效率复核任务。
+低 ROI + 低 GMV → 降投排查任务。
+证据缺失且阻塞 ROI/GMV 动作 → 经营证据补齐任务。
+轻微波动 → 观察项 / 日报周报素材。
 ```
 
 任务进入执行队列后，其他模块不再重复展示已完成任务。
@@ -206,16 +217,23 @@ rows / blockRows
 - 生成可复盘内容。
 - 必要时生成 RAG 记忆候选。
 
-## 10. 详情页兜底
+## 10. 日报 / 周报阶段
 
-只要任务进入执行队列，详情页必须能打开。
+日报 / 周报不能只等已生成任务。
 
 ```text
-完整报告可用 → 展示深度报告。
-完整报告不可用 → 展示基础兜底报告。
+日报 / 周报基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项
 ```
 
-禁止因为深度报告或 alert 同步失败，让前端显示“报告加载失败”。
+优先结构：
+
+```text
+ROI 变化最大的商品
+GMV 增长 / 下滑最明显的商品
+广告消耗上升但 ROI 转弱的商品
+ROI 好但库存不足的机会商品
+ROI / GMV 同时转弱的排查商品
+```
 
 ## 11. 演示运行态清空阶段
 
@@ -225,6 +243,7 @@ Demo 测试反复导入时，清空必须反向删除完整派生链路：
 任务 / 复核 / 提交
 → alert_events
 → business_signals_v6
+→ operating_cadence_signals
 → product_metric_facts / store_metric_facts / traffic_source_facts
 → data_gap_events
 → metric_snapshots
@@ -242,6 +261,7 @@ imported_report_rows
 data_snapshots
 metric_snapshots
 business_signals_v6
+operating_cadence_signals
 operating_products
 operating_stores
 product_metric_facts
@@ -253,29 +273,3 @@ alert_events
 ```
 
 保留：账号、角色、权限、基础店铺配置。
-
-## 12. 验收标准
-
-一次完整 V12.3 验收必须覆盖：
-
-```text
-导入真实 ERA / ERP 报表
-→ reportProfile.sheetProfiles[].blocks[] 存在
-→ metricFactSync.mode = layout_block_metric_fact_routing
-→ product_metric_facts / store_metric_facts / traffic_source_facts 有事实写入
-→ data_gap_events 有普通缺口留痕但不制造任务
-→ importDiagnostics.layoutMode = sheet_block_fact_gap_staging
-→ operating_products / operating_stores 只保留身份定位
-→ 商品页事实表未命中显示“未识别”
-→ ROI 按 product / traffic_source / store 三口径隔离
-→ 任务 evidenceGate 返回 metricScope / requiredFactTables / forbiddenCrossScope
-→ 高风险证据完整进入执行队列
-→ 关键证据缺失降级为补证任务
-→ 任务详情全部可打开
-→ 运营接收提交
-→ 总管复核通过
-→ 任务完成
-→ 日志留痕
-→ RAG 候选生成
-→ 清空演示运行态后无残留
-```
