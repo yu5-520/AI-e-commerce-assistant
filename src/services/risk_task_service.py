@@ -1,10 +1,4 @@
-"""V12.7 task generation facade.
-
-The facade keeps baseline-first ROI/GMV cadence and the operating action gate,
-then adds V12.7 weight confidence policy: business performance is not governance
-weight. High ROI / high GMV / first-report labels can create urgency, but cannot
-create high-weight approval protection by themselves.
-"""
+"""V12.7.2 task generation facade."""
 
 from __future__ import annotations
 
@@ -18,8 +12,9 @@ from src.services.rag_business_memory_service import RAG_BUSINESS_MEMORY_VERSION
 from src.services.risk_task_v66_service import RISK_TASK_VERSION as STRICT_RISK_TASK_VERSION
 from src.services.risk_task_v66_service import ensure_risk_task_tables, generate_risk_tasks_for_signals as _generate_scoped_risk_tasks
 from src.services.risk_task_v66_service import risk_task_summary as _scoped_risk_task_summary
+from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open_tasks
 
-RISK_TASK_VERSION = "12.7.0"
+RISK_TASK_VERSION = "12.7.2"
 
 
 def _action_gate_counts(tasks: list[Dict[str, Any]]) -> Dict[str, int]:
@@ -40,16 +35,16 @@ def _weight_gate_counts(tasks: list[Dict[str, Any]]) -> Dict[str, int]:
 
 
 def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int = 200, requester_role_id: str = "operator") -> Dict[str, Any]:
-    """Generate strict risk tasks plus baseline-gated, action-gated, weight-confident operating tasks."""
     risk_result = _generate_scoped_risk_tasks(data_version=data_version, limit=limit, requester_role_id=requester_role_id)
     cadence_result = generate_operating_cadence_tasks(data_version=data_version, max_tasks=16)
+    cluster_result = cluster_open_tasks()
     risk_tasks = risk_result.get("tasks") or []
     cadence_tasks = cadence_result.get("tasks") or []
     all_tasks = [*risk_tasks, *cadence_tasks]
     return {
         **risk_result,
         "version": RISK_TASK_VERSION,
-        "mode": "v12_7_baseline_first_action_gate_weight_confidence_task_generation",
+        "mode": "v12_7_2_real_clustered_lifecycle_task_generation",
         "dataVersion": data_version,
         "strictRiskTaskVersion": STRICT_RISK_TASK_VERSION,
         "operatingCadenceVersion": OPERATING_CADENCE_VERSION,
@@ -57,6 +52,8 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "actionImpactEstimationVersion": ACTION_IMPACT_ESTIMATION_VERSION,
         "ragBusinessMemoryVersion": RAG_BUSINESS_MEMORY_VERSION,
         "operatingWeightPolicyVersion": OPERATING_WEIGHT_POLICY_VERSION,
+        "taskClusterVersion": TASK_CLUSTER_VERSION,
+        "taskClusterSync": cluster_result,
         "primaryAxis": "ROI_GMV",
         "baselineMode": bool(cadence_result.get("baselineMode")),
         "comparisonReady": bool(cadence_result.get("comparisonReady")),
@@ -64,6 +61,8 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "createdTaskCount": len(all_tasks),
         "strictRiskCreatedTaskCount": len(risk_tasks),
         "operatingCadenceCreatedTaskCount": len(cadence_tasks),
+        "clusteredTaskCount": cluster_result.get("clusterCount", 0),
+        "mergedDuplicateTaskCount": cluster_result.get("mergedDuplicateCount", 0),
         "blockedByBaselineCount": cadence_result.get("blockedByBaselineCount", 0),
         "actionGateDecisionCounts": _action_gate_counts(all_tasks),
         "weightGateCounts": _weight_gate_counts(all_tasks),
@@ -71,7 +70,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "strictRiskSync": risk_result,
         "operatingCadenceSync": cadence_result,
         "dailyReportSeedCount": len(cadence_result.get("topSignals") or []),
-        "rule": "V12.7：首份报表仍只建基线；高权重是公司治理标签，不是高ROI/高GMV表现标签；只有RAG配置、主管/老板标记或多期历史贡献能触发高权重审批。",
+        "rule": "V12.7.2 uses real backend clustered tasks. Accept, submit, review and detail all use the same task id.",
     }
 
 
@@ -85,6 +84,7 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
     summary["actionImpactEstimationVersion"] = ACTION_IMPACT_ESTIMATION_VERSION
     summary["ragBusinessMemoryVersion"] = RAG_BUSINESS_MEMORY_VERSION
     summary["operatingWeightPolicyVersion"] = OPERATING_WEIGHT_POLICY_VERSION
+    summary["taskClusterVersion"] = TASK_CLUSTER_VERSION
     summary["operatingCadenceSummary"] = cadence
-    summary["rule"] = "V12.7：经营表现、任务优先级、生命周期标签和首份报表标签不能当作高权重；高权重必须有明确治理来源和置信度。"
+    summary["rule"] = "V12.7.2 aligns clustered tasks with the task lifecycle."
     return summary
