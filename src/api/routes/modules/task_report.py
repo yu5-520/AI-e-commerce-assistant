@@ -11,7 +11,7 @@ from src.services.alert_detail_service import get_alert_detail_report
 from src.services.task_report_service import get_candidate_report, get_task_report
 
 router = APIRouter()
-TASK_REPORT_ROUTE_VERSION = "12.7.2"
+TASK_REPORT_ROUTE_VERSION = "12.8.0"
 
 
 def request_user_id(request: Request) -> str:
