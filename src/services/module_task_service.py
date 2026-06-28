@@ -323,6 +323,16 @@ def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
     return deepcopy(log)
 
 
+def reset_tasks() -> Dict[str, Any]:
+    task_count = len(TASKS)
+    log_count = len(LOGS)
+    event_count = len(TASK_EVENTS)
+    TASKS.clear()
+    LOGS.clear()
+    TASK_EVENTS.clear()
+    return {"ok": True, "taskCount": task_count, "logCount": log_count, "eventCount": event_count, "version": "12.6.0"}
+
+
 def event_visible_to_user(event: Dict[str, Any], user_id: str | None = None) -> bool:
     user = get_user(user_id)
     if not user:
