@@ -1,20 +1,20 @@
-"""V12.4 operating cadence task service.
+"""V12.4.1 ROI / GMV centred operating cadence task service.
 
-V12.4 changes the task source from single baseline alarms to:
+V12.4 moved task generation away from a single baseline alarm.  V12.4.1 adds
+the operator-facing priority model: ROI and GMV/payment amount are the primary
+business result axes; inventory, traffic, click rate, conversion, refund and
+margin explain why ROI/GMV moved and what action should be tested.
 
-    redline hard rules + upload frequency + 3/7/14/30/90 day trend windows
+Redline rules remain hard gates.  Non-redline movement is evaluated through:
+    ROI x GMV quadrant + upload frequency + 3/7/14/30/90 day trend windows
     + agent-style operating judgement + evidence gate.
-
-The service reads product_metric_facts, creates operating cadence signals, saves
-candidate tasks for daily/weekly reports, and promotes meaningful signals into
-SOP task packages.  It deliberately does not execute business changes.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
@@ -22,18 +22,16 @@ from src.services import module_task_service
 from src.services.metric_fact_store_service import ensure_metric_fact_tables
 from src.services.task_evidence_gate_service import apply_evidence_gate_to_created_task
 
-OPERATING_CADENCE_VERSION = "12.4.0"
+OPERATING_CADENCE_VERSION = "12.4.1"
 CADENCE_WINDOWS = [3, 7, 14, 30, 90]
+
 TRACKED_METRICS = {
+    "roi",
+    "payment_amount",
+    "ad_spend",
     "inventory_qty",
     "sellable_days",
-    "payment_amount",
-    "avg_order_value",
-    "payment_order_count",
-    "payment_unit_count",
     "payment_conversion_rate",
-    "roi",
-    "ad_spend",
     "click_rate",
     "visitor_count",
     "page_view_count",
@@ -41,23 +39,19 @@ TRACKED_METRICS = {
     "organic_visitor_count",
     "paid_visitor_count",
     "gross_margin_rate",
-    "gross_profit_amount",
-    "product_cost_amount",
     "refund_rate",
     "refund_amount",
-    "refund_order_count",
+    "payment_order_count",
+    "payment_unit_count",
 }
 
 METRIC_LABELS = {
+    "roi": "ROI",
+    "payment_amount": "GMV/支付金额",
+    "ad_spend": "广告消耗",
     "inventory_qty": "库存数量",
     "sellable_days": "可售天数",
-    "payment_amount": "支付金额",
-    "avg_order_value": "客单价",
-    "payment_order_count": "支付订单数",
-    "payment_unit_count": "支付件数",
     "payment_conversion_rate": "支付转化率",
-    "roi": "ROI",
-    "ad_spend": "广告消耗",
     "click_rate": "点击率",
     "visitor_count": "访客数",
     "page_view_count": "浏览量",
@@ -65,18 +59,16 @@ METRIC_LABELS = {
     "organic_visitor_count": "自然流量访客数",
     "paid_visitor_count": "付费流量访客数",
     "gross_margin_rate": "毛利率",
-    "gross_profit_amount": "毛利金额",
-    "product_cost_amount": "商品成本金额",
     "refund_rate": "退款率",
     "refund_amount": "退款金额",
-    "refund_order_count": "退款订单数",
+    "payment_order_count": "支付订单数",
+    "payment_unit_count": "支付件数",
 }
 
-REDLINE_RULES = {
-    "inventory_zero": "库存归零但仍有经营数据，必须人工复核是否断货、下架或补货。",
-    "negative_margin": "毛利率触及红线，必须复核售价、成本、优惠和活动承接。",
-    "refund_spike": "退款率进入红线区，必须复核售后原因和商品承接。",
-}
+ROI_GOOD = 2.0
+ROI_WEAK = 1.5
+GMV_MOVE = 0.12
+ROI_MOVE = 0.06
 
 
 def now_iso() -> str:
@@ -88,26 +80,22 @@ def make_id(prefix: str) -> str:
 
 
 def _num(value: Any) -> float | None:
-    if value in {None, ""}:
+    if value in {None, "", "未识别", "—"}:
         return None
     try:
-        return float(value)
+        return float(str(value).replace("¥", "").replace(",", "").replace("%", ""))
     except (TypeError, ValueError):
         return None
 
 
 def _pct_change(old: float | None, new: float | None) -> float | None:
-    if old is None or new is None:
-        return None
-    if abs(old) < 1e-9:
+    if old is None or new is None or abs(old) < 1e-9:
         return None
     return (new - old) / abs(old)
 
 
 def _fmt_change(value: float | None) -> str:
-    if value is None:
-        return "无法计算"
-    return f"{value * 100:+.1f}%"
+    return "无法计算" if value is None else f"{value * 100:+.1f}%"
 
 
 def _safe_date(value: Any) -> str:
@@ -167,6 +155,8 @@ def ensure_operating_cadence_tables() -> None:
                 "upload_frequency_level": "TEXT",
                 "report_target": "TEXT",
                 "agent_judgment": "TEXT",
+                "roi_gmv_quadrant": "TEXT",
+                "primary_axis": "TEXT",
             },
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_operating_cadence_signals_version ON operating_cadence_signals(data_version, created_at)")
@@ -174,7 +164,7 @@ def ensure_operating_cadence_tables() -> None:
         conn.commit()
 
 
-def _load_facts(limit: int = 5000) -> List[Dict[str, Any]]:
+def _load_facts(limit: int = 8000) -> List[Dict[str, Any]]:
     ensure_metric_fact_tables()
     with connect() as conn:
         rows = conn.execute(
@@ -252,7 +242,8 @@ def _upload_cadence(facts: List[Dict[str, Any]]) -> Dict[str, Any]:
         "avgIntervalDays": avg_interval,
         "frequencyLevel": level,
         "sensitivityMultiplier": multiplier,
-        "rule": "上传频率越高，短周期波动阈值越低；红线任务不受阈值降级影响。",
+        "primaryAxis": "ROI_GMV",
+        "rule": "上传频率越高，短周期 ROI/GMV 波动阈值越低；库存、流量、点击率、转化率、退款率用于解释 ROI/GMV。",
     }
 
 
@@ -264,9 +255,8 @@ def _entity_metrics(facts: List[Dict[str, Any]]) -> Dict[Tuple[str, str | None],
             continue
         store_id = str(row.get("store_id") or row.get("store_code") or row.get("store_name") or "").strip() or None
         metric = str(row.get("metric_code") or "").strip()
-        if metric not in TRACKED_METRICS:
-            continue
-        grouped[(product_id, store_id)][metric].append(row)
+        if metric in TRACKED_METRICS:
+            grouped[(product_id, store_id)][metric].append(row)
     for metrics in grouped.values():
         for rows in metrics.values():
             rows.sort(key=lambda item: (_safe_date(item.get("stat_date") or item.get("updated_at")), str(item.get("updated_at") or "")))
@@ -298,7 +288,59 @@ def _metric_pair(metrics: Dict[str, List[Dict[str, Any]]], code: str) -> Dict[st
     }
 
 
-def _signal_base(product: Dict[str, Any], cadence: Dict[str, Any], data_version: str | None, signal_type: str, risk_level: str, queue_type: str, domain: str, reason: str, metrics: List[Dict[str, Any]], score: float) -> Dict[str, Any]:
+def _movement(change: float | None, threshold: float) -> str:
+    if change is None:
+        return "unknown"
+    if change >= threshold:
+        return "up"
+    if change <= -threshold:
+        return "down"
+    return "flat"
+
+
+def _roi_gmv_quadrant(roi: Dict[str, Any], gmv: Dict[str, Any], threshold: float) -> Dict[str, Any]:
+    roi_latest = roi.get("latestValue")
+    roi_change = roi.get("changeRate")
+    gmv_change = gmv.get("changeRate")
+    roi_move = _movement(roi_change, ROI_MOVE * threshold)
+    gmv_move = _movement(gmv_change, GMV_MOVE * threshold)
+    roi_level = "unknown"
+    if roi_latest is not None:
+        roi_level = "good" if roi_latest >= ROI_GOOD else "weak" if roi_latest < ROI_WEAK else "normal"
+    if roi_move in {"up", "flat"} and gmv_move == "up" and roi_level != "weak":
+        quadrant = "high_roi_high_gmv"
+        name = "高ROI + 高GMV｜放量承接"
+        action = "GMV放量承接"
+        queue = "daily_operating_task"
+        score = 92
+    elif roi_move in {"up", "flat"} and gmv_move in {"flat", "down"} and roi_level != "weak":
+        quadrant = "high_roi_low_gmv"
+        name = "高ROI + 低GMV｜扩流测试"
+        action = "高ROI扩流测试"
+        queue = "daily_operating_task"
+        score = 84
+    elif roi_move == "down" and gmv_move == "up":
+        quadrant = "low_roi_high_gmv"
+        name = "低ROI + 高GMV｜效率复核"
+        action = "放量效率复核"
+        queue = "daily_operating_task"
+        score = 88
+    elif roi_move == "down" and gmv_move in {"flat", "down"}:
+        quadrant = "low_roi_low_gmv"
+        name = "低ROI + 低GMV｜降投排查"
+        action = "ROI异常排查"
+        queue = "daily_operating_task"
+        score = 90
+    else:
+        quadrant = "neutral_roi_gmv"
+        name = "ROI/GMV常规观察"
+        action = "经营观察"
+        queue = "report_seed_only"
+        score = 55
+    return {"quadrant": quadrant, "quadrantName": name, "actionType": action, "queueType": queue, "score": score, "roiMove": roi_move, "gmvMove": gmv_move, "roiLevel": roi_level}
+
+
+def _signal_base(product: Dict[str, Any], cadence: Dict[str, Any], data_version: str | None, signal_type: str, risk_level: str, queue_type: str, domain: str, reason: str, metrics: List[Dict[str, Any]], score: float, *, quadrant: Dict[str, Any] | None = None) -> Dict[str, Any]:
     window = _window_bucket(int(cadence.get("daySpan") or 0))
     return {
         "version": OPERATING_CADENCE_VERSION,
@@ -313,6 +355,8 @@ def _signal_base(product: Dict[str, Any], cadence: Dict[str, Any], data_version:
         "queueType": queue_type,
         "riskDomain": domain,
         "metricScope": "product",
+        "primaryAxis": "ROI_GMV",
+        "roiGmvQuadrant": quadrant or {},
         "reason": reason,
         "score": score,
         "metrics": metrics,
@@ -320,9 +364,10 @@ def _signal_base(product: Dict[str, Any], cadence: Dict[str, Any], data_version:
         "window": window,
         "reportTarget": window.get("reportTarget"),
         "agentJudgment": {
-            "status": "v12_4_operating_cadence_agent_judgment",
-            "boundary": "红线由硬规则控制；非红线由波动区间和上传频率放大 Agent 判断，但仍经过证据闸门。",
+            "status": "v12_4_1_roi_gmv_agent_judgment",
+            "boundary": "ROI/GMV 是任务主轴；库存、流量、点击率、转化率、退款率、毛利率用于解释原因；红线仍由硬规则控制。",
             "reason": reason,
+            "roiGmvQuadrant": (quadrant or {}).get("quadrantName"),
             "cadenceSensitivity": cadence.get("frequencyLevel"),
         },
     }
@@ -330,69 +375,89 @@ def _signal_base(product: Dict[str, Any], cadence: Dict[str, Any], data_version:
 
 def _build_signals_for_entity(product: Dict[str, Any], metrics: Dict[str, List[Dict[str, Any]]], cadence: Dict[str, Any], data_version: str | None) -> List[Dict[str, Any]]:
     mult = float(cadence.get("sensitivityMultiplier") or 1.0)
-    inventory = _metric_pair(metrics, "inventory_qty")
-    payment = _metric_pair(metrics, "payment_amount")
     roi = _metric_pair(metrics, "roi")
+    gmv = _metric_pair(metrics, "payment_amount")
     ad_spend = _metric_pair(metrics, "ad_spend")
+    inventory = _metric_pair(metrics, "inventory_qty")
+    sellable_days = _metric_pair(metrics, "sellable_days")
     conversion = _metric_pair(metrics, "payment_conversion_rate")
     click_rate = _metric_pair(metrics, "click_rate")
     visitors = _metric_pair(metrics, "visitor_count")
     refund_rate = _metric_pair(metrics, "refund_rate")
     gross_margin = _metric_pair(metrics, "gross_margin_rate")
+    paid_visitors = _metric_pair(metrics, "paid_visitor_count")
+    organic_visitors = _metric_pair(metrics, "organic_visitor_count")
 
-    signals: List[Dict[str, Any]] = []
     product_name = product.get("title") or product.get("productId")
+    signals: List[Dict[str, Any]] = []
 
     inv_latest = inventory.get("latestValue")
-    pay_latest = payment.get("latestValue")
-    if inv_latest is not None and inv_latest <= 0 and (pay_latest is None or pay_latest >= 0):
-        signals.append(_signal_base(product, cadence, data_version, "redline_inventory_zero", "高", "urgent_execution", "库存", f"{product_name} 库存已归零，需要立即复核断货、补货或下架承接。", [inventory, payment, conversion], 100))
+    gmv_latest = gmv.get("latestValue")
+    if inv_latest is not None and inv_latest <= 0 and (gmv_latest is None or gmv_latest >= 0):
+        signals.append(_signal_base(product, cadence, data_version, "redline_inventory_zero", "高", "urgent_execution", "库存承接", f"{product_name} 库存已归零，若 GMV/支付金额仍有承接，必须立即复核断货、下架、补货或替代主推。", [roi, gmv, inventory, sellable_days, conversion], 100))
 
     gm_latest = gross_margin.get("latestValue")
     if gm_latest is not None and gm_latest < 0.2:
-        signals.append(_signal_base(product, cadence, data_version, "redline_margin_floor", "高", "urgent_execution", "利润", f"{product_name} 毛利率低于 20% 红线，需要复核售价、成本、优惠和活动策略。", [gross_margin, payment, roi], 95))
+        signals.append(_signal_base(product, cadence, data_version, "redline_margin_floor", "高", "urgent_execution", "利润底线", f"{product_name} 毛利率低于 20% 红线，ROI/GMV 放大前必须复核售价、成本、优惠和活动承接。", [roi, gmv, gross_margin, ad_spend], 96))
 
     rr_latest = refund_rate.get("latestValue")
     rr_change = refund_rate.get("changeRate")
     if rr_latest is not None and (rr_latest >= 0.08 or (rr_change is not None and rr_change >= 0.5)):
-        signals.append(_signal_base(product, cadence, data_version, "redline_refund_watch", "高" if rr_latest >= 0.12 else "中", "urgent_execution" if rr_latest >= 0.12 else "today_execution", "售后", f"{product_name} 退款率进入关注区，需要复核退款理由和售后承接。", [refund_rate, payment], 90 if rr_latest >= 0.12 else 70))
+        signals.append(_signal_base(product, cadence, data_version, "refund_drag_on_roi_gmv", "高" if rr_latest >= 0.12 else "中", "urgent_execution" if rr_latest >= 0.12 else "daily_operating_task", "售后反噬", f"{product_name} 退款率进入关注区，可能反噬 ROI 与 GMV，需要复核退款理由和售后承接。", [roi, gmv, refund_rate], 91 if rr_latest >= 0.12 else 78))
 
-    inv_change = inventory.get("changeRate")
-    pay_change = payment.get("changeRate")
-    if inv_change is not None and inv_change <= -(0.20 * mult) and (pay_change is None or pay_change >= -0.05):
-        signals.append(_signal_base(product, cadence, data_version, "inventory_consumption_opportunity", "中", "daily_operating_task", "库存", f"{product_name} 库存 {_fmt_change(inv_change)}，支付金额 {_fmt_change(pay_change)}，存在补货、主推承接或断货风险复核需求。", [inventory, payment, conversion], 82))
-
-    ad_change = ad_spend.get("changeRate")
+    threshold = mult
+    quadrant = _roi_gmv_quadrant(roi, gmv, threshold)
     roi_change = roi.get("changeRate")
-    if ad_change is not None and ad_change >= (0.25 * mult) and roi_change is not None and roi_change <= -(0.08 * mult):
-        signals.append(_signal_base(product, cadence, data_version, "ad_efficiency_review", "中", "daily_operating_task", "投产", f"{product_name} 广告消耗 {_fmt_change(ad_change)}，ROI {_fmt_change(roi_change)}，需要复核投放质量、关键词、人群和预算节奏。", [ad_spend, roi, payment, click_rate, conversion], 80))
-
+    gmv_change = gmv.get("changeRate")
+    ad_change = ad_spend.get("changeRate")
+    inv_change = inventory.get("changeRate")
     conv_change = conversion.get("changeRate")
-    if conv_change is not None and conv_change <= -(0.12 * mult) and (pay_change is None or pay_change <= 0.10):
-        signals.append(_signal_base(product, cadence, data_version, "conversion_drop_review", "中", "daily_operating_task", "流量", f"{product_name} 支付转化率 {_fmt_change(conv_change)}，需要复核主图、详情页、价格和客服承接。", [conversion, click_rate, visitors, payment], 76))
+    click_change = click_rate.get("changeRate")
+    paid_change = paid_visitors.get("changeRate")
+    organic_change = organic_visitors.get("changeRate")
 
-    if pay_change is not None and pay_change <= -(0.18 * mult):
-        signals.append(_signal_base(product, cadence, data_version, "payment_decline_review", "中", "daily_operating_task", "趋势", f"{product_name} 支付金额 {_fmt_change(pay_change)}，需要排查流量、转化、库存和活动承接变化。", [payment, visitors, conversion, inventory], 74))
+    if quadrant["queueType"] == "daily_operating_task":
+        if quadrant["quadrant"] == "high_roi_high_gmv":
+            reason = f"{product_name} 进入 {quadrant['quadrantName']}：ROI变化 {_fmt_change(roi_change)}，GMV变化 {_fmt_change(gmv_change)}。优先判断加投、补货、主推位承接，而不是只做风险观察。"
+        elif quadrant["quadrant"] == "high_roi_low_gmv":
+            reason = f"{product_name} 进入 {quadrant['quadrantName']}：ROI表现可用，但GMV未放大，优先排查流量入口、人群、渠道和主推曝光。"
+        elif quadrant["quadrant"] == "low_roi_high_gmv":
+            reason = f"{product_name} 进入 {quadrant['quadrantName']}：GMV放大但ROI转弱，可能是放量效率下降，需要复核预算、人群、素材和转化承接。"
+        else:
+            reason = f"{product_name} 进入 {quadrant['quadrantName']}：ROI变化 {_fmt_change(roi_change)}，GMV变化 {_fmt_change(gmv_change)}，需要排查素材、流量、转化、价格、库存和售后。"
+        signals.append(_signal_base(product, cadence, data_version, f"roi_gmv_quadrant_{quadrant['quadrant']}", "中", "daily_operating_task", "ROI/GMV", reason, [roi, gmv, ad_spend, inventory, conversion, click_rate, paid_visitors, organic_visitors], quadrant["score"], quadrant=quadrant))
 
-    if pay_change is not None and pay_change >= (0.18 * mult) and (roi_change is None or roi_change >= -(0.05 * mult)):
-        signals.append(_signal_base(product, cadence, data_version, "growth_opportunity_capture", "中", "daily_operating_task", "趋势", f"{product_name} 支付金额 {_fmt_change(pay_change)}，ROI 未明显恶化，建议复核是否加库存、加主推位或放大优质流量。", [payment, roi, inventory, visitors], 78))
+    if ad_change is not None and ad_change >= (0.18 * mult) and roi_change is not None and roi_change <= -(0.05 * mult):
+        signals.append(_signal_base(product, cadence, data_version, "roi_ad_spend_efficiency_review", "中", "daily_operating_task", "投产", f"{product_name} 广告消耗 {_fmt_change(ad_change)}，ROI {_fmt_change(roi_change)}。投放效率变化优先级高于普通指标波动，需要当天复核预算、关键词、人群、素材。", [roi, gmv, ad_spend, click_rate, conversion], 89, quadrant=quadrant))
+
+    if roi.get("latestValue") is not None and roi.get("latestValue") >= ROI_GOOD and inv_latest is not None and (inv_latest <= 0 or (inv_change is not None and inv_change <= -(0.15 * mult))):
+        signals.append(_signal_base(product, cadence, data_version, "high_roi_low_inventory_restock", "中", "daily_operating_task", "库存承接", f"{product_name} ROI可用但库存变化 {_fmt_change(inv_change)}，属于高投产商品承接不足，应优先判断补货、调拨或主推位替换。", [roi, gmv, inventory, sellable_days], 86, quadrant=quadrant))
+
+    if conv_change is not None and conv_change <= -(0.10 * mult) and (roi_change is None or roi_change <= 0.02):
+        signals.append(_signal_base(product, cadence, data_version, "roi_gmv_conversion_explain", "中", "daily_operating_task", "转化承接", f"{product_name} 转化率 {_fmt_change(conv_change)}，可能解释 ROI/GMV 变化，需要排查主图、详情页、价格、评价和客服承接。", [roi, gmv, conversion, click_rate, visitors], 80, quadrant=quadrant))
+
+    if click_change is not None and click_change <= -(0.10 * mult) and (paid_change is not None or organic_change is not None):
+        signals.append(_signal_base(product, cadence, data_version, "roi_gmv_click_explain", "中", "daily_operating_task", "素材点击", f"{product_name} 点击率 {_fmt_change(click_change)}，可能影响 ROI/GMV 放大，需要复核主图、标题、素材和流量人群。", [roi, gmv, click_rate, paid_visitors, organic_visitors], 76, quadrant=quadrant))
 
     return signals
 
 
 def _actions_for_signal(signal: Dict[str, Any]) -> List[str]:
-    domain = signal.get("riskDomain")
-    if signal.get("signalType") == "redline_inventory_zero":
-        return ["6小时内核对真实库存、可售天数和在途库存。", "6小时内确认是否暂停投放、下架缺货链接或切换替代主推品。", "12小时内给出补货、替换主推位或客服承接话术结论。"]
-    if domain == "库存":
-        return ["24小时内复核近7日销量、库存和可售天数。", "判断是否需要补货、调拨、降低投放或替换主推位。", "提交库存截图、销售趋势截图和处理结论。"]
-    if domain == "投产":
-        return ["12小时内复核广告消耗、ROI、点击率和转化率。", "拆分关键词、人群、渠道或素材，找出消耗上升但效率下降的来源。", "提交预算调整建议；未复核前不自动加大投放。"]
-    if domain == "流量":
-        return ["24小时内复核主图、标题、详情页、价格和客服承接。", "对比自然流量与付费流量变化，判断是否流量质量变化。", "提交一项可执行测试方案，如换主图、换标题或详情页检查。"]
-    if domain == "售后":
-        return ["12小时内整理退款理由 TOP5。", "复核商品质量、尺码、发货、客服承接和页面描述是否存在异常。", "提交售后原因截图和处理方案。"]
-    return ["24小时内复核该商品 3/7/14 天趋势变化。", "判断是否进入补货、投放、主推位或价格策略调整。", "提交数据截图和下一步动作建议。"]
+    signal_type = signal.get("signalType") or ""
+    quadrant = (signal.get("roiGmvQuadrant") or {}).get("quadrant")
+    if signal_type == "redline_inventory_zero":
+        return ["6小时内核对真实库存、可售天数和在途库存。", "6小时内判断是否暂停投放、下架缺货链接或切换替代主推品。", "12小时内给出补货、替换主推位或客服承接话术结论。"]
+    if quadrant == "high_roi_high_gmv":
+        return ["今日内确认ROI是否稳定高于店铺投产底线。", "复核库存和可售天数是否支撑未来3-7天放量。", "提交加预算、补货、主推位承接或素材扩量建议。"]
+    if quadrant == "high_roi_low_gmv":
+        return ["今日内复核流量入口、曝光、人群和渠道覆盖。", "选择1-2个低风险渠道做扩流测试。", "提交扩流测试预算、周期和回看指标。"]
+    if quadrant == "low_roi_high_gmv":
+        return ["12小时内拆分广告计划、人群、关键词或素材消耗。", "确认GMV放大是否以ROI恶化为代价。", "提交降预算、换素材、换人群或保GMV控ROI方案。"]
+    if quadrant == "low_roi_low_gmv":
+        return ["今日内排查流量、点击、转化、价格、库存和竞品变化。", "判断是否暂停加投、降预算或进入素材/主图测试。", "提交一个优先处理动作和复核时间。"]
+    if signal.get("riskDomain") == "库存承接":
+        return ["24小时内复核ROI、GMV、库存和可售天数。", "判断是否补货、调拨、降低投放或替换主推位。", "提交库存截图、GMV趋势截图和处理结论。"]
+    return ["24小时内围绕ROI和GMV复核该商品变化。", "用库存、流量、点击率、转化率、退款率解释变化原因。", "提交加投、降投、补货、换素材、查转化或观察的明确结论。"]
 
 
 def _task_payload(signal: Dict[str, Any]) -> Dict[str, Any]:
@@ -402,10 +467,11 @@ def _task_payload(signal: Dict[str, Any]) -> Dict[str, Any]:
     queue_type = signal.get("queueType") or "daily_operating_task"
     deadline = "6小时内" if risk_level == "高" else "今日内" if queue_type == "daily_operating_task" else "本周内"
     title = signal.get("productTitle") or product.get("title") or signal.get("productId") or "经营对象"
-    subtitle = "红线强制复核" if risk_level == "高" else "今日经营调整" if queue_type == "daily_operating_task" else "周期复盘"
+    quadrant_name = (signal.get("roiGmvQuadrant") or {}).get("quadrantName") or "ROI/GMV经营判断"
+    subtitle = "红线强制复核" if risk_level == "高" else quadrant_name
     evidence_pack = [
         {
-            "type": "operating_cadence_signal",
+            "type": "roi_gmv_operating_signal",
             "title": item.get("metricName") or item.get("metricCode"),
             "metric": item.get("latestDisplayValue") or item.get("latestValue"),
             "reason": f"{item.get('metricName')} {item.get('firstDisplayValue')} → {item.get('latestDisplayValue')}，变化 {_fmt_change(item.get('changeRate'))}",
@@ -423,23 +489,25 @@ def _task_payload(signal: Dict[str, Any]) -> Dict[str, Any]:
         "visibleUserIds": list(dict.fromkeys([item for item in [product.get("assignedOperatorId"), product.get("ownerUserId"), product.get("reviewerId"), *(product.get("visibleUserIds") or [])] if item])),
         "visibleRoleIds": list(dict.fromkeys([*(product.get("visibleRoleIds") or []), "owner", "manager", "operator"])),
         "dataScopeSource": product.get("dataScopeSource") or "uploader_account",
-        "rule": "V12.4 任务继承商品/店铺归属，日报/周报候选不反向制造权限。",
+        "rule": "V12.4.1 任务继承商品/店铺归属，ROI/GMV信号不反向制造权限。",
     }
     detail = {
         "version": OPERATING_CADENCE_VERSION,
-        "title": f"经营节奏任务｜{title} · {subtitle}",
+        "title": f"ROI/GMV经营任务｜{title} · {subtitle}",
         "warningSummary": signal.get("reason"),
+        "primaryAxis": "ROI_GMV",
+        "roiGmvQuadrant": signal.get("roiGmvQuadrant"),
         "cadence": signal.get("cadence"),
         "window": signal.get("window"),
         "evidencePack": evidence_pack,
         "sopSteps": actions,
-        "reviewMetrics": {"metricScope": "product", "requiredFactTables": ["product_metric_facts"], "cadenceWindow": (signal.get("window") or {}).get("label")},
-        "completionGate": ["提交指标截图或报表数据", "说明是否执行调整", "总管复核后进入日报/周报复盘"],
-        "failureThreshold": {"riskLevel": risk_level, "queueType": queue_type, "rule": "红线必须处理；波动任务未复核前不得自动放大投放或库存动作。"},
-        "agentBoundary": "Agent 负责经营判断和 SOP，不直接改预算、库存、价格或店铺数据。",
+        "reviewMetrics": {"primaryMetrics": ["ROI", "GMV/支付金额", "广告消耗"], "explainMetrics": ["库存", "流量", "点击率", "转化率", "退款率", "毛利率"], "metricScope": "product", "requiredFactTables": ["product_metric_facts"]},
+        "completionGate": ["已说明ROI/GMV变化", "已用解释指标定位原因", "已提交加投/降投/补货/测试/观察结论", "总管复核后进入日报/周报复盘"],
+        "failureThreshold": {"riskLevel": risk_level, "queueType": queue_type, "rule": "红线必须处理；非红线动作必须先有ROI/GMV证据。"},
+        "agentBoundary": "Agent 只生成经营判断和SOP，不直接改预算、库存、价格或店铺数据。",
     }
     return {
-        "id": make_id("CADTASK"),
+        "id": make_id("ROITASK"),
         "taskGenerationMode": "v11_8_sop_package",
         "title": title,
         "taskCard": {"title": title, "subtitle": subtitle, "deadline": deadline, "priority": risk_level, "ownerRole": "运营" if ownership.get("assignedOperatorId") else "总管"},
@@ -450,15 +518,15 @@ def _task_payload(signal: Dict[str, Any]) -> Dict[str, Any]:
         "completionGate": detail["completionGate"],
         "failureThreshold": detail["failureThreshold"],
         "task": actions[0],
-        "taskType": "红线强制复核任务" if risk_level == "高" else "今日经营调整任务" if queue_type == "daily_operating_task" else "周期经营复盘任务",
+        "taskType": "红线强制复核任务" if risk_level == "高" else "ROI/GMV经营调整任务",
         "priority": risk_level,
         "deadline": deadline,
         "timeBucket": deadline,
-        "urgencyLevel": "urgent" if risk_level == "高" else "today" if queue_type == "daily_operating_task" else "weekly",
+        "urgencyLevel": "urgent" if risk_level == "高" else "today",
         "queueType": queue_type,
         "displayState": "expanded",
-        "source": "经营节奏Agent",
-        "sourceModule": "经营节奏Agent",
+        "source": "ROI/GMV经营节奏Agent",
+        "sourceModule": "ROI/GMV经营节奏Agent",
         "sourceRoute": "business-actions",
         "productId": signal.get("productId"),
         "entityId": signal.get("productId"),
@@ -471,25 +539,25 @@ def _task_payload(signal: Dict[str, Any]) -> Dict[str, Any]:
         "category": product.get("category") or "未分类",
         "riskDomain": signal.get("riskDomain"),
         "metricScope": "product",
-        "actionType": "红线复核" if risk_level == "高" else "经营调整" if queue_type == "daily_operating_task" else "周期复盘",
+        "actionType": (signal.get("roiGmvQuadrant") or {}).get("actionType") or "ROI/GMV经营调整",
         "taskLayer": "manager_dispatch" if risk_level == "高" else "operator_execution",
         "assigneeId": ownership.get("assignedOperatorId") if risk_level != "高" else None,
         "reviewerId": ownership.get("reviewerId"),
         "visibleUserIds": ownership.get("visibleUserIds"),
         "visibleRoleIds": ["owner", "manager", "finance"] if risk_level == "高" else ownership.get("visibleRoleIds"),
         "ownership": ownership,
-        "sourceEvent": f"V124:{signal.get('dataVersion') or 'latest'}:{signal.get('productId')}:{signal.get('signalType')}:{(signal.get('window') or {}).get('windowType')}",
+        "sourceEvent": f"V1241:{signal.get('dataVersion') or 'latest'}:{signal.get('productId')}:{signal.get('signalType')}:{(signal.get('roiGmvQuadrant') or {}).get('quadrant')}",
         "riskGrade": risk_level,
-        "riskPolicy": {"riskMode": "operating_cadence", "requiresEvidenceGate": True, "requiresApproval": risk_level == "高", "rule": "V12.4 红线硬控；波动区间由Agent判断后生成经营任务或候选任务。"},
+        "riskPolicy": {"riskMode": "roi_gmv_operating_cadence", "requiresEvidenceGate": True, "requiresApproval": risk_level == "高", "rule": "V12.4.1 ROI/GMV为主轴，红线硬控，波动区间由Agent判断。"},
         "investmentApplicationAllowed": False,
         "executionAllowed": risk_level != "高",
         "approvalChain": ["总管复核"] if risk_level == "高" else [],
         "executionRequirements": actions,
-        "judgmentTags": ["V12.4经营节奏", risk_level, signal.get("riskDomain"), queue_type, (signal.get("window") or {}).get("label"), signal.get("cadence", {}).get("frequencyLevel")],
+        "judgmentTags": ["V12.4.1 ROI/GMV", risk_level, signal.get("riskDomain"), queue_type, (signal.get("window") or {}).get("label"), (signal.get("roiGmvQuadrant") or {}).get("quadrantName")],
         "evidence": evidence_pack,
         "reason": signal.get("reason"),
         "agentJudgment": signal.get("agentJudgment"),
-        "sourceTrail": ["报表中心", "指标事实表", "经营节奏Agent", "任务证据闸门", "日报/周报候选"],
+        "sourceTrail": ["报表中心", "指标事实表", "ROI/GMV经营节奏Agent", "任务证据闸门", "日报/周报候选"],
         "recapTarget": "日报" if queue_type == "daily_operating_task" or risk_level == "高" else "周报",
     }
 
@@ -503,8 +571,8 @@ def _save_signal(signal: Dict[str, Any], status: str, task_id: str | None = None
             INSERT OR REPLACE INTO operating_cadence_signals (
                 signal_id, data_version, product_id, store_id, metric_scope, cadence_window,
                 signal_type, risk_level, queue_type, status, task_id, payload, created_at,
-                upload_frequency_level, report_target, agent_judgment
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                upload_frequency_level, report_target, agent_judgment, roi_gmv_quadrant, primary_axis
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 signal.get("signalId"),
@@ -523,6 +591,8 @@ def _save_signal(signal: Dict[str, Any], status: str, task_id: str | None = None
                 (signal.get("cadence") or {}).get("frequencyLevel"),
                 signal.get("reportTarget"),
                 dumps(signal.get("agentJudgment") or {}),
+                (signal.get("roiGmvQuadrant") or {}).get("quadrant"),
+                signal.get("primaryAxis") or "ROI_GMV",
             ),
         )
         conn.commit()
@@ -532,13 +602,6 @@ def _save_signal(signal: Dict[str, Any], status: str, task_id: str | None = None
 def generate_operating_cadence_tasks(data_version: str | None = None, *, max_tasks: int = 16) -> Dict[str, Any]:
     ensure_operating_cadence_tables()
     facts = _load_facts()
-    if data_version:
-        # Keep cadence frequency global, but promote latest-version signals first.
-        target_facts = [row for row in facts if str(row.get("data_version") or "") == str(data_version)]
-        if not target_facts:
-            target_facts = facts
-    else:
-        target_facts = facts
     cadence = _upload_cadence(facts)
     grouped = _entity_metrics(facts)
     latest_version = data_version or next((row.get("data_version") for row in reversed(facts) if row.get("data_version")), None)
@@ -568,16 +631,23 @@ def generate_operating_cadence_tasks(data_version: str | None = None, *, max_tas
 
     return {
         "version": OPERATING_CADENCE_VERSION,
-        "mode": "v12_4_upload_frequency_trend_window_agent_task_generation",
+        "mode": "v12_4_1_roi_gmv_centered_operating_task_generation",
         "dataVersion": data_version,
         "cadence": cadence,
+        "primaryAxis": "ROI_GMV",
+        "quadrantPolicy": {
+            "high_roi_high_gmv": "放量承接",
+            "high_roi_low_gmv": "扩流测试",
+            "low_roi_high_gmv": "效率复核",
+            "low_roi_low_gmv": "降投排查",
+        },
         "signalCount": len(signals),
         "createdTaskCount": len(tasks),
         "candidateCount": candidate_count,
         "reportSeedOnlyCount": report_only_count,
         "tasks": tasks,
         "topSignals": signals[:20],
-        "rule": "V12.4：日报/周报不再只依赖已生成任务；趋势信号、候选任务、观察项和执行任务共同构成日报/周报基础。",
+        "rule": "V12.4.1：运营主轴为 ROI 与 GMV；库存、流量、点击、转化、售后、毛利用于解释 ROI/GMV 并生成动作。日报/周报由执行任务、候选任务、趋势信号和观察项共同生成。",
     }
 
 
@@ -589,18 +659,22 @@ def operating_cadence_summary(limit: int = 40) -> Dict[str, Any]:
     by_status: Dict[str, int] = defaultdict(int)
     by_window: Dict[str, int] = defaultdict(int)
     by_report: Dict[str, int] = defaultdict(int)
+    by_quadrant: Dict[str, int] = defaultdict(int)
     for item in items:
         by_status[str(item.get("status") or "unknown")] += 1
         by_window[str((item.get("window") or {}).get("windowType") or "unknown")] += 1
         by_report[str(item.get("reportTarget") or "unknown")] += 1
+        by_quadrant[str((item.get("roiGmvQuadrant") or {}).get("quadrant") or "unknown")] += 1
     return {
         "version": OPERATING_CADENCE_VERSION,
+        "primaryAxis": "ROI_GMV",
         "signalCount": len(items),
         "byStatus": dict(by_status),
         "byWindow": dict(by_window),
         "byReportTarget": dict(by_report),
+        "byRoiGmvQuadrant": dict(by_quadrant),
         "dailyReportSeeds": [item for item in items if "日报" in str(item.get("reportTarget"))][:12],
         "weeklyReportSeeds": [item for item in items if "周报" in str(item.get("reportTarget"))][:12],
         "items": items,
-        "rule": "日报/周报由执行任务、候选任务、趋势信号和观察项共同生成；上传频率越高，短周期波动权重越高。",
+        "rule": "日报/周报优先围绕 ROI、GMV、广告消耗展示，再用库存、流量、点击、转化、退款、毛利解释原因。",
     }
