@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.4.1
+12.5.0
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.4.1 means: V12.4 operating cadence task system + ROI/GMV centred task priority. ROI and GMV/payment amount are the primary operating axes; inventory, traffic, click rate, conversion rate, refund rate, margin, and ad spend explain why ROI/GMV moved and which operating action should be tested. Daily/weekly reports prioritize ROI, GMV and ad spend before secondary evidence.
+- V12.5 means: baseline-first task generation + unified dashboard/todo task source. The first imported report establishes product/store/ROI/GMV baseline and may only create red-line, data-quality, or evidence-blocking tasks. ROI/GMV operating tasks require at least two comparable reports; 3/7/14/30/90 day trend tasks require enough cadence. Dashboard and Todo both hydrate from `/api/modules/todo`, so generated tasks are visible with full SOP content in the task page.
