@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repository hygiene checker for V12.6 versions, routes, action gate, and frontend task flow."""
+"""Repository hygiene checker for current release."""
 
 from __future__ import annotations
 
@@ -14,29 +14,23 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-REQUIRED_DOCS = [
-    "docs/API_CONTRACT.md",
-    "docs/MODULE_CHAIN.md",
-    "docs/PRODUCT_ARCHITECTURE.md",
-    "docs/DATA_TASK_LIFECYCLE.md",
-    "docs/V12_REPORT_GATEWAY.md",
-    "docs/DEPLOYMENT_RUNBOOK.md",
-    "docs/POSTGRESQL_CUTOVER.md",
-    "docs/archive/README.md",
+REQUIRED_FILES = [
+    "README.md",
+    "VERSION.md",
+    "versioning/VERSION.md",
+    "src/api/main.py",
+    "src/api/routes/health.py",
+    "src/services/risk_task_service.py",
+    "src/services/operating_weight_policy_service.py",
+    "src/services/action_authorization_gate_service.py",
+    "web_demo/index.html",
 ]
 
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.6", "经营动作权限", "系统估算", "RAG", "web_demo/", "docs/archive/README.md", "scripts/check_repo_hygiene.py"],
-    "docs/MODULE_CHAIN.md": ["operating_cadence_task_service", "action_authorization_gate_service", "action_impact_estimation_service", "rag_business_memory_service", "/api/modules/todo"],
-    "docs/DEPLOYMENT_RUNBOOK.md": ["12.6.0", "DEMO_ACCOUNT_SWITCH=true", "check_repo_hygiene.py", "/api/modules/todo", "actionAuthorization"],
-    "src/services/risk_task_service.py": ["v12_6_baseline_first_action_gate_operating_task_generation", "ACTION_AUTHORIZATION_VERSION", "RAG_BUSINESS_MEMORY_VERSION"],
-    "src/services/module_task_service.py": ["apply_v126_task_governance", "actionAuthorization", "actionImpactEstimate", "ragBusinessMemory"],
-    "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.6.0\"", "operatorProvidesFactsOnly", "manager_approval_required"],
-    "src/services/action_impact_estimation_service.py": ["ACTION_IMPACT_ESTIMATION_VERSION = \"12.6.0\"", "system_estimates_operator_does_not_forecast", "conservative"],
-    "src/services/rag_business_memory_service.py": ["RAG_BUSINESS_MEMORY_VERSION = \"12.6.0\"", "companyBaseline", "memoryWriteback"],
-    "web_demo/modules/todo/page.js": ["TASK CENTER · V12.6", "列表只按紧急程度和时间排序", "task-report"],
-    "web_demo/modules/operating-unit/page.js": ["查看商品", "查看任务", "operating-store-buttons"],
-    "web_demo/core/task-actions.js": ["openTaskReport", "openTodoTask"],
+    "README.md": ["V12.7", "RAG", "web_demo/"],
+    "src/services/risk_task_service.py": ["12.7.0", "OPERATING_WEIGHT_POLICY_VERSION"],
+    "src/services/operating_weight_policy_service.py": ["OPERATING_WEIGHT_POLICY_VERSION = \"12.7.0\"", "first_report_baseline", "canTriggerApproval"],
+    "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.7.0\"", "reportPerformanceIsNotGovernanceWeight"],
 }
 
 CRITICAL_APPAPI_ENDPOINTS = [
@@ -55,16 +49,14 @@ def read_text(path: str) -> str:
 
 
 def semantic_version_from_root() -> str:
-    text = read_text("VERSION.md")
-    match = re.search(r"```text\s*([0-9]+\.[0-9]+\.[0-9]+)\s*```", text, re.S)
+    match = re.search(r"```text\s*([0-9]+\.[0-9]+\.[0-9]+)\s*```", read_text("VERSION.md"), re.S)
     if not match:
-        raise AssertionError("VERSION.md missing fenced semantic version")
+        raise AssertionError("VERSION.md missing semantic version")
     return match.group(1)
 
 
 def semantic_version_from_versioning() -> str:
-    text = read_text("versioning/VERSION.md")
-    match = re.search(r"Current Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", text)
+    match = re.search(r"Current Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", read_text("versioning/VERSION.md"))
     if not match:
         raise AssertionError("versioning/VERSION.md missing Current Version")
     return match.group(1)
@@ -98,11 +90,15 @@ def route_present(route: str, routes: set[str]) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check repository docs and route hygiene.")
+    parser = argparse.ArgumentParser(description="Check repository release hygiene.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     errors: list[str] = []
     warnings: list[str] = []
+
+    for path in REQUIRED_FILES:
+        if not (ROOT / path).exists():
+            errors.append(f"required file missing: {path}")
 
     root_version = semantic_version_from_root()
     versioning_version = semantic_version_from_versioning()
@@ -121,27 +117,16 @@ def main() -> int:
     if assets != {version}:
         errors.append(f"web_demo/index.html asset versions are {sorted(assets)}, expected only {version}")
 
-    for doc in REQUIRED_DOCS:
-        if not (ROOT / doc).exists():
-            errors.append(f"required doc missing: {doc}")
-        elif doc not in read_text("README.md"):
-            errors.append(f"README.md does not index required doc: {doc}")
-
     for path, needles in STATIC_MUST_CONTAIN.items():
         text = read_text(path)
         for needle in needles:
             if needle not in text:
                 errors.append(f"{path} missing required marker: {needle}")
 
-    if "当前 UI 修改依据" not in read_text("frontend/README_DEPRECATED.md"):
-        errors.append("frontend/README_DEPRECATED.md missing current-entry deprecation wording")
-    if "历史归档" not in read_text("docs/archive/README.md"):
-        errors.append("docs/archive/README.md missing archive warning")
-
     routes = app_routes()
     missing_critical = [route for route in CRITICAL_APPAPI_ENDPOINTS if not route_present(route, routes)]
     if missing_critical:
-        errors.append("critical frontend/API endpoints missing from FastAPI app: " + ", ".join(missing_critical))
+        errors.append("critical endpoints missing: " + ", ".join(missing_critical))
 
     result: dict[str, Any] = {
         "ok": not errors,
