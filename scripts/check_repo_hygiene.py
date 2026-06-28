@@ -24,20 +24,25 @@ REQUIRED_FILES = [
     "src/api/routes/modules/task_report.py",
     "src/services/risk_task_service.py",
     "src/services/task_cluster_service.py",
-    "src/services/task_report_service.py",
+    "src/services/task_lifecycle_orchestrator_service.py",
+    "src/services/task_recap_scheduler_service.py",
+    "src/services/rag_feedback_loop_service.py",
+    "src/services/task_evidence_service.py",
+    "src/services/rag_business_memory_service.py",
     "src/services/operating_weight_policy_service.py",
     "src/services/action_authorization_gate_service.py",
     "web_demo/index.html",
 ]
 
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.7", "任务", "web_demo/"],
-    "src/services/risk_task_service.py": ["12.7.2", "TASK_CLUSTER_VERSION", "real_clustered_lifecycle"],
-    "src/services/task_cluster_service.py": ["TASK_CLUSTER_VERSION = \"12.7.2\"", "backend_real_task_lifecycle_cluster", "affectedProducts"],
-    "src/services/task_report_service.py": ["12.7.2", "affectedProducts", "fallbackDetail"],
-    "src/api/routes/modules/todo.py": ["TODO_VERSION = \"12.7.2\"", "_memory_or_repo_transition", "cluster_open_tasks"],
-    "src/api/routes/modules/task_report.py": ["TASK_REPORT_ROUTE_VERSION = \"12.7.2\""],
-    "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.7.2\"", "inventorySignalsBeforeCreativeWords"],
+    "README.md": ["V12.8", "任务生命周期", "RAG", "web_demo/"],
+    "src/services/risk_task_service.py": ["12.8.0", "TASK_LIFECYCLE_VERSION", "RECAP_SCHEDULER_VERSION", "RAG_FEEDBACK_LOOP_VERSION"],
+    "src/services/task_lifecycle_orchestrator_service.py": ["TASK_LIFECYCLE_VERSION = \"12.8.0\"", "complete_recap_and_create_rag_candidate", "lifecycle_snapshot"],
+    "src/services/task_recap_scheduler_service.py": ["RECAP_SCHEDULER_VERSION = \"12.8.0\"", "schedule_recap_cycles", "complete_recap_cycle"],
+    "src/services/rag_feedback_loop_service.py": ["RAG_FEEDBACK_LOOP_VERSION = \"12.8.0\"", "build_rag_candidate_from_recap", "retrieve_rag_feedback_for_task"],
+    "src/services/task_evidence_service.py": ["EVIDENCE_VERSION = \"12.8.0\"", "handle_evidence_submitted", "handle_manager_reviewed"],
+    "src/services/rag_business_memory_service.py": ["RAG_BUSINESS_MEMORY_VERSION = \"12.8.0\"", "approvedExperienceCards", "feedbackLoop"],
+    "src/api/routes/modules/todo.py": ["TODO_VERSION = \"12.8.0\"", "lifecycle_summary", "complete_recap_and_create_rag_candidate"],
     "src/services/operating_weight_policy_service.py": ["OPERATING_WEIGHT_POLICY_VERSION = \"12.7.0\"", "first_report_baseline", "canTriggerApproval"],
 }
 
@@ -48,6 +53,8 @@ CRITICAL_APPAPI_ENDPOINTS = [
     "/api/data/metric-facts/summary",
     "/api/data/data-gaps/summary",
     "/api/modules/todo",
+    "/api/modules/todo/lifecycle/summary",
+    "/api/modules/todo/{task_id}/recap/complete",
     "/api/modules/task-reports/tasks/{task_id}",
     "/api/system/reset-runtime-data",
 ]
