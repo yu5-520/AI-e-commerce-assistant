@@ -30,8 +30,6 @@ VERSION.md
 
 ## 2. 数据 / 报表导入链
 
-### 文件上传链路
-
 ```text
 web_demo/modules/report/page.js
 → AppApi.uploadReportFile()
@@ -46,37 +44,17 @@ web_demo/modules/report/page.js
 → trend_signal_service.ingest_product_trends
 → risk_task_service.generate_risk_tasks_for_signals
 → risk_task_v66_service 红线 / 证据闸门任务
-→ operating_cadence_task_service ROI/GMV主轴 + 上传频率 + 3/7/14/30/90 天节奏任务
+→ operating_cadence_task_service 首份报表基线 + ROI/GMV 对比任务
 → task_evidence_gate_service 按 metric_scope 取证
 → import_diagnostics_service.import_diagnostics
 → v116_import_closed_loop_service
+→ AppApi.refreshAfterDataImport()
+→ AppApi.refreshTaskState()
+→ /api/modules/todo
 → dashboard / operating-unit / product / todo / log 反查
 ```
 
-### 数据源同步链路
-
-```text
-web_demo/modules/report/page.js
-→ AppApi.dataSourceConnections()
-→ GET /api/data/source-connections
-→ src/api/routes/data_source_compat.py
-→ data_source_connection_service.list_data_source_connections
-
-web_demo/modules/report/page.js
-→ AppApi.syncDataSource(sourceId)
-→ POST /api/data/source-connections/{source_id}/sync
-→ src/api/routes/data_import.py
-→ data_source_connection_service
-→ _run_dataset_imports_without_legacy_tasks
-→ operating_object_store_service
-→ metric_fact_store_service
-→ data_gap_event_service
-→ trend_signal_service
-→ risk_task_service
-→ operating_cadence_task_service
-→ import_diagnostics_service
-→ v116_import_closed_loop_service
-```
+数据源同步链路同样经过 `operating_cadence_task_service`，并在导入后刷新 `/api/modules/todo`。
 
 ## 3. 报表布局 Agent 与事实表链
 
@@ -105,20 +83,15 @@ web_demo/modules/product/page.js
 
 事实表未命中显示“未识别”，不能显示 0，不能回读对象缓存。
 
-## 5. ROI/GMV 经营节奏任务链
-
-V12.4.1 后，任务不再平铺所有指标，也不只来自单一基线报警。运营主轴是 ROI 和 GMV。
+## 5. V12.5 基线优先任务链
 
 ```text
 product_metric_facts
 → operating_cadence_task_service._upload_cadence
-→ 3 / 7 / 14 / 30 / 90 天窗口判断
-→ ROI + GMV/payment_amount 四象限
-→ 高 ROI + 高 GMV：放量承接
-→ 高 ROI + 低 GMV：扩流测试
-→ 低 ROI + 高 GMV：效率复核
-→ 低 ROI + 低 GMV：降投排查
-→ 库存 / 流量 / 点击 / 转化 / 退款 / 毛利 / 广告消耗解释原因
+→ baselineMode / comparisonReady / trendReady
+→ 1份报表：baseline_snapshot，只建商品/店铺/ROI/GMV/库存/广告/转化基线
+→ 2份报表：允许环比 ROI/GMV 经营任务
+→ 3份报表或7天窗口：允许 3/7/14/30/90 天趋势任务
 → 红线硬规则：urgent_execution
 → 非红线波动：daily_operating_task / weekly_review_task / candidate_only / report_seed_only
 → task_evidence_gate_service.apply_evidence_gate_to_created_task
@@ -130,14 +103,29 @@ product_metric_facts
 边界：
 
 ```text
+首份报表不生成扩流、加投、降投、转化排查等经营测试任务。
 红线由硬规则控制，Agent 不允许降级。
 ROI/GMV 是任务优先级主轴。
 库存、流量、点击率、转化率、退款率、毛利率、广告消耗是解释指标。
 日报/周报基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项。
-日报/周报优先围绕 ROI、GMV、广告消耗组织。
 ```
 
-## 6. 任务模块链
+## 6. 总览 / 任务栏统一任务源
+
+```text
+/api/modules/dashboard
+→ todayWorkbench.todayPriorityTasks
+
+web_demo/modules/todo/page.js
+→ AppApi.refreshTaskState()
+→ GET /api/modules/todo
+→ AppTaskStore.hydrate(tasks, events, counters)
+→ visibleTaskQueue(activeTasks)
+```
+
+验收点：总览能看到的任务，进入任务栏后必须从 `/api/modules/todo` 同步到 `AppTaskStore`，不能只读本地空队列。
+
+## 7. 任务模块链
 
 ```text
 business_signals_v6
@@ -154,7 +142,7 @@ business_signals_v6
 
 任务页默认承接高风险、高时效和 daily_operating_task；普通缺口只留在 data_gap_events，不制造前端待办。
 
-## 7. 任务详情 / 报告链
+## 8. 任务详情 / 报告链
 
 ```text
 web_demo/modules/task-report/page.js
@@ -165,7 +153,7 @@ web_demo/modules/task-report/page.js
 → evidenceGate / metricFacts / cadence / ROI-GMV quadrant / dataVersion
 ```
 
-## 8. 系统诊断 / 清空运行态链
+## 9. 系统诊断 / 清空运行态链
 
 ```text
 web_demo/modules/system-status/page.js
@@ -177,7 +165,7 @@ web_demo/modules/system-status/page.js
 
 清空后 `operating_cadence_signals` 也必须被清理。
 
-## 9. 账号权限链
+## 10. 账号权限链
 
 ```text
 web_demo/modules/account/page.js
@@ -191,7 +179,7 @@ web_demo/modules/account/page.js
 
 ECS Demo 只有 `DEMO_ACCOUNT_SWITCH=true` 时允许切换账号。
 
-## 10. SaaS 数据隔离链
+## 11. SaaS 数据隔离链
 
 ```text
 Request Headers / Session
@@ -201,7 +189,7 @@ Request Headers / Session
 → tenant_id + org_id + store scope + deleted_at
 ```
 
-## 11. LLM / Agent 链
+## 12. LLM / Agent 链
 
 ```text
 /api/modules/agents
