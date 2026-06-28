@@ -1,4 +1,4 @@
-"""Task report service for V12.8 lifecycle reports."""
+"""Task report service for V12.8.1 lifecycle reports."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.services.account_service import get_user
 from src.services.module_task_service import find_task, list_tasks
 from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_snapshot
 
-REPORT_VERSION = "12.8.0"
+REPORT_VERSION = "12.8.1"
 
 ROLE_INSIGHTS = {
     "owner": {"title": "Owner view", "summary": "Focus on budget, margin and accountability.", "focus": ["margin", "budget", "accountability"], "hidden": []},
