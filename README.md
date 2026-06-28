@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：**V12.4.0 经营节奏任务系统**。
+当前基线：**V12.4.1 ROI/GMV 中心化经营任务权重**。
 
-V12.4 不推翻 V12.3 文档治理，也不回退 V12.2 事实层。核心变化是：任务不再只由单一基线报警触发，而由 **红线硬规则 + 上传频率 + 3/7/14/30/90 天趋势周期 + Agent 经营判断 + 证据闸门** 共同驱动。日报 / 周报不再等“已生成任务”才有内容，而由执行任务、候选任务、趋势信号和观察项共同构成。
+V12.4.1 不推翻 V12.4 经营节奏任务系统。核心变化是：运营每天最关注的主轴从“指标平铺”收口到 **ROI 投产比 + GMV/支付金额**。库存、流量、点击率、转化率、退款率、毛利率、广告消耗不是独立噪音，而是解释 ROI/GMV 为什么变化、下一步该加投、降投、补货、换素材、查转化还是观察的证据。
 
 ## 当前执行入口
 
@@ -32,8 +32,9 @@ V12.4 不推翻 V12.3 文档治理，也不回退 V12.2 事实层。核心变化
 → 商品页从事实表读取指标，事实表未命中显示“未识别”
 → product ROI / traffic_source ROI / store ROI 三口径隔离
 → business_signals_v6 生成趋势信号
-→ operating_cadence_task_service 计算上传频率和趋势周期
-→ 红线任务强制生成，非红线波动由 Agent 判断生成日常经营任务或候选任务
+→ operating_cadence_task_service 计算上传频率和 3/7/14/30/90 天趋势周期
+→ ROI/GMV 四象限判断：放量承接 / 扩流测试 / 效率复核 / 降投排查
+→ 红线任务强制生成，非红线波动由 Agent 判断生成 ROI/GMV 经营任务或候选任务
 → task_evidence_gate_service 严格按 metric_scope 取证
 → 证据完整：经营执行任务
 → 关键证据缺失：补证任务
@@ -41,18 +42,34 @@ V12.4 不推翻 V12.3 文档治理，也不回退 V12.2 事实层。核心变化
 → 任务详情、证据提交、总管复核、日志留痕、RAG 候选
 ```
 
-## V12.4 经营节奏规则
+## V12.4.1 ROI/GMV 经营规则
 
 ```text
-3天：短波动，适合今日复核和异常检查。
-7天：小趋势，适合日报 / 周报重点和经营调整。
-14天：中短趋势，适合策略复盘。
-30天：中趋势，适合商品结构、店铺权重、主推品调整。
-90天：大趋势，适合类目方向、价格带和季节性判断。
-上传频率越高，短周期波动权重越高。
-红线任务不允许 Agent 降级；Agent 只负责解释和 SOP。
-非红线波动允许 Agent 在范围内判断是否生成日常经营任务、候选任务或观察项。
-日报 / 周报的基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项。
+ROI 是投放效率主指标。
+GMV/支付金额是经营规模主指标。
+广告消耗解释 ROI 是否被预算拉低或放大。
+库存和可售天数解释 GMV 能不能继续承接。
+流量、点击率、转化率解释 ROI/GMV 变化原因。
+退款率和毛利率解释 ROI/GMV 是否安全。
+```
+
+四象限：
+
+```text
+高 ROI + 高 GMV：放量承接，优先判断加投、补货、主推位承接。
+高 ROI + 低 GMV：扩流测试，优先判断曝光、人群、渠道和主推位。
+低 ROI + 高 GMV：效率复核，防止 GMV 放大但投产恶化。
+低 ROI + 低 GMV：降投排查，优先查素材、流量、转化、价格、库存、竞品。
+```
+
+日报 / 周报优先展示：
+
+```text
+ROI 变化最大的商品。
+GMV 增长或下滑最明显的商品。
+广告消耗上升但 ROI 转弱的商品。
+ROI 好但库存不足的机会商品。
+ROI / GMV 同时转弱的排查商品。
 ```
 
 ## 当前主文档
@@ -63,7 +80,7 @@ docs/MODULE_CHAIN.md              AI 修改仓库的模块链定位图
 docs/PRODUCT_ARCHITECTURE.md      当前产品结构和模块边界
 docs/DATA_TASK_LIFECYCLE.md       数据、事实、缺口、任务、复核生命周期
 docs/V12_REPORT_GATEWAY.md        V12/V12.2 报表布局 Agent 和指标事实层
-docs/DEPLOYMENT_RUNBOOK.md        V12.4 服务器部署和排障 SOP
+docs/DEPLOYMENT_RUNBOOK.md        V12.4.1 服务器部署和排障 SOP
 docs/POSTGRESQL_CUTOVER.md        PostgreSQL 主写切换边界
 docs/archive/README.md            历史文档归档规则
 scripts/verify_release.py         版本一致性验收脚本
@@ -87,7 +104,7 @@ scripts/check_repo_hygiene.py     仓库文档和链路卫生检查脚本
 /api/accounts/switch                   ECS Demo 账号切换验证
 /api/data/source-connections           数据源接口契约
 /api/data/upload/preview               上传文件预览 + 报表布局画像
-/api/data/upload/confirm               上传确认导入 + 经营对象 / block事实 / 缺口 / 诊断 / 经营节奏同步
+/api/data/upload/confirm               上传确认导入 + 经营对象 / block事实 / 缺口 / 诊断 / ROI-GMV经营节奏同步
 /api/data/metric-facts/summary         指标事实表统计
 /api/data/data-gaps/summary            数据缺口池统计
 /api/data/import-diagnostics           Sheet → Block → Fact → Gap → Staging 诊断
@@ -97,18 +114,17 @@ scripts/check_repo_hygiene.py     仓库文档和链路卫生检查脚本
 /api/system/postgres-cutover-check     PostgreSQL 主写切换前检查
 ```
 
-## V12.4 硬规则
+## V12.4.1 硬规则
 
 ```text
 VERSION.md、versioning/VERSION.md、FastAPI app.version、health.API_VERSION、web_demo/index.html 资源版本必须一致。
 README 只做当前入口索引，不堆历史流水账。
 API_CONTRACT 只记录当前真实可用 API。
 MODULE_CHAIN 只记录当前执行链路，不能把 frontend/ 作为当前入口。
-DEPLOYMENT_RUNBOOK 必须跟随当前版本，不允许停留在旧版本。
 事实表未命中的指标显示“未识别”，不能显示 0，不能读对象缓存。
 product ROI、traffic_source ROI、store ROI 互相隔离，不能跨口径覆盖。
 普通缺口只进入 data_gap_events；只有阻塞经营判断的关键证据缺失，才生成补证任务。
-红线由硬规则控制；波动由 Agent 判断；证据闸门阻止无证据高风险执行。
+红线由硬规则控制；ROI/GMV 波动由 Agent 判断；证据闸门阻止无证据高风险执行。
 日报 / 周报不能只依赖已生成任务，必须能承接候选任务、趋势信号和观察项。
 ```
 
@@ -124,21 +140,4 @@ bash scripts/deploy_fast.sh
 
 ```bash
 bash scripts/deploy_atomic.sh
-```
-
-完整严格发布：
-
-```bash
-LIGHT_DEPLOY=0 ROUTE_GUARD_MODE=strict RUNTIME_ROUTE_GUARD=strict bash scripts/deploy_atomic.sh
-```
-
-## 验收入口
-
-```bash
-python scripts/verify_release.py
-python scripts/check_repo_hygiene.py
-curl http://127.0.0.1:8000/api/health
-curl http://127.0.0.1:8000/api/data/source-connections
-curl http://127.0.0.1:8000/api/data/import-diagnostics
-curl http://127.0.0.1:8000/api/system/runtime-diagnostics
 ```
