@@ -1,29 +1,33 @@
-"""Task report service for V11.8 structured SOP task packages.
+"""Task report service for V12.7.2.
 
-The detail page no longer invents a legacy fallback report from old task fields.
-If a task lacks taskDetailReport, the UI should show a clear structure-missing
-state and ask the user to regenerate the task from the new chain.
+The report page supports backend batch tasks and returns a usable report for any
+existing task. A missing taskDetailReport becomes a structured fallback report;
+it is not an HTTP 500 path.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from src.services.account_service import get_user
-from src.services.module_task_service import list_tasks
+from src.services.module_task_service import find_task, list_tasks
 
 ROLE_INSIGHTS = {
-    "owner": {"title": "老板战略视角", "summary": "重点看预算、利润、售后和组织责任是否闭环。", "focus": ["利润影响", "组织瓶颈", "预算是否继续放大", "责任链是否闭环"], "hidden": []},
-    "manager": {"title": "店群管理视角", "summary": "重点判断任务是否拆给正确运营、提交证据是否充分、同类问题是否反复出现。", "focus": ["派发对象", "处理进度", "复核质量", "退回原因"], "hidden": ["跨店群老板级归因"]},
-    "operator": {"title": "运营执行视角", "summary": "重点看我为什么要处理、要检查哪些字段、处理完提交什么证据。", "focus": ["执行清单", "字段检查", "提交证据", "退回补充"], "hidden": ["财务利润细节", "其他运营任务", "组织瓶颈"]},
-    "finance": {"title": "财务经营视角", "summary": "重点看退款成本、广告消耗、利润承接、库存资金和数据可信度。", "focus": ["利润承接", "退款成本", "ROI 可信度", "库存资金"], "hidden": ["运营派发按钮", "人员复核动作"]},
-    "observer": {"title": "只读摘要视角", "summary": "只确认风险已进入流程、当前状态和最终归档结果。", "focus": ["风险状态", "处理进度", "归档结果"], "hidden": ["财务细节", "人员绩效", "任务责任链"]},
+    "owner": {"title": "Owner view", "summary": "Focus on budget, margin and accountability.", "focus": ["margin", "budget", "accountability"], "hidden": []},
+    "manager": {"title": "Manager view", "summary": "Focus on assignment, progress and review quality.", "focus": ["assignment", "progress", "review"], "hidden": []},
+    "operator": {"title": "Operator view", "summary": "Focus on what to do, what data to check, and what proof to submit.", "focus": ["steps", "evidence", "submission"], "hidden": []},
+    "finance": {"title": "Finance view", "summary": "Focus on margin, refunds, ad spend and inventory cash.", "focus": ["margin", "refund", "ad spend", "inventory"], "hidden": []},
+    "observer": {"title": "Read-only view", "summary": "Focus on status and archive result.", "focus": ["status", "result"], "hidden": []},
 }
 
 
 def _now() -> str:
     return datetime.now().isoformat()
+
+
+def _as_list(value: Any) -> List[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _apply_role_insight(report: Dict[str, Any], user_id: str | None = None) -> Dict[str, Any]:
@@ -37,30 +41,39 @@ def _apply_role_insight(report: Dict[str, Any], user_id: str | None = None) -> D
     return report
 
 
+def _task_lookup(task_id: str, user_id: str | None = None) -> Dict[str, Any] | None:
+    task = next((item for item in list_tasks(active_only=False, viewer_id=user_id) if item.get("id") == task_id), None)
+    return task or find_task(task_id)
+
+
 def _structure_missing_report(task_id: str, user_id: str | None = None, task: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    title = (task or {}).get("title") or task_id
     report = {
         "reportId": f"RPT-STRUCTURE-MISSING-{task_id}",
         "reportType": "structure_missing",
+        "version": "12.7.2",
         "module": "task",
-        "sourceModule": "V11.8任务结构守卫",
+        "sourceModule": "task_report_service",
         "sourceRoute": "business-actions",
-        "entityId": task_id,
+        "entityId": (task or {}).get("entityId") or (task or {}).get("productId") or task_id,
         "taskId": task_id,
-        "taskStatus": (task or {}).get("status") or "结构缺失",
+        "taskStatus": (task or {}).get("status") or "structure_missing",
         "generatedAt": _now(),
-        "title": f"任务结构缺失｜{task_id}",
-        "warningSummary": "该任务不是由 V11.8 经营对象 + 指标证据 + SOP 任务包生成，已禁止用旧字段自动拼接详情报告。",
-        "riskLevel": (task or {}).get("priority") or "中",
-        "evidence": [{"label": "缺失结构", "value": "taskDetailReport / evidencePack / sopSteps / ownership"}],
-        "aiAssessment": "旧任务详情兜底已删除。请重新从经营对象主档和指标证据生成结构化任务。",
-        "suggestedActions": ["返回数据页重新生成任务", "检查经营对象是否已入库", "确认任务是否来自 V11.8 SOP 任务包"],
-        "operationChecklist": ["确认商品/店铺归属", "确认指标证据", "重新生成 SOP 任务包"],
-        "dataNeeded": ["经营对象主档", "指标证据", "趋势信号", "权限归属"],
-        "humanDecision": ["是否重新生成任务", "是否归档旧任务"],
-        "nextStep": "重新导入或重新生成任务，直到任务包含 taskDetailReport。",
-        "agentBoundary": "详情页只展示任务生成链路写入的结构化报告，不再编造兜底报告。",
-        "fallbackDetail": False,
+        "title": f"Task detail pending | {title}",
+        "warningSummary": "The task exists but has no complete taskDetailReport. The page returns a structured fallback instead of failing.",
+        "riskLevel": (task or {}).get("priority") or "medium",
+        "evidence": (task or {}).get("evidencePack") or [],
+        "suggestedActions": (task or {}).get("sopSteps") or ["Accept the task", "Submit execution proof", "Retry detail report after refresh"],
+        "operationChecklist": (task or {}).get("sopSteps") or ["Check store and product ownership", "Check metric evidence", "Submit execution note"],
+        "affectedProducts": (task or {}).get("affectedProducts") or [],
+        "affectedProductCount": (task or {}).get("affectedProductCount") or 0,
+        "actionAuthorization": (task or {}).get("actionAuthorization"),
+        "actionImpactEstimate": (task or {}).get("actionImpactEstimate"),
+        "ragBusinessMemory": (task or {}).get("ragBusinessMemory"),
+        "nextStep": "Continue from the task queue. Detail gaps do not block task lifecycle actions.",
+        "fallbackDetail": True,
         "structureMissing": True,
+        "failClosed": False,
         "relatedTask": task,
     }
     return _apply_role_insight(report, user_id)
@@ -69,35 +82,42 @@ def _structure_missing_report(task_id: str, user_id: str | None = None, task: Di
 def _report_from_structured_task(task: Dict[str, Any], task_id: str, user_id: str | None = None) -> Dict[str, Any]:
     detail = dict(task.get("taskDetailReport") or {})
     card = task.get("taskCard") or {}
+    title = card.get("title") or task.get("title") or task_id
     detail.setdefault("reportId", f"RPT-TASK-{task_id}")
     detail.setdefault("reportType", "task")
+    detail["version"] = "12.7.2"
     detail.setdefault("module", "task")
-    detail.setdefault("sourceModule", task.get("sourceModule") or "V11.8 SOP任务包")
+    detail.setdefault("sourceModule", task.get("sourceModule") or "SOP task package")
     detail.setdefault("sourceRoute", task.get("sourceRoute") or "business-actions")
     detail.setdefault("entityId", task.get("entityId") or task.get("productId") or task_id)
     detail.setdefault("taskId", task_id)
-    detail.setdefault("taskStatus", task.get("status"))
+    detail["taskStatus"] = task.get("status")
     detail.setdefault("generatedAt", _now())
-    detail.setdefault("title", f"任务详情报告｜{card.get('title') or task.get('title') or task_id}")
-    detail.setdefault("warningSummary", task.get("reason") or "结构化 SOP 任务。")
-    detail.setdefault("riskLevel", task.get("priority") or "中")
-    detail.setdefault("evidence", task.get("evidencePack") or task.get("evidence") or [])
-    detail.setdefault("suggestedActions", task.get("sopSteps") or [])
-    detail.setdefault("operationChecklist", task.get("sopSteps") or [])
-    detail.setdefault("dataNeeded", ["经营对象主档", "指标证据", "复核截图或数据"])
-    detail.setdefault("humanDecision", ["是否完成处理", "是否提交复核", "是否需要补充数据"])
-    detail.setdefault("nextStep", "按 SOP 完成处理，并提交证据给复核人。")
+    detail.setdefault("title", f"Task report | {title}")
+    detail.setdefault("warningSummary", task.get("reason") or "Structured task report.")
+    detail.setdefault("riskLevel", task.get("priority") or "medium")
     detail["taskCard"] = card
+    detail["evidence"] = task.get("evidencePack") or task.get("evidence") or detail.get("evidence") or []
     detail["evidencePack"] = task.get("evidencePack") or detail.get("evidencePack") or []
-    detail["sopSteps"] = task.get("sopSteps") or detail.get("sopSteps") or []
+    detail["sopSteps"] = _as_list(task.get("sopSteps")) or _as_list(detail.get("sopSteps")) or _as_list(detail.get("suggestedActions"))
+    detail["suggestedActions"] = _as_list(detail.get("suggestedActions")) or detail["sopSteps"]
+    detail["operationChecklist"] = _as_list(detail.get("operationChecklist")) or detail["sopSteps"]
     detail["reviewMetrics"] = task.get("reviewMetrics") or detail.get("reviewMetrics") or {}
     detail["completionGate"] = task.get("completionGate") or detail.get("completionGate") or []
     detail["failureThreshold"] = task.get("failureThreshold") or detail.get("failureThreshold") or {}
     detail["ownership"] = task.get("ownership") or {}
     detail["agentJudgment"] = task.get("agentJudgment") or {}
+    detail["actionAuthorization"] = task.get("actionAuthorization") or detail.get("actionAuthorization")
+    detail["actionImpactEstimate"] = task.get("actionImpactEstimate") or detail.get("actionImpactEstimate")
+    detail["ragBusinessMemory"] = task.get("ragBusinessMemory") or detail.get("ragBusinessMemory")
+    detail["affectedProducts"] = task.get("affectedProducts") or detail.get("affectedProducts") or []
+    detail["affectedProductCount"] = task.get("affectedProductCount") or len(detail["affectedProducts"])
+    detail["batchTask"] = bool(task.get("batchTask"))
+    detail["taskClusterVersion"] = task.get("taskClusterVersion") or detail.get("taskClusterVersion")
     detail["relatedTask"] = task
     detail["fallbackDetail"] = False
     detail["structureMissing"] = False
+    detail["failClosed"] = False
     return _apply_role_insight(detail, user_id)
 
 
@@ -106,7 +126,7 @@ def get_candidate_report(module: str, entity_id: str, user_id: str | None = None
 
 
 def get_task_report(task_id: str, user_id: str | None = None) -> Dict[str, Any] | None:
-    task = next((item for item in list_tasks(active_only=False, viewer_id=user_id) if item.get("id") == task_id), None)
+    task = _task_lookup(task_id, user_id)
     if not task:
         return _structure_missing_report(task_id, user_id)
     if not task.get("taskDetailReport"):
