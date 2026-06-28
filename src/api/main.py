@@ -14,7 +14,7 @@ from src.services.v112_task_chain_fix_service import apply_v112_task_chain_fix
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "12.5.0"
+API_VERSION = "12.6.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 V112_TASK_CHAIN_FIX = apply_v112_task_chain_fix()
@@ -28,7 +28,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_5": "baseline_first_tasks_and_unified_todo_source"}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_6": "rag_action_permission_gate_and_system_estimation"}
 
 
 app.include_router(modules.router)
