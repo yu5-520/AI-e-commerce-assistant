@@ -34,9 +34,7 @@
     const taskCount = Number(row.activeTaskCount || 0);
     const storeName = row.displayName || row.storeName || "店铺";
     const storeId = row.storeId || storeName;
-    const action = taskCount > 0
-      ? `<button type="button" data-store-task="${s(storeId)}">查看任务</button>`
-      : `<button type="button" data-store-products="${s(storeId)}">查看店铺</button>`;
+    const action = `<div class="operating-store-buttons"><button type="button" data-store-products="${s(storeId)}">查看商品</button>${taskCount > 0 ? `<button type="button" data-store-task="${s(storeId)}">查看任务</button>` : ""}</div>`;
     return `<article class="operating-store-card ${s(row.level || "watch")}">
       <div class="operating-store-main">
         <div>
