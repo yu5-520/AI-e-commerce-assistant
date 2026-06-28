@@ -1,5 +1,5 @@
-Current Version: 12.6.1
+Current Version: 12.7.0
 
-V12.6.1｜商品档案 findOpenTask 前端断点修复
+V12.7 weight confidence policy
 
-主线：保留 V12.6 的 RAG经营动作权限闸门、系统估算、自动确认/主管审批流，同时修复商品档案页进入后因任务动作桥接函数不完整导致的 `findOpenTask is not a function`。现在 AppTaskStore 和 AppTaskActions 都提供 findOpenTask，task-actions 兼容旧缓存和空任务池，任务查询失败不会阻断商品档案渲染。
+V12.7 keeps the V12.6 action gate and system-side estimation flow, and changes the high-weight decision rule. Report performance labels such as high ROI, high GMV, click rate movement, conversion movement, task priority, product lifecycle tags, and first-report baseline tags cannot by themselves create high-weight store or product approval protection. High weight must come from explicit RAG or company configuration, manager marking, owner marking, or multi-period historical contribution with source and confidence. First imported reports default to middle or unknown weight, low confidence, and first_report_baseline source.
