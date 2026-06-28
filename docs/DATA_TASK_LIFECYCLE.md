@@ -1,8 +1,8 @@
 # DATA_TASK_LIFECYCLE
 
-本文件只记录当前产品从数据到事实、缺口、ROI/GMV 经营判断、任务、复核、复盘和演示清空的主链路。
+本文件只记录 **V12.8.1 当前产品从数据到任务生命周期、自动复盘、RAG反馈增强的主链路**。历史版本流程不得放在本文件占据当前判断位置。
 
-## 1. 主生命周期
+## 1. 当前主生命周期
 
 ```text
 报表导入 / 接口同步
@@ -22,14 +22,21 @@
 → ROI/GMV 四象限判断
 → 库存、流量、点击、转化、退款、毛利、广告消耗解释 ROI/GMV 变化
 → task_evidence_gate_service 按 metric_scope 取证
-→ 高风险红线任务 / ROI-GMV 日常经营任务 / 周期复盘候选 / 补证任务
-→ 运营接收
-→ 运营提交证据
-→ 总管复核
-→ 老板查看结果
-→ 日志留痕
-→ RAG 记忆候选
-→ v116 导入闭环反查
+→ rag_business_memory_service 读取公司基线 + approved/effective 经验卡
+→ action_impact_estimation_service 系统估算动作影响
+→ operating_weight_policy_service 判断权重来源与置信度
+→ action_authorization_gate_service 判断账号权限和审批路径
+→ task_cluster_service 生成后端真实聚合任务
+→ task_lifecycle_orchestrator_service 挂载 taskLifecycle
+→ /api/modules/todo 返回任务池
+→ 运营接收任务
+→ 运营提交处理材料 / evidence
+→ 主管复核材料
+→ task_recap_scheduler_service 自动生成复盘周期
+→ 系统按后续事实表/报表完成复盘
+→ rag_feedback_loop_service 生成RAG候选
+→ 人工审核 approved
+→ 下一次任务生成召回 approved/effective 经验卡
 ```
 
 ## 2. 导入阶段
@@ -59,7 +66,6 @@ web_demo/modules/report/page.js
 - 触发 ROI/GMV 经营节奏判断。
 - 触发任务证据闸门。
 - 触发模块刷新契约。
-- 执行 v116 闭环反查。
 
 ## 3. 报表布局与事实阶段
 
@@ -104,13 +110,14 @@ GMV / 支付金额 = 经营规模主指标
 退款率 / 毛利率 = ROI/GMV 是否安全的解释指标
 ```
 
-四象限：
+任务生成必须遵守基线优先：
 
 ```text
-高 ROI + 高 GMV → 放量承接任务
-高 ROI + 低 GMV → 扩流测试任务
-低 ROI + 高 GMV → 效率复核任务
-低 ROI + 低 GMV → 降投排查任务
+1份报表：只建 baseline_snapshot，非红线不生成经营测试任务。
+2份报表：允许环比任务。
+3份报表或更长周期：允许 3/7/14/30/90 天趋势任务。
+红线风险：可立即生成 urgent_execution。
+轻微波动：进入观察项 / 日报周报素材。
 ```
 
 ## 5. 数据缺口阶段
@@ -129,30 +136,7 @@ GMV / 支付金额 = 经营规模主指标
 - 这个证据影响哪个动作。
 - 补齐前系统不会生成什么高风险建议。
 
-## 6. 标签、趋势和经营节奏阶段
-
-趋势不是单点指标，必须支持变化判断：
-
-- 3天短波动。
-- 7天小趋势。
-- 14天中短趋势。
-- 30天中趋势。
-- 90天大趋势。
-- 上传频率。
-- ROI / GMV 变化方向。
-- 广告、库存、流量、点击、转化、退款、毛利的解释联动。
-
-经营信号进入任务前，必须能说明：
-
-- 哪个商品、店铺或流量来源触发。
-- 来自哪个数据版本。
-- ROI 和 GMV 如何变化。
-- 解释指标是什么。
-- metric_scope 是 product、traffic_source 还是 store。
-- 为什么需要人工介入。
-- 是否具备关键证据。
-
-## 7. 任务生成阶段
+## 6. 任务生成阶段
 
 任务必须包含：
 
@@ -172,6 +156,7 @@ GMV / 支付金额 = 经营规模主指标
 - requiredFactTables。
 - forbiddenCrossScope。
 - ROI/GMV 四象限或解释标签。
+- taskLifecycle。
 
 任务生成规则：
 
@@ -185,44 +170,81 @@ GMV / 支付金额 = 经营规模主指标
 轻微波动 → 观察项 / 日报周报素材。
 ```
 
-任务进入执行队列后，其他模块不再重复展示已完成任务。
+重复商品任务必须由后端 `task_cluster_service` 聚合成真实后端任务。前端不得再次做同类任务聚合。
 
-## 8. 执行和复核阶段
+## 7. 任务生命周期阶段
+
+生命周期阶段：
 
 ```text
-总管派发
-→ 运营接收
-→ 运营提交
-→ 总管复核
-→ 老板查看
-→ 日志 / RAG 候选
+generated                 生成任务
+accepted                  接收任务
+evidence_submitted        提交处理材料
+manager_reviewed          主管复核
+recap_scheduled           生成自动复盘周期
+recap_completed           复盘完成
+rag_candidate_created     进入RAG候选
+rag_approved              RAG增强任务生成
+returned                  退回补充
+archived                  归档
 ```
 
 同一个 task id 在不同角色下展示不同视图：
 
-- 老板：查看进度和结果。
-- 总管：派发、复核、驳回。
-- 运营：接收、提交、补充。
+- 老板：查看进度、结果、预算和策略影响。
+- 总管：派发、复核、驳回、确认是否进入RAG。
+- 运营：接收、提交事实材料、补充处理证据。
 
-前端不展示“跨账号生命周期”工程标注，只展示任务状态、执行人、复核和证据。
+前端只展示任务状态、执行人、复核、生命周期阶段和详情入口；完整 SOP、证据链、自动复盘周期、RAG 候选状态进入任务详情页。
 
-## 9. 完成和留痕阶段
+## 8. 自动复盘阶段
 
-任务完成后必须：
+系统根据任务类型生成复盘周期：
 
-- 从待处理任务池中移出。
-- 同步更新来源模块展示状态。
-- 写入任务事件。
-- 写入日志。
-- 生成可复盘内容。
-- 必要时生成 RAG 记忆候选。
+```text
+活动任务 → T+3 / T+7
+素材/标题/主图测试 → T+3
+库存任务 → T+3 / T+7
+投放/ROI任务 → T+1 / T+3
+售后任务 → T+7
+```
+
+复盘指标：
+
+```text
+ROI
+GMV/支付金额
+访客数
+点击率
+转化率
+广告消耗
+库存消耗
+退款率
+毛利率
+```
+
+规则：运营不能手填 ROI/GMV/销量预测。运营只提交客观材料；系统从后续事实表/报表读取指标变化，生成 `autoRecapResult`。
+
+## 9. RAG 反馈增强阶段
+
+```text
+自动复盘完成
+→ rag_feedback_loop_service.build_rag_candidate_from_recap
+→ experience_memory_service.draft_experience_from_task
+→ status=pending_review
+→ owner / manager 人工审核
+→ status=approved 且 effective=true
+→ rag_business_memory_service 下次任务生成召回
+```
+
+边界：pending_review 只做候选，不直接增强任务生成。只有 approved/effective 经验卡可以进入后续任务生成。
 
 ## 10. 日报 / 周报阶段
 
 日报 / 周报不能只等已生成任务。
 
 ```text
-日报 / 周报基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项
+日报 / 周报基础 = 已生成任务 + 候选任务 + 趋势信号 + 观察项 + 自动复盘结果 + RAG候选状态
 ```
 
 优先结构：
@@ -233,6 +255,8 @@ GMV 增长 / 下滑最明显的商品
 广告消耗上升但 ROI 转弱的商品
 ROI 好但库存不足的机会商品
 ROI / GMV 同时转弱的排查商品
+复盘周期到达但效果未确认的任务
+可进入RAG的有效经验卡候选
 ```
 
 ## 11. 演示运行态清空阶段
@@ -240,7 +264,7 @@ ROI / GMV 同时转弱的排查商品
 Demo 测试反复导入时，清空必须反向删除完整派生链路：
 
 ```text
-任务 / 复核 / 提交
+RAG候选 / 复盘周期 / 任务 / 复核 / 提交
 → alert_events
 → business_signals_v6
 → operating_cadence_signals
@@ -252,24 +276,6 @@ Demo 测试反复导入时，清空必须反向删除完整派生链路：
 → report_records / import_records / workflow_runs
 → operating_products
 → operating_stores
-```
-
-清空后必须为 0：
-
-```text
-imported_report_rows
-data_snapshots
-metric_snapshots
-business_signals_v6
-operating_cadence_signals
-operating_products
-operating_stores
-product_metric_facts
-store_metric_facts
-traffic_source_facts
-data_gap_events
-task_status
-alert_events
 ```
 
 保留：账号、角色、权限、基础店铺配置。
