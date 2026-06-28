@@ -117,34 +117,33 @@
     return listActiveTasks().find((task) => taskMatches(task, entity)) || null;
   }
 
-  window.AppTaskStore = { hydrate, snapshot, listTasks, listActiveTasks, listLogs, listEvents, counters, upsert, subscribe };
+  function openTodoTask(taskId) {
+    window.AppRouter?.navigate?.("business-actions", taskId ? { focusTaskId: taskId } : null);
+  }
+  function openTaskReport(taskId) {
+    window.AppRouter?.navigate?.("task-report", taskId ? { taskId } : null);
+  }
+  function openCandidateReport(module, entityId) {
+    if (!module || !entityId) return;
+    window.AppRouter?.navigate?.("task-report", { module, entityId });
+  }
+  async function createTaskFromReport(module, entityId) {
+    if (!window.AppApi) return null;
+    const map = {
+      product: window.AppApi.createProductTask,
+      competitor: window.AppApi.createCompetitorTask,
+      listing: window.AppApi.createListingTask,
+      traffic: window.AppApi.createTrafficTask,
+      report: window.AppApi.createReportTask,
+    };
+    const fn = map[module];
+    if (!fn) return null;
+    const result = await fn(entityId);
+    if (result?.task) upsert(result.task);
+    return result;
+  }
 
-  window.AppTaskActions = {
-    findOpenTask,
-    openTodoTask(taskId) {
-      window.AppRouter?.navigate?.("business-actions", taskId ? { focusTaskId: taskId } : null);
-    },
-    openTaskReport(taskId) {
-      window.AppRouter?.navigate?.("task-report", taskId ? { taskId } : null);
-    },
-    openCandidateReport(module, entityId) {
-      if (!module || !entityId) return;
-      window.AppRouter?.navigate?.("task-report", { module, entityId });
-    },
-    async createTaskFromReport(module, entityId) {
-      if (!window.AppApi) return null;
-      const map = {
-        product: window.AppApi.createProductTask,
-        competitor: window.AppApi.createCompetitorTask,
-        listing: window.AppApi.createListingTask,
-        traffic: window.AppApi.createTrafficTask,
-        report: window.AppApi.createReportTask,
-      };
-      const fn = map[module];
-      if (!fn) return null;
-      const result = await fn(entityId);
-      if (result?.task) upsert(result.task);
-      return result;
-    },
-  };
+  const storeApi = { hydrate, snapshot, listTasks, listActiveTasks, listLogs, listEvents, counters, upsert, subscribe, findOpenTask, taskMatches };
+  window.AppTaskStore = storeApi;
+  window.AppTaskActions = { ...(window.AppTaskActions || {}), findOpenTask, openTodoTask, openTaskReport, openCandidateReport, createTaskFromReport };
 })();
