@@ -1,6 +1,6 @@
 # MODULE_CHAIN
 
-本文件是 AI 修改仓库时的模块定位地图。只记录当前执行链路，不记录历史版本流水账。
+本文件是 AI 修改仓库时的模块定位地图。只记录 **V12.8.1 当前执行链路**，不记录历史版本流水账。
 
 ## 0. 当前入口链
 
@@ -86,7 +86,25 @@ rag_candidate_created
 rag_approved
 ```
 
-## 4. 商品档案链
+## 4. 前端任务契约链
+
+```text
+web_demo/core/api-client.js
+→ AppApi.todo()
+→ GET /api/modules/todo
+→ AppApi.lifecycleSummary()
+→ GET /api/modules/todo/lifecycle/summary
+→ AppApi.completeRecapTodo(taskId, body)
+→ POST /api/modules/todo/{task_id}/recap/complete
+→ web_demo/modules/todo/page.js
+→ 只展示后端真实任务，不做前端二次聚合
+→ web_demo/modules/task-report/page.js
+→ 展示 taskLifecycle / recapCycles / ragCandidate
+```
+
+禁止：`todo/page.js` 出现本地 `clusterTasks()` 或写死旧 `12.7.1` 聚合版本。
+
+## 5. 商品档案链
 
 ```text
 web_demo/modules/product/page.js
@@ -100,7 +118,7 @@ web_demo/modules/product/page.js
 
 事实表未命中显示“未识别”，不能显示 0，不能回读对象缓存。
 
-## 5. 基线优先任务链
+## 6. 基线优先任务链
 
 ```text
 product_metric_facts
@@ -116,7 +134,7 @@ product_metric_facts
 → 日报 / 周报素材
 ```
 
-## 6. 权重置信度链
+## 7. 权重置信度链
 
 ```text
 经营任务 payload
@@ -128,7 +146,7 @@ product_metric_facts
 → auto_execute / manager_approval_required / owner_approval_required
 ```
 
-## 7. RAG 反馈链
+## 8. RAG 反馈链
 
 ```text
 复盘完成结果
@@ -142,7 +160,7 @@ product_metric_facts
 
 边界：pending_review 只做候选，不直接增强任务生成。
 
-## 8. 总览 / 任务栏统一任务源
+## 9. 总览 / 任务栏统一任务源
 
 ```text
 /api/modules/dashboard
@@ -155,4 +173,4 @@ web_demo/modules/todo/page.js
 → visibleTaskQueue(activeTasks)
 ```
 
-任务列表只显示紧急程度、截止时间、店铺、商品、状态、负责人和详情入口；完整 SOP、证据链、估算结果、权限判断、自动复盘周期和 RAG 候选放到任务详情页。
+任务列表只显示紧急程度、截止时间、店铺、商品、状态、负责人、生命周期阶段和详情入口；完整 SOP、证据链、估算结果、权限判断、自动复盘周期和 RAG 候选放到任务详情页。
