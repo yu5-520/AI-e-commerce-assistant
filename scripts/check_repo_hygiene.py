@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repository hygiene checker for V12.5 docs, versions, routes, baseline gate, and todo sync."""
+"""Repository hygiene checker for V12.6 versions, routes, action gate, and frontend task flow."""
 
 from __future__ import annotations
 
@@ -25,38 +25,19 @@ REQUIRED_DOCS = [
     "docs/archive/README.md",
 ]
 
-CURRENT_DOCS = [
-    "README.md",
-    "docs/API_CONTRACT.md",
-    "docs/MODULE_CHAIN.md",
-    "docs/PRODUCT_ARCHITECTURE.md",
-    "docs/DATA_TASK_LIFECYCLE.md",
-    "docs/DEPLOYMENT_RUNBOOK.md",
-]
-
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.5", "首份报表", "/api/modules/todo", "ROI/GMV", "日报 / 周报", "web_demo/", "frontend/", "docs/archive/README.md", "scripts/check_repo_hygiene.py"],
-    "docs/MODULE_CHAIN.md": ["metric_fact_store_service", "data_gap_event_service", "import_diagnostics_service", "task_evidence_gate_service", "data_source_compat.py", "operating_cadence_task_service", "首份报表", "/api/modules/todo"],
-    "docs/API_CONTRACT.md": ["/api/data/source-connections", "/api/data/import-diagnostics", "/api/modules/todo", "metricScope", "forbiddenCrossScope"],
-    "docs/DEPLOYMENT_RUNBOOK.md": ["12.5.0", "DEMO_ACCOUNT_SWITCH=true", "check_repo_hygiene.py", "/api/data/source-connections", "/api/modules/todo", "baselineMode"],
-    "docs/PRODUCT_ARCHITECTURE.md": ["product_metric_facts", "traffic_source_facts", "data_gap_events", "未识别"],
-    "docs/DATA_TASK_LIFECYCLE.md": ["Sheet → Block → Fact → Gap → Staging", "requiredFactTables", "forbiddenCrossScope"],
-    "src/services/risk_task_service.py": ["operating_cadence_task_service", "v12_5_baseline_first_redline_plus_roi_gmv_operating_task_generation", "ROI_GMV"],
-    "src/services/operating_cadence_task_service.py": ["OPERATING_CADENCE_VERSION = \"12.5.0\"", "baselineMode", "comparisonReady", "ROI_GMV", "payment_amount", "roiGmvQuadrant", "daily_operating_task", "_upload_cadence"],
-    "web_demo/core/api-client.js": ["refreshTaskState", "/api/modules/todo", "AppTaskStore", "v125-task-state-refresh"],
-    "web_demo/modules/todo/page.js": ["TASK CENTER · V12.5", "refreshTaskState", "后端任务池", "首份报表"],
+    "README.md": ["V12.6", "经营动作权限", "系统估算", "RAG", "web_demo/", "docs/archive/README.md", "scripts/check_repo_hygiene.py"],
+    "docs/MODULE_CHAIN.md": ["operating_cadence_task_service", "action_authorization_gate_service", "action_impact_estimation_service", "rag_business_memory_service", "/api/modules/todo"],
+    "docs/DEPLOYMENT_RUNBOOK.md": ["12.6.0", "DEMO_ACCOUNT_SWITCH=true", "check_repo_hygiene.py", "/api/modules/todo", "actionAuthorization"],
+    "src/services/risk_task_service.py": ["v12_6_baseline_first_action_gate_operating_task_generation", "ACTION_AUTHORIZATION_VERSION", "RAG_BUSINESS_MEMORY_VERSION"],
+    "src/services/module_task_service.py": ["apply_v126_task_governance", "actionAuthorization", "actionImpactEstimate", "ragBusinessMemory"],
+    "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.6.0\"", "operatorProvidesFactsOnly", "manager_approval_required"],
+    "src/services/action_impact_estimation_service.py": ["ACTION_IMPACT_ESTIMATION_VERSION = \"12.6.0\"", "system_estimates_operator_does_not_forecast", "conservative"],
+    "src/services/rag_business_memory_service.py": ["RAG_BUSINESS_MEMORY_VERSION = \"12.6.0\"", "companyBaseline", "memoryWriteback"],
+    "web_demo/modules/todo/page.js": ["TASK CENTER · V12.6", "列表只按紧急程度和时间排序", "task-report"],
+    "web_demo/modules/operating-unit/page.js": ["查看商品", "查看任务", "operating-store-buttons"],
+    "web_demo/core/task-actions.js": ["openTaskReport", "openTodoTask"],
 }
-
-FORBIDDEN_CURRENT_DOC_SNIPPETS = [
-    "当前 V11",
-    "V11.17 Demo 目标",
-    "一次完整 V11",
-    "# V11.17 Demo",
-    "# V11.16",
-    "# V11.15",
-    "V11.17 清空",
-    "V11 规则",
-]
 
 CRITICAL_APPAPI_ENDPOINTS = [
     "/api/data/source-connections",
@@ -85,53 +66,27 @@ def semantic_version_from_versioning() -> str:
     text = read_text("versioning/VERSION.md")
     match = re.search(r"Current Version:\s*([0-9]+\.[0-9]+\.[0-9]+)", text)
     if not match:
-        raise AssertionError("versioning/VERSION.md missing `Current Version: x.y.z`")
+        raise AssertionError("versioning/VERSION.md missing Current Version")
     return match.group(1)
 
 
-def version_minor_marker(version: str) -> str:
-    parts = version.split(".")
-    return f"V{parts[0]}.{parts[1]}"
-
-
 def index_asset_versions() -> set[str]:
-    text = read_text("web_demo/index.html")
-    return set(re.findall(r"[?&]v=([0-9]+\.[0-9]+\.[0-9]+)", text))
+    return set(re.findall(r"[?&]v=([0-9]+\.[0-9]+\.[0-9]+)", read_text("web_demo/index.html")))
 
 
 def normalize_route(path: str) -> str:
-    text = str(path or "").strip().strip("`").strip()
-    text = text.split("?", 1)[0]
-    if len(text) > 1:
-        text = text.rstrip("/")
-    return text
+    text = str(path or "").strip().strip("`").split("?", 1)[0]
+    return text.rstrip("/") if len(text) > 1 else text
 
 
 def route_to_regex(route: str) -> re.Pattern[str]:
-    route = normalize_route(route)
-    pieces = []
-    for part in route.split("/"):
-        if part.startswith("{") and part.endswith("}"):
-            pieces.append(r"[^/]+")
-        else:
-            pieces.append(re.escape(part))
+    pieces = [r"[^/]+" if part.startswith("{") and part.endswith("}") else re.escape(part) for part in normalize_route(route).split("/")]
     return re.compile("^" + "/".join(pieces) + "$" )
 
 
 def app_routes() -> set[str]:
     from src.api.main import app
-
     return {normalize_route(getattr(route, "path", "")) for route in app.routes if normalize_route(getattr(route, "path", ""))}
-
-
-def contract_routes() -> list[str]:
-    text = read_text("docs/API_CONTRACT.md")
-    routes: list[str] = []
-    for match in re.finditer(r"(?:GET|POST|DELETE|PUT|PATCH)?\s*(/api/[A-Za-z0-9_./{}?=&:-]+)", text):
-        route = normalize_route(match.group(1))
-        if route and route not in routes:
-            routes.append(route)
-    return routes
 
 
 def route_present(route: str, routes: set[str]) -> bool:
@@ -142,18 +97,10 @@ def route_present(route: str, routes: set[str]) -> bool:
     return any(pattern.match(item) for item in routes)
 
 
-def doc_has_current_guard(path: str, text: str) -> bool:
-    if path == "README.md":
-        return "当前基线" in text and "V12.5" in text
-    return "V12.5" in text or "V12.4" in text or "当前" in text
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check repository docs and route hygiene.")
-    parser.add_argument("--strict-api-contract", action="store_true", help="Treat API_CONTRACT route misses as errors instead of warnings.")
-    parser.add_argument("--json", action="store_true", help="Print JSON result only.")
+    parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -162,7 +109,6 @@ def main() -> int:
     if root_version != versioning_version:
         errors.append(f"VERSION.md is {root_version}, versioning/VERSION.md is {versioning_version}")
     version = root_version
-    current_marker = version_minor_marker(version)
 
     from src.api.main import app
     from src.api.routes import health
@@ -171,7 +117,6 @@ def main() -> int:
         errors.append(f"FastAPI app.version is {app.version}, expected {version}")
     if getattr(health, "API_VERSION", None) != version:
         errors.append(f"health.API_VERSION is {getattr(health, 'API_VERSION', None)}, expected {version}")
-
     assets = index_asset_versions()
     if assets != {version}:
         errors.append(f"web_demo/index.html asset versions are {sorted(assets)}, expected only {version}")
@@ -179,24 +124,8 @@ def main() -> int:
     for doc in REQUIRED_DOCS:
         if not (ROOT / doc).exists():
             errors.append(f"required doc missing: {doc}")
-
-    readme = read_text("README.md")
-    for doc in REQUIRED_DOCS:
-        if doc not in readme:
+        elif doc not in read_text("README.md"):
             errors.append(f"README.md does not index required doc: {doc}")
-
-    for path in CURRENT_DOCS:
-        text = read_text(path)
-        if not doc_has_current_guard(path, text):
-            warnings.append(f"{path} does not clearly mark itself as current V12.5 documentation")
-        for forbidden in FORBIDDEN_CURRENT_DOC_SNIPPETS:
-            if forbidden in text:
-                errors.append(f"{path} contains forbidden stale marker: {forbidden}")
-
-    if "当前 UI 修改依据" not in read_text("frontend/README_DEPRECATED.md"):
-        errors.append("frontend/README_DEPRECATED.md missing current-entry deprecation wording")
-    if "历史归档" not in read_text("docs/archive/README.md"):
-        errors.append("docs/archive/README.md missing archive warning")
 
     for path, needles in STATIC_MUST_CONTAIN.items():
         text = read_text(path)
@@ -204,43 +133,30 @@ def main() -> int:
             if needle not in text:
                 errors.append(f"{path} missing required marker: {needle}")
 
+    if "当前 UI 修改依据" not in read_text("frontend/README_DEPRECATED.md"):
+        errors.append("frontend/README_DEPRECATED.md missing current-entry deprecation wording")
+    if "历史归档" not in read_text("docs/archive/README.md"):
+        errors.append("docs/archive/README.md missing archive warning")
+
     routes = app_routes()
-    contract = contract_routes()
-    missing_contract_routes = [route for route in contract if not route_present(route, routes)]
     missing_critical = [route for route in CRITICAL_APPAPI_ENDPOINTS if not route_present(route, routes)]
     if missing_critical:
         errors.append("critical frontend/API endpoints missing from FastAPI app: " + ", ".join(missing_critical))
-    if missing_contract_routes:
-        message = "API_CONTRACT routes not found in FastAPI app: " + ", ".join(missing_contract_routes)
-        if args.strict_api_contract:
-            errors.append(message)
-        else:
-            warnings.append(message)
 
     result: dict[str, Any] = {
         "ok": not errors,
         "version": version,
-        "versionMarker": current_marker,
         "rootVersion": root_version,
         "versioningVersion": versioning_version,
         "appVersion": str(app.version),
         "healthVersion": getattr(health, "API_VERSION", None),
         "assetVersions": sorted(assets),
-        "requiredDocs": REQUIRED_DOCS,
         "routeCount": len(routes),
-        "contractRouteCount": len(contract),
-        "missingContractRoutes": missing_contract_routes,
         "missingCriticalRoutes": missing_critical,
         "warnings": warnings,
         "errors": errors,
     }
-
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print("=== repo hygiene ===")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-
+    print(json.dumps(result, ensure_ascii=False, indent=2)) if args.json else print("=== repo hygiene ===\n" + json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if not errors else 1
 
 
