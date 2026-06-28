@@ -1,15 +1,19 @@
-"""V12.6 operating action authorization gate.
+"""V12.7 operating action authorization gate.
 
-The gate turns an Agent action suggestion into one of three execution paths:
-auto execution, manager confirmation, or owner confirmation. Operators provide
-facts; the system estimates impact and checks the RAG-style company baseline.
+The gate separates business performance from governance weight:
+
+- high ROI / high GMV / task priority can create urgency;
+- only explicit RAG/company/manager/owner/historical-contribution weight can
+  create approval protection.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-ACTION_AUTHORIZATION_VERSION = "12.6.0"
+from src.services.operating_weight_policy_service import OPERATING_WEIGHT_POLICY_VERSION, infer_operating_weight, is_governance_high_weight
+
+ACTION_AUTHORIZATION_VERSION = "12.7.0"
 
 ACTION_LABELS = {
     "activity_participation": "活动报名 / 活动承接",
@@ -26,7 +30,7 @@ ACTION_LABELS = {
 }
 
 HIGH_RISK_ACTIONS = {"price_adjustment", "ad_budget_adjustment", "homepage_position", "product_demotion"}
-HIGH_WEIGHT_MARKERS = ("高权重", "主推", "核心", "品牌主店", "战略", "爆品", "高ROI", "高GMV")
+APPROVAL_ACTIONS_ON_CONFIRMED_HIGH_WEIGHT = HIGH_RISK_ACTIONS | {"title_test", "main_image_test"}
 
 
 def _join_text(task: Dict[str, Any]) -> str:
@@ -68,19 +72,7 @@ def infer_action_type(task: Dict[str, Any]) -> str:
 
 
 def infer_object_weight(task: Dict[str, Any]) -> Dict[str, Any]:
-    text = " ".join([
-        str(task.get("storeWeightTag") or ""),
-        str(task.get("productWeightTag") or ""),
-        str(task.get("priority") or ""),
-        *[str(item) for item in task.get("judgmentTags") or []],
-    ])
-    high = any(marker in text for marker in HIGH_WEIGHT_MARKERS) or task.get("priority") == "高"
-    return {
-        "storeWeight": "high" if high else "middle",
-        "productWeight": "high" if high else "middle",
-        "combinedWeight": "high" if high else "middle",
-        "rule": "店铺权重和商品权重取更高等级作为动作审批强度。",
-    }
+    return infer_operating_weight(task)
 
 
 def _operator_permission_level(task: Dict[str, Any]) -> str:
@@ -107,26 +99,28 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
     object_weight = infer_object_weight(task)
     operator_level = _operator_permission_level(task)
     high_risk = action_type in HIGH_RISK_ACTIONS
-    high_weight = object_weight.get("combinedWeight") == "high"
-    if high_risk and task.get("priority") == "高":
+    confirmed_high_weight = is_governance_high_weight(object_weight)
+    needs_weight_approval = confirmed_high_weight and operator_level != "high" and action_type in APPROVAL_ACTIONS_ON_CONFIRMED_HIGH_WEIGHT
+    if high_risk and confirmed_high_weight and task.get("priority") == "高":
         decision = "owner_approval_required"
-        layer = "manager_dispatch"
-        reason = "高风险动作影响价格、预算、主推位或商品权重，需要老板或总管确认。"
-    elif high_risk or (high_weight and operator_level != "high"):
+        layer = "manager_approval"
+        reason = "高风险动作作用于已确认高权重/战略对象，需要老板或总管确认。"
+    elif high_risk or needs_weight_approval:
         decision = "manager_approval_required"
-        layer = "manager_dispatch"
-        reason = "动作影响范围超过当前账号可直接执行权限，需要主管确认。"
+        layer = "manager_approval"
+        reason = "动作风险或已确认权重超过当前账号可直接执行权限，需要主管确认。"
     else:
         decision = "auto_execute"
         layer = "operator_execution"
-        reason = "动作在当前账号权限和经营对象权重范围内，可直接生成运营执行任务。"
+        reason = "动作在当前账号权限范围内；经营表现标签不会被当作高权重审批依据。"
     return {
         "version": ACTION_AUTHORIZATION_VERSION,
-        "mode": "rag_operating_action_permission_gate",
+        "mode": "rag_operating_action_permission_gate_v12_7_weight_confidence",
         "actionType": action_type,
         "actionLabel": ACTION_LABELS.get(action_type, "经营处理"),
         "operatorPermissionLevel": operator_level,
         "objectWeight": object_weight,
+        "operatingWeightPolicyVersion": OPERATING_WEIGHT_POLICY_VERSION,
         "decision": decision,
         "taskLayer": layer,
         "approvalReason": reason,
@@ -135,22 +129,25 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
             "operatorProvidesFactsOnly": True,
             "systemEstimatesImpact": True,
             "approvalUsesConservativeFloor": True,
-            "rule": "V12.6：运营补事实，系统估算影响，RAG 校验权限、权重和公司基线。",
+            "reportPerformanceIsNotGovernanceWeight": True,
+            "rule": "V12.7：高权重必须来自RAG配置、主管/老板标记或多期历史贡献；高ROI、高GMV、任务优先级和首份报表标签不能触发高权重审批。",
         },
     }
 
 
 def apply_action_authorization(task: Dict[str, Any]) -> Dict[str, Any]:
     gate = authorize_action(task)
-    next_task = {**task, "actionAuthorization": gate, "v126ActionGate": gate}
+    next_task = {**task, "actionAuthorization": gate, "v127ActionGate": gate, "v126ActionGate": gate}
     if gate["decision"] in {"manager_approval_required", "owner_approval_required"}:
-        next_task["taskLayer"] = "manager_dispatch"
+        next_task["taskLayer"] = gate.get("taskLayer") or "manager_approval"
         next_task["assigneeId"] = None
+        next_task["status"] = "待审批" if gate["decision"] == "manager_approval_required" else "待老板确认"
+        next_task["workflowStatus"] = next_task["status"]
         next_task["visibleRoleIds"] = list(dict.fromkeys([*(next_task.get("visibleRoleIds") or []), "owner", "manager"]))
         card = dict(next_task.get("taskCard") or {})
-        card["subtitle"] = "主管确认｜" + gate.get("actionLabel", "经营动作")
+        card["subtitle"] = "主管审批｜" + gate.get("actionLabel", "经营动作") if gate["decision"] == "manager_approval_required" else "老板确认｜" + gate.get("actionLabel", "经营动作")
         next_task["taskCard"] = card
-        next_task["taskType"] = "主管确认任务" if gate["decision"] == "manager_approval_required" else "老板确认任务"
+        next_task["taskType"] = "主管审批任务" if gate["decision"] == "manager_approval_required" else "老板确认任务"
         next_task["priority"] = "高" if gate["decision"] == "owner_approval_required" else next_task.get("priority", "中")
     else:
         next_task.setdefault("taskLayer", "operator_execution")
