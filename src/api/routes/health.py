@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "12.7.2"
+API_VERSION = "12.8.0"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -14,6 +14,8 @@ def health() -> Dict[str, Any]:
         "product": "AI ERP Operating Advisor",
         "currentEntry": "/",
         "todoEntry": "/api/modules/todo",
+        "todoLifecycleSummaryEntry": "/api/modules/todo/lifecycle/summary",
+        "todoRecapCompleteEntry": "/api/modules/todo/{task_id}/recap/complete",
         "productEntry": "/api/modules/product?storeId=STORE_ID",
         "taskReportEntry": "/api/modules/task-reports/tasks/{task_id}",
         "runtimeDiagnosticsEntry": "/api/system/runtime-diagnostics",
@@ -21,4 +23,5 @@ def health() -> Dict[str, Any]:
         "v1270Rule": "operating_weight_confidence_policy",
         "v1271Rule": "clustered_task_queue_and_safe_reports",
         "v1272Rule": "real_clustered_task_lifecycle_inventory_before_material_tests",
+        "v1280Rule": "task_lifecycle_closed_loop_recap_to_rag_feedback",
     }
