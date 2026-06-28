@@ -58,11 +58,8 @@
     }
   }
   async function optionalRequest(path, fallback = {}) {
-    try {
-      return await request(path);
-    } catch (error) {
-      return { ...fallback, optionalError: error?.message || String(error || "接口异常"), optionalPath: path };
-    }
+    try { return await request(path); }
+    catch (error) { return { ...fallback, optionalError: error?.message || String(error || "接口异常"), optionalPath: path }; }
   }
   async function uploadRequest(path, file, fields = {}) {
     try {
@@ -94,14 +91,14 @@
     window.AppMockData.traffic = [];
     window.AppMockData.reportGroups = [];
     window.AppMockData.reportDetails = {};
-    window.AppMockData.v3 = { version: "12.2.8", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
+    window.AppMockData.v3 = { version: "12.5.0", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
     window.AppMockData.recentAlerts = [];
     status.lastImportSync = null;
     window.AppTaskStore?.hydrate?.([], [], [], {});
   }
   function rememberImportSync(result) {
-    status.lastImportSync = result?.v104ImportTaskSync || result?.importDiagnostics || null;
-    window.dispatchEvent(new CustomEvent("v104-import-sync", { detail: { result, sync: status.lastImportSync } }));
+    status.lastImportSync = result?.riskTaskSync || result?.v104ImportTaskSync || result?.importDiagnostics || null;
+    window.dispatchEvent(new CustomEvent("v125-import-sync", { detail: { result, sync: status.lastImportSync } }));
     return result;
   }
   function productFormatters() {
@@ -109,6 +106,13 @@
       money(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).startsWith("¥") ? String(value) : `¥${value}`; },
       percent(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).includes("%") ? String(value) : `${value}%`; },
     };
+  }
+  function normalizeTodoPayload(payload = {}) {
+    const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+    const active = Array.isArray(payload.activeTasks) ? payload.activeTasks : tasks.filter((task) => !["已完成", "已归档", "已写入复盘"].includes(task.status));
+    const events = Array.isArray(payload.events) ? payload.events : [];
+    const counters = payload.counters && typeof payload.counters === "object" ? payload.counters : {};
+    return { tasks, activeTasks: active, events, counters, payload };
   }
 
   const api = {
@@ -123,6 +127,7 @@
       const nextUserId = switched?.currentUser?.id || userId || previousUserId;
       setCurrentUserId(nextUserId);
       account = switched?.account || (await loadAccount());
+      await api.refreshTaskState().catch(() => null);
       window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } }));
       return account;
     },
@@ -175,14 +180,21 @@
     resetLegacyRuntimeOnce: () => api.post("/api/system/reset-legacy-runtime-once", null, {}),
     refreshAfterDataImport: async (result = {}) => {
       rememberImportSync(result);
-      const [products, competitors, listings, traffic, report] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report()]);
+      const [products, competitors, listings, traffic, report, tasks] = await Promise.all([api.product(), api.competitor(), api.listing(), api.traffic(), api.report(), api.refreshTaskState()]);
       api.applyModuleData({ products, competitors, listings, traffic, report });
-      window.dispatchEvent(new CustomEvent("v1228-data-refresh", { detail: { result } }));
-      return { products, competitors, listings, traffic, report };
+      window.dispatchEvent(new CustomEvent("v125-data-refresh", { detail: { result, tasks } }));
+      return { products, competitors, listings, traffic, report, tasks };
     },
     todo: (params = {}) => { const query = new URLSearchParams(); if (params.scope) query.set("scope", params.scope); if (params.assigneeId) query.set("assignee_id", params.assigneeId); const suffix = query.toString() ? `?${query.toString()}` : ""; return request(`/api/modules/todo${suffix}`); },
     todoEvents: () => request("/api/modules/todo/events"),
     todoCounters: () => request("/api/modules/todo/counters"),
+    refreshTaskState: async (params = {}) => {
+      const payload = await api.todo(params);
+      const normalized = normalizeTodoPayload(payload);
+      window.AppTaskStore?.hydrate?.(normalized.tasks, [], normalized.events, normalized.counters);
+      window.dispatchEvent(new CustomEvent("v125-task-state-refresh", { detail: normalized }));
+      return normalized;
+    },
     log: () => request("/api/modules/log"),
     recapCandidates: (target = "") => request(`/api/modules/recap-candidates${target ? `?target=${encodeURIComponent(target)}` : ""}`),
     taskReport: (id) => request(`/api/modules/task-reports/tasks/${encodeURIComponent(id)}`),
@@ -215,6 +227,10 @@
       window.AppMockData.reportGroups = Array.isArray(report?.reportGroups) ? report.reportGroups : [];
       window.AppMockData.reportDetails = report?.reportDetails || {};
       window.AppMockData.v3 = report?.v3 || null;
+    },
+    prefetch: async () => {
+      const [accountResult, taskState] = await Promise.all([loadAccount(), api.refreshTaskState().catch(() => null)]);
+      return { account: accountResult, taskState };
     },
     runtimeDiagnostics: () => request("/api/system/runtime-diagnostics"),
     backfillOperatingObjects: () => api.post("/api/system/backfill-operating-objects", null, {}),
