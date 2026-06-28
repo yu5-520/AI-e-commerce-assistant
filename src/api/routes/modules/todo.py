@@ -1,6 +1,7 @@
 """Todo module routes.
 
-V12.8 makes the visible task queue part of one lifecycle:
+V12.8.1 makes the visible task queue part of one lifecycle and aligns the
+frontend/backend contract:
 generate -> accept -> submit evidence -> manager review -> recap schedule ->
 recap complete -> RAG candidate -> future task enhancement.
 """
@@ -24,7 +25,7 @@ from src.services.v106_task_action_simplifier import apply_v106_task_actions
 
 router = APIRouter()
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
-TODO_VERSION = "12.8.0"
+TODO_VERSION = "12.8.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -144,7 +145,7 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
         "source": source,
         "repositoryFallback": {"version": TODO_VERSION, "used": source == "repository", "rule": "内存任务池为空时才读Repository；正常任务生命周期以内存任务池为主，同步写Repository。"},
         "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleVersion": TASK_LIFECYCLE_VERSION, "rule": "任务生成、聚合、接收、提交、复核、复盘和RAG候选共用同一个task_id。"},
-        "rule": "V12.8：任务生命周期闭环。",
+        "rule": "V12.8.1：任务生命周期闭环 + 前后端契约收口。",
     }
 
 
