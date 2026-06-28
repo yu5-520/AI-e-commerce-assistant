@@ -11,6 +11,7 @@ from src.services.alert_detail_service import get_alert_detail_report
 from src.services.task_report_service import get_candidate_report, get_task_report
 
 router = APIRouter()
+TASK_REPORT_ROUTE_VERSION = "12.7.2"
 
 
 def request_user_id(request: Request) -> str:
@@ -20,8 +21,8 @@ def request_user_id(request: Request) -> str:
 def _safe_report(kind: str, entity_id: str, exc: Exception) -> Dict[str, Any]:
     return {
         "id": entity_id,
-        "title": "Detail report fallback",
-        "version": "12.7.1",
+        "title": "Detail report safe fallback",
+        "version": TASK_REPORT_ROUTE_VERSION,
         "reportType": kind,
         "failClosed": True,
         "summary": "The task remains available. Report generation returned a structured fallback instead of HTTP 500.",
