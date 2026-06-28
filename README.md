@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：**V12.7.1 任务聚合队列 + 详情页容错 + 高权重判定重构**。
+当前基线：**V12.7.2 真实后端聚合任务生命周期 + 库存动作识别修复**。
 
-V12.7.1 保留 V12.7 的高权重判定规则：高 ROI、高 GMV、点击率 / 转化率波动、任务优先级、商品生命周期标签、首份报表基线标签，只能作为经营表现或任务排序依据，不能直接判定为高权重店铺或高权重商品。本版新增任务队列收口：同一店铺、同一动作、同一原因的多商品任务，在前端展示为一个聚合队列任务；完整受影响商品列表进入详情页。任务详情接口增加 fail-closed，字段异常时返回结构化报告，不再让页面 500。
+V12.7.2 保留 V12.7 的高权重判定规则和 V12.7.1 的聚合队列，但把聚合任务从“前端临时展示”收口为“后端真实任务对象”。同一店铺、同一动作、同一原因的商品任务会合并成一个稳定 task_id 的批量任务，受影响商品写入 affectedProducts，接收、提交、复核和详情页都使用同一个任务来源。库存、补货、可售天数、断货、缺货信号会优先识别为库存警告，不再被 SOP 里的“素材”字样误判为素材测试。
 
 ## 当前执行入口
 
@@ -22,26 +22,24 @@ V12.7.1 保留 V12.7 的高权重判定规则：高 ROI、高 GMV、点击率 / 
 → 首份报表 baseline_snapshot，只建基线
 → 两份报表才允许环比经营任务
 → risk_task_service 生成红线任务 + ROI/GMV经营任务
-→ rag_business_memory_service 读取公司基线和历史经营记忆
-→ action_impact_estimation_service 系统生成保守 / 正常 / 乐观估算
-→ operating_weight_policy_service 判断治理权重、来源、置信度
-→ action_authorization_gate_service 判断账号权限、动作风险和审批路径
-→ AppApi.refreshTaskState() 从 /api/modules/todo 同步后端任务池
-→ todo/page.js 按店铺 + 动作 + 原因聚合同类商品任务
-→ task_report 路由 fail-closed 返回详情或结构化兜底报告
+→ action_authorization_gate_service 先识别库存/补货/可售天数，再识别素材/标题/主图
+→ task_cluster_service 生成真实后端聚合任务
+→ /api/modules/todo 返回已聚合任务池
+→ accept / submit / review 先更新内存任务池，再 best-effort 同步 Repository
+→ task_report_service 根据同一个 task_id 输出详情报告和 affectedProducts
 ```
 
-## V12.7.1 硬规则
+## V12.7.2 硬规则
 
 ```text
 经营表现不等于权限权重。
 高ROI、高GMV、任务优先级、生命周期标签和首份报表标签不能触发高权重审批。
 第一份报表只做基线，非红线经营任务必须有至少两份可比报表。
-重复商品任务不能刷屏，同类任务必须聚合成队列任务。
-任务列表只显示时间、紧急度、状态和详情入口。
-完整 SOP、指标、证据链、受影响商品列表进入详情页。
+重复商品任务不能刷屏，同类任务必须聚合成真实后端任务。
+聚合任务必须有稳定 task_id、affectedProducts 和 taskDetailReport。
+接收按钮必须更新当前可见任务池状态，不能只写 Repository。
+库存/补货/可售天数信号必须显示为库存警告或补货承接，不能显示成素材测试。
 任务详情接口不能 500，异常时返回 failClosed 结构化报告。
-经营页店铺卡片永远保留查看商品入口，有任务时追加查看任务。
 ```
 
 ## 当前主 API
@@ -55,8 +53,8 @@ V12.7.1 保留 V12.7 的高权重判定规则：高 ROI、高 GMV、点击率 / 
 /api/modules/product                   商品档案
 /api/modules/product?storeId=STORE_ID  店铺商品档案
 /api/modules/product/{product_id}      单商品事实详情
-/api/modules/todo                      聚合后的任务队列来源
-/api/modules/task-reports/tasks/{id}   任务详情报告，fail-closed
+/api/modules/todo                      聚合后的真实任务队列来源
+/api/modules/task-reports/tasks/{id}   任务详情报告，支持批量任务 affectedProducts
 /api/modules/log                       日志
 /api/accounts                          账号
 /api/accounts/switch                   ECS Demo 账号切换验证
