@@ -141,8 +141,9 @@ def apply_action_authorization(task: Dict[str, Any]) -> Dict[str, Any]:
     if gate["decision"] in {"manager_approval_required", "owner_approval_required"}:
         next_task["taskLayer"] = gate.get("taskLayer") or "manager_approval"
         next_task["assigneeId"] = None
-        next_task["status"] = "待审批" if gate["decision"] == "manager_approval_required" else "待老板确认"
-        next_task["workflowStatus"] = next_task["status"]
+        next_task["status"] = "待复核"
+        next_task["workflowStatus"] = "待审批" if gate["decision"] == "manager_approval_required" else "待老板确认"
+        next_task["displayStatus"] = next_task["workflowStatus"]
         next_task["visibleRoleIds"] = list(dict.fromkeys([*(next_task.get("visibleRoleIds") or []), "owner", "manager"]))
         card = dict(next_task.get("taskCard") or {})
         card["subtitle"] = "主管审批｜" + gate.get("actionLabel", "经营动作") if gate["decision"] == "manager_approval_required" else "老板确认｜" + gate.get("actionLabel", "经营动作")
