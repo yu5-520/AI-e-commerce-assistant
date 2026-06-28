@@ -20,17 +20,25 @@ REQUIRED_FILES = [
     "versioning/VERSION.md",
     "src/api/main.py",
     "src/api/routes/health.py",
+    "src/api/routes/modules/todo.py",
+    "src/api/routes/modules/task_report.py",
     "src/services/risk_task_service.py",
+    "src/services/task_cluster_service.py",
+    "src/services/task_report_service.py",
     "src/services/operating_weight_policy_service.py",
     "src/services/action_authorization_gate_service.py",
     "web_demo/index.html",
 ]
 
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.7", "RAG", "web_demo/"],
-    "src/services/risk_task_service.py": ["12.7.0", "OPERATING_WEIGHT_POLICY_VERSION"],
+    "README.md": ["V12.7", "任务", "web_demo/"],
+    "src/services/risk_task_service.py": ["12.7.2", "TASK_CLUSTER_VERSION", "real_clustered_lifecycle"],
+    "src/services/task_cluster_service.py": ["TASK_CLUSTER_VERSION = \"12.7.2\"", "backend_real_task_lifecycle_cluster", "affectedProducts"],
+    "src/services/task_report_service.py": ["12.7.2", "affectedProducts", "fallbackDetail"],
+    "src/api/routes/modules/todo.py": ["TODO_VERSION = \"12.7.2\"", "_memory_or_repo_transition", "cluster_open_tasks"],
+    "src/api/routes/modules/task_report.py": ["TASK_REPORT_ROUTE_VERSION = \"12.7.2\""],
+    "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.7.2\"", "inventorySignalsBeforeCreativeWords"],
     "src/services/operating_weight_policy_service.py": ["OPERATING_WEIGHT_POLICY_VERSION = \"12.7.0\"", "first_report_baseline", "canTriggerApproval"],
-    "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.7.0\"", "reportPerformanceIsNotGovernanceWeight"],
 }
 
 CRITICAL_APPAPI_ENDPOINTS = [
@@ -40,6 +48,7 @@ CRITICAL_APPAPI_ENDPOINTS = [
     "/api/data/metric-facts/summary",
     "/api/data/data-gaps/summary",
     "/api/modules/todo",
+    "/api/modules/task-reports/tasks/{task_id}",
     "/api/system/reset-runtime-data",
 ]
 
