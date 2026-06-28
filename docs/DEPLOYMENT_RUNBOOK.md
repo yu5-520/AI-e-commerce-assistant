@@ -1,6 +1,6 @@
-# V12.4 部署 Runbook
+# V12.4.1 部署 Runbook
 
-本文件只保留服务器部署、版本一致性和排障边界。V12.4 的核心验收是：事实层稳定、文档治理稳定、数据源/账号契约稳定，并且经营节奏任务系统能在非红线波动下生成日报/周报素材和日常经营任务。
+本文件只保留服务器部署、版本一致性和排障边界。V12.4.1 的核心验收是：事实层稳定、文档治理稳定、数据源/账号契约稳定，并且经营节奏任务以 ROI/GMV 为主轴生成日常经营任务和日报/周报素材。
 
 ## 1. 部署分层
 
@@ -44,7 +44,7 @@ VERSION.md
 versioning/VERSION.md
 src/api/main.py:API_VERSION
 src/api/routes/health.py:API_VERSION
-web_demo/index.html?v=12.4.0
+web_demo/index.html?v=12.4.1
 src/services/risk_task_service.py
 src/services/operating_cadence_task_service.py
 scripts/verify_release.py
@@ -68,15 +68,16 @@ curl http://127.0.0.1:8000/api/system/runtime-diagnostics
 重点验收：
 
 ```text
-/api/health 返回 12.4.0。
-web_demo/index.html 只出现 12.4.0 资源版本。
+/api/health 返回 12.4.1。
+web_demo/index.html 只出现 12.4.1 资源版本。
 GET /api/data/source-connections 不返回 404。
 账号切换在 Demo 开关开启时不返回 403。
 导入真实 ERA 表后，importDiagnostics.layoutMode = sheet_block_fact_gap_staging。
 商品页事实表未命中显示“未识别”，不显示 0，不读对象缓存。
-riskTaskSync.mode = v12_4_redline_plus_operating_cadence_agent_task_generation。
-riskTaskSync.operatingCadenceSync.signalCount >= 0。
-多份报表形成 3/7/14/30/90 天趋势窗口后，应生成 daily_operating_task、候选任务或日报/周报信号。
+riskTaskSync.mode = v12_4_1_redline_plus_roi_gmv_operating_cadence_task_generation。
+riskTaskSync.operatingCadenceSync.primaryAxis = ROI_GMV。
+operatingCadenceSync.quadrantPolicy 存在。
+多份报表形成趋势窗口后，应生成 ROI/GMV daily_operating_task、候选任务或日报/周报信号。
 任务 evidenceGate 返回 metricScope / requiredFactTables / forbiddenCrossScope。
 ```
 
@@ -121,7 +122,8 @@ data_gap_events
 不要把 frontend/ 当作当前前端入口。
 不要用对象缓存给商品页经营指标托底。
 不要用 traffic_source ROI 覆盖 product ROI。
-不要让任务生成只依赖单一基线；非红线波动必须进入经营节奏判断。
+不要让任务生成只依赖单一基线；非红线波动必须进入 ROI/GMV 经营节奏判断。
+不要让日报/周报平铺所有指标；日报/周报必须优先围绕 ROI、GMV、广告消耗组织。
 ```
 
 ## 8. 当前推荐节奏
