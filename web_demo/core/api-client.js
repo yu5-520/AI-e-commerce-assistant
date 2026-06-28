@@ -91,7 +91,7 @@
     window.AppMockData.traffic = [];
     window.AppMockData.reportGroups = [];
     window.AppMockData.reportDetails = {};
-    window.AppMockData.v3 = { version: "12.5.0", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
+    window.AppMockData.v3 = { version: "12.8.1", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] };
     window.AppMockData.recentAlerts = [];
     status.lastImportSync = null;
     window.AppTaskStore?.hydrate?.([], [], [], {});
@@ -188,11 +188,12 @@
     todo: (params = {}) => { const query = new URLSearchParams(); if (params.scope) query.set("scope", params.scope); if (params.assigneeId) query.set("assignee_id", params.assigneeId); const suffix = query.toString() ? `?${query.toString()}` : ""; return request(`/api/modules/todo${suffix}`); },
     todoEvents: () => request("/api/modules/todo/events"),
     todoCounters: () => request("/api/modules/todo/counters"),
+    lifecycleSummary: () => request("/api/modules/todo/lifecycle/summary"),
     refreshTaskState: async (params = {}) => {
       const payload = await api.todo(params);
       const normalized = normalizeTodoPayload(payload);
       window.AppTaskStore?.hydrate?.(normalized.tasks, [], normalized.events, normalized.counters);
-      window.dispatchEvent(new CustomEvent("v125-task-state-refresh", { detail: normalized }));
+      window.dispatchEvent(new CustomEvent("v1281-task-state-refresh", { detail: normalized }));
       return normalized;
     },
     log: () => request("/api/modules/log"),
@@ -215,6 +216,7 @@
     reviewEvidenceTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/review-evidence`, null, body),
     taskEvidence: (id) => request(`/api/modules/todo/${encodeURIComponent(id)}/evidence`),
     writeRecapTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/recap`, null, body),
+    completeRecapTodo: (id, body = {}) => api.post(`/api/modules/todo/${id}/recap/complete`, null, body),
     completeTodo: (id) => api.post(`/api/modules/todo/${id}/complete`, null, {}),
     pinTodo: (id) => api.post(`/api/modules/todo/${id}/pin`, null, {}),
     reorderTodo: (id, direction) => api.post(`/api/modules/todo/${id}/reorder?direction=${encodeURIComponent(direction)}`, null, {}),
