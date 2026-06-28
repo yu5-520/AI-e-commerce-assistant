@@ -1,4 +1,4 @@
-"""V12.7.2 task generation facade."""
+"""V12.8 task generation facade."""
 
 from __future__ import annotations
 
@@ -9,12 +9,15 @@ from src.services.action_impact_estimation_service import ACTION_IMPACT_ESTIMATI
 from src.services.operating_cadence_task_service import OPERATING_CADENCE_VERSION, generate_operating_cadence_tasks, operating_cadence_summary
 from src.services.operating_weight_policy_service import OPERATING_WEIGHT_POLICY_VERSION
 from src.services.rag_business_memory_service import RAG_BUSINESS_MEMORY_VERSION
+from src.services.rag_feedback_loop_service import RAG_FEEDBACK_LOOP_VERSION
 from src.services.risk_task_v66_service import RISK_TASK_VERSION as STRICT_RISK_TASK_VERSION
 from src.services.risk_task_v66_service import ensure_risk_task_tables, generate_risk_tasks_for_signals as _generate_scoped_risk_tasks
 from src.services.risk_task_v66_service import risk_task_summary as _scoped_risk_task_summary
 from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open_tasks
+from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_summary
+from src.services.task_recap_scheduler_service import RECAP_SCHEDULER_VERSION, recap_schedule_summary
 
-RISK_TASK_VERSION = "12.7.2"
+RISK_TASK_VERSION = "12.8.0"
 
 
 def _action_gate_counts(tasks: list[Dict[str, Any]]) -> Dict[str, int]:
@@ -44,16 +47,21 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
     return {
         **risk_result,
         "version": RISK_TASK_VERSION,
-        "mode": "v12_7_2_real_clustered_lifecycle_task_generation",
+        "mode": "v12_8_task_lifecycle_closed_loop_generation",
         "dataVersion": data_version,
         "strictRiskTaskVersion": STRICT_RISK_TASK_VERSION,
         "operatingCadenceVersion": OPERATING_CADENCE_VERSION,
         "actionAuthorizationVersion": ACTION_AUTHORIZATION_VERSION,
         "actionImpactEstimationVersion": ACTION_IMPACT_ESTIMATION_VERSION,
         "ragBusinessMemoryVersion": RAG_BUSINESS_MEMORY_VERSION,
+        "ragFeedbackLoopVersion": RAG_FEEDBACK_LOOP_VERSION,
         "operatingWeightPolicyVersion": OPERATING_WEIGHT_POLICY_VERSION,
         "taskClusterVersion": TASK_CLUSTER_VERSION,
+        "taskLifecycleVersion": TASK_LIFECYCLE_VERSION,
+        "recapSchedulerVersion": RECAP_SCHEDULER_VERSION,
         "taskClusterSync": cluster_result,
+        "taskLifecycleSync": lifecycle_summary(limit=80),
+        "recapScheduleSync": recap_schedule_summary(),
         "primaryAxis": "ROI_GMV",
         "baselineMode": bool(cadence_result.get("baselineMode")),
         "comparisonReady": bool(cadence_result.get("comparisonReady")),
@@ -70,7 +78,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "strictRiskSync": risk_result,
         "operatingCadenceSync": cadence_result,
         "dailyReportSeedCount": len(cadence_result.get("topSignals") or []),
-        "rule": "V12.7.2 uses real backend clustered tasks. Accept, submit, review and detail all use the same task id.",
+        "rule": "V12.8：生成任务、接收、提交材料、复核、自动复盘、RAG候选和RAG增强共用同一生命周期。",
     }
 
 
@@ -83,8 +91,13 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
     summary["actionGateVersion"] = ACTION_AUTHORIZATION_VERSION
     summary["actionImpactEstimationVersion"] = ACTION_IMPACT_ESTIMATION_VERSION
     summary["ragBusinessMemoryVersion"] = RAG_BUSINESS_MEMORY_VERSION
+    summary["ragFeedbackLoopVersion"] = RAG_FEEDBACK_LOOP_VERSION
     summary["operatingWeightPolicyVersion"] = OPERATING_WEIGHT_POLICY_VERSION
     summary["taskClusterVersion"] = TASK_CLUSTER_VERSION
+    summary["taskLifecycleVersion"] = TASK_LIFECYCLE_VERSION
+    summary["recapSchedulerVersion"] = RECAP_SCHEDULER_VERSION
     summary["operatingCadenceSummary"] = cadence
-    summary["rule"] = "V12.7.2 aligns clustered tasks with the task lifecycle."
+    summary["lifecycleSummary"] = lifecycle_summary(limit=limit)
+    summary["recapScheduleSummary"] = recap_schedule_summary()
+    summary["rule"] = "V12.8 closes the task lifecycle loop and lets approved RAG experience enhance future tasks."
     return summary
