@@ -1,6 +1,6 @@
-# V12.5 部署 Runbook
+# V12.6 部署 Runbook
 
-本文件只保留服务器部署、版本一致性和排障边界。V12.5 的核心验收是：首份报表只建基线，非红线 ROI/GMV 经营任务必须有可比报表；总览和任务栏必须共用 `/api/modules/todo` 后端任务源。
+本文件只保留服务器部署、版本一致性和排障边界。V12.6 的核心验收是：首份报表仍只建基线；经营任务生成后必须带 `actionAuthorization`、`actionImpactEstimate`、`ragBusinessMemory`，并按账号权限、店铺权重、商品权重和系统保守估算下限进入自动执行或主管/老板确认。
 
 ## 1. 部署分层
 
@@ -44,11 +44,16 @@ VERSION.md
 versioning/VERSION.md
 src/api/main.py:API_VERSION
 src/api/routes/health.py:API_VERSION
-web_demo/index.html?v=12.5.0
+web_demo/index.html?v=12.6.0
 src/services/risk_task_service.py
-src/services/operating_cadence_task_service.py
+src/services/module_task_service.py
+src/services/action_authorization_gate_service.py
+src/services/action_impact_estimation_service.py
+src/services/rag_business_memory_service.py
 web_demo/core/api-client.js
+web_demo/core/task-actions.js
 web_demo/modules/todo/page.js
+web_demo/modules/operating-unit/page.js
 scripts/verify_release.py
 scripts/check_repo_hygiene.py
 docs/API_CONTRACT.md
@@ -71,19 +76,17 @@ curl http://127.0.0.1:8000/api/system/runtime-diagnostics
 重点验收：
 
 ```text
-/api/health 返回 12.5.0。
-web_demo/index.html 只出现 12.5.0 资源版本。
+/api/health 返回 12.6.0。
+web_demo/index.html 只出现 12.6.0 资源版本。
 GET /api/data/source-connections 不返回 404。
 GET /api/modules/todo 返回 tasks / activeTasks / counters。
-账号切换在 Demo 开关开启时不返回 403。
-导入真实 ERA 表后，importDiagnostics.layoutMode = sheet_block_fact_gap_staging。
-商品页事实表未命中显示“未识别”，不显示 0，不读对象缓存。
-riskTaskSync.mode = v12_5_baseline_first_redline_plus_roi_gmv_operating_task_generation。
-riskTaskSync.operatingCadenceSync.baselineMode = true 时，operatingCadenceCreatedTaskCount 只能来自红线任务。
-首份报表不得生成 high_roi_low_gmv / 扩流测试 / 加投 / 降投经营测试任务。
-两份报表后 comparisonReady = true，才允许 ROI/GMV 环比经营任务。
-三份报表或7天窗口后 trendReady = true，才允许趋势任务。
-任务页进入时会调用 AppApi.refreshTaskState()，从 /api/modules/todo hydrate AppTaskStore。
+任务对象带 actionAuthorization / actionImpactEstimate / ragBusinessMemory。
+任务 actionAuthorization.decision 可为 auto_execute / manager_approval_required / owner_approval_required。
+活动任务中，运营只补充活动事实和竞品事实，系统估算 ROI/GMV/毛利/库存影响。
+标题/主图测试中，中权重对象直接生成运营执行任务，高权重对象进入主管确认。
+任务列表只显示紧急程度、截止时间、店铺、商品、状态和详情入口。
+任务详情按钮通过 task-report 打开，不依赖缺失的全局对象。
+经营页店铺卡片始终保留“查看商品”，有任务时追加“查看任务”。
 ```
 
 ## 6. Demo 数据清理
@@ -128,8 +131,9 @@ data_gap_events
 不要用对象缓存给商品页经营指标托底。
 不要用 traffic_source ROI 覆盖 product ROI。
 不要让第一份报表生成扩流、加投、降投等经营测试任务。
+不要让运营填写预测 ROI、GMV、销量、库存消耗、毛利率。
+不要让高权重店铺/商品的标题、主图、预算、价格、主推位动作绕过主管确认。
 不要让任务页只读本地空 AppTaskStore。
-不要让日报/周报平铺所有指标；日报/周报必须优先围绕 ROI、GMV、广告消耗组织。
 ```
 
 ## 8. 当前推荐节奏
