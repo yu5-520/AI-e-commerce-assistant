@@ -37,27 +37,56 @@ web_demo/modules/report/page.js
 → src/api/routes/data_import.py
 → import_adapter_service.parse_upload_file
 → report_profile_agent_service 生成 sheetProfiles[].blocks[]
-→ report_schema_service.confirm_report_import(auto_create_tasks=False)
-→ operating_object_store_service.upsert_operating_objects_from_import
 → metric_fact_store_service.ingest_metric_facts_from_sheet_rows
 → data_gap_event_service.ingest_data_gaps_from_import
 → trend_signal_service.ingest_product_trends
 → risk_task_service.generate_risk_tasks_for_signals
-→ risk_task_v66_service 红线 / 证据闸门任务
 → operating_cadence_task_service 首份报表基线 + ROI/GMV 对比任务
-→ module_task_service.apply_v126_task_governance
-→ rag_business_memory_service 读取 RAG 公司基线和历史经营记忆
+→ rag_business_memory_service 读取公司基线 + approved/effective RAG经验卡
 → action_impact_estimation_service 系统估算活动/标题/主图/投放影响
 → operating_weight_policy_service 判断权重来源、权重置信度、是否可触发审批
 → action_authorization_gate_service 校验账号权限、动作风险和审批路径
-→ task_evidence_gate_service 按 metric_scope 取证
-→ import_diagnostics_service.import_diagnostics
+→ task_cluster_service 合并同店铺同动作同原因任务
+→ task_lifecycle_orchestrator_service 挂载 taskLifecycle
 → AppApi.refreshTaskState()
 → /api/modules/todo
 → dashboard / operating-unit / product / todo / log 反查
 ```
 
-## 3. 商品档案链
+## 3. 任务生命周期闭环链
+
+```text
+module_task_service.create_task
+→ task_lifecycle_orchestrator_service.generated
+→ /api/modules/todo/{task_id}/accept
+→ task_lifecycle_orchestrator_service.accepted
+→ /api/modules/todo/{task_id}/submit-evidence 或 /submit
+→ task_lifecycle_orchestrator_service.evidence_submitted
+→ /api/modules/todo/{task_id}/review-evidence 或 /review
+→ task_lifecycle_orchestrator_service.manager_reviewed
+→ task_recap_scheduler_service.schedule_recap_cycles
+→ /api/modules/todo/{task_id}/recap/complete
+→ task_recap_scheduler_service.complete_recap_cycle
+→ rag_feedback_loop_service.build_rag_candidate_from_recap
+→ experience_memory_service.draft_experience_from_task
+→ 人工审核 approved
+→ rag_business_memory_service 下次任务生成召回 approved/effective 经验卡
+```
+
+生命周期阶段：
+
+```text
+generated
+accepted
+evidence_submitted
+manager_reviewed
+recap_scheduled
+recap_completed
+rag_candidate_created
+rag_approved
+```
+
+## 4. 商品档案链
 
 ```text
 web_demo/modules/product/page.js
@@ -71,7 +100,7 @@ web_demo/modules/product/page.js
 
 事实表未命中显示“未识别”，不能显示 0，不能回读对象缓存。
 
-## 4. 基线优先任务链
+## 5. 基线优先任务链
 
 ```text
 product_metric_facts
@@ -87,7 +116,7 @@ product_metric_facts
 → 日报 / 周报素材
 ```
 
-## 5. V12.7 权重置信度链
+## 6. 权重置信度链
 
 ```text
 经营任务 payload
@@ -99,29 +128,21 @@ product_metric_facts
 → auto_execute / manager_approval_required / owner_approval_required
 ```
 
-边界：
+## 7. RAG 反馈链
 
 ```text
-经营表现不等于权限权重。
-任务优先级不等于商品权重。
-首份报表不能直接判高权重。
-高权重审批必须有明确 weightSource 和足够 weightConfidence。
+复盘完成结果
+→ rag_feedback_loop_service.build_rag_candidate_from_recap
+→ experience_memory_service.upsert_case(status=pending_review)
+→ 人工审核 approved
+→ search_cases(effective_only=True, min_quality=0.7)
+→ rag_business_memory_service.approvedExperienceCards
+→ 新任务 SOP / 估算 / 权限判断增强
 ```
 
-## 6. V12.7 经营动作权限闸门
+边界：pending_review 只做候选，不直接增强任务生成。
 
-```text
-经营任务 payload
-→ module_task_service.normalize_task
-→ apply_v126_task_governance
-→ rag_business_memory_service.business_memory_context
-→ action_impact_estimation_service.estimate_action_impact
-→ operating_weight_policy_service.infer_operating_weight
-→ action_authorization_gate_service.authorize_action
-→ auto_execute / manager_approval_required / owner_approval_required
-```
-
-## 7. 总览 / 任务栏统一任务源
+## 8. 总览 / 任务栏统一任务源
 
 ```text
 /api/modules/dashboard
@@ -134,38 +155,4 @@ web_demo/modules/todo/page.js
 → visibleTaskQueue(activeTasks)
 ```
 
-任务列表只显示紧急程度、截止时间、店铺、商品、状态、负责人和详情入口；完整 SOP、证据链、估算结果、权限判断放到任务详情页。
-
-## 8. 经营页入口链
-
-```text
-web_demo/modules/operating-unit/page.js
-→ 店铺卡片永远保留“查看商品”
-→ 有任务时追加“查看任务”
-→ 不能因为生成任务替换商品入口
-```
-
-## 9. 任务详情 / 报告链
-
-```text
-web_demo/core/task-actions.js
-→ AppTaskActions.openTaskReport()
-→ web_demo/modules/task-report/page.js
-→ AppApi.taskReport() / candidateReport() / alertReport()
-→ /api/modules/task-reports/*
-→ src/api/routes/modules/task_report.py
-→ task_report_service
-→ evidenceGate / metricFacts / cadence / ROI-GMV quadrant / actionAuthorization / actionImpactEstimate / ragBusinessMemory / objectWeight
-```
-
-## 10. 系统诊断 / 清空运行态链
-
-```text
-web_demo/modules/system-status/page.js
-→ AppApi.resetRuntimeData()
-→ POST /api/system/reset-runtime-data?confirm=true
-→ system_service.clear_runtime_data
-→ 删除导入行、快照、业务信号、经营节奏信号、任务、日志、经营商品、经营店铺、事实表、缺口池
-```
-
-清空后 `operating_cadence_signals` 也必须被清理。
+任务列表只显示紧急程度、截止时间、店铺、商品、状态、负责人和详情入口；完整 SOP、证据链、估算结果、权限判断、自动复盘周期和 RAG 候选放到任务详情页。
