@@ -1,6 +1,6 @@
-# V12.8 部署 Runbook
+# V12.8.1 部署 Runbook
 
-本文件只保留服务器部署、版本一致性和排障边界。V12.8 的核心验收是：任务生命周期从生成任务到RAG候选闭环，`/api/modules/todo` 返回 `taskLifecycle`，复核通过后生成自动复盘周期，复盘完成后生成RAG候选。
+本文件只保留服务器部署、版本一致性和排障边界。V12.8.1 的核心验收是：任务生命周期从生成任务到RAG候选闭环，前端不再二次聚合任务，`/api/modules/todo` 返回后端真实任务和 `taskLifecycle`，复核通过后生成自动复盘周期，复盘完成后生成RAG候选。
 
 ## 1. 部署分层
 
@@ -31,7 +31,9 @@ VERSION.md
 versioning/VERSION.md
 src/api/main.py:API_VERSION
 src/api/routes/health.py:API_VERSION
-web_demo/index.html?v=12.8.0
+web_demo/index.html?v=12.8.1
+web_demo/core/api-client.js
+web_demo/modules/todo/page.js
 src/services/risk_task_service.py
 src/services/module_task_service.py
 src/services/task_lifecycle_orchestrator_service.py
@@ -42,6 +44,8 @@ src/services/rag_business_memory_service.py
 src/api/routes/modules/todo.py
 scripts/verify_release.py
 scripts/check_repo_hygiene.py
+docs/API_CONTRACT.md
+docs/DATA_TASK_LIFECYCLE.md
 docs/MODULE_CHAIN.md
 docs/DEPLOYMENT_RUNBOOK.md
 ```
@@ -59,8 +63,10 @@ curl http://127.0.0.1:8000/api/system/runtime-diagnostics
 重点验收：
 
 ```text
-/api/health 返回 12.8.0。
-web_demo/index.html 只出现 12.8.0 资源版本。
+/api/health 返回 12.8.1。
+web_demo/index.html 只出现 12.8.1 资源版本。
+web_demo/modules/todo/page.js 不允许出现 clusterTasks 或 12.7.1。
+web_demo/core/api-client.js 必须暴露 lifecycleSummary() 和 completeRecapTodo()。
 GET /api/modules/todo 返回 taskLifecycleSync。
 每个可见任务带 taskLifecycle.stage / nextExpected / recapCycles。
 接收任务后 stage = accepted。
@@ -84,4 +90,6 @@ rag_business_memory_service 只召回 approved/effective 经验卡，不召回 p
 不要让任务复核通过后只写日志而不生成复盘周期。
 不要让复盘候选和RAG候选脱离原 task_id。
 不要让复盘结束后跳过人工审核直接进入 approved RAG。
+不要让前端重新聚合后端已经聚合过的任务。
+不要让 V12.3 / V12.7 文档占据当前执行流程。
 ```
