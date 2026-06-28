@@ -1,8 +1,8 @@
 """Todo module routes.
 
-V12.7.2 aligns the visible task queue, accept/submit/review actions and detail
-reports around the same backend task id. Memory tasks are updated first, and the
-repository write is best-effort sync for the demo runtime.
+V12.8 makes the visible task queue part of one lifecycle:
+generate -> accept -> submit evidence -> manager review -> recap schedule ->
+recap complete -> RAG candidate -> future task enhancement.
 """
 
 from __future__ import annotations
@@ -14,17 +14,17 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from src.core.context import UserContext, context_from_headers, get_current_context
 from src.repositories.task_repository import TaskRepository
 from src.services.account_service import current_user, user_has_permission, user_id_from_headers
-from src.services.experience_memory_service import draft_experience_from_task
 from src.services.module_task_service import get_task_counters_for_user, list_task_events_for_user, list_tasks, pin_task, reorder_task, update_task
 from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open_tasks
 from src.services.task_evidence_service import get_task_evidence, review_task_evidence, submit_task_evidence
+from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, apply_lifecycle_to_task_projection, complete_recap_and_create_rag_candidate, handle_evidence_submitted, handle_manager_reviewed, handle_task_accepted, lifecycle_summary
 from src.services.task_repository_write_service import reset_tasks_with_repository, transition_task_with_repository
 from src.services.v105_cross_account_flow_service import apply_v105_cross_account_flow, projected_task_for_role
 from src.services.v106_task_action_simplifier import apply_v106_task_actions
 
 router = APIRouter()
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
-TODO_VERSION = "12.7.2"
+TODO_VERSION = "12.8.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -47,6 +47,7 @@ def _viewer_for_query(user_id: str | None) -> str | None:
 
 def _v10_task(task: Dict[str, Any], user_id: str | None) -> Dict[str, Any]:
     role_task = projected_task_for_role(apply_v105_cross_account_flow(task), _viewer_role(user_id))
+    role_task = apply_lifecycle_to_task_projection(role_task)
     return apply_v106_task_actions(role_task)
 
 
@@ -68,7 +69,7 @@ def _counter_from_tasks(active_tasks: List[Dict[str, Any]], events: List[Dict[st
         "submitted": len([task for task in visible if task.get("status") in {"已提交", "待复核"}]),
         "reviewing": len([task for task in visible if task.get("status") == "待复核"]),
         "returned": len([task for task in visible if task.get("workflowStatus") == "已退回"]),
-        "waitingRecap": len([task for task in visible if task.get("status") == "已完成" and task.get("recapTarget") in {"日报", "周报", "月报"}]),
+        "waitingRecap": len([task for task in visible if task.get("status") in {"已完成", "已通过", "已写入复盘"}]),
         "recentEvents": len(events or []),
         "latestEvent": (events or [None])[0],
     }
@@ -81,10 +82,28 @@ def _safe_repo_transition(task_id: str, action: str, payload: Dict[str, Any], ct
         return {"ok": False, "repositoryError": str(exc), "action": action}
 
 
+def _apply_lifecycle_event(task_id: str, event_action: str, *, viewer_id: str, payload: Dict[str, Any] | None = None) -> Dict[str, Any] | None:
+    payload = payload or {}
+    if event_action == "operator_accepted":
+        return handle_task_accepted(task_id, actor_user_id=viewer_id)
+    if event_action == "operator_submitted":
+        return handle_evidence_submitted(task_id, evidence={"summary": payload.get("note")}, actor_user_id=viewer_id)
+    if event_action == "manager_approved":
+        return handle_manager_reviewed(task_id, approved=True, review={"comment": payload.get("note")}, actor_user_id=viewer_id)
+    if event_action == "manager_returned":
+        return handle_manager_reviewed(task_id, approved=False, review={"comment": payload.get("note")}, actor_user_id=viewer_id)
+    return None
+
+
 def _memory_or_repo_transition(task_id: str, patch: Dict[str, Any], *, event_action: str, repo_payload: Dict[str, Any], ctx: UserContext, viewer_id: str, log_type: str, result_message: str) -> Dict[str, Any]:
     memory_task = update_task(task_id, patch, log_type=log_type, action=log_type, result=result_message)
     repo_result = _safe_repo_transition(task_id, event_action, repo_payload, ctx)
+    lifecycle_task = _apply_lifecycle_event(task_id, event_action, viewer_id=viewer_id, payload=repo_payload)
     if memory_task:
+        if lifecycle_task and lifecycle_task.get("taskLifecycle"):
+            memory_task["taskLifecycle"] = lifecycle_task.get("taskLifecycle")
+            memory_task["lifecycleStage"] = lifecycle_task.get("lifecycleStage")
+            memory_task["lifecycleVersion"] = lifecycle_task.get("lifecycleVersion")
         memory_task["repositoryWrite"] = {"bestEffort": True, "result": {key: value for key, value in repo_result.items() if key != "task"}}
         return _v10_task(memory_task, viewer_id)
     task = repo_result.get("task")
@@ -119,13 +138,19 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
         "events": events,
         "counters": counters,
         "taskClusterSync": cluster_sync,
+        "taskLifecycleSync": lifecycle_summary(limit=80),
         "scope": scope,
         "viewer": current_user(viewer_id),
         "source": source,
         "repositoryFallback": {"version": TODO_VERSION, "used": source == "repository", "rule": "内存任务池为空时才读Repository；正常任务生命周期以内存任务池为主，同步写Repository。"},
-        "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "rule": "同店铺同动作同原因的任务是真实后端聚合任务，不再只是前端临时展示。"},
-        "rule": "任务生成、聚合、接收、详情使用同一个后端任务ID。",
+        "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleVersion": TASK_LIFECYCLE_VERSION, "rule": "任务生成、聚合、接收、提交、复核、复盘和RAG候选共用同一个task_id。"},
+        "rule": "V12.8：任务生命周期闭环。",
     }
+
+
+@router.get("/todo/lifecycle/summary")
+def todo_lifecycle_summary() -> Dict[str, Any]:
+    return lifecycle_summary(limit=100)
 
 
 @router.get("/todo/events")
@@ -202,10 +227,7 @@ def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     approved = decision in {"approve", "approved", "pass", "通过"}
     event_action = "manager_approved" if approved else "manager_returned"
     status_patch = {"status": "已完成" if approved else "已退回", "workflowStatus": "已通过" if approved else "已退回", "reviewNote": note, "reviewerId": viewer_id}
-    task = _memory_or_repo_transition(task_id, status_patch, event_action=event_action, repo_payload={"note": note, "actorUserId": body.get("reviewer_id") or body.get("reviewerId") or viewer_id}, ctx=ctx, viewer_id=viewer_id, log_type="任务复核", result_message=note)
-    if approved:
-        task["feedbackDraft"] = draft_experience_from_task(task_id, operator_submission=task.get("submissionNote") or "运营提交内容待补充。", manager_review=task.get("reviewNote") or note, before_metrics=body.get("beforeMetrics") or body.get("before_metrics") or task.get("beforeMetrics") or {}, after_metrics=body.get("afterMetrics") or body.get("after_metrics") or task.get("afterMetrics") or {}, user_id=viewer_id)
-    return task
+    return _memory_or_repo_transition(task_id, status_patch, event_action=event_action, repo_payload={"note": note, "actorUserId": body.get("reviewer_id") or body.get("reviewerId") or viewer_id}, ctx=ctx, viewer_id=viewer_id, log_type="任务复核", result_message=note)
 
 
 @router.post("/todo/{task_id}/review-evidence")
@@ -215,6 +237,17 @@ def review_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | 
     task = review_task_evidence(task_id, body or {}, reviewer_id=viewer_id)
     if not task:
         raise HTTPException(status_code=400, detail="cannot review task evidence")
+    return _v10_task(task, viewer_id)
+
+
+@router.post("/todo/{task_id}/recap/complete")
+def complete_recap_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"review_tasks", "assign_tasks", "dispatch_tasks"})
+    body = body or {}
+    task = complete_recap_and_create_rag_candidate(task_id, before_metrics=body.get("beforeMetrics") or body.get("before_metrics") or {}, after_metrics=body.get("afterMetrics") or body.get("after_metrics") or {}, reviewer_id=viewer_id, conclusion=body.get("conclusion") or body.get("note"))
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
     return _v10_task(task, viewer_id)
 
 
