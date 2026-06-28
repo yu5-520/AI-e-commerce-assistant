@@ -32,18 +32,33 @@ REQUIRED_FILES = [
     "src/services/operating_weight_policy_service.py",
     "src/services/action_authorization_gate_service.py",
     "web_demo/index.html",
+    "web_demo/core/api-client.js",
+    "web_demo/modules/todo/page.js",
+    "docs/API_CONTRACT.md",
+    "docs/DATA_TASK_LIFECYCLE.md",
 ]
 
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.8", "任务生命周期", "RAG", "web_demo/"],
-    "src/services/risk_task_service.py": ["12.8.0", "TASK_LIFECYCLE_VERSION", "RECAP_SCHEDULER_VERSION", "RAG_FEEDBACK_LOOP_VERSION"],
+    "README.md": ["V12.8.1", "任务生命周期", "前后端接口契约", "RAG", "web_demo/"],
+    "docs/API_CONTRACT.md": ["V12.8.1", "/api/modules/todo/lifecycle/summary", "/api/modules/todo/{task_id}/recap/complete", "前端不得二次聚合"],
+    "docs/DATA_TASK_LIFECYCLE.md": ["V12.8.1", "自动复盘", "rag_feedback_loop_service", "前端不得再次做同类任务聚合"],
+    "web_demo/core/api-client.js": ["lifecycleSummary", "completeRecapTodo", "/api/modules/todo/lifecycle/summary", "/recap/complete"],
+    "web_demo/modules/todo/page.js": ["TASK CENTER · V12.8.1", "后端真实任务队列", "前端不再二次聚合"],
+    "src/services/risk_task_service.py": ["12.8.1", "TASK_LIFECYCLE_VERSION", "RECAP_SCHEDULER_VERSION", "RAG_FEEDBACK_LOOP_VERSION"],
     "src/services/task_lifecycle_orchestrator_service.py": ["TASK_LIFECYCLE_VERSION = \"12.8.0\"", "complete_recap_and_create_rag_candidate", "lifecycle_snapshot"],
     "src/services/task_recap_scheduler_service.py": ["RECAP_SCHEDULER_VERSION = \"12.8.0\"", "schedule_recap_cycles", "complete_recap_cycle"],
     "src/services/rag_feedback_loop_service.py": ["RAG_FEEDBACK_LOOP_VERSION = \"12.8.0\"", "build_rag_candidate_from_recap", "retrieve_rag_feedback_for_task"],
     "src/services/task_evidence_service.py": ["EVIDENCE_VERSION = \"12.8.0\"", "handle_evidence_submitted", "handle_manager_reviewed"],
     "src/services/rag_business_memory_service.py": ["RAG_BUSINESS_MEMORY_VERSION = \"12.8.0\"", "approvedExperienceCards", "feedbackLoop"],
-    "src/api/routes/modules/todo.py": ["TODO_VERSION = \"12.8.0\"", "lifecycle_summary", "complete_recap_and_create_rag_candidate"],
+    "src/api/routes/modules/todo.py": ["TODO_VERSION = \"12.8.1\"", "lifecycle_summary", "complete_recap_and_create_rag_candidate"],
+    "src/api/routes/modules/task_report.py": ["TASK_REPORT_ROUTE_VERSION = \"12.8.1\""],
     "src/services/operating_weight_policy_service.py": ["OPERATING_WEIGHT_POLICY_VERSION = \"12.7.0\"", "first_report_baseline", "canTriggerApproval"],
+}
+
+FORBIDDEN_CONTAINS = {
+    "web_demo/modules/todo/page.js": ["function clusterTasks", "taskClusterVersion: \"12.7.1\"", "TASK CENTER · V12.7.1"],
+    "docs/API_CONTRACT.md": ["V12.3 MVP 验收"],
+    "docs/DATA_TASK_LIFECYCLE.md": ["必要时生成 RAG 记忆候选"],
 }
 
 CRITICAL_APPAPI_ENDPOINTS = [
@@ -56,6 +71,7 @@ CRITICAL_APPAPI_ENDPOINTS = [
     "/api/modules/todo/lifecycle/summary",
     "/api/modules/todo/{task_id}/recap/complete",
     "/api/modules/task-reports/tasks/{task_id}",
+    "/api/modules/recap-candidates",
     "/api/system/reset-runtime-data",
 ]
 
@@ -138,6 +154,11 @@ def main() -> int:
         for needle in needles:
             if needle not in text:
                 errors.append(f"{path} missing required marker: {needle}")
+    for path, forbidden_items in FORBIDDEN_CONTAINS.items():
+        text = read_text(path)
+        for forbidden in forbidden_items:
+            if forbidden in text:
+                errors.append(f"{path} contains forbidden stale marker: {forbidden}")
 
     routes = app_routes()
     missing_critical = [route for route in CRITICAL_APPAPI_ENDPOINTS if not route_present(route, routes)]
