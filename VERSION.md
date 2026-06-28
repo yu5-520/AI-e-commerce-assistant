@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.5.0
+12.6.0
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.5 means: baseline-first task generation + unified dashboard/todo task source. The first imported report establishes product/store/ROI/GMV baseline and may only create red-line, data-quality, or evidence-blocking tasks. ROI/GMV operating tasks require at least two comparable reports; 3/7/14/30/90 day trend tasks require enough cadence. Dashboard and Todo both hydrate from `/api/modules/todo`, so generated tasks are visible with full SOP content in the task page.
+- V12.6 means: RAG operating action permission gate + system-side impact estimation + automatic execution / manager approval flow. Activity signup, title tests, main-image tests, traffic expansion, price changes, budget changes, homepage position changes, inventory actions, and demotion actions must pass account permission, store weight, product weight, company baseline, and conservative impact-floor checks. Operators only provide objective facts; the system estimates ROI/GMV/margin/inventory impact and routes the action to auto execution, manager confirmation, or owner confirmation.
