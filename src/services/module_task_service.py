@@ -1,7 +1,8 @@
-"""V11.8 role-scoped task lifecycle service.
+"""V12.6 role-scoped task lifecycle service.
 
-New tasks must arrive as structured SOP task packages. The legacy rule chain may
-read historical tasks, but it cannot generate new tasks anymore.
+New tasks must arrive as structured SOP task packages. V12.6 adds the operating
+action gate: every task is enriched with RAG-style permission, business baseline,
+impact estimation, and role execution path before it enters the task pool.
 """
 
 from __future__ import annotations
@@ -12,6 +13,9 @@ from typing import Any, Callable, Dict, List
 from uuid import uuid4
 
 from src.services.account_service import default_reviewer, get_user, user_display
+from src.services.action_authorization_gate_service import apply_action_authorization
+from src.services.action_impact_estimation_service import apply_action_impact_estimation
+from src.services.rag_business_memory_service import apply_rag_business_memory
 
 PRIORITY_RANK = {"高": 1, "中": 2, "低": 3}
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
@@ -65,12 +69,72 @@ def validate_v118_task_package(payload: Dict[str, Any]) -> None:
         raise ValueError("旧 agentJudgment 已禁止生成新任务。")
 
 
+def _v126_sop_steps(task: Dict[str, Any]) -> List[str]:
+    gate = task.get("actionAuthorization") or {}
+    action_type = gate.get("actionType") or "generic_operation"
+    decision = gate.get("decision") or "auto_execute"
+    if action_type == "activity_participation":
+        return [
+            "6小时内补充活动事实：活动名称、活动入口、活动时间、活动价、平台补贴、商家让利、报名门槛、资源位。",
+            "补充竞品活动事实：竞品价格、竞品销量、竞品资源位、活动截图或链接。",
+            "提交后系统自动估算活动影响，并根据 RAG 权限和公司基线判断自动确认或主管审批。",
+            "活动开始后第3天，系统自动复盘 ROI、GMV、访客数、点击率、转化率、广告消耗、库存消耗、退款率和毛利率，并写入周报。",
+        ]
+    if action_type in {"title_test", "main_image_test", "creative_material_test"}:
+        if decision == "auto_execute":
+            label = "标题" if action_type == "title_test" else "主图" if action_type == "main_image_test" else "素材"
+            return [
+                f"今日18:00前提交2个新{label}方案，并保留原{label}作为对照组。",
+                f"上传原{label}截图、新{label}方案、测试开始时间和测试范围。",
+                "测试周期3天，系统自动复盘点击率、访客数、转化率、ROI、GMV变化。",
+                "复盘结果写入周报，并沉淀为标题/主图/素材测试 RAG 记忆候选。",
+            ]
+        return [
+            "系统已判断该动作需要主管确认，运营暂不直接修改。",
+            "主管确认后，系统再生成运营执行任务。",
+            "确认任务需说明允许测试范围、测试周期、回看指标和是否影响高权重商品/店铺。",
+        ]
+    if decision in {"manager_approval_required", "owner_approval_required"}:
+        return [
+            "系统已完成经营判断，但该动作超过当前账号可直接执行权限。",
+            "主管需确认是否允许执行，并给出允许范围、复核时间和回看指标。",
+            "确认后再进入运营执行任务；未确认前不修改价格、预算、主图、标题、主推位或商品状态。",
+        ]
+    return _as_list(task.get("sopSteps")) or [
+        "今日内按系统判断执行经营动作。",
+        "上传执行截图、处理记录和开始时间。",
+        "系统按任务周期自动复盘 ROI、GMV、点击率、转化率、库存、退款率和毛利率。",
+    ]
+
+
+def apply_v126_task_governance(task: Dict[str, Any]) -> Dict[str, Any]:
+    item = apply_rag_business_memory(task)
+    item = apply_action_impact_estimation(item, memory_context=item.get("ragBusinessMemory"))
+    item = apply_action_authorization(item)
+    sop = _v126_sop_steps(item)
+    item["sopSteps"] = sop
+    item["executionRequirements"] = sop
+    item["actionGovernanceVersion"] = "12.6.0"
+    detail = dict(item.get("taskDetailReport") or {})
+    detail["version"] = "12.6.0"
+    detail["sopSteps"] = sop
+    detail["actionAuthorization"] = item.get("actionAuthorization")
+    detail["actionImpactEstimate"] = item.get("actionImpactEstimate")
+    detail["ragBusinessMemory"] = item.get("ragBusinessMemory")
+    detail["sopBoundary"] = "运营只补充活动、竞品、标题、主图、素材等客观事实；系统负责估算影响和权限判断。"
+    item["taskDetailReport"] = detail
+    judgment = dict(item.get("agentJudgment") or {})
+    judgment["v126Rule"] = "Agent判断经营问题；系统估算影响；RAG校验权限、权重和公司基线。"
+    item["agentJudgment"] = judgment
+    return item
+
+
 def build_dedupe_key(task: Dict[str, Any]) -> str:
     ownership = task.get("ownership") or {}
     entity_type = task.get("entityType") or "商品"
     entity_id = task.get("entityId") or task.get("productId") or task.get("id") or "unknown"
     risk_domain = task.get("riskDomain") or (task.get("taskCard") or {}).get("subtitle") or "经营"
-    action_type = task.get("actionType") or "SOP"
+    action_type = task.get("actionType") or (task.get("actionAuthorization") or {}).get("actionType") or "SOP"
     owner = ownership.get("assignedOperatorId") or ownership.get("ownerUserId") or "global"
     source_event = task.get("sourceEvent") or ""
     return f"{owner}:{entity_type}:{entity_id}:{risk_domain}:{action_type}:{source_event}"
@@ -79,7 +143,7 @@ def build_dedupe_key(task: Dict[str, Any]) -> str:
 def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
     """Only normalize lifecycle fields; never infer business meaning."""
     validate_v118_task_package(task)
-    item = deepcopy(task)
+    item = apply_v126_task_governance(deepcopy(task))
     ownership = item.get("ownership") or {}
     card = item.get("taskCard") or {}
     item.setdefault("id", make_id("A"))
@@ -122,7 +186,7 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
     item.setdefault("assignedById", None)
     item["assignedByName"] = user_display(item.get("assignedById"), "系统预警" if item.get("assigneeId") else "未下发")
     item["dedupeKey"] = item.get("dedupeKey") or build_dedupe_key(item)
-    item["sourceTrail"] = list(dict.fromkeys(value for value in [*(item.get("sourceTrail") or []), item.get("sourceModule"), "V11.8 SOP任务包"] if value))
+    item["sourceTrail"] = list(dict.fromkeys(value for value in [*(item.get("sourceTrail") or []), item.get("sourceModule"), "V12.6经营动作权限闸门", "V11.8 SOP任务包"] if value))
     return item
 
 
@@ -158,7 +222,7 @@ def available_actions_for_viewer(task: Dict[str, Any], viewer_id: str | None = N
         return ["report", "source"]
     if role_id == "manager":
         actions = ["report", "source", "pin", "move", "assign"]
-        if status in {"已提交", "待复核"}:
+        if status in {"已提交", "待复核", "待拆分"}:
             actions.append("review")
         if status in {"已完成", "已通过", "已归档"}:
             actions.append("write_recap")
@@ -185,8 +249,25 @@ def project_task_for_viewer(task: Dict[str, Any], viewer_id: str | None = None) 
     return item
 
 
+def _deadline_rank(task: Dict[str, Any]) -> int:
+    text = str(task.get("deadline") or task.get("timeBucket") or "")
+    if "2小时" in text or "2 小时" in text:
+        return 1
+    if "6小时" in text or "6 小时" in text:
+        return 2
+    if "12小时" in text or "12 小时" in text:
+        return 3
+    if "今日" in text:
+        return 4
+    if "3天" in text or "3 天" in text:
+        return 5
+    if "本周" in text or "7天" in text:
+        return 6
+    return 9
+
+
 def sort_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return sorted(tasks, key=lambda task: (PRIORITY_RANK.get(task.get("priority"), 9), task.get("manualOrder", 9999), task.get("createdAt", "")))
+    return sorted(tasks, key=lambda task: (PRIORITY_RANK.get(task.get("priority"), 9), _deadline_rank(task), task.get("manualOrder", 9999), task.get("createdAt", "")))
 
 
 def create_task_event(task: Dict[str, Any], event_type: str, actor_user_id: str | None = None, from_status: str | None = None, from_workflow: str | None = None, message: str | None = None, target_user_ids: List[str] | None = None, target_role_ids: List[str] | None = None) -> Dict[str, Any]:
@@ -232,7 +313,7 @@ def create_log(payload: Dict[str, Any]) -> Dict[str, Any]:
         "store": payload.get("store") or task.get("store") or "任务池",
         "productId": payload.get("productId") or task.get("productId") or task.get("id") or "TASK",
         "action": payload.get("action") or "任务池动作",
-        "reason": payload.get("reason") or (task.get("taskDetailReport") or {}).get("warningSummary") or task.get("reason") or "来自 V11.8 SOP 任务包。",
+        "reason": payload.get("reason") or (task.get("taskDetailReport") or {}).get("warningSummary") or task.get("reason") or "来自 V12.6 经营动作权限闸门。",
         "result": payload.get("result") or "已写入日志。",
         "route": payload.get("route") or task.get("sourceRoute") or "dashboard",
         "taskRoute": payload.get("taskRoute") or "business-actions",
@@ -359,8 +440,8 @@ def create_task(payload: Dict[str, Any]) -> Dict[str, Any]:
         create_task_event(existing, "task_merged", message="相同来源 SOP 任务已合并。")
         return deepcopy(existing)
     TASKS.insert(0, task)
-    create_task_event(task, "task_created", message="任务已由 V11.8 SOP 任务包生成。")
-    create_log({"type": "任务进入池", "task": task, "status": "已加入任务池", "action": "生成SOP任务", "result": "任务已按经营对象归属同步到相关账号。"})
+    create_task_event(task, "task_created", message="任务已由 V12.6 经营动作权限闸门生成。")
+    create_log({"type": "任务进入池", "task": task, "status": "已加入任务池", "action": "生成经营动作任务", "result": "任务已按账号权限、店铺权重、商品权重和RAG基线同步到相关账号。"})
     return deepcopy(task)
 
 
@@ -389,7 +470,6 @@ def update_task(task_id: str, patch: Dict[str, Any], *, log_type: str | None = N
 
 
 def submit_task(task_id: str, note: str | None = None, submitter_id: str | None = None) -> Dict[str, Any] | None:
-    """Lifecycle-only submit adapter used by evidence forms."""
     return update_task(
         task_id,
         {"status": "待复核", "workflowStatus": "待复核", "submissionNote": note or "运营已提交处理结果。", "submittedById": submitter_id, "submittedAt": now_iso()},
@@ -400,7 +480,6 @@ def submit_task(task_id: str, note: str | None = None, submitter_id: str | None 
 
 
 def review_task(task_id: str, decision: str = "approve", note: str | None = None, reviewer_id: str | None = None) -> Dict[str, Any] | None:
-    """Lifecycle-only review adapter used by evidence review."""
     approved = decision in {"approve", "approved", "pass", "通过"}
     return update_task(
         task_id,
@@ -416,46 +495,3 @@ def review_task(task_id: str, decision: str = "approve", note: str | None = None
         action="复核通过" if approved else "复核退回",
         result=note or ("复核通过。" if approved else "复核退回。"),
     )
-
-
-def pin_task(task_id: str) -> Dict[str, Any] | None:
-    """Lifecycle-only pin adapter kept for the todo route."""
-    task = find_task(task_id)
-    if not task:
-        return None
-    task["manualOrder"] = 0
-    task["pinned"] = True
-    task["updatedAt"] = now_iso()
-    create_task_event(task, "task_pinned", message="任务已置顶。")
-    return deepcopy(task)
-
-
-def reorder_task(task_id: str, direction: str = "down") -> Dict[str, Any] | None:
-    """Lifecycle-only reorder adapter kept for the todo route."""
-    ordered = sort_tasks(TASKS)
-    index = next((i for i, item in enumerate(ordered) if item.get("id") == task_id), None)
-    if index is None:
-        return None
-    target_index = index - 1 if direction in {"up", "top", "prev", "上移"} else index + 1
-    if target_index < 0 or target_index >= len(ordered):
-        return deepcopy(ordered[index])
-    current = ordered[index]
-    target = ordered[target_index]
-    current_order = current.get("manualOrder", index)
-    target_order = target.get("manualOrder", target_index)
-    current["manualOrder"], target["manualOrder"] = target_order, current_order
-    current["updatedAt"] = now_iso()
-    target["updatedAt"] = now_iso()
-    create_task_event(current, "task_reordered", message="任务排序已更新。")
-    return deepcopy(current)
-
-
-def reset_tasks() -> Dict[str, Any]:
-    """Runtime reset adapter kept for system cleanup; it does not generate tasks."""
-    task_count = len(TASKS)
-    log_count = len(LOGS)
-    event_count = len(TASK_EVENTS)
-    TASKS.clear()
-    LOGS.clear()
-    TASK_EVENTS.clear()
-    return {"ok": True, "version": "11.8.0", "clearedTasks": task_count, "clearedLogs": log_count, "clearedEvents": event_count, "rule": "只清空运行态，不恢复旧任务生成规则。"}
