@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Repository hygiene checker for V12.4 docs, versions, routes, and cadence tasks.
-
-Hard goals:
-- keep VERSION.md, versioning/VERSION.md, FastAPI app.version, health.API_VERSION
-  and web asset versions aligned;
-- keep README as a current execution index instead of a historical changelog;
-- keep current docs on the V12 fact/layout/gap/evidence/cadence chain;
-- make frontend/ explicitly deprecated;
-- warn or fail when API_CONTRACT routes do not map to the running FastAPI app;
-- ensure operating cadence task service is present so tasks are not only redline-based.
-"""
+"""Repository hygiene checker for V12.4.1 docs, versions, routes, and ROI/GMV cadence tasks."""
 
 from __future__ import annotations
 
@@ -45,14 +35,14 @@ CURRENT_DOCS = [
 ]
 
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.4", "operating_cadence_task_service", "3/7/14/30/90", "日报 / 周报", "web_demo/", "frontend/", "docs/archive/README.md", "scripts/check_repo_hygiene.py"],
-    "docs/MODULE_CHAIN.md": ["metric_fact_store_service", "data_gap_event_service", "import_diagnostics_service", "task_evidence_gate_service", "data_source_compat.py", "operating_cadence_task_service"],
+    "README.md": ["V12.4.1", "ROI/GMV", "四象限", "日报 / 周报", "web_demo/", "frontend/", "docs/archive/README.md", "scripts/check_repo_hygiene.py"],
+    "docs/MODULE_CHAIN.md": ["metric_fact_store_service", "data_gap_event_service", "import_diagnostics_service", "task_evidence_gate_service", "data_source_compat.py", "operating_cadence_task_service", "ROI/GMV"],
     "docs/API_CONTRACT.md": ["/api/data/source-connections", "/api/data/import-diagnostics", "metricScope", "forbiddenCrossScope"],
-    "docs/DEPLOYMENT_RUNBOOK.md": ["12.4.0", "DEMO_ACCOUNT_SWITCH=true", "check_repo_hygiene.py", "/api/data/source-connections", "operating_cadence_task_service"],
+    "docs/DEPLOYMENT_RUNBOOK.md": ["12.4.1", "DEMO_ACCOUNT_SWITCH=true", "check_repo_hygiene.py", "/api/data/source-connections", "ROI_GMV"],
     "docs/PRODUCT_ARCHITECTURE.md": ["product_metric_facts", "traffic_source_facts", "data_gap_events", "未识别"],
     "docs/DATA_TASK_LIFECYCLE.md": ["Sheet → Block → Fact → Gap → Staging", "requiredFactTables", "forbiddenCrossScope"],
-    "src/services/risk_task_service.py": ["operating_cadence_task_service", "v12_4_redline_plus_operating_cadence_agent_task_generation"],
-    "src/services/operating_cadence_task_service.py": ["CADENCE_WINDOWS", "daily_operating_task", "日报/周报", "_upload_cadence"],
+    "src/services/risk_task_service.py": ["operating_cadence_task_service", "v12_4_1_redline_plus_roi_gmv_operating_cadence_task_generation", "ROI_GMV"],
+    "src/services/operating_cadence_task_service.py": ["OPERATING_CADENCE_VERSION = \"12.4.1\"", "ROI_GMV", "payment_amount", "roiGmvQuadrant", "daily_operating_task", "_upload_cadence"],
 }
 
 FORBIDDEN_CURRENT_DOC_SNIPPETS = [
@@ -151,7 +141,7 @@ def route_present(route: str, routes: set[str]) -> bool:
 
 def doc_has_current_guard(path: str, text: str) -> bool:
     if path == "README.md":
-        return "当前基线" in text and "V12.4" in text
+        return "当前基线" in text and "V12.4.1" in text
     return "V12.4" in text or "当前" in text
 
 
@@ -195,7 +185,7 @@ def main() -> int:
     for path in CURRENT_DOCS:
         text = read_text(path)
         if not doc_has_current_guard(path, text):
-            warnings.append(f"{path} does not clearly mark itself as current V12.4 documentation")
+            warnings.append(f"{path} does not clearly mark itself as current V12.4.1 documentation")
         for forbidden in FORBIDDEN_CURRENT_DOC_SNIPPETS:
             if forbidden in text:
                 errors.append(f"{path} contains forbidden stale marker: {forbidden}")
