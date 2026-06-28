@@ -45,7 +45,7 @@ STATIC_MUST_CONTAIN = {
     "web_demo/core/api-client.js": ["lifecycleSummary", "completeRecapTodo", "/api/modules/todo/lifecycle/summary", "/recap/complete"],
     "web_demo/modules/todo/page.js": ["TASK CENTER · V12.8.1", "后端真实任务队列", "前端不再二次聚合"],
     "src/services/risk_task_service.py": ["12.8.1", "TASK_LIFECYCLE_VERSION", "RECAP_SCHEDULER_VERSION", "RAG_FEEDBACK_LOOP_VERSION"],
-    "src/services/task_lifecycle_orchestrator_service.py": ["TASK_LIFECYCLE_VERSION = \"12.8.0\"", "complete_recap_and_create_rag_candidate", "lifecycle_snapshot"],
+    "src/services/task_lifecycle_orchestrator_service.py": ["TASK_LIFECYCLE_VERSION = \"12.8.1\"", "complete_recap_and_create_rag_candidate", "lifecycle_snapshot", "apply_lifecycle_to_task_projection"],
     "src/services/task_recap_scheduler_service.py": ["RECAP_SCHEDULER_VERSION = \"12.8.0\"", "schedule_recap_cycles", "complete_recap_cycle"],
     "src/services/rag_feedback_loop_service.py": ["RAG_FEEDBACK_LOOP_VERSION = \"12.8.0\"", "build_rag_candidate_from_recap", "retrieve_rag_feedback_for_task"],
     "src/services/task_evidence_service.py": ["EVIDENCE_VERSION = \"12.8.0\"", "handle_evidence_submitted", "handle_manager_reviewed"],
