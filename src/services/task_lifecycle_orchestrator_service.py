@@ -1,4 +1,4 @@
-"""V12.8 task lifecycle orchestrator."""
+"""V12.8.1 task lifecycle orchestrator."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.services import module_task_service
 from src.services.rag_feedback_loop_service import RAG_FEEDBACK_LOOP_VERSION, build_rag_candidate_from_recap
 from src.services.task_recap_scheduler_service import RECAP_SCHEDULER_VERSION, complete_recap_cycle, list_recap_cycles_for_task, schedule_recap_cycles
 
-TASK_LIFECYCLE_VERSION = "12.8.0"
+TASK_LIFECYCLE_VERSION = "12.8.1"
 
 STAGE_BY_STATUS = {
     "待拆分": "generated",
@@ -143,7 +143,13 @@ def lifecycle_summary(limit: int = 50) -> Dict[str, Any]:
 
 def apply_lifecycle_to_task_projection(task: Dict[str, Any]) -> Dict[str, Any]:
     item = deepcopy(task)
-    item["taskLifecycle"] = lifecycle_snapshot(task)
-    item["lifecycleStage"] = item["taskLifecycle"].get("stage")
+    snapshot = lifecycle_snapshot(task)
+    if task.get("id") and not task.get("taskLifecycle"):
+        try:
+            module_task_service.update_task(task["id"], {"taskLifecycle": snapshot, "lifecycleStage": snapshot.get("stage"), "lifecycleVersion": TASK_LIFECYCLE_VERSION})
+        except Exception:
+            pass
+    item["taskLifecycle"] = snapshot
+    item["lifecycleStage"] = snapshot.get("stage")
     item["lifecycleVersion"] = TASK_LIFECYCLE_VERSION
     return item
