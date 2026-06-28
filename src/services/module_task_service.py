@@ -1,8 +1,8 @@
 """V12.6 role-scoped task lifecycle service.
 
-New tasks must arrive as structured SOP task packages. V12.6 adds the operating
-action gate: every task is enriched with RAG-style permission, business baseline,
-impact estimation, and role execution path before it enters the task pool.
+Tasks enter as structured SOP task packages. V12.6 enriches each task with
+business memory, system impact estimation and an action authorization gate before
+it reaches the visible task pool.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from src.services.rag_business_memory_service import apply_rag_business_memory
 
 PRIORITY_RANK = {"高": 1, "中": 2, "低": 3}
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
-FINANCE_DOMAINS = {"报表", "价格", "流量", "库存", "利润", "财务"}
+REQUIRED_V118_FIELDS = {"taskCard", "taskDetailReport", "evidencePack", "sopSteps", "reviewMetrics", "completionGate", "failureThreshold", "agentJudgment", "ownership"}
 EVENT_LABELS = {
     "task_created": "任务创建",
     "task_merged": "任务合并",
@@ -36,7 +36,6 @@ EVENT_LABELS = {
     "task_reordered": "任务排序",
     "demo_reset": "演示重置",
 }
-REQUIRED_V118_FIELDS = {"taskCard", "taskDetailReport", "evidencePack", "sopSteps", "reviewMetrics", "completionGate", "failureThreshold", "agentJudgment", "ownership"}
 
 TASKS: List[Dict[str, Any]] = []
 LOGS: List[Dict[str, Any]] = []
@@ -141,7 +140,6 @@ def build_dedupe_key(task: Dict[str, Any]) -> str:
 
 
 def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Only normalize lifecycle fields; never infer business meaning."""
     validate_v118_task_package(task)
     item = apply_v126_task_governance(deepcopy(task))
     ownership = item.get("ownership") or {}
@@ -407,7 +405,18 @@ def task_state_for_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     active = find_open_task_by_key(suggested_key)
     completed = find_completed_task_by_key(suggested_key)
     archived = bool(completed and not active)
-    return {"suggestedTaskKey": suggested_key, "activeTaskId": active.get("id") if active else None, "activeTaskStatus": active.get("status") if active else None, "activeWorkflowStatus": active.get("workflowStatus") if active else None, "activeAssigneeName": active.get("assigneeName") if active else None, "completedTaskId": completed.get("id") if completed else None, "completedTaskStatus": completed.get("status") if completed else None, "hasActiveTask": bool(active), "candidateArchived": archived, "candidateStatus": "completed_archived" if archived else "active_task" if active else "pending_candidate"}
+    return {
+        "suggestedTaskKey": suggested_key,
+        "activeTaskId": active.get("id") if active else None,
+        "activeTaskStatus": active.get("status") if active else None,
+        "activeWorkflowStatus": active.get("workflowStatus") if active else None,
+        "activeAssigneeName": active.get("assigneeName") if active else None,
+        "completedTaskId": completed.get("id") if completed else None,
+        "completedTaskStatus": completed.get("status") if completed else None,
+        "hasActiveTask": bool(active),
+        "candidateArchived": archived,
+        "candidateStatus": "completed_archived" if archived else "active_task" if active else "pending_candidate",
+    }
 
 
 def attach_task_state(item: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -467,6 +476,34 @@ def update_task(task_id: str, patch: Dict[str, Any], *, log_type: str | None = N
         create_log({"type": log_type, "task": task, "action": action or log_type, "result": result or "任务已更新。"})
     create_task_event(task, "task_completed" if task.get("status") in DONE_STATUS and before_status != task.get("status") else "task_updated", from_status=before_status, from_workflow=before_workflow, message=result or "任务已更新。")
     return deepcopy(task)
+
+
+def pin_task(task_id: str) -> Dict[str, Any] | None:
+    task = find_task(task_id)
+    if not task:
+        return None
+    return update_task(task_id, {"pinned": True, "manualOrder": 0}, log_type="任务置顶", action="置顶任务", result="任务已置顶。")
+
+
+def reorder_task(task_id: str, direction: str = "down") -> Dict[str, Any] | None:
+    task = find_task(task_id)
+    if not task:
+        return None
+    active = [item for item in sort_tasks(TASKS) if item.get("status") not in DONE_STATUS]
+    index = next((idx for idx, item in enumerate(active) if item.get("id") == task_id), -1)
+    if index < 0:
+        return None
+    target_index = index - 1 if direction in {"up", "上移", "prev"} else index + 1
+    if target_index < 0 or target_index >= len(active):
+        return deepcopy(task)
+    current_order = active[index].get("manualOrder", index)
+    target_order = active[target_index].get("manualOrder", target_index)
+    active[index]["manualOrder"] = target_order
+    active[target_index]["manualOrder"] = current_order
+    active[index]["updatedAt"] = now_iso()
+    active[target_index]["updatedAt"] = active[index]["updatedAt"]
+    create_task_event(active[index], "task_reordered", message="任务顺序已调整。")
+    return deepcopy(active[index])
 
 
 def submit_task(task_id: str, note: str | None = None, submitter_id: str | None = None) -> Dict[str, Any] | None:
