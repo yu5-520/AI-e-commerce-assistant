@@ -105,12 +105,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.4.1：接口/演示同步只写事实和缺口，任务由红线 + ROI/GMV 经营节奏 + 证据闸门生成。"
+        result["rule"] = "V12.5：接口/演示同步只写事实和缺口；第一份报表只建基线，任务由红线 + ROI/GMV 对比 + 证据闸门生成。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "12.4.1",
-        "mode": "v12_4_1_dataset_sync_without_legacy_task_rules",
+        "version": "12.5.0",
+        "mode": "v12_5_dataset_sync_without_legacy_task_rules",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -119,7 +119,7 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         "results": results,
         "rows": all_rows,
         "summary": get_v3_dashboard_summary(),
-        "rule": "导入先完成经营对象、指标事实和缺口留痕，再由 ROI/GMV 经营节奏和证据闸门判断是否生成任务。",
+        "rule": "导入先完成经营对象、指标事实和缺口留痕；首份报表只做基线，后续对比后再生成 ROI/GMV 经营任务。",
     }
 
 
@@ -158,7 +158,7 @@ def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: 
         )
         return result
     if not materialized_rows:
-        result["metricFactSync"] = {"version": "12.4.1", "skipped": True, "reason": "rows is not a list"}
+        result["metricFactSync"] = {"version": "12.5.0", "skipped": True, "reason": "rows is not a list"}
         return result
     result["metricFactSync"] = ingest_metric_facts_from_import(
         result,
@@ -216,7 +216,7 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
     materialized_rows = _materialize_import_rows(result, rows)
     if not materialized_rows:
         result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "12.4.1", "skipped": True, "reason": "rows is not a list"}
+        result["riskTaskSync"] = {"version": "12.5.0", "skipped": True, "reason": "rows is not a list"}
         return result
     import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
     summaries: List[Dict[str, Any]] = []
@@ -249,18 +249,22 @@ def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_sy
         "rule": "导入后先生成商品快照、指标趋势和经营信号。",
     }
     result["riskTaskSync"] = {
-        "version": "12.4.1",
-        "mode": "v12_4_1_redline_plus_roi_gmv_operating_cadence_task_generation",
+        "version": "12.5.0",
+        "mode": "v12_5_baseline_first_redline_plus_roi_gmv_operating_task_generation",
         "primaryAxis": "ROI_GMV",
         "datasetCount": len(risk_summaries),
         "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries),
         "strictRiskCreatedTaskCount": sum(item.get("strictRiskCreatedTaskCount", 0) for item in risk_summaries),
         "operatingCadenceCreatedTaskCount": sum(item.get("operatingCadenceCreatedTaskCount", 0) for item in risk_summaries),
+        "blockedByBaselineCount": sum(item.get("blockedByBaselineCount", 0) for item in risk_summaries),
+        "baselineMode": any(bool(item.get("baselineMode")) for item in risk_summaries),
+        "comparisonReady": any(bool(item.get("comparisonReady")) for item in risk_summaries),
+        "trendReady": any(bool(item.get("trendReady")) for item in risk_summaries),
         "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries),
         "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries),
         "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries),
         "summaries": risk_summaries,
-        "rule": "V12.4.1：任务生成以 ROI/GMV 为主轴；库存、流量、点击、转化、退款、毛利用于解释原因；关键证据缺失时按 metric_scope 降级为补证任务。",
+        "rule": "V12.5：首份报表只建基线；非红线 ROI/GMV 经营任务必须至少有两份可比报表；关键证据缺失时按 metric_scope 降级为补证任务。",
     }
     return result
 
