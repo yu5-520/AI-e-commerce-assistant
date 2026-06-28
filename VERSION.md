@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.8.0
+12.8.1
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.8 means: task lifecycle closed loop. A task must move through one task_id from generation, acceptance, evidence submission, manager review, automatic recap scheduling, recap completion, RAG candidate creation, RAG approval, and future task generation enhancement. Operators submit facts, the system schedules recap windows and reads follow-up metrics, and only approved/effective recap experience cards enhance later tasks.
+- V12.8.1 means: V12.8 task lifecycle closed loop + frontend/backend contract alignment + document governance cleanup. The frontend must trust backend clustered task objects and must not re-cluster tasks locally. The API client must expose lifecycle summary and recap completion endpoints. `module_task_service.create_task()` must attach the generated lifecycle stage. Current execution docs must describe V12.8.1 lifecycle contracts, not V12.3/V12.7-era flows.
