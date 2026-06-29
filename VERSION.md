@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.9.1
+14.2.0
 ```
 
 ## Release Contract
@@ -11,4 +11,24 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.9.1 means: V12.9 lifecycle state machine + auto-accept and idempotent repository-aware lifecycle. Operator permission-in tasks that do not require manager/owner review must be auto-accepted into `处理中` / `accepted` when the todo queue is read. Manual accept becomes idempotent: if the task is already in `处理中` or a later stage, it returns the latest projection without writing duplicate receive logs. The lifecycle state machine must read and hydrate tasks from SQLite TaskRepository when the in-memory task pool is empty, so the visible task list, accept/submit actions, task detail report and event log use the same primary task_id.
+
+## V14.2 Meaning
+
+V14.2 means that report import, product state snapshot, product change snapshot, signal pool, RAG context, Agent judgment, task snapshot and task pool are aligned as one mainline.
+
+Mainline:
+
+```text
+report import
+  -> operating snapshot
+  -> system product snapshot
+  -> product signal snapshot
+  -> signal pool
+  -> RAG context
+  -> Agent judgment
+  -> task snapshot
+  -> task pool
+  -> task lifecycle
+```
+
+Legacy paths may remain for archive, compatibility and diagnostics, but the visible task path must pass through `task_snapshot_station`.
