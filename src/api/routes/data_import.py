@@ -1,4 +1,10 @@
-"""Data Hub routes."""
+"""Data Hub routes.
+
+V12.13.1 rule: import endpoints are pipeline stations. They materialize rows,
+metric facts, data gaps, operating objects and the operating-unit snapshot, but
+they do not synchronously generate tasks or run legacy closed-loop task hooks.
+Task generation is only triggered by `/api/pipeline/data-versions/{data_version}/tasks/generate`.
+"""
 
 from __future__ import annotations
 
@@ -18,18 +24,15 @@ from src.services.import_adapter_service import compact_upload_meta, parse_uploa
 from src.services.import_diagnostics_service import import_diagnostics
 from src.services.metric_fact_store_service import ingest_metric_facts_from_import, ingest_metric_facts_from_sheet_rows, metric_fact_summary
 from src.services.operating_object_store_service import upsert_operating_objects_from_import
+from src.services.operating_unit_snapshot_service import materialize_operating_unit_snapshot
+from src.services.pipeline_gate_service import record_stage_gate
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions
-from src.services.report_schema_service import confirm_report_import, get_report_templates, normalize_rows_with_mapping, preview_report_dataset
-from src.services.risk_task_service import generate_risk_tasks_for_signals
-from src.services.trend_signal_service import ingest_product_trends
-from src.services.v104_import_task_sync_service import attach_v104_import_sync
-from src.services.v107_operating_profile_service import attach_v107_operating_profile
-from src.services.v108_tag_change_task_service import attach_v108_tag_change_tasks
-from src.services.v116_import_closed_loop_service import attach_v116_import_closed_loop
+from src.services.report_schema_service import confirm_report_import, get_report_templates, preview_report_dataset
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
 DEFAULT_SYNC_DATASETS = ["inventory", "refunds", "orders", "products"]
+DATA_IMPORT_ROUTE_VERSION = "12.13.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -105,12 +108,12 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.5：接口/演示同步只写事实和缺口；第一份报表只建基线，任务由红线 + ROI/GMV 对比 + 证据闸门生成。"
+        result["rule"] = "V12.13.1：接口同步只写事实、经营对象和快照；任务生成由pipeline任务站触发。"
         results.append(result)
         all_rows.extend(normalized)
     return {
-        "version": "12.5.0",
-        "mode": "v12_5_dataset_sync_without_legacy_task_rules",
+        "version": DATA_IMPORT_ROUTE_VERSION,
+        "mode": "v12_13_1_dataset_sync_without_legacy_task_triggers",
         "datasetCount": len(results),
         "rowCount": len(all_rows),
         "alertCount": sum(item.get("alertCount", 0) for item in results),
@@ -119,7 +122,7 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         "results": results,
         "rows": all_rows,
         "summary": get_v3_dashboard_summary(),
-        "rule": "导入先完成经营对象、指标事实和缺口留痕；首份报表只做基线，后续对比后再生成 ROI/GMV 经营任务。",
+        "rule": "导入只完成数据站点；任务生成、Agent增强、RAG/LLM不在上传请求里执行。",
     }
 
 
@@ -158,7 +161,7 @@ def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: 
         )
         return result
     if not materialized_rows:
-        result["metricFactSync"] = {"version": "12.5.0", "skipped": True, "reason": "rows is not a list"}
+        result["metricFactSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "rows is not a list"}
         return result
     result["metricFactSync"] = ingest_metric_facts_from_import(
         result,
@@ -185,6 +188,44 @@ def _attach_v1213_data_gap_sync(result: Dict[str, Any], rows: Any, *, source: st
     return result
 
 
+def _data_versions_from_result(result: Dict[str, Any]) -> List[str]:
+    versions: List[str] = []
+    if result.get("dataVersion"):
+        versions.append(str(result["dataVersion"]))
+    for item in result.get("results") if isinstance(result.get("results"), list) else []:
+        if isinstance(item, dict) and item.get("dataVersion"):
+            versions.append(str(item["dataVersion"]))
+    return list(dict.fromkeys([item for item in versions if item]))
+
+
+def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    ctx = context_from_headers(request.headers)
+    versions = _data_versions_from_result(result)
+    if not versions:
+        versions = [None]  # type: ignore[list-item]
+    gates = []
+    for version in versions:
+        gate_input = {"source": source, "rowCount": len(result.get("rows") or []), "sourceSystem": result.get("sourceSystem")}
+        gates.append(record_stage_gate(data_version=version, stage="import_uploaded", status="completed", input_payload=gate_input, output_payload={"dataVersion": version}, user_id=ctx.user_id, output_ref=f"import:{version or 'latest'}"))
+        gates.append(record_stage_gate(data_version=version, stage="report_parsed", status="completed", input_payload=gate_input, output_payload={"rowCount": len(result.get("rows") or [])}, user_id=ctx.user_id, upstream_stage="import_uploaded", output_ref=f"rows:{version or 'latest'}"))
+        gates.append(record_stage_gate(data_version=version, stage="metric_facts_ready", status="completed", input_payload={"metricFactSync": result.get("metricFactSync")}, output_payload={"summary": result.get("metricFactSync")}, user_id=ctx.user_id, upstream_stage="report_parsed", output_ref=f"metric_facts:{version or 'latest'}"))
+        gates.append(record_stage_gate(data_version=version, stage="operating_objects_ready", status="completed", input_payload={"operatingObjectSync": result.get("operatingObjectSync")}, output_payload={"summary": result.get("operatingObjectSync")}, user_id=ctx.user_id, upstream_stage="metric_facts_ready", output_ref=f"operating_objects:{version or 'latest'}"))
+        snapshot = materialize_operating_unit_snapshot(user_id=ctx.user_id, data_version=version, force=True)
+        result["operatingUnitSnapshotSync"] = snapshot
+        gates.append(record_stage_gate(data_version=version, stage="operating_unit_snapshot_ready", status="completed", input_payload={"source": source}, output_payload={"snapshotKey": snapshot.get("snapshotKey"), "storeCount": len(snapshot.get("storeRows") or [])}, user_id=ctx.user_id, upstream_stage="operating_objects_ready", output_ref=snapshot.get("snapshotKey")))
+    result["pipelineSync"] = {
+        "version": DATA_IMPORT_ROUTE_VERSION,
+        "mode": "import_station_gates_without_task_generation",
+        "dataVersions": [item for item in versions if item],
+        "gateCount": len(gates),
+        "gates": gates,
+        "taskGeneration": "disabled_in_import_request",
+        "agentEnhancement": "disabled_in_import_request",
+        "rule": "V12.13.1：上传/同步只到经营页快照站；任务生成必须走 /api/pipeline/data-versions/{data_version}/tasks/generate。",
+    }
+    return result
+
+
 def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
     version = result.get("dataVersion")
     if not version and isinstance(result.get("results"), list) and result["results"]:
@@ -194,7 +235,7 @@ def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
         report_profile=_report_profile_from_result(result),
         metric_fact_sync=result.get("metricFactSync") if isinstance(result.get("metricFactSync"), dict) else None,
         data_gap_sync=result.get("dataGapSync") if isinstance(result.get("dataGapSync"), dict) else None,
-        risk_task_sync=result.get("riskTaskSync") if isinstance(result.get("riskTaskSync"), dict) else None,
+        risk_task_sync=None,
     )
     return result
 
@@ -204,68 +245,19 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
         result = _attach_operating_object_sync(request, result, rows, source=source)
         result = _attach_v121_metric_fact_sync(result, rows, source=source)
         result = _attach_v1213_data_gap_sync(result, rows, source=source)
-    ctx = context_from_headers(request.headers)
-    v104 = attach_v104_import_sync(result, source=source)
-    v107 = attach_v107_operating_profile(v104)
-    v108 = attach_v108_tag_change_tasks(v107, ctx)
-    closed = attach_v116_import_closed_loop(v108, ctx, source=source)
-    return _attach_import_diagnostics(closed)
+    result["legacyImportTaskHooksDisabled"] = True
+    result["legacyHooksRemoved"] = ["attach_v104_import_sync", "attach_v107_operating_profile", "attach_v108_tag_change_tasks", "attach_v116_import_closed_loop", "_attach_v62_trend_and_risk_sync"]
+    result["createdTaskCount"] = 0
+    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_pipeline_station"})
+    result["rule"] = "V12.13.1：导入接口删除旧任务触发点，只保留数据入库、事实表、对象映射、快照和阀门。"
+    return _attach_import_diagnostics(result)
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    materialized_rows = _materialize_import_rows(result, rows)
-    if not materialized_rows:
-        result["trendSync"] = {"version": "6.2.0", "skipped": True, "reason": "rows is not a list"}
-        result["riskTaskSync"] = {"version": "12.5.0", "skipped": True, "reason": "rows is not a list"}
-        return result
-    import_results = result.get("results") if isinstance(result.get("results"), list) else [result]
-    summaries: List[Dict[str, Any]] = []
-    risk_summaries: List[Dict[str, Any]] = []
-    for item in import_results:
-        if not isinstance(item, dict):
-            continue
-        dataset_name = item.get("datasetName")
-        data_version = item.get("dataVersion")
-        if not dataset_name or not data_version:
-            continue
-        base_rows = item.get("rows") if isinstance(item.get("rows"), list) and item.get("rows") else materialized_rows
-        field_mapping = (item.get("schemaPreview") or {}).get("fieldMapping") or {}
-        routed_rows = normalize_rows_with_mapping(base_rows, field_mapping) if isinstance(field_mapping, dict) else base_rows
-        trend_summary = ingest_product_trends(dataset_name=str(dataset_name), data_version=str(data_version), rows=routed_rows, source_system=source_system or result.get("sourceSystem"))
-        risk_summary = generate_risk_tasks_for_signals(data_version=str(data_version))
-        item["trendSync"] = trend_summary
-        item["riskTaskSync"] = risk_summary
-        summaries.append(trend_summary)
-        risk_summaries.append(risk_summary)
-    result["trendSync"] = {
-        "version": "6.2.0",
-        "mode": "product_snapshot_metric_trend_signal_sync",
-        "datasetCount": len(summaries),
-        "snapshotCount": sum(item.get("snapshotCount", 0) for item in summaries),
-        "trendCount": sum(item.get("trendCount", 0) for item in summaries),
-        "signalCount": sum(item.get("signalCount", 0) for item in summaries),
-        "taskCandidateSignalCount": sum(item.get("taskCandidateSignalCount", 0) for item in summaries),
-        "summaries": summaries,
-        "rule": "导入后先生成商品快照、指标趋势和经营信号。",
-    }
-    result["riskTaskSync"] = {
-        "version": "12.5.0",
-        "mode": "v12_5_baseline_first_redline_plus_roi_gmv_operating_task_generation",
-        "primaryAxis": "ROI_GMV",
-        "datasetCount": len(risk_summaries),
-        "createdTaskCount": sum(item.get("createdTaskCount", 0) for item in risk_summaries),
-        "strictRiskCreatedTaskCount": sum(item.get("strictRiskCreatedTaskCount", 0) for item in risk_summaries),
-        "operatingCadenceCreatedTaskCount": sum(item.get("operatingCadenceCreatedTaskCount", 0) for item in risk_summaries),
-        "blockedByBaselineCount": sum(item.get("blockedByBaselineCount", 0) for item in risk_summaries),
-        "baselineMode": any(bool(item.get("baselineMode")) for item in risk_summaries),
-        "comparisonReady": any(bool(item.get("comparisonReady")) for item in risk_summaries),
-        "trendReady": any(bool(item.get("trendReady")) for item in risk_summaries),
-        "signalCount": sum(item.get("signalCount", 0) for item in risk_summaries),
-        "groupCount": sum(item.get("groupCount", 0) for item in risk_summaries),
-        "evidenceBlockedTaskCount": sum((item.get("evidenceGateSync") or {}).get("blockedTaskCount", 0) for item in risk_summaries),
-        "summaries": risk_summaries,
-        "rule": "V12.5：首份报表只建基线；非红线 ROI/GMV 经营任务必须至少有两份可比报表；关键证据缺失时按 metric_scope 降级为补证任务。",
-    }
+    """Deprecated no-op kept for old callers; it must not generate tasks."""
+    result["trendSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "trend station detached from import request"}
+    result["riskTaskSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task generation moved to /api/pipeline/data-versions/{data_version}/tasks/generate"}
+    result["legacyRiskSyncDisabled"] = True
     return result
 
 
@@ -296,8 +288,8 @@ def sync_source_connection(request: Request, source_id: str) -> Dict[str, Any]:
     objected = _attach_operating_object_sync(request, result, result.get("rows"), source=f"{source_id}_api_sync")
     facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
     gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
-    synced = _attach_v62_trend_and_risk_sync(gapped, gapped.get("rows"), source_system=source_id)
-    return _attach_import_product_contracts(request, synced, synced.get("rows"), source=f"{source_id}_api_sync", upsert_objects=False)
+    staged = _attach_pipeline_station_sync(request, gapped, source=f"{source_id}_api_sync")
+    return _attach_import_product_contracts(request, staged, staged.get("rows"), source=f"{source_id}_api_sync", upsert_objects=False)
 
 
 @router.post("/validate")
@@ -386,7 +378,7 @@ async def preview_upload(file: UploadFile = File(...), dataset_name: str = Form(
 
 
 @router.post("/upload/confirm")
-async def confirm_upload(request: Request, file: UploadFile = File(...), dataset_name: str = Form(default="auto"), source_system: str = Form(default="manual_upload"), auto_create_tasks: bool = Form(default=True)) -> Dict[str, Any]:
+async def confirm_upload(request: Request, file: UploadFile = File(...), dataset_name: str = Form(default="auto"), source_system: str = Form(default="manual_upload"), auto_create_tasks: bool = Form(default=False)) -> Dict[str, Any]:
     parsed = await _rows_from_uploaded_file(file)
     rows = parsed.get("rows")
     try:
@@ -395,8 +387,8 @@ async def confirm_upload(request: Request, file: UploadFile = File(...), dataset
         objected = _attach_operating_object_sync(request, result, rows, source="upload_file_import")
         facted = _attach_v121_metric_fact_sync(objected, rows, source="upload_file_import", source_system=source_system, parsed=parsed)
         gapped = _attach_v1213_data_gap_sync(facted, rows, source="upload_file_import", source_system=source_system, parsed=parsed)
-        synced = _attach_v62_trend_and_risk_sync(gapped, rows, source_system=source_system)
-        return _attach_import_product_contracts(request, synced, rows, source="upload_file_import", upsert_objects=False)
+        staged = _attach_pipeline_station_sync(request, gapped, source="upload_file_import")
+        return _attach_import_product_contracts(request, staged, rows, source="upload_file_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -425,8 +417,8 @@ def confirm_import(request: Request, body: Dict[str, Any] = Body(default_factory
         objected = _attach_operating_object_sync(request, result, body.get("rows"), source="confirm_report_import")
         facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="confirm_report_import", source_system=source_system)
         gapped = _attach_v1213_data_gap_sync(facted, body.get("rows"), source="confirm_report_import", source_system=source_system)
-        synced = _attach_v62_trend_and_risk_sync(gapped, body.get("rows"), source_system=source_system)
-        return _attach_import_product_contracts(request, synced, body.get("rows"), source="confirm_report_import", upsert_objects=False)
+        staged = _attach_pipeline_station_sync(request, gapped, source="confirm_report_import")
+        return _attach_import_product_contracts(request, staged, body.get("rows"), source="confirm_report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -436,13 +428,14 @@ def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=
     dataset_name = body.get("dataset_name") or body.get("datasetName")
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
+    source_system = body.get("source_system") or body.get("sourceSystem")
     try:
         result = import_report_dataset(str(dataset_name), rows=body.get("rows"), auto_create_tasks=False)
         objected = _attach_operating_object_sync(request, result, body.get("rows"), source="report_import")
-        facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="report_import", source_system=body.get("source_system") or body.get("sourceSystem"))
-        gapped = _attach_v1213_data_gap_sync(facted, body.get("rows"), source="report_import", source_system=body.get("source_system") or body.get("sourceSystem"))
-        synced = _attach_v62_trend_and_risk_sync(gapped, body.get("rows"), source_system=body.get("source_system") or body.get("sourceSystem"))
-        return _attach_import_product_contracts(request, synced, body.get("rows"), source="report_import", upsert_objects=False)
+        facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="report_import", source_system=source_system)
+        gapped = _attach_v1213_data_gap_sync(facted, body.get("rows"), source="report_import", source_system=source_system)
+        staged = _attach_pipeline_station_sync(request, gapped, source="report_import")
+        return _attach_import_product_contracts(request, staged, body.get("rows"), source="report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -454,8 +447,8 @@ def import_mock_alerts(request: Request) -> Dict[str, Any]:
     objected = _attach_operating_object_sync(request, result, result.get("rows"), source="mock_alerts_import")
     facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
     gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
-    synced = _attach_v62_trend_and_risk_sync(gapped, gapped.get("rows"), source_system="mock_alerts")
-    return _attach_import_product_contracts(request, synced, synced.get("rows"), source="mock_alerts_import", upsert_objects=False)
+    staged = _attach_pipeline_station_sync(request, gapped, source="mock_alerts_import")
+    return _attach_import_product_contracts(request, staged, staged.get("rows"), source="mock_alerts_import", upsert_objects=False)
 
 
 @router.get("/v3-summary")
