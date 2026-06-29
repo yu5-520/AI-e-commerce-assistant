@@ -51,7 +51,7 @@ DEFAULT_OUTPUTS = {
     "rag_feedback_station": ["taskId", "candidateCount", "outputRef"],
 }
 
-REAL_ADAPTERS = {"operating_snapshot_station", "task_signal_station", "task_pool_station", "task_acceptance_station", "task_assignment_station", "task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}
+REAL_ADAPTERS = {"operating_snapshot_station", "task_signal_station", "task_pool_station"}
 
 
 def _is_blank(value: Any) -> bool:
@@ -81,8 +81,8 @@ def station_contract(station_id: str) -> Dict[str, Any]:
         "backendModule": station.get("backendModule"),
         "frontendModule": station.get("frontendModule"),
         "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"},
-        "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "diagnosticUsesSimulation": True},
-        "rule": "V13.7：任务生命周期站点契约覆盖接收/派发、提交/复核、复盘/RAG回流。",
+        "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "dedicatedLifecycleRoute": sid in {"task_acceptance_station", "task_assignment_station", "task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}, "diagnosticUsesSimulation": True},
+        "rule": "V13.7：任务生命周期站点契约覆盖接收/派发、提交/复核、复盘/RAG回流；业务动作走专用生命周期站点API。",
     }
 
 
@@ -148,4 +148,4 @@ def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *,
     output_check = validate_contract_payload(station["stationId"], output, direction="output")
     status = "failed" if adapter_error else "completed"
     gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"]}, output_payload=output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output_ref, error_message=adapter_error, run_type="diagnostic" if diagnostic else "business", is_diagnostic=diagnostic)
-    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V13.7：Station Interface 调用任务生命周期站点adapter；todo页面只读取投影。"}
+    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V13.7：Station Interface 写标准阀门；生命周期业务动作走 /api/task-lifecycle-stations。"}
