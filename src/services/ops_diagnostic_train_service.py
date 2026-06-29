@@ -1,8 +1,7 @@
-"""V12.14 Ops Diagnostic Train.
+"""V12.14.2 Ops Diagnostic Train.
 
-The ops train does not carry real business data. It runs station contracts with a
-diagnostic data version, writes diagnostic records, and reports which station is
-broken before users discover it by opening product pages.
+The ops train does not carry real business data. It checks station contracts and
+also checks whether deprecated files leaked back into the mainline.
 """
 
 from __future__ import annotations
@@ -14,10 +13,11 @@ from time import perf_counter
 from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import connect, ensure_columns
+from src.services.deprecated_station_registry_service import DEPRECATED_STATION_VERSION, mainline_purity_check
 from src.services.station_contract_service import STATION_CONTRACT_VERSION, run_station_contract, station_health, validate_contract_payload
 from src.services.station_registry_service import STATION_REGISTRY_VERSION, get_station, list_stations
 
-OPS_DIAGNOSTIC_TRAIN_VERSION = "12.14.0"
+OPS_DIAGNOSTIC_TRAIN_VERSION = "12.14.2"
 
 
 def now_iso() -> str:
@@ -133,13 +133,7 @@ def _read_run(row: Any) -> Dict[str, Any]:
         payload = json.loads(row["payload"] or "{}")
     except Exception:
         payload = {}
-    return payload or {
-        "runId": row["run_id"],
-        "status": row["status"],
-        "mode": row["mode"],
-        "failedStage": row["failed_stage"],
-        "summary": row["summary"],
-    }
+    return payload or {"runId": row["run_id"], "status": row["status"], "mode": row["mode"], "failedStage": row["failed_stage"], "summary": row["summary"]}
 
 
 def station_health_summary() -> Dict[str, Any]:
@@ -154,15 +148,41 @@ def station_health_summary() -> Dict[str, Any]:
             "moduleImportOk": health.get("moduleImportOk"),
             "nextStation": station.get("nextStation"),
         })
+    deprecated_check = mainline_purity_check()
     failed = [item for item in stations if item.get("status") not in {"healthy", "ok"}]
+    if deprecated_check.get("status") == "blocked":
+        failed.append({"stationId": "deprecated_station_archive", "status": "blocked"})
     return {
         "version": OPS_DIAGNOSTIC_TRAIN_VERSION,
         "registryVersion": STATION_REGISTRY_VERSION,
         "contractVersion": STATION_CONTRACT_VERSION,
+        "deprecatedStationVersion": DEPRECATED_STATION_VERSION,
         "status": "healthy" if not failed else "degraded",
         "failedCount": len(failed),
         "stations": stations,
-        "rule": "系统页读取站点健康，不触发真实业务数据流。",
+        "deprecatedMainlineCheck": deprecated_check,
+        "rule": "系统页读取站点健康和废弃站点回流检查，不触发真实业务数据流。",
+    }
+
+
+def _deprecated_check_item(run_id: str) -> Dict[str, Any]:
+    t0 = perf_counter()
+    check = mainline_purity_check()
+    status = "passed" if check.get("status") == "clean" else "failed"
+    return {
+        "checkId": f"{run_id}:deprecated_station_archive",
+        "stationId": "deprecated_station_archive",
+        "stage": "deprecated_mainline_leak",
+        "title": "废弃站点回流检查",
+        "status": status,
+        "durationMs": int((perf_counter() - t0) * 1000),
+        "inputContract": "passed",
+        "outputContract": "passed" if status == "passed" else "failed",
+        "gateWritten": False,
+        "nextStationReadable": True,
+        "warningMessage": f"{check.get('warningCount', 0)} legacy adapter warnings",
+        "errorMessage": None if status == "passed" else f"{check.get('violationCount', 0)} deprecated mainline violations",
+        "details": check,
     }
 
 
@@ -175,6 +195,16 @@ def run_ops_train(mode: str = "contract", created_by: str | None = None) -> Dict
     checks: List[Dict[str, Any]] = []
     failed_stage = None
     previous_output_ref = None
+
+    deprecated_check = _deprecated_check_item(run_id)
+    checks.append(deprecated_check)
+    if deprecated_check["status"] == "failed":
+        failed_stage = "deprecated_mainline_leak"
+        if mode == "stop_on_failure":
+            run = _finalize_run(run_id, mode, diagnostic_data_version, started, t0, created_by, checks, failed_stage)
+            _write_run(run)
+            return run
+
     for station in list_stations():
         station_t0 = perf_counter()
         sid = station["stationId"]
@@ -222,29 +252,24 @@ def run_ops_train(mode: str = "contract", created_by: str | None = None) -> Dict
                 "warningMessage": warning,
                 "errorMessage": result.get("error"),
             }
-        except Exception as exc:  # pragma: no cover - diagnostic runner surface
-            check = {
-                "checkId": f"{run_id}:{sid}",
-                "stationId": sid,
-                "stage": station["stage"],
-                "title": station["title"],
-                "status": "failed",
-                "durationMs": int((perf_counter() - station_t0) * 1000),
-                "inputContract": "failed",
-                "outputContract": "failed",
-                "gateWritten": False,
-                "nextStationReadable": False,
-                "errorMessage": str(exc),
-            }
+        except Exception as exc:
+            check = {"checkId": f"{run_id}:{sid}", "stationId": sid, "stage": station["stage"], "title": station["title"], "status": "failed", "durationMs": int((perf_counter() - station_t0) * 1000), "inputContract": "failed", "outputContract": "failed", "gateWritten": False, "nextStationReadable": False, "errorMessage": str(exc)}
         checks.append(check)
         if check["status"] == "failed" and not failed_stage:
             failed_stage = check["stage"]
             if mode == "stop_on_failure":
                 break
+
+    run = _finalize_run(run_id, mode, diagnostic_data_version, started, t0, created_by, checks, failed_stage)
+    _write_run(run)
+    return run
+
+
+def _finalize_run(run_id: str, mode: str, diagnostic_data_version: str, started: str, t0: float, created_by: str | None, checks: List[Dict[str, Any]], failed_stage: str | None) -> Dict[str, Any]:
     status = "passed" if not failed_stage and all(item["status"] in {"passed", "warning"} for item in checks) else "failed"
     if status == "passed" and any(item["status"] == "warning" for item in checks):
         status = "warning"
-    run = {
+    return {
         "version": OPS_DIAGNOSTIC_TRAIN_VERSION,
         "runId": run_id,
         "status": status,
@@ -257,10 +282,8 @@ def run_ops_train(mode: str = "contract", created_by: str | None = None) -> Dict
         "createdBy": created_by or "OPS",
         "summary": "运维火车巡检完成" if status in {"passed", "warning"} else f"运维火车发现断点：{failed_stage}",
         "stations": checks,
-        "rule": "运维火车只跑 diagnostic data version，不载真实报表、不生成真实任务、不写真实RAG。",
+        "rule": "运维火车只跑 diagnostic data version，并检查 deprecated 文件是否回流主线。",
     }
-    _write_run(run)
-    return run
 
 
 def latest_ops_train() -> Dict[str, Any]:
@@ -290,6 +313,8 @@ def get_ops_run(run_id: str) -> Dict[str, Any]:
 
 
 def check_single_station(station_id: str, created_by: str | None = None) -> Dict[str, Any]:
+    if station_id == "deprecated_station_archive":
+        return {"version": OPS_DIAGNOSTIC_TRAIN_VERSION, "stationId": station_id, "result": mainline_purity_check()}
     station = get_station(station_id)
     if not station:
         return {"version": OPS_DIAGNOSTIC_TRAIN_VERSION, "status": "failed", "stationId": station_id, "error": "station_not_found"}
