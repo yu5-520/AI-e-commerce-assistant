@@ -1,4 +1,8 @@
-"""Todo module routes for V12.11.1."""
+"""Todo module routes for V12.13.1.
+
+GET /todo is a reader. Clustering and auto-accept are explicit lifecycle sync
+operations, not page-load side effects.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,7 @@ from src.services.task_repository_write_service import reset_tasks_with_reposito
 
 router = APIRouter()
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
-TODO_VERSION = "12.11.1"
+TODO_VERSION = "12.13.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -83,12 +87,7 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
     query_viewer_id = _viewer_for_query(viewer_id)
     review_scope = scope == "review"
     mine_assignee = assignee_id if scope in {"mine", "operator"} else None
-    cluster_sync = cluster_open_tasks()
     tasks, active_tasks, source = _load_tasks(ctx, viewer_id=query_viewer_id, assignee_id=mine_assignee, review_scope=review_scope)
-    auto_accept_sync = auto_accept_ready_tasks(active_tasks, viewer_id=viewer_id, ctx=ctx)
-    if auto_accept_sync.get("autoAcceptedCount"):
-        tasks, active_tasks, second_source = _load_tasks(ctx, viewer_id=query_viewer_id, assignee_id=mine_assignee, review_scope=review_scope)
-        source = f"{source}+auto_accept->{second_source}"
     events = list_task_events_for_user(query_viewer_id)
     counters = _counter_from_tasks(active_tasks, events)
     return {
@@ -97,15 +96,42 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
         "activeTasks": _project_tasks(active_tasks, viewer_id),
         "events": events,
         "counters": counters,
-        "taskClusterSync": cluster_sync,
-        "autoAcceptSync": auto_accept_sync,
+        "taskClusterSync": {"version": TASK_CLUSTER_VERSION, "skipped": True, "reason": "GET /todo is read-only in V12.13.1"},
+        "autoAcceptSync": {"version": TODO_VERSION, "skipped": True, "reason": "Use POST /todo/lifecycle/sync"},
         "taskLifecycleSync": lifecycle_state_summary(limit=100),
         "scope": scope,
         "viewer": current_user(viewer_id),
         "source": source,
-        "repositoryFallback": {"version": TODO_VERSION, "used": "repository" in source, "rule": "V12.11.1状态机可读取并回灌Repository任务。"},
-        "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleStateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "rule": "权限内运营任务自动接收，卡片默认进入提交材料阶段。"},
-        "rule": "V12.11.1：权限内任务自动接收；提交、派发、复核、复盘统一走生命周期状态机。",
+        "repositoryFallback": {"version": TODO_VERSION, "used": "repository" in source, "rule": "V12.13.1任务页读取不触发状态变更。"},
+        "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleStateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "rule": "生命周期同步拆到显式接口，页面GET只读。"},
+        "readMode": "readonly_no_lifecycle_side_effects",
+        "rule": "V12.13.1：任务页GET只读；聚合、自动接收等生命周期动作必须显式调用 /todo/lifecycle/sync。",
+    }
+
+
+@router.post("/todo/lifecycle/sync")
+def todo_lifecycle_sync(request: Request, ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    query_viewer_id = _viewer_for_query(viewer_id)
+    cluster_sync = cluster_open_tasks()
+    tasks, active_tasks, source = _load_tasks(ctx, viewer_id=query_viewer_id, assignee_id=None, review_scope=False)
+    auto_accept_sync = auto_accept_ready_tasks(active_tasks, viewer_id=viewer_id, ctx=ctx)
+    if auto_accept_sync.get("autoAcceptedCount"):
+        tasks, active_tasks, second_source = _load_tasks(ctx, viewer_id=query_viewer_id, assignee_id=None, review_scope=False)
+        source = f"{source}+auto_accept->{second_source}"
+    events = list_task_events_for_user(query_viewer_id)
+    return {
+        "version": TODO_VERSION,
+        "ok": True,
+        "source": source,
+        "taskClusterSync": cluster_sync,
+        "autoAcceptSync": auto_accept_sync,
+        "tasks": _project_tasks(tasks, viewer_id),
+        "activeTasks": _project_tasks(active_tasks, viewer_id),
+        "events": events,
+        "counters": _counter_from_tasks(active_tasks, events),
+        "taskLifecycleSync": lifecycle_state_summary(limit=100),
+        "rule": "V12.13.1：生命周期动作显式同步，不再挂在页面GET。",
     }
 
 
