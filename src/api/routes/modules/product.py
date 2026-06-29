@@ -9,14 +9,15 @@ from fastapi import APIRouter, Query, Request
 from src.api.routes.modules.common import find_or_404
 from src.services.account_service import user_id_from_headers
 from src.services.module_projection_service import projected_products
-from src.services.module_task_service import create_task, visible_candidates
+from src.services.module_task_service import visible_candidates
 from src.services.operating_object_store_service import list_operating_products
 from src.services.product_archive_detail_service import enrich_product_archive_detail
 from src.services.report_alert_service import attach_alert_state
-from src.services.v1211_manual_task_package_service import wrap_manual_task_payload
+from src.services.task_pool_station_service import enter_task_pool_from_snapshot
+from src.services.task_snapshot_station_service import create_task_snapshot
 
 router = APIRouter()
-PRODUCT_ARCHIVE_VERSION = "12.11.1"
+PRODUCT_ARCHIVE_VERSION = "14.1.0"
 
 
 def _has_value(value: Any) -> bool:
@@ -58,17 +59,7 @@ def _normalize_archive_item(item: Dict[str, Any]) -> Dict[str, Any]:
     store_name = _text(item.get("storeName") or item.get("store") or item.get("normalizedStoreName") or store_id) or "未绑定店铺"
     archive_id = _archive_id(item)
     normalized = dict(item)
-    normalized.update({
-        "id": archive_id,
-        "objectId": archive_id,
-        "archiveId": archive_id,
-        "productId": product_id,
-        "rawProductId": product_id,
-        "storeId": store_id,
-        "storeName": store_name,
-        "store": store_name,
-        "productArchiveVersion": PRODUCT_ARCHIVE_VERSION,
-    })
+    normalized.update({"id": archive_id, "objectId": archive_id, "archiveId": archive_id, "productId": product_id, "rawProductId": product_id, "storeId": store_id, "storeName": store_name, "store": store_name, "productArchiveVersion": PRODUCT_ARCHIVE_VERSION})
     return normalized
 
 
@@ -96,36 +87,18 @@ def product_task_payload(item: Dict[str, Any]) -> Dict[str, Any]:
     risk_domain = "售后" if item.get("afterSalesLevel") != "good" else "库存" if item.get("inventoryLevel") == "danger" else "商品"
     high_risk = item.get("afterSalesLevel") != "good" or item.get("inventoryLevel") == "danger"
     store_id = item.get("storeId")
-    return {
-        "entityType": "商品",
-        "entityId": item["id"],
-        "riskDomain": risk_domain,
-        "actionType": "观察" if risk_domain == "商品" else "复查",
-        "sourceModule": "商品模块",
-        "source": "导入数据触发",
-        "sourceRoute": "business-products",
-        "productId": item.get("productId") or item["id"],
-        "objectId": item["id"],
-        "storeIds": [store_id] if store_id else [],
-        "visibleStoreIds": [store_id] if store_id else [],
-        "imageLabel": item.get("imageLabel") or "品",
-        "productShort": item.get("shortName") or item.get("title") or item.get("productId") or item["id"],
-        "productTitle": item.get("title") or item.get("productId") or item["id"],
-        "title": item.get("title") or item.get("productId") or item["id"],
-        "platform": item.get("platform") or "导入数据",
-        "store": item.get("storeName") or item.get("store") or "未绑定店铺",
-        "link": item.get("link") or item.get("productLink") or "",
-        "priority": "高" if high_risk else "中",
-        "priorityLevel": "danger" if high_risk else "warning",
-        "deadline": "今天内" if high_risk else "明天前",
-        "taskType": "售后复查" if item.get("afterSalesLevel") != "good" else "库存承接" if item.get("inventoryLevel") == "danger" else "商品复核",
-        "taskSignal": "先查售后" if item.get("afterSalesLevel") != "good" else "确认补货" if item.get("inventoryLevel") == "danger" else "数据复核",
-        "task": item.get("suggestion") or "根据导入数据复核商品状态。",
-        "reason": item.get("suggestion") or "商品内容来自报表导入后的模块投影。",
-        "judgmentTags": [item.get("inventoryStatus", "库存待确认"), item.get("afterSales", "售后待确认"), f"毛利 {item.get('grossMargin', '—')}", *(item.get("sourceDataVersions") or [])[:1]],
-        "sourceDataVersions": item.get("sourceDataVersions", []),
-        "sourceDatasets": item.get("sourceDatasets", []),
-    }
+    return {"entityType": "商品", "entityId": item["id"], "riskDomain": risk_domain, "actionType": "观察" if risk_domain == "商品" else "复查", "sourceModule": "商品模块", "source": "模块页面触发", "sourceRoute": "business-products", "productId": item.get("productId") or item["id"], "objectId": item["id"], "storeIds": [store_id] if store_id else [], "visibleStoreIds": [store_id] if store_id else [], "imageLabel": item.get("imageLabel") or "品", "productShort": item.get("shortName") or item.get("title") or item.get("productId") or item["id"], "productTitle": item.get("title") or item.get("productId") or item["id"], "title": item.get("title") or item.get("productId") or item["id"], "platform": item.get("platform") or "导入数据", "store": item.get("storeName") or item.get("store") or "未绑定店铺", "link": item.get("link") or item.get("productLink") or "", "priority": "高" if high_risk else "中", "priorityLevel": "danger" if high_risk else "warning", "deadline": "今天内" if high_risk else "明天前", "taskType": "售后复查" if item.get("afterSalesLevel") != "good" else "库存承接" if item.get("inventoryLevel") == "danger" else "商品复核", "taskSignal": "模块页面人工请求", "task": item.get("suggestion") or "根据导入数据复核商品状态。", "reason": item.get("suggestion") or "商品内容来自报表导入后的模块投影。", "judgmentTags": [item.get("inventoryStatus", "库存待确认"), item.get("afterSales", "售后待确认"), f"毛利 {item.get('grossMargin', '—')}", *(item.get("sourceDataVersions") or [])[:1]], "sourceDataVersions": item.get("sourceDataVersions", []), "sourceDatasets": item.get("sourceDatasets", [])}
+
+
+def _enter_snapshot_pool(payload: Dict[str, Any], user_id: str | None = None) -> Dict[str, Any]:
+    entity_id = payload.get("entityId") or payload.get("productId")
+    source_version = (payload.get("sourceDataVersions") or [None])[0]
+    priority = payload.get("priority") or "中"
+    decision = "manager_review_required" if priority == "高" else "create_task_snapshot"
+    task_plan = {"title": payload.get("title") or entity_id, "subtitle": "manual_module_request_v14_1", "entityType": payload.get("entityType") or "商品", "entityId": entity_id, "taskType": payload.get("taskType") or "商品复核", "actionType": payload.get("actionType") or "manual_request", "priority": priority, "deadline": payload.get("deadline") or "24小时内", "riskDomain": payload.get("riskDomain") or "商品", "sopSteps": [payload.get("task") or "复核该经营对象。", "提交处理截图、数据口径和影响范围。", "后续由系统复盘相关指标。"], "evidenceRequirements": ["页面来源", "处理截图", "数据口径"], "reviewMetrics": ["ROI", "GMV", "点击率", "转化率", "退款率", "库存"], "needManagerReview": decision == "manager_review_required", "reason": payload.get("reason") or payload.get("taskSignal")}
+    snapshot = create_task_snapshot({"dataVersion": source_version, "decision": decision, "confidence": 0.7, "entityType": payload.get("entityType") or "商品", "entityId": entity_id, "signalRef": f"manual:product:{entity_id}:{source_version or 'latest'}", "ragContext": {"source": "product_manual_request", "version": PRODUCT_ARCHIVE_VERSION}, "agentJudgment": {"decision": decision, "confidence": 0.7, "reason": task_plan["reason"], "status": "manual_snapshot_bridge"}, "taskPlan": task_plan, "evidenceRequirements": task_plan["evidenceRequirements"], "systemFacts": {"modulePayload": payload}, "source": "product_module_manual_request"}, created_by=user_id)
+    pool = enter_task_pool_from_snapshot(snapshot.get("taskSnapshotId"), created_by=user_id)
+    return {"version": PRODUCT_ARCHIVE_VERSION, "mode": "manual_request_via_task_snapshot", "snapshot": snapshot, "pool": pool, "task": pool.get("task") if isinstance(pool, dict) else None}
 
 
 def with_alert_state(item: Dict[str, Any], user_id: str | None = None) -> Dict[str, Any]:
@@ -155,4 +128,4 @@ def product_detail(request: Request, product_id: str) -> Dict[str, Any]:
 def product_task(request: Request, product_id: str) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     item = find_or_404(product_items(user_id), product_id, "product")
-    return create_task(wrap_manual_task_payload(product_task_payload(item)))
+    return _enter_snapshot_pool(product_task_payload(item), user_id=user_id)
