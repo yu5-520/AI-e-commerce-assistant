@@ -9,6 +9,7 @@
     ["business-listing", "operating-unit"], ["business-traffic", "operating-unit"], ["trend-center", "operating-unit"],
     ["weight-center", "operating-unit"], ["tenant-config", "system-status"], ["config-audit", "system-status"],
     ["release-governance", "system-status"], ["release-alerts", "system-status"], ["feedback-flywheel", "business-report"],
+    ["task-report", "business-actions"], ["task-submit", "business-actions"],
   ]);
 
   function compressedRoute(route) { return INTERNAL_TO_V10_NAV.get(route) || route; }
@@ -30,7 +31,7 @@
     badge.classList.toggle("warning", !ok && source !== "unknown");
   }
 
-  const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.WeightCenterPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.LogPage, window.FeedbackFlywheelPage, window.TaskReportPage];
+  const pages = [window.DashboardPage, window.StoreOverviewPage, window.TaskCommandPage, window.ProfitBudgetPage, window.OrgEfficiencyPage, window.ReviewAuditPage, window.AccountPage, window.RoleConsolePage, window.SystemStatusPage, window.TenantConfigPage, window.ConfigAuditPage, window.ReleaseGovernancePage, window.ReleaseAlertsPage, window.WeightCenterPage, window.ManagerTasksPage, window.ManagerDispatchPage, window.ManagerReviewPage, window.ManagerTaskDetailPage, window.ManagerModulesPage, window.ManagerRetrospectivePage, window.ManagerReportsPage, window.OperatingUnitPage, window.ReportPage, window.DataVersionDetailPage, window.TrendCenterPage, window.ProductPage, window.CompetitorPage, window.ListingPage, window.TrafficPage, window.InventoryCenterPage, window.ServiceCenterPage, window.TodoPage, window.TaskReportPage, window.TaskSubmitPage, window.LogPage, window.FeedbackFlywheelPage];
   pages.filter(Boolean).forEach((page) => AppRouter.register(page));
 
   function applyNavigationScope(account) {
