@@ -13,7 +13,6 @@ from typing import Any, Dict, List
 from src.services.account_service import get_user, user_display
 from src.services.module_task_service import create_log, find_task, now_iso, update_task
 from src.services.task_evidence_repository_service import persist_evidence_submission
-from src.services.task_lifecycle_orchestrator_service import handle_evidence_submitted
 from src.services.task_lifecycle_state_machine_service import get_lifecycle_task_projection
 from src.services.uid import make_id
 
@@ -122,8 +121,6 @@ def submit_task_evidence(task_id: str, body: Dict[str, Any] | None = None, submi
     latest["evidenceAudit"] = audit
     latest["latestEvidenceRecord"] = record
     latest["evidenceRecords"] = records[:10]
-    lifecycle = handle_evidence_submitted(task_id, evidence=record, actor_user_id=submitter_id)
-    latest["taskLifecycle"] = (lifecycle or {}).get("taskLifecycle") or latest.get("taskLifecycle")
     create_log({"type": "处理证据提交", "task": latest, "status": "已提交材料", "action": action, "result": summary, "operator": record["submittedByName"]})
     return deepcopy(latest)
 
