@@ -12,20 +12,20 @@
     }
   }
 
-  async function postJson(path) {
-    const response = await fetch(path, { method: "POST", headers: { Accept: "application/json", "X-Mock-User-Id": window.AppApi?.getCurrentUserId?.() || "U001" } });
+  async function postJson(path, body = null) {
+    const response = await fetch(path, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mock-User-Id": window.AppApi?.getCurrentUserId?.() || "U001" }, body: body ? JSON.stringify(body) : undefined });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     return response.json();
   }
 
   function pill(text, tone = "neutral") { return `<span class="system-pill ${tone}">${s(text)}</span>`; }
   function metric(label, value, tone = "neutral") { return `<article class="system-metric"><span>${s(label)}</span><strong>${s(value)}</strong>${pill(tone === "good" ? "正常" : tone === "warn" ? "关注" : tone === "danger" ? "阻断" : "状态", tone)}</article>`; }
-  function row(title, value, tone = "neutral") { return `<article class="system-layer-row"><div><strong>${s(title)}</strong><span>${s(value)}</span></div>${pill(tone, tone === "正常" || tone === "已回填" ? "good" : tone === "关注" ? "warn" : tone === "阻断" ? "danger" : "neutral")}</article>`; }
+  function row(title, value, tone = "neutral") { return `<article class="system-layer-row"><div><strong>${s(title)}</strong><span>${s(value)}</span></div>${pill(tone, tone === "正常" || tone === "已回填" ? "good" : tone === "关注" || tone === "降级" ? "warn" : tone === "阻断" ? "danger" : "neutral")}</article>`; }
 
   function statusTone(status) {
-    if (status === "ok") return "good";
-    if (status === "object_sync_failed" || status === "dirty_runtime_residue") return "danger";
-    if (status === "visible_empty") return "warn";
+    if (["ok", "healthy", "passed"].includes(status)) return "good";
+    if (["warning", "visible_empty", "degraded"].includes(status)) return "warn";
+    if (["object_sync_failed", "dirty_runtime_residue", "failed"].includes(status)) return "danger";
     return "neutral";
   }
 
@@ -33,18 +33,45 @@
     if (status === "object_sync_failed") return "经营对象未入库";
     if (status === "dirty_runtime_residue") return "清空不完整";
     if (status === "visible_empty") return "当前账号不可见";
+    if (status === "degraded") return "站点降级";
+    if (status === "passed") return "巡检通过";
+    if (status === "warning") return "巡检关注";
+    if (status === "failed") return "巡检失败";
     return "运行正常";
   }
 
   function renderTableCounts(counts = {}) {
-    const entries = Object.entries(counts);
-    return entries.map(([name, value]) => row(name, value, value > 0 ? "正常" : "关注")).join("") || "<p>暂无运行态表数据。</p>";
+    return Object.entries(counts).map(([name, value]) => row(name, value, value > 0 ? "正常" : "关注")).join("") || "<p>暂无运行态表数据。</p>";
+  }
+
+  function renderStationHealth(health = {}) {
+    const stations = health.stations || [];
+    return `<section class="page-section system-section"><div class="section-header"><h3>站点巡检</h3>${pill(statusLabel(health.status), statusTone(health.status))}</div>
+      <div class="system-layer-list">
+        ${stations.map((item) => row(`${item.title || item.stationId}`, `${item.stage || "-"} · ${item.nextStation || "终点"}`, item.status === "healthy" ? "正常" : "降级")).join("") || "<p>暂无站点注册。</p>"}
+      </div>
+      <div class="dashboard-linked-actions" style="margin-top:16px"><button type="button" data-run-ops-train>运行运维火车</button><button type="button" class="secondary" data-open-stations>查看站点接口</button></div>
+    </section>`;
+  }
+
+  function renderOpsTrain(train) {
+    if (!train || train.status === "missing") return "";
+    const stations = train.stations || [];
+    return `<section class="page-section system-section"><div class="section-header"><h3>最近运维火车</h3>${pill(statusLabel(train.status), statusTone(train.status))}</div>
+      <div class="system-layer-list">
+        ${row("运行批次", train.runId, train.status === "failed" ? "阻断" : "正常")}
+        ${row("诊断版本", train.diagnosticDataVersion, "正常")}
+        ${row("失败站点", train.failedStage || "无", train.failedStage ? "阻断" : "正常")}
+        ${row("耗时", `${train.totalDurationMs || 0} ms`, (train.totalDurationMs || 0) > 3000 ? "关注" : "正常")}
+        ${stations.map((item) => row(item.title || item.stationId, `${item.inputContract}/${item.outputContract} · gate=${item.gateWritten ? "yes" : "no"}`, item.status === "failed" ? "阻断" : item.status === "warning" ? "关注" : "正常")).join("")}
+      </div>
+    </section>`;
   }
 
   function renderBackfillResult(result) {
     if (!result) return "";
     const after = result.after || {};
-    const blocked = result.status === "blocked_dirty_runtime_residue";
+    const blocked = result.status === "blocked_dirty_runtime_residue" || result.status === "failed";
     return `<section class="page-section system-section"><div class="section-header"><h3>最近处理结果</h3>${pill(result.status || "completed", blocked ? "danger" : result.status === "completed" ? "good" : "warn")}</div><div class="system-layer-list">
       ${row("来源", result.source, blocked ? "阻断" : "正常")}
       ${row("处理行数", result.rowCount, result.rowCount > 0 ? "已回填" : "关注")}
@@ -60,32 +87,36 @@
     route: "system-status",
     title: "系统状态",
     _backfillResult: null,
+    _opsTrainResult: null,
     async render() {
-      const [health, diagnostics, db] = await Promise.all([
+      const [health, diagnostics, db, stationHealth, latestTrain] = await Promise.all([
         loadJson("/api/health", {}),
         loadJson("/api/system/runtime-diagnostics", {}),
         loadJson("/api/system/db-status", {}),
+        loadJson("/api/ops/stations/health", {}),
+        loadJson("/api/ops/train/latest", null),
       ]);
-      const apiVersion = health?.version || diagnostics?.version || "11.14.0";
+      const apiVersion = health?.version || diagnostics?.version || "12.14.0";
       const visible = diagnostics?.visibleCounts || {};
       const tableCounts = diagnostics?.tableCounts || {};
       const tone = statusTone(diagnostics?.status);
       const statusText = statusLabel(diagnostics?.status);
       const dirty = diagnostics?.dirtyRuntimeResidue;
-      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V11.14</p><h2>系统状态</h2><p>优先检查真实运行态：导入行、快照、业务信号、经营对象主档、当前账号可见商品和店铺。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(statusText)}</small></div></section>
+      const opsTrain = this._opsTrainResult || latestTrain;
+      return `<section class="system-hero"><div><p class="eyebrow">SYSTEM STATUS · V12.14</p><h2>系统状态</h2><p>站点契约、经营对象、Pipeline阀门和运维火车共同定位断点。</p></div><div class="system-hero-side"><span>当前版本</span><strong>${s(apiVersion)}</strong><small>${s(statusText)}</small></div></section>
       <section class="system-metric-grid">
         ${metric("运行状态", statusText, tone)}
+        ${metric("站点数量", stationHealth?.stations?.length ?? 0, stationHealth?.status === "healthy" ? "good" : "warn")}
         ${metric("当前可见商品", visible.products ?? 0, dirty ? "danger" : (visible.products ?? 0) > 0 ? "good" : "warn")}
         ${metric("当前可见店铺", visible.stores ?? 0, dirty ? "danger" : (visible.stores ?? 0) > 0 ? "good" : "warn")}
-        ${metric("导入行", tableCounts.imported_report_rows ?? 0, (tableCounts.imported_report_rows ?? 0) > 0 ? "good" : "warn")}
       </section>
+      ${renderStationHealth(stationHealth)}
+      ${renderOpsTrain(opsTrain)}
       <section class="page-section system-section"><div class="section-header"><h3>经营对象运行诊断</h3>${pill(statusText, tone)}</div><div class="system-layer-list">
         ${row("当前账号", `${diagnostics?.currentContext?.user_id || diagnostics?.currentContext?.userId || "-"} / ${diagnostics?.currentContext?.role_id || diagnostics?.currentContext?.roleId || "-"}`, "正常")}
-        ${row("business_signals_v6", tableCounts.business_signals_v6 ?? 0, (tableCounts.business_signals_v6 ?? 0) > 0 ? (dirty ? "阻断" : "正常") : "关注")}
         ${row("operating_products", tableCounts.operating_products ?? 0, (tableCounts.operating_products ?? 0) > 0 ? (dirty ? "阻断" : "正常") : "关注")}
         ${row("operating_stores", tableCounts.operating_stores ?? 0, (tableCounts.operating_stores ?? 0) > 0 ? (dirty ? "阻断" : "正常") : "关注")}
-        ${row("当前账号可见商品", visible.products ?? 0, (visible.products ?? 0) > 0 && !dirty ? "正常" : "关注")}
-        ${row("当前账号可见店铺", visible.stores ?? 0, (visible.stores ?? 0) > 0 && !dirty ? "正常" : "关注")}
+        ${row("pipeline_stage_gates", tableCounts.pipeline_stage_gates ?? 0, (tableCounts.pipeline_stage_gates ?? 0) > 0 ? "正常" : "关注")}
         ${row("诊断规则", diagnostics?.rule || "经营对象主档为准", dirty || diagnostics?.objectSyncFailed ? "阻断" : "正常")}
       </div><div class="dashboard-linked-actions" style="margin-top:16px"><button type="button" data-backfill-objects>回填经营对象</button><button type="button" class="secondary" data-clear-runtime>清空演示环境</button><button type="button" class="secondary" data-system-refresh>刷新诊断</button></div></section>
       ${renderBackfillResult(this._backfillResult)}
@@ -93,13 +124,22 @@
     },
     mount(ctx) {
       ctx.delegate("[data-system-refresh]", "click", () => AppRouter.schedule("system-status-refresh"));
+      ctx.delegate("[data-open-stations]", "click", () => window.open("/api/stations", "_blank"));
+      ctx.delegate("[data-run-ops-train]", "click", async (_, node) => {
+        node.disabled = true;
+        node.textContent = "巡检中";
+        try { this._opsTrainResult = await postJson("/api/ops/train/run", { mode: "contract" }); }
+        catch (error) { this._opsTrainResult = { status: "failed", runId: "local-error", failedStage: "ops_route", totalDurationMs: 0, stations: [], summary: String(error) }; }
+        AppRouter.schedule("ops-train-run");
+      });
       ctx.delegate("[data-clear-runtime]", "click", async (_, node) => {
-        if (!window.confirm("清空演示运行态？会删除导入行、快照、信号、任务、日志、经营商品和经营店铺。")) return;
+        if (!window.confirm("清空演示运行态？会删除导入行、快照、信号、任务、日志、经营商品、经营店铺、pipeline阀门和巡检记录。")) return;
         node.disabled = true;
         node.textContent = "清空中";
         try {
           const result = await window.AppApi?.resetRuntimeData?.(true);
           this._backfillResult = { status: "runtime_cleared", source: "reset-runtime-data", rowCount: 0, operatingObjectSync: { productUpsertCount: 0, storeUpsertCount: 0 }, after: { visibleCounts: { products: 0, stores: 0 } }, rule: result?.message || "演示运行态已清空。" };
+          this._opsTrainResult = null;
         } catch (error) {
           this._backfillResult = { status: "failed", source: String(error), rowCount: 0, operatingObjectSync: { productUpsertCount: 0, storeUpsertCount: 0 }, after: { visibleCounts: { products: 0, stores: 0 } } };
         }
@@ -108,11 +148,8 @@
       ctx.delegate("[data-backfill-objects]", "click", async (_, node) => {
         node.disabled = true;
         node.textContent = "回填中";
-        try {
-          this._backfillResult = await postJson("/api/system/backfill-operating-objects");
-        } catch (error) {
-          this._backfillResult = { status: "failed", source: String(error), rowCount: 0, operatingObjectSync: { productUpsertCount: 0, storeUpsertCount: 0 }, after: { visibleCounts: { products: 0, stores: 0 } } };
-        }
+        try { this._backfillResult = await postJson("/api/system/backfill-operating-objects"); }
+        catch (error) { this._backfillResult = { status: "failed", source: String(error), rowCount: 0, operatingObjectSync: { productUpsertCount: 0, storeUpsertCount: 0 }, after: { visibleCounts: { products: 0, stores: 0 } } }; }
         AppRouter.schedule("system-backfill");
       });
     },
