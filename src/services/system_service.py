@@ -21,6 +21,7 @@ V12131_RUNTIME_RESET_MARKER = "v12_13_1_pipeline_snapshot_runtime_reset_applied"
 V12140_RUNTIME_RESET_MARKER = "v12_14_station_ops_runtime_reset_applied"
 V131_RUNTIME_RESET_MARKER = "v13_1_snapshot_task_handoff_runtime_reset_applied"
 V133_RUNTIME_RESET_MARKER = "v13_3_task_snapshot_runtime_reset_applied"
+V134_RUNTIME_RESET_MARKER = "v13_4_task_pool_runtime_reset_applied"
 
 TABLES = [
     {"table_name": "workflow_runs", "time_expression": "COALESCE(MAX(finished_at), MAX(started_at))"},
@@ -48,15 +49,16 @@ TABLES = [
     {"table_name": "pipeline_stage_gates", "time_expression": "MAX(updated_at)"},
     {"table_name": "station_handoffs", "time_expression": "MAX(updated_at)"},
     {"table_name": "task_snapshots", "time_expression": "MAX(updated_at)"},
+    {"table_name": "task_pool_entries", "time_expression": "MAX(updated_at)"},
     {"table_name": "ops_diagnostic_runs", "time_expression": "MAX(finished_at)"},
     {"table_name": "ops_station_checks", "time_expression": "MAX(created_at)"},
 ]
 
 RUNTIME_TABLES = [
-    "task_reviews", "task_submissions", "task_assignments", "approval_records", "task_status", "alert_events", "business_signals_v6", "operating_cadence_signals", "metric_snapshots", "product_metric_facts", "store_metric_facts", "traffic_source_facts", "data_gap_events", "data_snapshots", "imported_report_rows", "report_records", "import_records", "execution_logs", "workflow_runs", "operating_products", "operating_stores", "operating_unit_snapshots", "pipeline_stage_gates", "station_handoffs", "task_snapshots", "ops_station_checks", "ops_diagnostic_runs",
+    "task_reviews", "task_submissions", "task_assignments", "approval_records", "task_status", "alert_events", "business_signals_v6", "operating_cadence_signals", "metric_snapshots", "product_metric_facts", "store_metric_facts", "traffic_source_facts", "data_gap_events", "data_snapshots", "imported_report_rows", "report_records", "import_records", "execution_logs", "workflow_runs", "operating_products", "operating_stores", "operating_unit_snapshots", "pipeline_stage_gates", "station_handoffs", "task_snapshots", "task_pool_entries", "ops_station_checks", "ops_diagnostic_runs",
 ]
 
-RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、快照、业务信号、任务、日志、导入生成的经营对象主档、指标事实、数据缺口、经营节奏信号、经营页快照、pipeline阶段阀门、V13.1快照到任务判断交接记录、V13.3任务快照和运维火车巡检记录；账号、角色、权限和基础店铺配置保留。"
+RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、快照、业务信号、任务、日志、导入生成的经营对象主档、指标事实、数据缺口、经营节奏信号、经营页快照、pipeline阶段阀门、V13.1快照到任务判断交接记录、V13.3任务快照、V13.4任务池入池记录和运维火车巡检记录；账号、角色、权限和基础店铺配置保留。"
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -126,6 +128,7 @@ def get_db_status() -> Dict[str, Any]:
         station_ops_reset_marker = _meta_get(conn, V12140_RUNTIME_RESET_MARKER)
         snapshot_task_handoff_marker = _meta_get(conn, V131_RUNTIME_RESET_MARKER)
         task_snapshot_marker = _meta_get(conn, V133_RUNTIME_RESET_MARKER)
+        task_pool_marker = _meta_get(conn, V134_RUNTIME_RESET_MARKER)
     return {
         "ok": True,
         "database": {"type": "sqlite", "path": str(db_path), "exists": db_path.exists(), "size_bytes": db_path.stat().st_size if db_path.exists() else 0},
@@ -141,6 +144,7 @@ def get_db_status() -> Dict[str, Any]:
         "v12140StationOpsRuntimeReset": {"marker": V12140_RUNTIME_RESET_MARKER, "applied": station_ops_reset_marker == "done"},
         "v131SnapshotTaskHandoffRuntimeReset": {"marker": V131_RUNTIME_RESET_MARKER, "applied": snapshot_task_handoff_marker == "done"},
         "v133TaskSnapshotRuntimeReset": {"marker": V133_RUNTIME_RESET_MARKER, "applied": task_snapshot_marker == "done"},
+        "v134TaskPoolRuntimeReset": {"marker": V134_RUNTIME_RESET_MARKER, "applied": task_pool_marker == "done"},
     }
 
 
@@ -149,7 +153,7 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
     removed_files: List[str] = []
     with connect() as conn:
         deleted_tables = _delete_runtime_tables(conn)
-        for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER]:
+        for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER]:
             _meta_set(conn, marker, "done")
             _meta_set(conn, f"{marker}_reason", reason)
         conn.commit()
@@ -159,7 +163,7 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
             if path.exists():
                 path.unlink()
                 removed_files.append(str(path))
-    return {"ok": True, "message": "演示运行态已全链路清空：导入行、快照、pipeline阀门、快照到任务判断交接、任务快照、运维火车巡检记录、业务信号、任务、日志、经营商品、经营店铺、指标事实、数据缺口和经营节奏信号均回到空状态。", "reason": reason, "deletedTables": deleted_tables, "removedFiles": removed_files, "includeAuditLogs": include_audit_logs, "boundary": RUNTIME_BOUNDARY_NOTE, "db_status": get_db_status()}
+    return {"ok": True, "message": "演示运行态已全链路清空：导入行、快照、pipeline阀门、快照到任务判断交接、任务快照、任务池入池记录、运维火车巡检记录、业务信号、任务、日志、经营商品、经营店铺、指标事实、数据缺口和经营节奏信号均回到空状态。", "reason": reason, "deletedTables": deleted_tables, "removedFiles": removed_files, "includeAuditLogs": include_audit_logs, "boundary": RUNTIME_BOUNDARY_NOTE, "db_status": get_db_status()}
 
 
 def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
@@ -169,18 +173,18 @@ def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
 def reset_legacy_runtime_once() -> Dict[str, Any]:
     init_db()
     with connect() as conn:
-        if any(_meta_get(conn, marker) == "done" for marker in [V133_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V5_RUNTIME_RESET_MARKER]):
-            return {"ok": True, "skipped": True, "marker": V133_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
+        if any(_meta_get(conn, marker) == "done" for marker in [V134_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V5_RUNTIME_RESET_MARKER]):
+            return {"ok": True, "skipped": True, "marker": V134_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
         stale_count = sum(_table_count(conn, table_name) for table_name in RUNTIME_TABLES)
     if stale_count <= 0:
         with connect() as conn:
-            for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER]:
+            for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER]:
                 _meta_set(conn, marker, "done")
                 _meta_set(conn, f"{marker}_reason", "empty_runtime_noop")
             conn.commit()
         reset_tasks()
-        return {"ok": True, "skipped": True, "marker": V133_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
-    result = clear_runtime_data(include_audit_logs=False, reason="v133_startup_one_time_full_runtime_cleanup")
+        return {"ok": True, "skipped": True, "marker": V134_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
+    result = clear_runtime_data(include_audit_logs=False, reason="v134_startup_one_time_full_runtime_cleanup")
     result["staleRecordCount"] = stale_count
-    result["marker"] = V133_RUNTIME_RESET_MARKER
+    result["marker"] = V134_RUNTIME_RESET_MARKER
     return result
