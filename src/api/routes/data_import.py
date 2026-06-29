@@ -1,9 +1,8 @@
-"""Data Hub routes.
+"""V14.2 Data Hub routes.
 
-V12.13.1 rule: import endpoints are pipeline stations. They materialize rows,
-metric facts, data gaps, operating objects and the operating-unit snapshot, but
-they do not synchronously generate tasks or run legacy closed-loop task hooks.
-Task generation is only triggered by `/api/pipeline/data-versions/{data_version}/tasks/generate`.
+Import endpoints still write facts, objects and snapshots first. After that they run
+V14.2 snapshot-driven task mainline so uploaded reports do not depend on front-end
+refresh to create signals and tasks.
 """
 
 from __future__ import annotations
@@ -26,13 +25,14 @@ from src.services.metric_fact_store_service import ingest_metric_facts_from_impo
 from src.services.operating_object_store_service import upsert_operating_objects_from_import
 from src.services.operating_unit_snapshot_service import materialize_operating_unit_snapshot
 from src.services.pipeline_gate_service import record_stage_gate
-from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, latest_data_version, list_alert_events, list_alerts_for_entity, list_data_versions
+from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, list_alert_events, list_alerts_for_entity
 from src.services.report_schema_service import confirm_report_import, get_report_templates, preview_report_dataset
+from src.services.v142_task_mainline_service import run_v142_task_mainline
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
 DEFAULT_SYNC_DATASETS = ["inventory", "refunds", "orders", "products"]
-DATA_IMPORT_ROUTE_VERSION = "12.13.1"
+DATA_IMPORT_ROUTE_VERSION = "14.2.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -106,10 +106,10 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         normalized = _normalize_result_rows(result, rows)
         result["rows"] = normalized
         result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V12.13.1：接口同步只写事实、经营对象和快照；任务生成由pipeline任务站触发。"
+        result["rule"] = "V14.2：接口同步只写事实、经营对象和快照；任务生成由V14.2快照主链触发。"
         results.append(result)
         all_rows.extend(normalized)
-    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "v12_13_1_dataset_sync_without_legacy_task_triggers", "datasetCount": len(results), "rowCount": len(all_rows), "alertCount": sum(item.get("alertCount", 0) for item in results), "createdTaskCount": 0, "taggedAlertCount": sum(item.get("taggedAlertCount", 0) for item in results), "results": results, "rows": all_rows, "summary": get_v3_dashboard_summary(), "rule": "导入只完成数据站点；任务生成、Agent增强、RAG/LLM不在上传请求里执行。"}
+    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "dataset_sync_without_legacy_task_triggers", "datasetCount": len(results), "rowCount": len(all_rows), "alertCount": sum(item.get("alertCount", 0) for item in results), "createdTaskCount": 0, "taggedAlertCount": sum(item.get("taggedAlertCount", 0) for item in results), "results": results, "rows": all_rows, "summary": get_v3_dashboard_summary(), "rule": "导入先完成数据站点；任务生成走V14.2系统快照主链。"}
 
 
 def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
@@ -162,9 +162,7 @@ def _data_versions_from_result(result: Dict[str, Any]) -> List[str]:
 
 def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
     ctx = context_from_headers(request.headers)
-    versions = _data_versions_from_result(result)
-    if not versions:
-        versions = [None]  # type: ignore[list-item]
+    versions = _data_versions_from_result(result) or [None]  # type: ignore[list-item]
     gates = []
     for version in versions:
         gate_input = {"source": source, "rowCount": len(result.get("rows") or []), "sourceSystem": result.get("sourceSystem")}
@@ -175,7 +173,7 @@ def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, s
         snapshot = materialize_operating_unit_snapshot(user_id=ctx.user_id, data_version=version, force=True)
         result["operatingUnitSnapshotSync"] = snapshot
         gates.append(record_stage_gate(data_version=version, stage="operating_unit_snapshot_ready", status="completed", input_payload={"source": source}, output_payload={"snapshotKey": snapshot.get("snapshotKey"), "storeCount": len(snapshot.get("storeRows") or [])}, user_id=ctx.user_id, upstream_stage="operating_objects_ready", output_ref=snapshot.get("snapshotKey")))
-    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "import_station_gates_without_task_generation", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "gates": gates, "taskGeneration": "disabled_in_import_request", "agentEnhancement": "disabled_in_import_request", "rule": "V12.13.1：上传/同步只到经营页快照站；任务生成必须走 /api/pipeline/data-versions/{data_version}/tasks/generate。"}
+    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "import_station_gates_then_v142_task_mainline", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "gates": gates, "taskGeneration": "v142_mainline_after_import", "rule": "V14.2：上传/同步先到经营页快照站，再进入系统商品快照与商品信号快照主链。"}
     return result
 
 
@@ -194,17 +192,28 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
         result = _attach_v1213_data_gap_sync(result, rows, source=source)
     result["legacyImportTaskHooksDisabled"] = True
     result["legacyHooksRemoved"] = ["attach_v104_import_sync", "attach_v107_operating_profile", "attach_v108_tag_change_tasks", "attach_v116_import_closed_loop", "_attach_v62_trend_and_risk_sync"]
-    result["createdTaskCount"] = 0
-    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_pipeline_station"})
-    result["rule"] = "V12.13.1：导入接口删除旧任务触发点，只保留数据入库、事实表、对象映射、快照和阀门。"
+    result.setdefault("createdTaskCount", 0)
+    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_v142_snapshot_mainline"})
+    result["rule"] = "V14.2：导入接口保留旧任务隔绝，并触发系统商品快照主链。"
     return _attach_import_diagnostics(result)
 
 
-def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    result["trendSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "trend station detached from import request"}
-    result["riskTaskSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task generation moved to /api/pipeline/data-versions/{data_version}/tasks/generate"}
-    result["legacyRiskSyncDisabled"] = True
+def _attach_v142_task_mainline(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+    ctx = context_from_headers(request.headers)
+    versions = _data_versions_from_result(result)
+    if not versions and result.get("dataVersion"):
+        versions = [str(result["dataVersion"])]
+    runs = []
+    for version in versions:
+        runs.append(run_v142_task_mainline(version, user_id=ctx.user_id, max_signals=50, force=True, source=source))
+    result["v142TaskMainlineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "runCount": len(runs), "runs": runs, "createdTaskCount": sum((run.get("taskGeneration") or {}).get("createdTaskCount", 0) for run in runs), "productSnapshotCount": sum((run.get("taskGeneration") or {}).get("productSnapshotCount", 0) for run in runs), "productSignalCount": sum((run.get("taskGeneration") or {}).get("productSignalCount", 0) for run in runs), "signalCount": sum((run.get("taskGeneration") or {}).get("signalCount", 0) for run in runs), "judgmentCount": sum((run.get("taskGeneration") or {}).get("judgmentCount", 0) for run in runs), "taskSnapshotCount": sum((run.get("taskGeneration") or {}).get("taskSnapshotCount", 0) for run in runs), "rule": "V14.2：上传后端自动执行系统商品快照→商品信号快照→RAG→Agent→任务快照→任务池。"}
+    result["createdTaskCount"] = result["v142TaskMainlineSync"]["createdTaskCount"]
     return result
+
+
+def _finalize_import(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = False) -> Dict[str, Any]:
+    final = _attach_import_product_contracts(request, result, rows, source=source, upsert_objects=upsert_objects)
+    return _attach_v142_task_mainline(request, final, source=source)
 
 
 async def _rows_from_uploaded_file(file: UploadFile) -> Dict[str, Any]:
@@ -240,7 +249,7 @@ def sync_source_connection(request: Request, source_id: str) -> Dict[str, Any]:
     facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
     gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
     staged = _attach_pipeline_station_sync(request, gapped, source=f"{source_id}_api_sync")
-    return _attach_import_product_contracts(request, staged, staged.get("rows"), source=f"{source_id}_api_sync", upsert_objects=False)
+    return _finalize_import(request, staged, staged.get("rows"), source=f"{source_id}_api_sync", upsert_objects=False)
 
 
 @router.post("/validate")
@@ -339,7 +348,7 @@ async def confirm_upload(request: Request, file: UploadFile = File(...), dataset
         facted = _attach_v121_metric_fact_sync(objected, rows, source="upload_file_import", source_system=source_system, parsed=parsed)
         gapped = _attach_v1213_data_gap_sync(facted, rows, source="upload_file_import", source_system=source_system, parsed=parsed)
         staged = _attach_pipeline_station_sync(request, gapped, source="upload_file_import")
-        return _attach_import_product_contracts(request, staged, rows, source="upload_file_import", upsert_objects=False)
+        return _finalize_import(request, staged, rows, source="upload_file_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -369,7 +378,7 @@ def confirm_import(request: Request, body: Dict[str, Any] = Body(default_factory
         facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="confirm_report_import", source_system=source_system)
         gapped = _attach_v1213_data_gap_sync(facted, body.get("rows"), source="confirm_report_import", source_system=source_system)
         staged = _attach_pipeline_station_sync(request, gapped, source="confirm_report_import")
-        return _attach_import_product_contracts(request, staged, body.get("rows"), source="confirm_report_import", upsert_objects=False)
+        return _finalize_import(request, staged, body.get("rows"), source="confirm_report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -386,7 +395,7 @@ def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=
         facted = _attach_v121_metric_fact_sync(objected, body.get("rows"), source="report_import", source_system=source_system)
         gapped = _attach_v1213_data_gap_sync(facted, body.get("rows"), source="report_import", source_system=source_system)
         staged = _attach_pipeline_station_sync(request, gapped, source="report_import")
-        return _attach_import_product_contracts(request, staged, body.get("rows"), source="report_import", upsert_objects=False)
+        return _finalize_import(request, staged, body.get("rows"), source="report_import", upsert_objects=False)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -399,7 +408,7 @@ def import_mock_alerts(request: Request) -> Dict[str, Any]:
     facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
     gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
     staged = _attach_pipeline_station_sync(request, gapped, source="mock_alerts_import")
-    return _attach_import_product_contracts(request, staged, staged.get("rows"), source="mock_alerts_import", upsert_objects=False)
+    return _finalize_import(request, staged, staged.get("rows"), source="mock_alerts_import", upsert_objects=False)
 
 
 @router.get("/v3-summary")
@@ -419,9 +428,4 @@ def alert_events(active_only: bool = Query(default=True)) -> List[Dict[str, Any]
 
 @router.get("/versions")
 def versions() -> List[Dict[str, Any]]:
-    return list_data_versions()
-
-
-@router.get("/latest-version")
-def latest_version_endpoint() -> Dict[str, Any]:
-    return latest_data_version()
+    return list_version_import_records(limit=200).get("records", [])
