@@ -11,7 +11,7 @@ from src.services.task_repository_mirror_service import mirror_task_reset_to_pro
 from src.services.task_state_machine_service import ACTION_TARGET_STATUS, assert_transition_allowed, mirror_all
 from src.services.trace_audit_service import resolve_trace_id, write_audit_log
 
-TASK_WRITE_VERSION = "12.10.0"
+TASK_WRITE_VERSION = "12.11.1"
 
 
 def _task_id(task: Dict[str, Any] | None) -> str | None:
@@ -63,6 +63,8 @@ def transition_task_with_repository(task_id: str, action: str, payload: Dict[str
     from_status = existing.get("status")
     normalized_action = {
         "accept": "operator_accepted",
+        "assign": "manager_assigned",
+        "split": "manager_assigned",
         "submit": "operator_submitted",
         "review_approve": "manager_approved",
         "review_return": "manager_returned",
@@ -86,7 +88,7 @@ def transition_task_with_repository(task_id: str, action: str, payload: Dict[str
     mirror_all(module_task_service.TASKS, module_task_service.TASK_EVENTS, module_task_service.LOGS)
     write_audit_log(ctx, trace_id=trace_id, event_type="task.transitioned", resource_type="task", resource_id=task_id, action=action, status=task.get("status"), payload={"fromStatus": from_status, "targetStatus": target_status})
     production_mirror = mirror_task_to_production(ctx, task, action=action)
-    return _repository_response(ctx, task, action=action, message="任务状态已通过 V12.10 生命周期状态机写入，并按配置尝试镜像到 PostgreSQL Repository。", trace_id=trace_id, production_mirror=production_mirror)
+    return _repository_response(ctx, task, action=action, message="任务状态已通过 V12.11.1 生命周期状态机写入，并按配置尝试镜像到 PostgreSQL Repository。", trace_id=trace_id, production_mirror=production_mirror)
 
 
 def reset_tasks_with_repository(ctx: UserContext, *, reason: str = "demo reset") -> Dict[str, Any]:
