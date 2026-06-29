@@ -7,9 +7,7 @@
 
   function arr(value) { return Array.isArray(value) ? value.filter(Boolean) : []; }
   function task() { return report?.relatedTask || {}; }
-  function steps() {
-    return arr(report?.sopSteps || report?.suggestedActions || report?.operationChecklist || task().sopSteps);
-  }
+  function steps() { return arr(report?.operatorSopSteps || report?.sopSteps || report?.suggestedActions || report?.operationChecklist || task().sopSteps); }
   function neededFields() {
     const templateFields = arr(evidence?.template?.fields);
     const gateFields = arr((task().actionAuthorization || task().v1282ActionGate || {}).operatorFactFields);
@@ -35,16 +33,16 @@
   function renderSteps() {
     const list = steps();
     if (!list.length) return "";
-    return `<section class="page-section"><div class="section-header"><h3>SOP确认</h3><span class="status-badge">${list.length}步</span></div><ol class="action-step-list">${list.map((item) => `<li>${s(item.title || item.action || item.summary || item)}</li>`).join("")}</ol></section>`;
+    return `<section class="page-section"><div class="section-header"><h3>Agent SOP确认</h3><span class="status-badge">运营只执行</span></div><ol class="action-step-list">${list.map((item) => `<li>${s(item.title || item.action || item.summary || item)}</li>`).join("")}</ol></section>`;
   }
   function renderForm() {
     const uploads = uploadFields();
     const fields = neededFields();
-    return `<section class="page-section task-submit-section"><div class="section-header"><h3>提交处理材料</h3><span class="status-badge">独立提交页</span></div><form id="taskSubmitForm" class="task-submit-form">
+    return `<section class="page-section task-submit-section"><div class="section-header"><h3>提交处理材料</h3><span class="status-badge">提交后系统复盘</span></div><form id="taskSubmitForm" class="task-submit-form">
       <div class="submit-upload-grid">${uploads.map(renderUpload).join("")}</div>
       <div class="submit-field-grid">${fields.map(renderField).join("")}</div>
-      <label class="submit-field full"><span>处理总结</span><textarea rows="4" name="summary" placeholder="说明已完成的动作、影响范围、需要系统复盘的指标"></textarea></label>
-      <label class="submit-field full"><span>处理结果</span><textarea rows="3" name="result" placeholder="例如：已更换主图并记录测试开始时间，等待系统按3天周期复盘点击率和转化率"></textarea></label>
+      <label class="submit-field full"><span>处理总结</span><textarea rows="4" name="summary" placeholder="说明已执行的Agent SOP动作、影响范围、已上传的截图或数据凭证"></textarea></label>
+      <label class="submit-field full"><span>处理结果</span><textarea rows="3" name="result" placeholder="例如：已更换标题A并保留原标题B对照；提交后由系统等待下一次报表更新自动复盘"></textarea></label>
       <div class="report-actions"><button type="submit">确认提交材料</button><button type="button" class="secondary" data-back-task>返回任务列表</button><button type="button" class="secondary" data-open-detail="${s(taskId)}">查看SOP详情</button></div>
     </form></section>`;
   }
@@ -53,7 +51,7 @@
     const t = task();
     const title = report?.title || t.title || t.productTitle || "任务提交";
     const status = report?.taskStatus || t.status || "处理中";
-    return `<section class="report-hero"><div><p class="eyebrow">TASK SUBMIT · V12.10</p><h2>${s(title)}</h2><p>${s(report?.warningSummary || t.reason || "按SOP提交处理材料，提交后进入系统复盘或总管复核。")}</p></div><div class="report-hero-side"><span>当前状态</span><strong>${s(status)}</strong><small>${s(t.store || t.storeName || "任务池")}</small></div></section>${notice ? AppShell.notice("提交结果", notice) : ""}${renderSteps()}${renderForm()}`;
+    return `<section class="report-hero"><div><p class="eyebrow">TASK SUBMIT · V12.11</p><h2>${s(title)}</h2><p>${s(report?.warningSummary || t.reason || "按Agent SOP提交处理材料，后续报表更新后由系统自动复盘。")}</p></div><div class="report-hero-side"><span>当前状态</span><strong>${s(status)}</strong><small>${s(t.store || t.storeName || "任务池")}</small></div></section>${notice ? AppShell.notice("提交结果", notice) : ""}${renderSteps()}${renderForm()}`;
   }
   function collectPayload(form) {
     const fields = {};
@@ -68,9 +66,9 @@
       size: input.files?.[0]?.size || 0,
       type: input.files?.[0]?.type || "",
     })).filter((item) => item.filename);
-    const summary = form.summary?.value?.trim() || "运营已提交处理材料，等待系统复盘或总管复核。";
-    const result = form.result?.value?.trim() || "处理材料已提交。";
-    return { summary, note: summary, result, fields, formFields: fields, attachments, evidenceLinks: attachments, action: task().actionType || task().taskType || "运营处理", enterRecap: true };
+    const summary = form.summary?.value?.trim() || "运营已提交Agent SOP执行材料，等待系统自动复盘。";
+    const result = form.result?.value?.trim() || "处理材料已提交，后续报表更新后系统自动计算复盘结果。";
+    return { summary, note: summary, result, fields, formFields: fields, attachments, evidenceLinks: attachments, action: task().actionType || task().taskType || "运营处理", enterRecap: true, operatorManualRecapRequired: false };
   }
 
   window.TaskSubmitPage = {
@@ -100,7 +98,7 @@
           const result = await AppApi.submitEvidenceTodo(taskId, collectPayload(form));
           if (result?.task?.id) window.AppTaskStore?.upsert?.(result.task);
           await AppApi.refreshTaskState().catch(() => null);
-          notice = "处理材料已提交，任务已进入后续复核或自动复盘链路。";
+          notice = "处理材料已提交，任务进入等待系统自动复盘链路。";
           AppRouter.navigate("business-report");
         } catch (error) {
           notice = error?.message || "提交失败，请补充材料后重试。";
