@@ -11,7 +11,7 @@ from src.services.alert_detail_service import get_alert_detail_report
 from src.services.task_report_service import get_candidate_report, get_task_report
 
 router = APIRouter()
-TASK_REPORT_ROUTE_VERSION = "12.8.2"
+TASK_REPORT_ROUTE_VERSION = "12.8.3"
 
 
 def request_user_id(request: Request) -> str:
@@ -26,7 +26,7 @@ def _safe_report(kind: str, entity_id: str, exc: Exception) -> Dict[str, Any]:
         "reportType": kind,
         "taskStatus": "详情生成异常",
         "failClosed": True,
-        "summary": "任务本身仍可处理；详情服务返回结构化兜底，避免页面 500。下一版应从同一个 task_id 补齐 taskDetailReport。",
+        "summary": "任务本身仍可处理；详情服务返回结构化兜底，避免页面 500。请检查同一个 task_id 是否已经生成聚合详情报告。",
         "error": str(exc),
         "taskLifecycle": {"stage": "generated", "stageLabel": "生成任务", "nextExpected": "返回任务列表继续处理"},
         "sections": [
