@@ -1,5 +1,5 @@
-Current Version: 12.8.3
+Current Version: 12.9.0
 
-V12.8.3 task card action surface and aggregate detail closure
+V12.9.0 task lifecycle state machine unified write entrance
 
-This release keeps the V12.8.2 backend main-architecture forced gates and closes task UI/action drift. Task cards show a left time/order rail, one current human action and a persistent detail button. Operator cards no longer show review or recap actions. Frontend task cards use backend primaryTaskAction / visibleTaskActions, and aggregate tasks return stable Chinese detail reports with affected products, lifecycle, evidence, authorization, recap cycles and next step.
+This release makes task_lifecycle_state_machine_service the only write entrance for visible task lifecycle transitions. Accept, submit, manager review, recap completion and RAG candidate creation update status, lifecycle stage, event log, SQLite mirror and frontend task projection on the same primary task_id.
