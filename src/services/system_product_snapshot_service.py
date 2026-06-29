@@ -1,8 +1,8 @@
-"""V14.3 system product snapshot service.
+"""V14.5 system product snapshot service.
 
-A system product snapshot is not a raw data snapshot only. It is a layered
-snapshot that keeps product profile/category identity separate from operating
-metric state, then packages both for Agent judgment.
+A system product snapshot is a layered product package: profile/category identity,
+operating metric state, and permission stamp. The stamp travels with the product
+through signal, Agent, task snapshot, task pool, and lifecycle stations.
 """
 
 from __future__ import annotations
@@ -12,49 +12,13 @@ from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.module_projection_service import projected_products
+from src.services.permission_stamp_service import row_permission_stamp
 
-SYSTEM_PRODUCT_SNAPSHOT_VERSION = "14.3.0"
+SYSTEM_PRODUCT_SNAPSHOT_VERSION = "14.5.0"
 
-PROFILE_FIELDS = [
-    "objectId",
-    "productId",
-    "skuId",
-    "spuId",
-    "erpProductCode",
-    "storeId",
-    "storeName",
-    "platform",
-    "title",
-    "shortName",
-    "productUrl",
-    "categoryLevel1",
-    "categoryLevel2",
-    "categoryLevel3",
-    "verticalCategory",
-    "priceBand",
-    "productRole",
-    "lifecycleStage",
-    "isHeroProduct",
-    "isNewProduct",
-    "isCampaignProduct",
-]
-
-METRIC_FIELDS = [
-    "roas",
-    "roi",
-    "adSpend",
-    "paymentAmount",
-    "grossMargin",
-    "clickRate",
-    "conversionRate",
-    "refundRate",
-    "inventory",
-    "sellableDays",
-    "organicVisitors",
-    "paidVisitors",
-    "inventoryStatus",
-    "afterSales",
-]
+PROFILE_FIELDS = ["objectId", "productId", "skuId", "spuId", "erpProductCode", "storeId", "storeName", "platform", "title", "shortName", "productUrl", "categoryLevel1", "categoryLevel2", "categoryLevel3", "verticalCategory", "priceBand", "productRole", "lifecycleStage", "isHeroProduct", "isNewProduct", "isCampaignProduct"]
+METRIC_FIELDS = ["roas", "roi", "adSpend", "paymentAmount", "grossMargin", "clickRate", "conversionRate", "refundRate", "inventory", "sellableDays", "organicVisitors", "paidVisitors", "inventoryStatus", "afterSales"]
+PERMISSION_FIELDS = ["permissionStamp", "permissionStampId", "permissionSource", "uploadedByUserId", "ownerUserId", "assignedOperatorId", "visibleUserIds", "visibleRoleIds", "importBatchId"]
 
 
 def now_iso() -> str:
@@ -63,8 +27,7 @@ def now_iso() -> str:
 
 def ensure_product_snapshot_tables() -> None:
     with connect() as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS system_product_snapshots_v14 (
                 snapshot_id TEXT PRIMARY KEY,
                 data_version TEXT,
@@ -73,8 +36,7 @@ def ensure_product_snapshot_tables() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
         ensure_columns(conn, "system_product_snapshots_v14", {"data_version": "TEXT", "product_count": "INTEGER DEFAULT 0", "updated_at": "TEXT"})
         conn.execute("CREATE INDEX IF NOT EXISTS idx_system_product_snapshot_v14_version ON system_product_snapshots_v14(data_version, created_at)")
         conn.commit()
@@ -104,30 +66,14 @@ def _infer_vertical_category(item: Dict[str, Any]) -> str:
     return _text(_first(item, ["verticalCategory", "vertical_category", "category", "categoryName", "categoryLevel3", "categoryLevel2", "categoryLevel1", "category_name"], "未归类")) or "未归类"
 
 
+def _permission_snapshot(item: Dict[str, Any]) -> Dict[str, Any]:
+    stamp = row_permission_stamp(item)
+    return {"permissionStamp": stamp, "permissionStampId": stamp.get("permissionStampId"), "permissionSource": stamp.get("permissionSource"), "uploadedByUserId": stamp.get("uploadedByUserId"), "ownerUserId": stamp.get("ownerUserId"), "assignedOperatorId": stamp.get("assignedOperatorId"), "visibleUserIds": stamp.get("visibleUserIds") or [], "visibleRoleIds": stamp.get("visibleRoleIds") or [], "importBatchId": stamp.get("importBatchId")}
+
+
 def _profile_snapshot(item: Dict[str, Any]) -> Dict[str, Any]:
-    profile = {
-        "objectId": _product_key(item),
-        "productId": item.get("productId") or item.get("id"),
-        "skuId": _first(item, ["skuId", "sku", "sku_id"]),
-        "spuId": _first(item, ["spuId", "spu", "spu_id"]),
-        "erpProductCode": _first(item, ["erpProductCode", "erpCode", "erp_product_code", "商家编码"]),
-        "storeId": item.get("storeId"),
-        "storeName": item.get("storeName") or item.get("store"),
-        "platform": _first(item, ["platform", "平台"], "unknown"),
-        "title": item.get("title"),
-        "shortName": item.get("shortName"),
-        "productUrl": _first(item, ["productUrl", "productLink", "link", "url", "商品链接"]),
-        "categoryLevel1": _first(item, ["categoryLevel1", "一级类目"]),
-        "categoryLevel2": _first(item, ["categoryLevel2", "二级类目"]),
-        "categoryLevel3": _first(item, ["categoryLevel3", "三级类目"]),
-        "verticalCategory": _infer_vertical_category(item),
-        "priceBand": _first(item, ["priceBand", "price_band", "价格带"], "unknown"),
-        "productRole": _first(item, ["productRole", "role", "商品角色"], "regular"),
-        "lifecycleStage": _first(item, ["lifecycleStage", "lifecycle", "生命周期"], "unknown"),
-        "isHeroProduct": bool(item.get("isHeroProduct") or item.get("hero") or item.get("主推品")),
-        "isNewProduct": bool(item.get("isNewProduct") or item.get("new") or item.get("新品")),
-        "isCampaignProduct": bool(item.get("isCampaignProduct") or item.get("campaign") or item.get("活动品")),
-    }
+    profile = {"objectId": _product_key(item), "productId": item.get("productId") or item.get("id"), "skuId": _first(item, ["skuId", "sku", "sku_id"]), "spuId": _first(item, ["spuId", "spu", "spu_id"]), "erpProductCode": _first(item, ["erpProductCode", "erpCode", "erp_product_code", "商家编码"]), "storeId": item.get("storeId"), "storeName": item.get("storeName") or item.get("store"), "platform": _first(item, ["platform", "平台"], "unknown"), "title": item.get("title"), "shortName": item.get("shortName"), "productUrl": _first(item, ["productUrl", "productLink", "link", "url", "商品链接"]), "categoryLevel1": _first(item, ["categoryLevel1", "一级类目"]), "categoryLevel2": _first(item, ["categoryLevel2", "二级类目"]), "categoryLevel3": _first(item, ["categoryLevel3", "三级类目"]), "verticalCategory": _infer_vertical_category(item), "priceBand": _first(item, ["priceBand", "price_band", "价格带"], "unknown"), "productRole": _first(item, ["productRole", "role", "商品角色"], "regular"), "lifecycleStage": _first(item, ["lifecycleStage", "lifecycle", "生命周期"], "unknown"), "isHeroProduct": bool(item.get("isHeroProduct") or item.get("hero") or item.get("主推品")), "isNewProduct": bool(item.get("isNewProduct") or item.get("new") or item.get("新品")), "isCampaignProduct": bool(item.get("isCampaignProduct") or item.get("campaign") or item.get("活动品"))}
+    profile.update(_permission_snapshot(item))
     return profile
 
 
@@ -140,34 +86,19 @@ def _metric_snapshot(item: Dict[str, Any]) -> Dict[str, Any]:
     metric["sourceDataVersions"] = item.get("sourceDataVersions") or []
     metric["sourceDatasets"] = item.get("sourceDatasets") or []
     metric["metricFacts"] = item.get("metricFacts") or []
+    metric.update(_permission_snapshot(item))
     return metric
 
 
-def _agent_snapshot_package(profile: Dict[str, Any], metric: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "objectId": profile.get("objectId"),
-        "productId": profile.get("productId"),
-        "storeId": profile.get("storeId"),
-        "profileSnapshot": profile,
-        "metricSnapshot": metric,
-        "agentContextSeed": {
-            "platform": profile.get("platform"),
-            "storeName": profile.get("storeName"),
-            "verticalCategory": profile.get("verticalCategory"),
-            "productRole": profile.get("productRole"),
-            "lifecycleStage": profile.get("lifecycleStage"),
-            "roas": metric.get("roas"),
-            "adSpend": metric.get("adSpend"),
-            "refundRate": metric.get("refundRate"),
-            "inventory": metric.get("inventory"),
-        },
-    }
+def _agent_snapshot_package(profile: Dict[str, Any], metric: Dict[str, Any], permission: Dict[str, Any]) -> Dict[str, Any]:
+    return {"objectId": profile.get("objectId"), "productId": profile.get("productId"), "storeId": profile.get("storeId"), "profileSnapshot": profile, "metricSnapshot": metric, "permissionStamp": permission.get("permissionStamp"), "permissionStampId": permission.get("permissionStampId"), "ownerUserId": permission.get("ownerUserId"), "assignedOperatorId": permission.get("assignedOperatorId"), "visibleUserIds": permission.get("visibleUserIds") or [], "agentContextSeed": {"platform": profile.get("platform"), "storeName": profile.get("storeName"), "verticalCategory": profile.get("verticalCategory"), "productRole": profile.get("productRole"), "lifecycleStage": profile.get("lifecycleStage"), "roas": metric.get("roas"), "adSpend": metric.get("adSpend"), "refundRate": metric.get("refundRate"), "inventory": metric.get("inventory")}}
 
 
 def _snapshot_item(item: Dict[str, Any]) -> Dict[str, Any]:
     profile = _profile_snapshot(item)
     metric = _metric_snapshot(item)
-    return {**profile, **metric, "profileSnapshot": profile, "metricSnapshot": metric, "agentProductSnapshotPackage": _agent_snapshot_package(profile, metric)}
+    permission = _permission_snapshot(item)
+    return {**profile, **metric, **permission, "profileSnapshot": profile, "metricSnapshot": metric, "permissionSnapshot": permission, "agentProductSnapshotPackage": _agent_snapshot_package(profile, metric, permission)}
 
 
 def row_to_snapshot(row: Any) -> Dict[str, Any]:
@@ -218,31 +149,15 @@ def materialize_system_product_snapshot(data_version: str | None = None, *, user
             products = filtered
     profile_snapshots = [item.get("profileSnapshot") for item in products]
     metric_snapshots = [item.get("metricSnapshot") for item in products]
+    permission_snapshots = [item.get("permissionSnapshot") for item in products]
     agent_packages = [item.get("agentProductSnapshotPackage") for item in products]
-    payload = {
-        "version": SYSTEM_PRODUCT_SNAPSHOT_VERSION,
-        "snapshotId": snapshot_id,
-        "dataVersion": data_version,
-        "stationId": "system_product_snapshot_station",
-        "products": products,
-        "profileSnapshots": profile_snapshots,
-        "metricSnapshots": metric_snapshots,
-        "agentProductSnapshotPackages": agent_packages,
-        "productCount": len(products),
-        "profileFieldSet": PROFILE_FIELDS,
-        "metricFieldSet": METRIC_FIELDS,
-        "source": "module_projection_service.projected_products",
-        "rule": "V14.3 system product snapshot = product profile snapshot + product metric snapshot + Agent package seed.",
-    }
+    payload = {"version": SYSTEM_PRODUCT_SNAPSHOT_VERSION, "snapshotId": snapshot_id, "dataVersion": data_version, "stationId": "system_product_snapshot_station", "products": products, "profileSnapshots": profile_snapshots, "metricSnapshots": metric_snapshots, "permissionSnapshots": permission_snapshots, "agentProductSnapshotPackages": agent_packages, "productCount": len(products), "profileFieldSet": PROFILE_FIELDS, "metricFieldSet": METRIC_FIELDS, "permissionFieldSet": PERMISSION_FIELDS, "source": "module_projection_service.projected_products", "rule": "V14.5 system product snapshot = profile + metric + permission stamp package."}
     now = now_iso()
     with connect() as conn:
-        conn.execute(
-            """
+        conn.execute("""
             INSERT OR REPLACE INTO system_product_snapshots_v14 (snapshot_id, data_version, product_count, payload, created_at, updated_at)
             VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM system_product_snapshots_v14 WHERE snapshot_id = ?), ?), ?)
-            """,
-            (snapshot_id, data_version, len(products), dumps(payload), snapshot_id, now, now),
-        )
+        """, (snapshot_id, data_version, len(products), dumps(payload), snapshot_id, now, now))
         conn.commit()
         row = conn.execute("SELECT * FROM system_product_snapshots_v14 WHERE snapshot_id = ?", (snapshot_id,)).fetchone()
     return {**row_to_snapshot(row), "outputRef": f"system_product_snapshot:{snapshot_id}", "productSnapshotRef": f"system_product_snapshot:{snapshot_id}"}
