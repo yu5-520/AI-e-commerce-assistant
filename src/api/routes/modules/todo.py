@@ -1,8 +1,4 @@
-"""Todo module routes.
-
-V12.9 makes the task lifecycle state machine the only write entrance for visible
-lifecycle transitions: accept -> submit -> manager review -> system recap -> RAG.
-"""
+"""Todo module routes for V12.9.1."""
 
 from __future__ import annotations
 
@@ -16,12 +12,12 @@ from src.services.account_service import current_user, user_has_permission, user
 from src.services.module_task_service import get_task_counters_for_user, list_task_events_for_user, list_tasks, pin_task, reorder_task, update_task
 from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open_tasks
 from src.services.task_evidence_service import get_task_evidence, review_task_evidence, submit_task_evidence
-from src.services.task_lifecycle_state_machine_service import TASK_LIFECYCLE_STATE_MACHINE_VERSION, get_lifecycle_task_projection, lifecycle_state_summary, project_lifecycle_task, transition_lifecycle_task
+from src.services.task_lifecycle_state_machine_service import TASK_LIFECYCLE_STATE_MACHINE_VERSION, auto_accept_ready_tasks, get_lifecycle_task_projection, lifecycle_state_summary, project_lifecycle_task, transition_lifecycle_task
 from src.services.task_repository_write_service import reset_tasks_with_repository
 
 router = APIRouter()
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
-TODO_VERSION = "12.9.0"
+TODO_VERSION = "12.9.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -34,12 +30,8 @@ def require_any_permission(user_id: str, permissions: set[str]) -> None:
         raise HTTPException(status_code=403, detail=f"{user['roleName']} does not have permission for this action")
 
 
-def _viewer_role(user_id: str | None) -> str | None:
-    return (current_user(user_id) or {}).get("roleId") if user_id else None
-
-
 def _viewer_for_query(user_id: str | None) -> str | None:
-    return None if _viewer_role(user_id) == "owner" else user_id
+    return None if (current_user(user_id) or {}).get("roleId") == "owner" else user_id
 
 
 def _project_task(task: Dict[str, Any], user_id: str | None) -> Dict[str, Any]:
@@ -63,11 +55,18 @@ def _counter_from_tasks(active_tasks: List[Dict[str, Any]], events: List[Dict[st
         "processing": len([task for task in visible if task.get("status") == "处理中"]),
         "submitted": len([task for task in visible if task.get("status") in {"已提交", "待复核"}]),
         "reviewing": len([task for task in visible if task.get("status") == "待复核"]),
-        "returned": len([task for task in visible if task.get("workflowStatus") == "已退回"]),
         "waitingRecap": len([task for task in visible if task.get("workflowStatus") == "等待自动复盘" or task.get("lifecycleStage") == "recap_scheduled"]),
         "recentEvents": len(events or []),
         "latestEvent": (events or [None])[0],
     }
+
+
+def _load_tasks(ctx: UserContext, *, viewer_id: str | None, assignee_id: str | None, review_scope: bool) -> tuple[list[Dict[str, Any]], list[Dict[str, Any]], str]:
+    tasks = list_tasks(assignee_id=assignee_id, review_scope=review_scope, viewer_id=viewer_id)
+    active_tasks = list_tasks(active_only=True, assignee_id=assignee_id, review_scope=review_scope, viewer_id=viewer_id)
+    if tasks or active_tasks:
+        return tasks, active_tasks, "memory"
+    return _repository_fallback(ctx, active_only=False, assignee_id=assignee_id), _repository_fallback(ctx, active_only=True, assignee_id=assignee_id), "repository"
 
 
 def _transition_or_404(task_id: str, action: str, *, viewer_id: str, payload: Dict[str, Any] | None = None, ctx: UserContext | None = None) -> Dict[str, Any]:
@@ -85,17 +84,13 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
     review_scope = scope == "review"
     mine_assignee = assignee_id if scope in {"mine", "operator"} else None
     cluster_sync = cluster_open_tasks()
-    tasks = list_tasks(assignee_id=mine_assignee, review_scope=review_scope, viewer_id=query_viewer_id)
-    active_tasks = list_tasks(active_only=True, assignee_id=mine_assignee, review_scope=review_scope, viewer_id=query_viewer_id)
+    tasks, active_tasks, source = _load_tasks(ctx, viewer_id=query_viewer_id, assignee_id=mine_assignee, review_scope=review_scope)
+    auto_accept_sync = auto_accept_ready_tasks(active_tasks, viewer_id=viewer_id, ctx=ctx)
+    if auto_accept_sync.get("autoAcceptedCount"):
+        tasks, active_tasks, second_source = _load_tasks(ctx, viewer_id=query_viewer_id, assignee_id=mine_assignee, review_scope=review_scope)
+        source = f"{source}+auto_accept->{second_source}"
     events = list_task_events_for_user(query_viewer_id)
     counters = _counter_from_tasks(active_tasks, events)
-    source = "memory"
-    if not tasks and not active_tasks:
-        tasks = _repository_fallback(ctx, active_only=False, assignee_id=mine_assignee)
-        active_tasks = _repository_fallback(ctx, active_only=True, assignee_id=mine_assignee)
-        counters = _counter_from_tasks(active_tasks, events=[])
-        events = []
-        source = "repository"
     return {
         "version": TODO_VERSION,
         "tasks": _project_tasks(tasks, viewer_id),
@@ -103,13 +98,14 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
         "events": events,
         "counters": counters,
         "taskClusterSync": cluster_sync,
+        "autoAcceptSync": auto_accept_sync,
         "taskLifecycleSync": lifecycle_state_summary(limit=100),
         "scope": scope,
         "viewer": current_user(viewer_id),
         "source": source,
-        "repositoryFallback": {"version": TODO_VERSION, "used": source == "repository", "rule": "V12.9正常任务生命周期以内存任务池为主，状态机同步写SQLite镜像。"},
-        "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleStateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "rule": "接收、提交、复核、自动复盘和RAG候选必须通过统一生命周期状态机。"},
-        "rule": "V12.9：任务生命周期状态机统一写入口。",
+        "repositoryFallback": {"version": TODO_VERSION, "used": "repository" in source, "rule": "V12.9.1状态机可读取并回灌Repository任务。"},
+        "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleStateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "rule": "权限内运营任务自动接收，卡片默认进入提交材料阶段。"},
+        "rule": "V12.9.1：权限内任务生成后自动接收；人工接收保持幂等。",
     }
 
 
@@ -141,24 +137,6 @@ def todo_evidence(request: Request, task_id: str) -> Dict[str, Any]:
     return evidence
 
 
-@router.post("/todo/{task_id}/split")
-def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
-    viewer_id = request_user_id(request)
-    require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
-    body = body or {}
-    assignee_id = body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId")
-    reviewer_id = body.get("reviewer_id") or body.get("reviewerId")
-    task = update_task(task_id, {"status": "待接收", "workflowStatus": "已派发", "assigneeId": assignee_id, "reviewerId": reviewer_id}, log_type="任务派发", action="manager_assigned", result="任务已派发，等待运营接收。")
-    if not task:
-        raise HTTPException(status_code=404, detail="task not found")
-    return {"ok": True, "version": TODO_VERSION, "action": "manager_assigned", "task": get_lifecycle_task_projection(task_id, viewer_id) or _project_task(task, viewer_id)}
-
-
-@router.post("/todo/{task_id}/assign")
-def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
-    return split_todo(request, task_id, body)
-
-
 @router.post("/todo/{task_id}/accept")
 def accept_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
@@ -173,16 +151,6 @@ def submit_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     return _transition_or_404(task_id, "submit", viewer_id=viewer_id, payload=body or {"note": "运营已提交处理材料。"}, ctx=ctx)
 
 
-@router.post("/todo/{task_id}/submit-evidence")
-def submit_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    viewer_id = request_user_id(request)
-    require_any_permission(viewer_id, {"submit_tasks", "handle_tasks", "assign_tasks", "dispatch_tasks"})
-    task = submit_task_evidence(task_id, body or {}, submitter_id=viewer_id)
-    if not task:
-        raise HTTPException(status_code=400, detail="cannot submit task evidence")
-    return _transition_or_404(task_id, "submit", viewer_id=viewer_id, payload=body or {"note": "运营已提交处理材料。"}, ctx=ctx)
-
-
 @router.post("/todo/{task_id}/review")
 def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
@@ -191,6 +159,16 @@ def review_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Bo
     decision = body.get("decision") or "approve"
     action = "review_approve" if decision in {"approve", "approved", "pass", "通过"} else "review_return"
     return _transition_or_404(task_id, action, viewer_id=viewer_id, payload=body, ctx=ctx)
+
+
+@router.post("/todo/{task_id}/submit-evidence")
+def submit_evidence_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"submit_tasks", "handle_tasks", "assign_tasks", "dispatch_tasks"})
+    task = submit_task_evidence(task_id, body or {}, submitter_id=viewer_id)
+    if not task:
+        raise HTTPException(status_code=400, detail="cannot submit task evidence")
+    return _transition_or_404(task_id, "submit", viewer_id=viewer_id, payload=body or {"note": "运营已提交处理材料。"}, ctx=ctx)
 
 
 @router.post("/todo/{task_id}/review-evidence")
@@ -214,9 +192,7 @@ def complete_recap_todo(request: Request, task_id: str, body: Dict[str, Any] | N
 
 @router.post("/todo/{task_id}/recap")
 def recap_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
-    viewer_id = request_user_id(request)
-    require_any_permission(viewer_id, {"review_tasks", "assign_tasks", "dispatch_tasks"})
-    return _transition_or_404(task_id, "recap_complete", viewer_id=viewer_id, payload=body or {}, ctx=ctx)
+    return complete_recap_todo(request, task_id, body, ctx)
 
 
 @router.post("/todo/{task_id}/complete")
@@ -224,6 +200,24 @@ def complete_todo(request: Request, task_id: str, ctx: UserContext = Depends(get
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"review_tasks", "submit_tasks", "dispatch_tasks", "assign_tasks"})
     return _transition_or_404(task_id, "complete", viewer_id=viewer_id, payload={}, ctx=ctx)
+
+
+@router.post("/todo/{task_id}/split")
+def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
+    body = body or {}
+    assignee_id = body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId")
+    reviewer_id = body.get("reviewer_id") or body.get("reviewerId")
+    task = update_task(task_id, {"status": "待接收", "workflowStatus": "已派发", "assigneeId": assignee_id, "reviewerId": reviewer_id}, log_type="任务派发", action="manager_assigned", result="任务已派发，等待运营接收。")
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    return {"ok": True, "version": TODO_VERSION, "action": "manager_assigned", "task": get_lifecycle_task_projection(task_id, viewer_id) or _project_task(task, viewer_id)}
+
+
+@router.post("/todo/{task_id}/assign")
+def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    return split_todo(request, task_id, body)
 
 
 @router.post("/todo/{task_id}/pin")
