@@ -16,7 +16,7 @@ from src.services.v1212_rag_llm_agent_service import apply_v1212_rag_llm_agent
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "12.13.0"
+API_VERSION = "12.13.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 V112_TASK_CHAIN_FIX = apply_v112_task_chain_fix()
@@ -32,11 +32,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {
-        "message": "AI ERP Operating Advisor API is running.",
-        "version": API_VERSION,
-        "v12_13": "pipeline_station_gate_snapshot_read",
-    }
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_13_1": "legacy_side_effect_cleanup"}
 
 
 app.include_router(modules.router)
