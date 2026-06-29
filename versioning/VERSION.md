@@ -1,6 +1,6 @@
-Current Version: 14.3.0
+Current Version: 14.3.1
 
-V14.3 Full Product Signal Package Mainline
+V14.3.1 Signal Handoff Fix
 
 Core chain:
 
@@ -8,17 +8,13 @@ Core chain:
 
 Key updates:
 
-- `system_product_snapshot_service.py` now separates product profile snapshot, product metric snapshot and Agent package seed.
-- `product_signal_snapshot_service.py` now creates full product signal packages for all products, including normal-state packages.
-- `signal_pool_service.py` now queues full signal packages instead of only abnormal items.
-- `operation_budget_service.py` adds task budget estimation and budget ledger support.
-- `agent_judgment_station_service.py` now includes operation budget, SOP and evidence requirements in Agent judgments.
-- `v142_task_mainline_service.py` remains as a compatibility name, but now runs the V14.3 mainline and caps Agent batch size at 20 packages.
-- `station_adapter_service.py`, `station_registry_service.py`, `station_contract_service.py`, `pipeline.py`, and `main.py` are updated to V14.3.
+- `signal_pool_service.py` now normalizes full product signal packages to `pending_rag_agent` before Agent consumption.
+- Existing pending package rows with `pending_agent_judgment` are repaired when signal pool regenerates.
+- `health.py`, `main.py`, `VERSION.md`, `versioning/VERSION.md`, and `web_demo/index.html` are aligned to 14.3.1.
 
-Runtime counters:
+Runtime counters to verify:
 
-`productSnapshotCount`, `productSignalPackageCount`, `productSignalCount`, `signalCount`, `judgmentCount`, `taskSnapshotCount`, `createdTaskCount`, `observeOrNoiseCount`.
+`productSnapshotCount`, `productSignalPackageCount`, `signalCount`, `judgmentCount`, `taskSnapshotCount`, `createdTaskCount`, `budgetLedgers`.
 
 Boundary:
 
