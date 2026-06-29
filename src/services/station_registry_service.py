@@ -1,15 +1,15 @@
-"""V13.7 clean business station registry.
+"""V14 clean business station registry.
 
-Only business mainline stations live here. V13.7 completes the internal task
-lifecycle line: acceptance/assignment, submission/review, recap/RAG feedback are
-explicit stations instead of hidden todo-only actions.
+Only business mainline stations live here. V14 connects the Agent task judgment
+line with real Signal Pool, RAG Context, Agent Judgment, Task Snapshot and Task
+Pool adapters.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-STATION_REGISTRY_VERSION = "13.7.0"
+STATION_REGISTRY_VERSION = "14.0.0"
 
 
 def station(station_id: str, stage: str, title: str, backend: str, prefix: str, next_station: str | None, line: str, domain: str, *, replayable: bool = True) -> Dict[str, Any]:
@@ -34,9 +34,9 @@ STATIONS: List[Dict[str, Any]] = [
     station("metric_fact_station", "metric_facts_ready", "指标事实站", "src.services.metric_fact_store_service", "metric_facts", "operating_object_station", "external_data_line", "data_fact"),
     station("operating_object_station", "operating_objects_ready", "商品/店铺映射站", "src.services.operating_object_store_service", "operating_objects", "operating_snapshot_station", "external_data_line", "operating_object"),
     station("operating_snapshot_station", "operating_unit_snapshot_ready", "经营页快照站", "src.services.operating_unit_snapshot_service", "operating_unit_snapshot", "task_signal_station", "external_data_line", "operating_snapshot"),
-    station("task_signal_station", "task_signal_ready", "任务信号站", "src.services.risk_task_service", "task_signals", "rag_context_station", "agent_task_judgment_line", "task_signal"),
-    station("rag_context_station", "rag_context_ready", "RAG参照站", "src.services.rag_feedback_loop_service", "rag_context", "agent_judgment_station", "agent_task_judgment_line", "rag_context"),
-    station("agent_judgment_station", "agent_judgment_ready", "Agent判断站", "src.stations.agent_enhance_station.service", "agent_judgment", "task_snapshot_station", "agent_task_judgment_line", "agent_judgment"),
+    station("task_signal_station", "task_signal_ready", "信号池站", "src.services.signal_pool_service", "signal_pool", "rag_context_station", "agent_task_judgment_line", "task_signal"),
+    station("rag_context_station", "rag_context_ready", "RAG上下文站", "src.services.rag_context_station_service", "rag_context", "agent_judgment_station", "agent_task_judgment_line", "rag_context"),
+    station("agent_judgment_station", "agent_judgment_ready", "Agent判断站", "src.services.agent_judgment_station_service", "agent_judgment", "task_snapshot_station", "agent_task_judgment_line", "agent_judgment"),
     station("task_snapshot_station", "task_snapshot_ready", "任务快照站", "src.services.task_snapshot_station_service", "task_snapshot", "task_pool_station", "agent_task_judgment_line", "task_snapshot"),
     station("task_pool_station", "task_pool_entered", "任务入池站", "src.services.task_pool_station_service", "task_pool", "task_acceptance_station", "internal_task_lifecycle_line", "task_pool"),
     station("task_acceptance_station", "task_accepted", "任务接收站", "src.services.task_acceptance_assignment_station_service", "task_acceptance", "task_submission_station", "internal_task_lifecycle_line", "task_acceptance"),
@@ -81,6 +81,6 @@ def registry_summary() -> Dict[str, Any]:
             "agentTaskJudgmentLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "agent_task_judgment_line"],
             "internalTaskLifecycleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "internal_task_lifecycle_line"],
         },
-        "mainlinePurity": "deprecated_files_excluded",
-        "rule": "V13.7：外部数据线、Agent判断线、任务生命周期线已经合并为完整站点闭环。",
+        "mainlinePurity": "v14_signal_rag_agent_snapshot_pool",
+        "rule": "V14：经营规则迁入RAG，Agent负责判断，代码负责接口、权限、生命周期和审计边界。",
     }
