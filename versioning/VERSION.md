@@ -1,25 +1,31 @@
-Current Version: 13.1.0
+Current Version: 13.3.0
 
-V13.1 Agent-Guided Snapshot Task Handoff
+V13.3 Task Snapshot Station
 
-This release starts V13 by connecting the external data station line to the internal task judgment line without restoring old task-generation hooks.
+This release adds the Task Snapshot Station as the formal decision package between Agent judgment and task pool.
 
 Core rule:
 
-- External report data becomes metric facts, operating objects and operating snapshots.
-- Operating snapshots do not directly create tasks.
-- A snapshot creates a light `station_handoff` into the task judgment line.
-- Task generation remains blocked until RAG context and Agent judgment decide whether a task snapshot should be created.
-- V13.1 records the handoff as `pending_agent_judgment` instead of using system-only rigid rules.
+- External report data still stops at the operating snapshot.
+- V13.1 handoff still moves the snapshot into the task judgment line.
+- Agent judgment results do not directly create visible tasks.
+- V13.3 stores Agent judgment as a `task_snapshot` first.
+- Task snapshots can represent create-task, manager-review, observe-only, or ignore-noise decisions.
+- Task pool entry must be handled later by `task_pool_station`.
 
 Key updates:
 
-- Added `src/services/snapshot_task_handoff_service.py`.
-- Added `src/api/routes/station_handoffs.py` with `/api/station-handoffs` APIs.
-- Updated `src/api/main.py` to `13.1.0` and included station handoff routes.
-- Added `station_handoffs` to runtime DB status and reset scope.
-- Updated frontend API client so import refresh creates a snapshot-to-task-judgment handoff after data refresh.
+- Added `src/services/task_snapshot_station_service.py`.
+- Added `src/api/routes/task_snapshots.py` with `/api/task-snapshots` APIs.
+- Updated `src/api/main.py` to `13.3.0` and included task snapshot routes.
+- Updated `station_registry_service.py` to register the Agent task judgment line:
+  - `task_signal_station`
+  - `rag_context_station`
+  - `agent_judgment_station`
+  - `task_snapshot_station`
+- Updated `station_contract_service.py` with V13.3 task snapshot contracts.
+- Added `task_snapshots` to runtime DB status and reset scope.
 
 Current contract:
 
-The data line stops at the operating snapshot. V13.1 creates the bridge into the task judgment line. V13.2 should consume the handoff, call RAG context and Agent judgment, and only then create task snapshots.
+System facts and RAG context support Agent judgment. Agent judgment produces a task snapshot. A task snapshot is not yet a visible task. Later versions should move `snapshot_ready` records into `task_pool_station`, then continue task acceptance, submission, review, recap, and RAG feedback.
