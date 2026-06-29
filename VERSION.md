@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.8.2
+12.8.3
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.8.2 means: V12.8.1 lifecycle contract alignment + backend main-architecture forced gates. Store labels must pass the store tag projection gateway and cannot show high-weight without trusted governance source. Authorization must pass budget range, system conservative impact estimate, company baseline, and confirmed governance weight before manager approval. Detail report fallback must be localized and treated as a last-resort diagnostic, not a normal task detail.
+- V12.8.3 means: V12.8.2 backend main-architecture forced gates + task card action surface and aggregate detail report closure. The task list must show a left time/order rail, one current human action plus persistent detail, and must not render review or recap buttons on operator task cards. The frontend must use backend `primaryTaskAction` / `visibleTaskActions` instead of raw `availableActions`. Aggregate tasks must have a stable Chinese detail report with affected products, trigger reason, lifecycle, evidence, authorization, recap cycles, and next step.
