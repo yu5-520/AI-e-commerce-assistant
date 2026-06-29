@@ -12,8 +12,10 @@ from src.services.module_data_service import all_reports
 from src.services.module_projection_service import projected_report_details, projected_report_groups
 from src.services.module_task_service import create_task
 from src.services.report_alert_service import get_v3_dashboard_summary, list_alert_events
+from src.services.v1211_manual_task_package_service import wrap_manual_task_payload
 
 router = APIRouter()
+REPORT_MODULE_VERSION = "12.11.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -82,7 +84,7 @@ def report(request: Request) -> Dict[str, Any]:
     sync_records = _real_sync_records(groups)
     has_data = bool(sync_records or details or v3.get("latestDataVersion") or recent_alerts)
     return {
-        "version": "5.2.1",
+        "version": REPORT_MODULE_VERSION,
         "hasData": has_data,
         "reportGroups": groups if has_data else [],
         "reportDetails": details if has_data else {},
@@ -109,4 +111,4 @@ def report_task(request: Request, report_id: str) -> Dict[str, Any]:
     user_id = request_user_id(request)
     reports = _flatten(projected_report_groups(user_id)) or all_reports()
     item = find_or_404(reports, report_id, "report")
-    return create_task(report_task_payload(item))
+    return create_task(wrap_manual_task_payload(report_task_payload(item)))
