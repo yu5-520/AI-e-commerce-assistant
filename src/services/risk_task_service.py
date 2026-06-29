@@ -1,4 +1,4 @@
-"""V12.12 task generation facade."""
+"""V12.13 task generation station facade."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open
 from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_summary
 from src.services.task_recap_scheduler_service import RECAP_SCHEDULER_VERSION, recap_schedule_summary
 
-RISK_TASK_VERSION = "12.12.0"
+RISK_TASK_VERSION = "12.13.0"
 
 
 def _action_gate_counts(tasks: list[Dict[str, Any]]) -> Dict[str, int]:
@@ -47,7 +47,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
     return {
         **risk_result,
         "version": RISK_TASK_VERSION,
-        "mode": "v12_12_rag_llm_product_level_task_generation",
+        "mode": "v12_13_task_signal_station_no_page_trigger",
         "dataVersion": data_version,
         "strictRiskTaskVersion": STRICT_RISK_TASK_VERSION,
         "operatingCadenceVersion": OPERATING_CADENCE_VERSION,
@@ -78,7 +78,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "strictRiskSync": risk_result,
         "operatingCadenceSync": cadence_result,
         "dailyReportSeedCount": len(cadence_result.get("topSignals") or []),
-        "rule": "V12.12：经营节奏任务由系统变化包 + 商品上下文 + RAG基础库 + LLM生成 + SOP校验器增强；批量任务保留商品级动作卡。",
+        "rule": "V12.13：任务生成是pipeline独立站点；经营页刷新不能触发任务生成、RAG检索或LLM增强。",
     }
 
 
@@ -99,5 +99,5 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
     summary["operatingCadenceSummary"] = cadence
     summary["lifecycleSummary"] = lifecycle_summary(limit=limit)
     summary["recapScheduleSummary"] = recap_schedule_summary()
-    summary["rule"] = "V12.12 adds RAG baseline retrieval, LLM SOP generation, SOP guardrail validation and product-level action cards."
+    summary["rule"] = "V12.13 keeps RAG/LLM task enhancement, but exposes task generation as a station instead of a page side effect."
     return summary
