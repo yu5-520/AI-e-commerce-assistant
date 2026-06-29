@@ -107,7 +107,7 @@
           button.disabled = false;
           button.textContent = original;
           AppShell.setView(renderPage());
-          this.mount(ctx);
+          window.TaskSubmitPage.mount(ctx);
         }
       });
     },
