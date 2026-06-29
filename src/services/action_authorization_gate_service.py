@@ -1,18 +1,18 @@
-"""V12.8.2 operating action authorization gate.
+"""V14.4.1 operating action authorization gate.
 
-Authorization must not jump from action type directly to manager approval. Budget
-and activity actions pass through: operator budget range, system conservative
-impact floor, company baseline, and confirmed governance weight.
+Authorization reads TaskIntent PermissionEnvelope first. Budget is never inferred
+from free text, product codes, deadlines, titles, or IDs. This prevents normal
+operator tasks from being pushed to manager approval because a product code such
+as P10006 was parsed as a budget.
 """
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List
 
 from src.services.operating_weight_policy_service import OPERATING_WEIGHT_POLICY_VERSION, infer_operating_weight, is_governance_high_weight
 
-ACTION_AUTHORIZATION_VERSION = "12.8.2"
+ACTION_AUTHORIZATION_VERSION = "14.4.1"
 
 ACTION_LABELS = {
     "activity_participation": "活动报名 / 活动承接",
@@ -55,16 +55,12 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def _first_number(text: str) -> float | None:
-    match = re.search(r"(\d+(?:\.\d+)?)\s*(?:元|预算|预算金额)?", text or "")
-    return _as_float(match.group(1)) if match else None
-
-
 def infer_action_type(task: Dict[str, Any]) -> str:
-    text = _join_text(task)
-    explicit = str(task.get("actionType") or "")
+    intent = task.get("taskIntent") if isinstance(task.get("taskIntent"), dict) else {}
+    explicit = str(task.get("actionType") or intent.get("taskType") or "")
     if explicit in ACTION_LABELS and explicit != "generic_operation":
         return explicit
+    text = _join_text(task)
     if any(token in text for token in ("库存归零", "库存", "补货", "调拨", "可售天数", "断货", "缺货")):
         return "inventory_restock"
     if any(token in text for token in ("活动", "报名", "平台补贴", "商家让利", "活动价")):
@@ -109,6 +105,12 @@ def _company_baseline(task: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _operator_budget_range(task: Dict[str, Any]) -> tuple[float, float]:
+    envelope = _permission_envelope(task)
+    if envelope:
+        low = _as_float(envelope.get("operatorBudgetMin"))
+        high = _as_float(envelope.get("operatorBudgetMax"))
+        if low is not None and high is not None:
+            return low, high
     baseline = _company_baseline(task)
     raw = baseline.get("operatorActivityBudgetRange") or baseline.get("operatorBudgetRange") or [3000, 8000]
     if isinstance(raw, (list, tuple)) and len(raw) >= 2:
@@ -118,18 +120,40 @@ def _operator_budget_range(task: Dict[str, Any]) -> tuple[float, float]:
     return 3000.0, 8000.0
 
 
-def _requested_budget(task: Dict[str, Any]) -> float | None:
+def _permission_envelope(task: Dict[str, Any]) -> Dict[str, Any]:
+    envelope = task.get("permissionEnvelope") if isinstance(task.get("permissionEnvelope"), dict) else {}
+    if envelope:
+        return envelope
+    intent = task.get("taskIntent") if isinstance(task.get("taskIntent"), dict) else {}
+    envelope = intent.get("permissionEnvelope") if isinstance(intent.get("permissionEnvelope"), dict) else {}
+    return envelope or {}
+
+
+def _structured_budget(task: Dict[str, Any]) -> float | None:
+    envelope = _permission_envelope(task)
+    if envelope:
+        for key in ("estimatedBudgetCost", "requestedBudget", "budgetAmount"):
+            parsed = _as_float(envelope.get(key))
+            if parsed is not None:
+                return parsed
+    intent = task.get("taskIntent") if isinstance(task.get("taskIntent"), dict) else {}
+    budget_sources = [task.get("operationBudget"), intent.get("budget") if isinstance(intent, dict) else None]
+    for source in budget_sources:
+        if not isinstance(source, dict):
+            continue
+        for key in ("estimatedBudgetCost", "requestedBudget", "budgetAmount", "activityBudget", "adBudget", "plannedBudget"):
+            parsed = _as_float(source.get(key))
+            if parsed is not None:
+                return parsed
     for key in ("requestedBudget", "budgetAmount", "activityBudget", "adBudget", "plannedBudget"):
         parsed = _as_float(task.get(key))
         if parsed is not None:
             return parsed
-    detail = task.get("taskDetailReport") or {}
-    for source in (task.get("actionAuthorization") or {}, task.get("actionImpactEstimate") or {}, detail):
-        for key in ("requestedBudget", "budgetAmount", "activityBudget", "adBudget", "plannedBudget"):
-            parsed = _as_float(source.get(key) if isinstance(source, dict) else None)
-            if parsed is not None:
-                return parsed
-    return _first_number(_join_text(task))
+    return None
+
+
+def _requested_budget(task: Dict[str, Any]) -> float | None:
+    return _structured_budget(task)
 
 
 def _conservative_floor(task: Dict[str, Any], metric: str) -> float | None:
@@ -159,6 +183,16 @@ def _operator_fields(action_type: str) -> List[str]:
     }.get(action_type, ["执行截图", "处理记录", "复核说明"])
 
 
+def _envelope_requires_review(task: Dict[str, Any]) -> bool | None:
+    envelope = _permission_envelope(task)
+    if not envelope:
+        return None
+    value = envelope.get("requiresManagerReview")
+    if isinstance(value, bool):
+        return value
+    return None
+
+
 def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
     action_type = infer_action_type(task)
     object_weight = infer_object_weight(task)
@@ -168,10 +202,23 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
     budget_action = action_type in BUDGET_GATED_ACTIONS
     budget = _requested_budget(task)
     budget_min, budget_max = _operator_budget_range(task)
-    budget_over_limit = bool(budget is not None and budget_max and budget > budget_max)
+    envelope = _permission_envelope(task)
+    envelope_requires_review = _envelope_requires_review(task)
+    if envelope and envelope.get("budgetOverLimit") is not None:
+        budget_over_limit = bool(envelope.get("budgetOverLimit"))
+    else:
+        budget_over_limit = bool(budget is not None and budget_max and budget > budget_max)
     below_floor = _below_company_floor(task)
     needs_weight_approval = confirmed_high_weight and operator_level != "high" and action_type in APPROVAL_ACTIONS_ON_CONFIRMED_HIGH_WEIGHT
-    if hard_action and confirmed_high_weight and task.get("priority") == "高":
+    if envelope_requires_review is True:
+        decision = "manager_approval_required"
+        layer = "manager_approval"
+        reason = envelope.get("reviewReason") or "结构化权限信封要求主管确认。"
+    elif envelope_requires_review is False and not hard_action and not below_floor and not needs_weight_approval:
+        decision = "auto_execute"
+        layer = "operator_execution"
+        reason = "TaskIntent权限信封确认该任务在运营可执行范围内。"
+    elif hard_action and confirmed_high_weight and task.get("priority") == "高":
         decision = "owner_approval_required"
         layer = "manager_approval"
         reason = "硬风险动作作用于已确认治理高权重/战略对象，需要老板或总管确认。"
@@ -185,7 +232,7 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
         reason = "动作在当前账号权限和公司基线内；投放/活动类任务未因动作类型一刀切升级审批。"
     return {
         "version": ACTION_AUTHORIZATION_VERSION,
-        "mode": "main_architecture_forced_permission_gate_v12_8_2",
+        "mode": "task_intent_permission_envelope_v14_4_1",
         "actionType": action_type,
         "actionLabel": ACTION_LABELS.get(action_type, "经营处理"),
         "operatorPermissionLevel": operator_level,
@@ -195,7 +242,8 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
         "taskLayer": layer,
         "approvalReason": reason,
         "operatorFactFields": _operator_fields(action_type),
-        "budgetGate": {"isBudgetAction": budget_action, "requestedBudget": budget, "operatorBudgetMin": budget_min, "operatorBudgetMax": budget_max, "budgetOverLimit": budget_over_limit},
+        "permissionEnvelope": envelope,
+        "budgetGate": {"isBudgetAction": budget_action, "requestedBudget": budget, "operatorBudgetMin": budget_min, "operatorBudgetMax": budget_max, "budgetOverLimit": budget_over_limit, "budgetSource": "structured_only", "freeTextBudgetParsingAllowed": False},
         "impactGate": {"usesSystemEstimate": True, "belowCompanyFloor": below_floor, "roiConservativeFloor": _conservative_floor(task, "roi"), "marginConservativeFloor": _conservative_floor(task, "grossMarginRate"), "companyBaseline": _company_baseline(task)},
         "policy": {
             "operatorProvidesFactsOnly": True,
@@ -204,14 +252,15 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
             "reportPerformanceIsNotGovernanceWeight": True,
             "inventorySignalsBeforeCreativeWords": True,
             "budgetActionIsNotAutomaticManagerApproval": True,
-            "rule": "V12.8.2：审批必须经过预算权限、系统保守估算、公司基线和已确认治理权重，不能只靠actionType短路。",
+            "freeTextBudgetParsingAllowed": False,
+            "rule": "V14.4.1：审批预算只读取TaskIntent/PermissionEnvelope结构化字段，禁止从标题、商品编码、期限和自由文本抓数字。",
         },
     }
 
 
 def apply_action_authorization(task: Dict[str, Any]) -> Dict[str, Any]:
     gate = authorize_action(task)
-    next_task = {**task, "actionAuthorization": gate, "v1282ActionGate": gate, "v127ActionGate": gate, "v126ActionGate": gate}
+    next_task = {**task, "actionAuthorization": gate, "v1441ActionGate": gate, "v1282ActionGate": gate, "v127ActionGate": gate, "v126ActionGate": gate}
     if gate["decision"] in {"manager_approval_required", "owner_approval_required"}:
         next_task["taskLayer"] = gate.get("taskLayer") or "manager_approval"
         next_task["assigneeId"] = None
@@ -225,5 +274,11 @@ def apply_action_authorization(task: Dict[str, Any]) -> Dict[str, Any]:
         next_task["taskType"] = "主管审批任务" if gate["decision"] == "manager_approval_required" else "老板确认任务"
         next_task["priority"] = "高" if gate["decision"] == "owner_approval_required" else next_task.get("priority", "中")
     else:
-        next_task.setdefault("taskLayer", "operator_execution")
+        next_task["taskLayer"] = "operator_execution"
+        ownership = next_task.get("ownership") or {}
+        if not next_task.get("assigneeId"):
+            next_task["assigneeId"] = ownership.get("assignedOperatorId")
+        next_task.setdefault("status", "待接收")
+        next_task.setdefault("workflowStatus", "待接收")
+        next_task.setdefault("displayStatus", next_task.get("workflowStatus") or "待接收")
     return next_task
