@@ -1,8 +1,6 @@
-Current Version: 14.2.0
+Current Version: 14.3.0
 
-V14.2 System Product Snapshot Signal Mainline
-
-This release aligns the product module state and task signal generation path.
+V14.3 Full Product Signal Package Mainline
 
 Core chain:
 
@@ -10,23 +8,18 @@ Core chain:
 
 Key updates:
 
-- Added `src/services/system_product_snapshot_service.py`.
-- Added `src/services/product_signal_snapshot_service.py`.
-- Added `src/services/v142_task_mainline_service.py`.
-- Updated `src/services/signal_pool_service.py` to consume product signal snapshots.
-- Updated `src/services/station_registry_service.py` with snapshot signal stations.
-- Updated `src/services/station_contract_service.py` with V14.2 contracts.
-- Updated `src/services/station_adapter_service.py` with real snapshot signal adapters.
-- Updated `src/api/routes/pipeline.py` to run the V14.2 mainline.
-- Updated `src/api/routes/data_import.py` to run the V14.2 mainline after imports.
-- Updated `src/api/main.py` to `14.2.0`.
-- Added `docs/V14_2_UPDATE_SUMMARY.md`.
-- Added `docs/V14_OLD_CHAIN_ISOLATION.md`.
+- `system_product_snapshot_service.py` now separates product profile snapshot, product metric snapshot and Agent package seed.
+- `product_signal_snapshot_service.py` now creates full product signal packages for all products, including normal-state packages.
+- `signal_pool_service.py` now queues full signal packages instead of only abnormal items.
+- `operation_budget_service.py` adds task budget estimation and budget ledger support.
+- `agent_judgment_station_service.py` now includes operation budget, SOP and evidence requirements in Agent judgments.
+- `v142_task_mainline_service.py` remains as a compatibility name, but now runs the V14.3 mainline and caps Agent batch size at 20 packages.
+- `station_adapter_service.py`, `station_registry_service.py`, `station_contract_service.py`, `pipeline.py`, and `main.py` are updated to V14.3.
 
 Runtime counters:
 
-`productSnapshotCount`, `productSignalCount`, `signalCount`, `judgmentCount`, `taskSnapshotCount`, `createdTaskCount`, `observeOrNoiseCount`.
+`productSnapshotCount`, `productSignalPackageCount`, `productSignalCount`, `signalCount`, `judgmentCount`, `taskSnapshotCount`, `createdTaskCount`, `observeOrNoiseCount`.
 
 Boundary:
 
-Legacy routes may remain for archive, compatibility or diagnostics. The visible task path must pass through `task_snapshot_station`.
+The system generates and queues full signal packages. RAG defines operation-value and budget boundaries. Agent judges. The system reserves budget and controls task lifecycle.
