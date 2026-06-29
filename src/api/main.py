@@ -13,14 +13,14 @@ from src.api.routes import accounts, approvals, architecture, audit, data_import
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "12.14.2"
+API_VERSION = "12.14.3"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": ["v112_task_chain_fix", "v1211_agent_sop_enhancement", "v1212_rag_llm_agent"],
-    "mode": "station_interface_explicit_execution_with_deprecated_archive",
-    "rule": "V12.14.2：主入口不执行旧Hook；旧文件统一进入Deprecated Station Archive登记，正线站点保持干净。",
+    "mode": "deprecated_physical_archive_migration",
+    "rule": "V12.14.3：archive_only旧补丁已迁入Deprecated Station Archive；正线站点保持干净。",
 }
 
 if WEB_DEMO_DIR.exists():
@@ -32,7 +32,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_14_2": "deprecated_station_archive_mainline_purity", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_14_3": "deprecated_physical_archive_migration", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
