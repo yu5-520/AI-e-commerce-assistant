@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-14.3.0
+14.3.1
 ```
 
 ## Release Contract
@@ -12,9 +12,9 @@
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
 
-## V14.3 Meaning
+## V14.3.1 Meaning
 
-V14.3 means: product snapshot is split into product profile snapshot and product metric snapshot; every product generates a full signal package; RAG defines operation-value and budget boundaries; Agent judges signal packages in batches and creates budgeted task snapshots.
+V14.3.1 fixes the signal handoff between full product signal packages and Agent judgment.
 
 Mainline:
 
@@ -30,6 +30,13 @@ report import
   -> task pool
   -> task lifecycle
 ```
+
+Core fix:
+
+- Product signal packages may be born as `pending_agent_judgment`.
+- Signal pool now normalizes Agent-ready packages to `pending_rag_agent`.
+- Agent judgment station consumes `pending_rag_agent`.
+- Existing pending package rows are repaired when the signal pool is regenerated.
 
 Core rules:
 
