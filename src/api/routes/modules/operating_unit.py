@@ -1,4 +1,4 @@
-"""Operating unit route with runtime-residue fail-closed and safe partial aggregation."""
+"""Operating unit route with V12.8.2 store tag gateway."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ from src.services.module_projection_service import projection_summary, projected
 from src.services.module_task_service import get_task_counters_for_user, list_tasks
 from src.services.operating_object_store_service import list_operating_products, list_operating_stores, operating_object_summary
 from src.services.report_alert_service import get_v3_dashboard_summary
+from src.services.store_tag_projection_service import STORE_TAG_PROJECTION_VERSION, project_store_tags
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "11.16.0"
+OPERATING_UNIT_VERSION = "12.8.2"
 SOURCE_TABLES = ["import_records", "report_records", "imported_report_rows", "data_snapshots", "metric_snapshots"]
 DERIVED_TABLES = ["business_signals_v6", "operating_products", "operating_stores", "task_status", "task_assignments", "task_submissions", "task_reviews", "alert_events"]
 T = TypeVar("T")
@@ -39,7 +40,6 @@ def _percent(value: Any) -> float | None:
 
 
 def _has_value(value: Any) -> bool:
-    """Return whether a merge value is meaningful without building unsafe sets."""
     if value is None or value == "" or value == "—":
         return False
     if isinstance(value, (list, tuple, set, dict)) and len(value) == 0:
@@ -106,14 +106,6 @@ def _store_platform(item: Dict[str, Any] | None, fallback: str = "平台") -> st
     return str(store.get("platform") or fallback) if store else fallback
 
 
-def _store_weight_tag(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> str:
-    if len(products) >= 10 or len(traffic) >= 8:
-        return "高权重店铺"
-    if len(products) <= 2 and len(traffic) <= 1:
-        return "测试型店铺"
-    return "中权重店铺"
-
-
 def _product_role(item: Dict[str, Any]) -> str:
     inventory_level = item.get("inventoryLevel")
     after_sales_level = item.get("afterSalesLevel")
@@ -136,20 +128,20 @@ def _business_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) 
     if any(item.get("afterSalesLevel") in {"danger", "warning"} for item in products):
         tags.append("售后观察")
     if any(item.get("inventoryLevel") in {"danger", "warning"} for item in products):
-        tags.append("库存观察")
+        tags.append("库存警告")
     if any((_percent(item.get("grossMargin")) or 1) < 0.2 for item in products):
         tags.append("毛利观察")
-    if any(item.get("objectStoreVersion") for item in products):
-        tags.append("已入库")
     if active_alert_count > 0:
         tags.append("执行任务")
+    if any(item.get("objectStoreVersion") for item in products):
+        tags.append("经营观察")
     return tags or ["常规观察"]
 
 
 def _tag_level(value: str) -> str:
-    if any(word in value for word in ["执行任务", "高风险", "库存"]):
+    if any(word in value for word in ["执行任务", "高风险", "库存", "售后", "数据缺口"]):
         return "warning"
-    if any(word in value for word in ["高权重", "成交", "稳定", "已入库"]):
+    if any(word in value for word in ["战略", "高权重", "稳定"]):
         return "good"
     return "watch"
 
@@ -186,6 +178,25 @@ def _active_task_count_for_store(store_id: str | None, active_tasks: List[Dict[s
     return len([task for task in active_tasks if store_id in set(task.get("storeIds") or task.get("visibleStoreIds") or []) and task.get("displayState") != "backend_only"])
 
 
+def _apply_store_tag_projection(row: Dict[str, Any], *, products: List[Dict[str, Any]] | None = None, traffic_count: int = 0, active_task_count: int = 0, existing_business_tags: List[str] | None = None) -> Dict[str, Any]:
+    projection = project_store_tags(row, products=products or [], traffic_count=traffic_count, active_task_count=active_task_count, existing_business_tags=existing_business_tags or row.get("businessTags") or [])
+    governance = projection.get("governanceTag") or {}
+    display_tags = projection.get("displayTags") or []
+    next_row = dict(row)
+    next_row["storeWeightTag"] = governance.get("label") or "权重未确认"
+    next_row["storeWeight"] = governance.get("weight") or {}
+    next_row["storeTagProjection"] = projection
+    next_row["governanceTags"] = [governance.get("label") or "权重未确认"]
+    next_row["dataTags"] = projection.get("dataTags") or []
+    next_row["businessTags"] = projection.get("businessTags") or ["常规观察"]
+    next_row["riskTags"] = projection.get("riskTags") or next_row["businessTags"]
+    next_row["displayTags"] = display_tags
+    next_row["level"] = projection.get("level") or _tag_level(" ".join(display_tags))
+    next_row["tagGatewayVersion"] = STORE_TAG_PROJECTION_VERSION
+    next_row["tagRule"] = projection.get("rule")
+    return next_row
+
+
 def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], active_tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     products_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     traffic_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -203,26 +214,23 @@ def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any
         store_traffic = traffic_by_store.get(store_name, [])
         role_counter = Counter(_product_role(item) for item in store_products)
         product_role_tags = [f"{name} {count}" for name, count in role_counter.most_common()] or ["暂无商品"]
-        tags = _business_tags(store_products)
+        base_tags = _business_tags(store_products)
         task_count = _active_task_count_for_store(store_id, active_tasks)
-        store_weight = _store_weight_tag(store_products, store_traffic)
-        rows.append({
+        row = {
             "storeId": store_id,
             "storeName": store_name,
             "displayName": store_name,
             "platform": store.get("platform"),
-            "storeWeightTag": store_weight,
             "productCount": len(store_products),
             "trafficCount": len(store_traffic),
             "productRoleTags": product_role_tags[:4],
-            "businessTags": tags[:4],
-            "riskTags": tags[:4],
             "activeTaskCount": task_count,
             "alertCount": task_count,
             "taskIntensity": "有执行任务" if task_count else "标签观察",
-            "level": _tag_level("执行任务" if task_count else " ".join(tags)),
-            "judgment": f"{store_weight} · 商品 {len(store_products)} · 执行任务 {task_count}",
-        })
+        }
+        row = _apply_store_tag_projection(row, products=store_products, traffic_count=len(store_traffic), active_task_count=task_count, existing_business_tags=base_tags)
+        row["judgment"] = f"{row['storeWeightTag']} · 商品 {len(store_products)} · 执行任务 {task_count}"
+        rows.append(row)
     return rows
 
 
@@ -238,7 +246,10 @@ def _merge_store_rows(generated: List[Dict[str, Any]], master: List[Dict[str, An
             existing = seen[key]
             existing.update({k: v for k, v in row.items() if _has_value(v)})
             existing["productCount"] = max(_as_int(existing.get("productCount")), _as_int(row.get("productCount")))
-    return list(seen.values())
+    normalized: List[Dict[str, Any]] = []
+    for row in seen.values():
+        normalized.append(_apply_store_tag_projection(row, products=[], traffic_count=_as_int(row.get("trafficCount")), active_task_count=_as_int(row.get("activeTaskCount")), existing_business_tags=row.get("businessTags") or []))
+    return normalized
 
 
 def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any], *, object_missing: bool = False) -> Dict[str, Any]:
@@ -247,7 +258,7 @@ def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Di
     if object_missing:
         return {"title": "经营判断", "summary": "检测到报表数据或数据版本，但当前账号可读商品 / 店铺仍为 0。请在系统页执行经营对象回填，或重新导入报表。", "priority": "先修复经营对象入库，再生成任务", "mainRisk": "经营对象未入库", "taggedStoreCount": 0, "activeTaskCount": active_tasks, "objectSyncFailed": True}
     if active_tasks:
-        summary = f"当前有 {active_tasks} 个执行任务，需要先处理高风险高时效事项。低风险信号已沉淀为店铺和商品标签。"
+        summary = f"当前有 {active_tasks} 个执行任务，需要先处理高时效事项。店铺标签已按治理、数据、经营三层拆分。"
         main = "执行任务"
     else:
         summary = f"当前无需要立即处理的执行任务，{len(store_rows)} 个店铺、{sum(_as_int(row.get('productCount')) for row in store_rows)} 个商品已完成清洗入库。"
@@ -329,5 +340,6 @@ def operating_unit(request: Request) -> Dict[str, Any]:
         "objectStore": object_summary,
         "objectSyncFailed": False,
         "diagnostics": {"errors": errors},
-        "rule": "V11.16 经营单元合并店铺行使用安全空值判断，重复店铺不会触发 500。",
+        "tagProjectionVersion": STORE_TAG_PROJECTION_VERSION,
+        "rule": "V12.8.2 经营单元店铺标签必须经过治理/数据/经营三层标签出口；商品数量和已入库状态不能生成高权重店铺。",
     }
