@@ -13,9 +13,10 @@ from src.services.module_task_service import create_task, visible_candidates
 from src.services.operating_object_store_service import list_operating_products
 from src.services.product_archive_detail_service import enrich_product_archive_detail
 from src.services.report_alert_service import attach_alert_state
+from src.services.v1211_manual_task_package_service import wrap_manual_task_payload
 
 router = APIRouter()
-PRODUCT_ARCHIVE_VERSION = "12.1.2"
+PRODUCT_ARCHIVE_VERSION = "12.11.1"
 
 
 def _has_value(value: Any) -> bool:
@@ -154,4 +155,4 @@ def product_detail(request: Request, product_id: str) -> Dict[str, Any]:
 def product_task(request: Request, product_id: str) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     item = find_or_404(product_items(user_id), product_id, "product")
-    return create_task(product_task_payload(item))
+    return create_task(wrap_manual_task_payload(product_task_payload(item)))
