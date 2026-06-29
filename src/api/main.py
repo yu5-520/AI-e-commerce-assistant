@@ -15,7 +15,7 @@ from src.services.v1211_agent_sop_enhancement_service import apply_v1211_agent_s
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "12.11.1"
+API_VERSION = "12.11.2"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 V112_TASK_CHAIN_FIX = apply_v112_task_chain_fix()
@@ -33,7 +33,7 @@ def index() -> Any:
     return {
         "message": "AI ERP Operating Advisor API is running.",
         "version": API_VERSION,
-        "v12_11_1": "cleanup_legacy_submit_manual_task_assign_paths",
+        "v12_11_2": "hotfix_missing_task_evidence_repository_service",
     }
 
 
