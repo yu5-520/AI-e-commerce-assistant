@@ -1,4 +1,4 @@
-"""V13.3 standard station contract service."""
+"""V13.4 standard station contract service."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.services.pipeline_gate_service import record_stage_gate, stage_summary
 from src.services.station_adapter_service import STATION_ADAPTER_VERSION, run_station_adapter
 from src.services.station_registry_service import STATION_REGISTRY_VERSION, get_station, list_stations
 
-STATION_CONTRACT_VERSION = "13.3.0"
+STATION_CONTRACT_VERSION = "13.4.0"
 
 DEFAULT_INPUTS = {
     "import_station": ["source", "dataVersion"],
@@ -21,6 +21,7 @@ DEFAULT_INPUTS = {
     "rag_context_station": ["dataVersion", "taskSignalRef"],
     "agent_judgment_station": ["dataVersion", "ragContextRef"],
     "task_snapshot_station": ["dataVersion", "agentJudgment", "decision"],
+    "task_pool_station": ["taskSnapshotId"],
     "agent_enhance_station": ["dataVersion", "taskSnapshotRef"],
     "evidence_station": ["taskId", "submitterId"],
     "auto_recap_station": ["taskId", "evidenceRef"],
@@ -37,6 +38,7 @@ DEFAULT_OUTPUTS = {
     "rag_context_station": ["matchedContextCount", "outputRef"],
     "agent_judgment_station": ["decision", "confidence", "outputRef"],
     "task_snapshot_station": ["taskSnapshotId", "decision", "status", "outputRef"],
+    "task_pool_station": ["poolEntryId", "taskId", "createdTaskCount", "outputRef"],
     "agent_enhance_station": ["enhancedTaskCount", "outputRef"],
     "evidence_station": ["evidenceId", "outputRef"],
     "auto_recap_station": ["recapId", "outputRef"],
@@ -71,8 +73,8 @@ def station_contract(station_id: str) -> Dict[str, Any]:
         "backendModule": station.get("backendModule"),
         "frontendModule": station.get("frontendModule"),
         "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"},
-        "adapter": {"realAdapterSupported": sid in {"operating_snapshot_station", "task_signal_station"}, "diagnosticUsesSimulation": True},
-        "rule": "V13.3：站点契约区分外部数据线、Agent任务判断线和内部任务生命周期线；任务快照站只产出判断结论包。",
+        "adapter": {"realAdapterSupported": sid in {"operating_snapshot_station", "task_signal_station", "task_pool_station"}, "diagnosticUsesSimulation": True},
+        "rule": "V13.4：任务池站只负责把任务快照入池；接收、派发、提交、复核继续分站处理。",
     }
 
 
@@ -132,10 +134,10 @@ def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *,
     except Exception as exc:
         adapter_error = str(exc)
         adapter_output = {"adapterMode": "real_adapter_failed_fallback_contract", "adapterError": adapter_error}
-    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V13-3" if diagnostic else None)
+    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V13-4" if diagnostic else None)
     output_ref = adapter_output.get("outputRef") or f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
     output = _complete_output_for_contract(station["stationId"], {**adapter_output, "dataVersion": data_version, "outputRef": output_ref, "stationId": station["stationId"], "isDiagnostic": diagnostic})
     output_check = validate_contract_payload(station["stationId"], output, direction="output")
     status = "failed" if adapter_error else "completed"
     gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"]}, output_payload=output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output_ref, error_message=adapter_error, run_type="diagnostic" if diagnostic else "business", is_diagnostic=diagnostic)
-    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V13.3：Station Interface 调用 adapter；任务快照站只写判断结论包，后续入池由task_pool_station处理。"}
+    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V13.4：Station Interface 调用 adapter；任务池站只处理入池，不自动接收、不自动派发。"}
