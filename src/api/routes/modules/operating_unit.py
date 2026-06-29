@@ -1,345 +1,56 @@
-"""Operating unit route with V12.8.2 store tag gateway."""
+"""Operating unit module route.
+
+V12.13 rule: the operating page is a snapshot reader. It must not re-run report
+projection, traffic projection, task generation, RAG retrieval or LLM generation
+when the page is opened.
+"""
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from typing import Any, Callable, Dict, List, TypeVar
+from typing import Any, Dict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 
-from src.repositories.sqlite_repository import connect
-from src.services.account_service import current_user, list_stores, user_id_from_headers
-from src.services.module_projection_service import projection_summary, projected_products, projected_traffic
-from src.services.module_task_service import get_task_counters_for_user, list_tasks
-from src.services.operating_object_store_service import list_operating_products, list_operating_stores, operating_object_summary
-from src.services.report_alert_service import get_v3_dashboard_summary
-from src.services.store_tag_projection_service import STORE_TAG_PROJECTION_VERSION, project_store_tags
+from src.services.account_service import current_user, user_id_from_headers
+from src.services.operating_unit_snapshot_service import OPERATING_UNIT_SNAPSHOT_VERSION, get_operating_unit_snapshot, materialize_operating_unit_snapshot
+from src.services.pipeline_gate_service import PIPELINE_GATE_VERSION, stage_summary
 
 router = APIRouter()
-OPERATING_UNIT_VERSION = "12.8.2"
-SOURCE_TABLES = ["import_records", "report_records", "imported_report_rows", "data_snapshots", "metric_snapshots"]
-DERIVED_TABLES = ["business_signals_v6", "operating_products", "operating_stores", "task_status", "task_assignments", "task_submissions", "task_reviews", "alert_events"]
-T = TypeVar("T")
+OPERATING_UNIT_VERSION = "12.13.0"
 
 
-def _as_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(float(str(value).replace(",", "").strip()))
-    except (TypeError, ValueError):
-        return default
-
-
-def _percent(value: Any) -> float | None:
-    if value in {None, "", "—"}:
-        return None
-    text = str(value).replace("%", "").strip()
-    try:
-        return float(text) / 100
-    except (TypeError, ValueError):
-        return None
-
-
-def _has_value(value: Any) -> bool:
-    if value is None or value == "" or value == "—":
-        return False
-    if isinstance(value, (list, tuple, set, dict)) and len(value) == 0:
-        return False
-    return True
-
-
-def _safe(name: str, fn: Callable[[], T], fallback: T, errors: List[Dict[str, str]]) -> T:
-    try:
-        return fn()
-    except Exception as exc:
-        errors.append({"stage": name, "error": str(exc)})
-        return fallback
-
-
-def _table_exists(conn, table_name: str) -> bool:
-    row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,)).fetchone()
-    return bool(row)
-
-
-def _table_count(conn, table_name: str) -> int:
-    if not _table_exists(conn, table_name):
-        return 0
-    row = conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()
-    return int(row["count"] if row else 0)
-
-
-def _runtime_residue_snapshot() -> Dict[str, Any]:
-    with connect() as conn:
-        source_counts = {name: _table_count(conn, name) for name in SOURCE_TABLES}
-        derived_counts = {name: _table_count(conn, name) for name in DERIVED_TABLES}
-    source_total = sum(source_counts.values())
-    derived_total = sum(derived_counts.values())
-    return {"dirty": source_total == 0 and derived_total > 0, "sourceTotal": source_total, "derivedTotal": derived_total, "sourceCounts": source_counts, "derivedCounts": derived_counts}
-
-
-def _store_map() -> Dict[str, Dict[str, Any]]:
-    stores: Dict[str, Dict[str, Any]] = {}
-    for store in list_stores():
-        stores[str(store.get("id"))] = store
-        stores[str(store.get("name"))] = store
-    return stores
-
-
-def _clean_store_name(item: Dict[str, Any] | None, fallback: str = "未命名店铺") -> str:
-    item = item or {}
-    raw = str(item.get("storeName") or item.get("store") or "").strip()
-    store_id = str(item.get("storeId") or item.get("id") or "").strip()
-    if raw and raw not in {store_id, "导入数据店铺", "未绑定店铺", "GLOBAL", "未归属店铺"}:
-        return raw
-    store = _store_map().get(store_id)
-    if store and store.get("name") and store.get("name") != store_id:
-        return str(store["name"])
-    return fallback
-
-
-def _store_platform(item: Dict[str, Any] | None, fallback: str = "平台") -> str:
-    item = item or {}
-    platform = str(item.get("platform") or "").strip()
-    if platform and platform not in {"导入数据", "未知平台"}:
-        return platform
-    store_id = str(item.get("storeId") or item.get("id") or "").strip()
-    store = _store_map().get(store_id)
-    return str(store.get("platform") or fallback) if store else fallback
-
-
-def _product_role(item: Dict[str, Any]) -> str:
-    inventory_level = item.get("inventoryLevel")
-    after_sales_level = item.get("afterSalesLevel")
-    margin = _percent(item.get("grossMargin"))
-    if after_sales_level in {"danger", "warning"}:
-        return "售后观察"
-    if inventory_level in {"danger", "warning"}:
-        return "库存观察"
-    if margin is not None and margin < 0.2:
-        return "低毛利观察"
-    if item.get("orderSummary"):
-        return "成交商品"
-    if item.get("objectStoreVersion"):
-        return "已入库商品"
-    return "普通观察"
-
-
-def _business_tags(products: List[Dict[str, Any]], active_alert_count: int = 0) -> List[str]:
-    tags: List[str] = []
-    if any(item.get("afterSalesLevel") in {"danger", "warning"} for item in products):
-        tags.append("售后观察")
-    if any(item.get("inventoryLevel") in {"danger", "warning"} for item in products):
-        tags.append("库存警告")
-    if any((_percent(item.get("grossMargin")) or 1) < 0.2 for item in products):
-        tags.append("毛利观察")
-    if active_alert_count > 0:
-        tags.append("执行任务")
-    if any(item.get("objectStoreVersion") for item in products):
-        tags.append("经营观察")
-    return tags or ["常规观察"]
-
-
-def _tag_level(value: str) -> str:
-    if any(word in value for word in ["执行任务", "高风险", "库存", "售后", "数据缺口"]):
-        return "warning"
-    if any(word in value for word in ["战略", "高权重", "稳定"]):
-        return "good"
-    return "watch"
-
-
-def _merge_products(projected: List[Dict[str, Any]], master: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen: Dict[str, Dict[str, Any]] = {}
-    for item in [*master, *projected]:
-        product_id = str(item.get("id") or item.get("productId") or "").strip()
-        if not product_id:
-            continue
-        store_id = str(item.get("storeId") or item.get("store") or item.get("storeName") or "GLOBAL").strip()
-        key = f"{store_id}::{product_id}"
-        if key not in seen:
-            seen[key] = dict(item)
-        else:
-            seen[key].update({key2: value for key2, value in item.items() if _has_value(value)})
-    return list(seen.values())
-
-
-def _visible_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen: Dict[str, Dict[str, Any]] = {}
-    for index, item in enumerate([*products, *traffic], start=1):
-        store_id = str(item.get("storeId") or "").strip()
-        store_name = _clean_store_name(item, fallback=f"店铺 {index}")
-        platform = _store_platform(item, fallback="导入平台")
-        key = store_name or store_id or f"店铺 {index}"
-        seen.setdefault(key, {"storeId": store_id, "storeName": store_name, "platform": platform})
-    return list(seen.values())
-
-
-def _active_task_count_for_store(store_id: str | None, active_tasks: List[Dict[str, Any]]) -> int:
-    if not store_id:
-        return 0
-    return len([task for task in active_tasks if store_id in set(task.get("storeIds") or task.get("visibleStoreIds") or []) and task.get("displayState") != "backend_only"])
-
-
-def _apply_store_tag_projection(row: Dict[str, Any], *, products: List[Dict[str, Any]] | None = None, traffic_count: int = 0, active_task_count: int = 0, existing_business_tags: List[str] | None = None) -> Dict[str, Any]:
-    projection = project_store_tags(row, products=products or [], traffic_count=traffic_count, active_task_count=active_task_count, existing_business_tags=existing_business_tags or row.get("businessTags") or [])
-    governance = projection.get("governanceTag") or {}
-    display_tags = projection.get("displayTags") or []
-    next_row = dict(row)
-    next_row["storeWeightTag"] = governance.get("label") or "权重未确认"
-    next_row["storeWeight"] = governance.get("weight") or {}
-    next_row["storeTagProjection"] = projection
-    next_row["governanceTags"] = [governance.get("label") or "权重未确认"]
-    next_row["dataTags"] = projection.get("dataTags") or []
-    next_row["businessTags"] = projection.get("businessTags") or ["常规观察"]
-    next_row["riskTags"] = projection.get("riskTags") or next_row["businessTags"]
-    next_row["displayTags"] = display_tags
-    next_row["level"] = projection.get("level") or _tag_level(" ".join(display_tags))
-    next_row["tagGatewayVersion"] = STORE_TAG_PROJECTION_VERSION
-    next_row["tagRule"] = projection.get("rule")
-    return next_row
-
-
-def build_store_rows(products: List[Dict[str, Any]], traffic: List[Dict[str, Any]], active_tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    products_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    traffic_by_store: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    for item in products:
-        key = _clean_store_name(item, fallback=str(item.get("storeId") or "未命名店铺"))
-        products_by_store[key].append(item)
-    for item in traffic:
-        key = _clean_store_name(item, fallback=str(item.get("storeId") or "未命名店铺"))
-        traffic_by_store[key].append(item)
-    rows: List[Dict[str, Any]] = []
-    for store in _visible_store_rows(products, traffic):
-        store_name = str(store.get("storeName") or "店铺")
-        store_id = str(store.get("storeId") or "")
-        store_products = products_by_store.get(store_name, [])
-        store_traffic = traffic_by_store.get(store_name, [])
-        role_counter = Counter(_product_role(item) for item in store_products)
-        product_role_tags = [f"{name} {count}" for name, count in role_counter.most_common()] or ["暂无商品"]
-        base_tags = _business_tags(store_products)
-        task_count = _active_task_count_for_store(store_id, active_tasks)
-        row = {
-            "storeId": store_id,
-            "storeName": store_name,
-            "displayName": store_name,
-            "platform": store.get("platform"),
-            "productCount": len(store_products),
-            "trafficCount": len(store_traffic),
-            "productRoleTags": product_role_tags[:4],
-            "activeTaskCount": task_count,
-            "alertCount": task_count,
-            "taskIntensity": "有执行任务" if task_count else "标签观察",
-        }
-        row = _apply_store_tag_projection(row, products=store_products, traffic_count=len(store_traffic), active_task_count=task_count, existing_business_tags=base_tags)
-        row["judgment"] = f"{row['storeWeightTag']} · 商品 {len(store_products)} · 执行任务 {task_count}"
-        rows.append(row)
-    return rows
-
-
-def _merge_store_rows(generated: List[Dict[str, Any]], master: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen: Dict[str, Dict[str, Any]] = {}
-    for row in [*master, *generated]:
-        key = str(row.get("storeId") or row.get("storeName") or row.get("displayName") or "").strip()
-        if not key:
-            continue
-        if key not in seen:
-            seen[key] = dict(row)
-        else:
-            existing = seen[key]
-            existing.update({k: v for k, v in row.items() if _has_value(v)})
-            existing["productCount"] = max(_as_int(existing.get("productCount")), _as_int(row.get("productCount")))
-    normalized: List[Dict[str, Any]] = []
-    for row in seen.values():
-        normalized.append(_apply_store_tag_projection(row, products=[], traffic_count=_as_int(row.get("trafficCount")), active_task_count=_as_int(row.get("activeTaskCount")), existing_business_tags=row.get("businessTags") or []))
-    return normalized
-
-
-def build_operating_judgment(store_rows: List[Dict[str, Any]], task_counters: Dict[str, Any], *, object_missing: bool = False) -> Dict[str, Any]:
-    active_tasks = _as_int(task_counters.get("visibleActive"), 0)
-    tagged_stores = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
-    if object_missing:
-        return {"title": "经营判断", "summary": "检测到报表数据或数据版本，但当前账号可读商品 / 店铺仍为 0。请在系统页执行经营对象回填，或重新导入报表。", "priority": "先修复经营对象入库，再生成任务", "mainRisk": "经营对象未入库", "taggedStoreCount": 0, "activeTaskCount": active_tasks, "objectSyncFailed": True}
-    if active_tasks:
-        summary = f"当前有 {active_tasks} 个执行任务，需要先处理高时效事项。店铺标签已按治理、数据、经营三层拆分。"
-        main = "执行任务"
-    else:
-        summary = f"当前无需要立即处理的执行任务，{len(store_rows)} 个店铺、{sum(_as_int(row.get('productCount')) for row in store_rows)} 个商品已完成清洗入库。"
-        main = "经营对象已更新"
-    return {"title": "经营判断", "summary": summary, "priority": "先看经营对象，再处理执行任务", "mainRisk": main, "taggedStoreCount": tagged_stores, "activeTaskCount": active_tasks}
+def _viewer(request: Request) -> tuple[str, Dict[str, Any]]:
+    user_id = user_id_from_headers(request.headers)
+    return user_id, current_user(user_id)
 
 
 @router.get("/operating-unit")
-def operating_unit(request: Request) -> Dict[str, Any]:
-    user_id = user_id_from_headers(request.headers)
-    user = current_user(user_id)
-    errors: List[Dict[str, str]] = []
-    residue = _safe("runtime_residue", _runtime_residue_snapshot, {"dirty": False, "sourceTotal": 0, "derivedTotal": 0, "sourceCounts": {}, "derivedCounts": {}}, errors)
-    if residue.get("dirty"):
-        return {
-            "version": OPERATING_UNIT_VERSION,
-            "hasData": False,
-            "unitName": "经营单元",
-            "emptyState": "运行态残留，等待清空",
-            "syncState": {"label": "清空不完整", "status": "dirty_runtime_residue"},
-            "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-            "metrics": [{"label": "源数据", "value": residue.get("sourceTotal", 0)}, {"label": "残留派生", "value": residue.get("derivedTotal", 0)}, {"label": "店铺", "value": 0}, {"label": "商品", "value": 0}],
-            "storeRows": [],
-            "operatingJudgment": {"title": "经营判断", "summary": "检测到导入源数据已清空，但业务信号、任务或经营对象主档仍有残留。经营中心已停止读取旧对象。", "priority": "清空演示环境后重新导入。", "mainRisk": "运行态残留", "taggedStoreCount": 0, "activeTaskCount": 0, "dirtyRuntimeResidue": True},
-            "tasks": {},
-            "objectStore": {"productCount": 0, "storeCount": 0, "latestDataVersion": None},
-            "dirtyRuntimeResidue": residue,
-            "diagnostics": {"errors": errors},
-        }
+def operating_unit(request: Request, data_version: str | None = Query(default=None, alias="dataVersion")) -> Dict[str, Any]:
+    user_id, user = _viewer(request)
+    snapshot = get_operating_unit_snapshot(user_id=user_id, data_version=data_version, allow_build=True)
+    snapshot["version"] = OPERATING_UNIT_VERSION
+    snapshot["snapshotVersion"] = OPERATING_UNIT_SNAPSHOT_VERSION
+    snapshot["pipelineGateVersion"] = PIPELINE_GATE_VERSION
+    snapshot["viewer"] = {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")}
+    snapshot["readMode"] = "snapshot_only"
+    snapshot["forbiddenRuntimeStages"] = ["projected_products", "projected_traffic", "projection_summary", "dataset_rows", "rag_retrieval", "llm_generation"]
+    snapshot["rule"] = "V12.13：经营页只读 operating_unit_snapshot。上传、解析、对象映射、任务生成、Agent增强均为独立pipeline站点。"
+    return snapshot
 
-    projection = _safe("projection_summary", lambda: projection_summary(user_id), {}, errors)
-    object_summary = _safe("operating_object_summary", lambda: operating_object_summary(user_id), {}, errors)
-    v3 = _safe("v3_dashboard_summary", lambda: get_v3_dashboard_summary(user_id), {}, errors)
-    master_products = _safe("list_operating_products", lambda: list_operating_products(user_id), [], errors)
-    master_stores = _safe("list_operating_stores", lambda: list_operating_stores(user_id), [], errors)
-    projected = _safe("projected_products", lambda: projected_products(user_id), [], errors)
-    products = _merge_products(projected, master_products)
-    traffic = _safe("projected_traffic", lambda: projected_traffic(user_id), [], errors)
-    task_counters = _safe("task_counters", lambda: get_task_counters_for_user(user_id), {}, errors)
-    active_tasks = _safe("active_tasks", lambda: list_tasks(viewer_id=user_id, active_only=True), [], errors)
-    execution_tasks = [task for task in active_tasks if isinstance(task, dict) and task.get("displayState") != "backend_only" and task.get("queueType") not in {"backend_tag", "store_product_tag", "observe_candidate"}]
 
-    has_source_data = bool(projection.get("hasData") or v3.get("latestDataVersion") or traffic or execution_tasks)
-    has_objects = bool(master_products or master_stores or object_summary.get("productCount") or object_summary.get("storeCount"))
-    has_data = bool(has_objects or has_source_data)
-    object_missing = bool(has_source_data and not has_objects and not products)
-    if not has_data:
-        return {"version": OPERATING_UNIT_VERSION, "hasData": False, "emptyState": "暂无数据", "syncState": {"label": "等待数据", "status": "empty"}, "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")}, "metrics": [], "storeRows": [], "operatingJudgment": None, "tasks": task_counters, "objectStore": object_summary, "diagnostics": {"errors": errors}}
-    if object_missing:
-        return {
-            "version": OPERATING_UNIT_VERSION,
-            "hasData": True,
-            "unitName": "经营单元",
-            "syncState": {"label": "经营对象未入库", "status": "object_sync_failed", "latestDataVersion": projection.get("latestDataVersion") or v3.get("latestDataVersion")},
-            "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
-            "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-            "metrics": [{"label": "店铺", "value": 0}, {"label": "商品", "value": 0}, {"label": "标签店铺", "value": 0}, {"label": "执行任务", "value": len(execution_tasks)}],
-            "storeRows": [],
-            "operatingJudgment": build_operating_judgment([], task_counters, object_missing=True),
-            "tasks": task_counters,
-            "objectStore": object_summary,
-            "objectSyncFailed": True,
-            "diagnostics": {"errors": errors},
-        }
+@router.post("/operating-unit/snapshot/rebuild")
+def rebuild_operating_unit_snapshot(request: Request, data_version: str | None = Query(default=None, alias="dataVersion")) -> Dict[str, Any]:
+    user_id, user = _viewer(request)
+    snapshot = materialize_operating_unit_snapshot(user_id=user_id, data_version=data_version, force=True)
+    snapshot["version"] = OPERATING_UNIT_VERSION
+    snapshot["snapshotVersion"] = OPERATING_UNIT_SNAPSHOT_VERSION
+    snapshot["pipelineGateVersion"] = PIPELINE_GATE_VERSION
+    snapshot["viewer"] = {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")}
+    snapshot["readMode"] = "snapshot_rebuilt"
+    return snapshot
 
-    store_rows = _merge_store_rows(build_store_rows(products, traffic, execution_tasks), master_stores)
-    tagged_store_count = len([row for row in store_rows if row.get("businessTags") and row.get("businessTags") != ["常规观察"]])
-    return {
-        "version": OPERATING_UNIT_VERSION,
-        "hasData": True,
-        "unitName": "经营单元",
-        "syncState": {"label": "数据已同步", "status": "synced", "latestDataVersion": object_summary.get("latestDataVersion") or projection.get("latestDataVersion") or v3.get("latestDataVersion")},
-        "latestSnapshotAt": projection.get("latestSnapshotAt") or v3.get("latestSnapshotAt"),
-        "viewer": {"id": user.get("id"), "roleId": user.get("roleId"), "roleName": user.get("roleName")},
-        "metrics": [{"label": "店铺", "value": len(store_rows)}, {"label": "商品", "value": len(products)}, {"label": "标签店铺", "value": tagged_store_count}, {"label": "执行任务", "value": len(execution_tasks)}],
-        "storeRows": store_rows,
-        "operatingJudgment": build_operating_judgment(store_rows, task_counters),
-        "tasks": task_counters,
-        "objectStore": object_summary,
-        "objectSyncFailed": False,
-        "diagnostics": {"errors": errors},
-        "tagProjectionVersion": STORE_TAG_PROJECTION_VERSION,
-        "rule": "V12.8.2 经营单元店铺标签必须经过治理/数据/经营三层标签出口；商品数量和已入库状态不能生成高权重店铺。",
-    }
+
+@router.get("/operating-unit/pipeline/stages")
+def operating_unit_pipeline_stages(request: Request, data_version: str | None = Query(default=None, alias="dataVersion")) -> Dict[str, Any]:
+    user_id, _ = _viewer(request)
+    return stage_summary(data_version=data_version, user_id=user_id, limit=80)
