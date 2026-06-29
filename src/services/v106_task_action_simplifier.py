@@ -1,4 +1,4 @@
-"""V12.9.1 task action surface simplifier.
+"""V12.11.1 task action surface simplifier.
 
 The task card exposes one current human action plus a persistent detail action.
 Operator permission-in tasks are auto-accepted by the lifecycle state machine, so
@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-V106_TASK_ACTION_VERSION = "12.9.1"
+V106_TASK_ACTION_VERSION = "12.11.1"
 V106_ROLE_ACTIONS = {
     "owner": ["view", "confirm"],
     "manager": ["approve", "reject"],
@@ -41,6 +41,7 @@ def _has(task: Dict[str, Any], action: str) -> bool:
     backend = set(task.get("availableActions") or [])
     status = str(task.get("status") or "")
     workflow = str(task.get("workflowStatus") or task.get("displayStatus") or "")
+    lifecycle = str(task.get("lifecycleStage") or "")
     if action == "view":
         return True
     if action == "confirm":
@@ -48,6 +49,8 @@ def _has(task: Dict[str, Any], action: str) -> bool:
     if action in {"approve", "reject"}:
         return "review" in backend or status in {"已提交", "待复核"} or workflow in {"待复核", "待审批", "待老板确认"}
     if action == "accept":
+        if status in {"处理中", "待复核", "已完成", "已通过", "已归档"} or workflow in {"处理中", "等待自动复盘"} or lifecycle in {"accepted", "evidence_submitted", "recap_scheduled"}:
+            return False
         return "accept" in backend or status in {"待接收", "待确认", "已派发", "待处理", "待拆分"} or workflow in {"已派发", "待处理", "运营接收任务"}
     if action in {"submit", "supplement"}:
         return "submit" in backend or status in {"处理中", "已退回"} or workflow in {"处理中", "已退回"}
@@ -70,7 +73,7 @@ def simplified_actions_for_task(task: Dict[str, Any]) -> Dict[str, Any]:
     primary = allowed[0] if allowed else None
     visible = [_action(role, primary, task, primary=True)] if primary else []
     raw = list(task.get("availableActions") or [])
-    return {"version": V106_TASK_ACTION_VERSION, "role": role, "rules": V106_ACTION_RULES, "primaryAction": visible[0] if visible else None, "secondaryAction": None, "visibleActions": visible, "detailAction": _action(role, "detail", task, primary=False), "hiddenBackendActions": [item for item in raw if item not in {primary, "report", "source"}], "roleAllowedActions": V106_ROLE_ACTIONS[role], "rule": "V12.9.1：权限内运营任务自动接收后，任务卡只展示提交；详情常驻；复盘由系统自动执行。"}
+    return {"version": V106_TASK_ACTION_VERSION, "role": role, "rules": V106_ACTION_RULES, "primaryAction": visible[0] if visible else None, "secondaryAction": None, "visibleActions": visible, "detailAction": _action(role, "detail", task, primary=False), "hiddenBackendActions": [item for item in raw if item not in {primary, "report", "source"}], "roleAllowedActions": V106_ROLE_ACTIONS[role], "rule": "V12.11.1：权限内运营任务自动接收后，任务卡只展示提交；详情常驻；复盘由系统自动执行。"}
 
 
 def apply_v106_task_actions(task: Dict[str, Any]) -> Dict[str, Any]:
