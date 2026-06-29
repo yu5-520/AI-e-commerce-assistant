@@ -13,7 +13,7 @@ from src.api.routes import accounts, approvals, architecture, audit, data_import
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.3.0"
+API_VERSION = "14.3.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
@@ -21,7 +21,7 @@ STATION_MAINLINE = {
     "legacyStartupHooks": [],
     "mode": "full_signal_package_rag_budget_agent_lifecycle",
     "mainline": ["operating_snapshot_station", "system_product_snapshot_station", "product_signal_snapshot_station", "task_signal_station", "rag_context_station", "agent_judgment_station", "task_snapshot_station", "task_pool_station", "task_lifecycle_stations"],
-    "rule": "V14.3：商品档案快照与经营数据快照分层，全量商品信号包进入RAG增强Agent判断；Agent生成带预算额度和SOP的任务快照，系统负责预算预占与生命周期。",
+    "rule": "V14.3.1：修复商品信号包进入信号池后的状态交接，确保Agent能消费pending_rag_agent信号；商品档案快照与经营数据快照分层，全量商品信号包进入RAG增强Agent判断。",
 }
 
 if WEB_DEMO_DIR.exists():
