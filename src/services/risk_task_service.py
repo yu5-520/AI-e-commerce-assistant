@@ -1,4 +1,4 @@
-"""V12.11.1 task generation facade."""
+"""V12.12 task generation facade."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open
 from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_summary
 from src.services.task_recap_scheduler_service import RECAP_SCHEDULER_VERSION, recap_schedule_summary
 
-RISK_TASK_VERSION = "12.11.1"
+RISK_TASK_VERSION = "12.12.0"
 
 
 def _action_gate_counts(tasks: list[Dict[str, Any]]) -> Dict[str, int]:
@@ -47,7 +47,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
     return {
         **risk_result,
         "version": RISK_TASK_VERSION,
-        "mode": "v12_11_1_lifecycle_cleanup_task_generation",
+        "mode": "v12_12_rag_llm_product_level_task_generation",
         "dataVersion": data_version,
         "strictRiskTaskVersion": STRICT_RISK_TASK_VERSION,
         "operatingCadenceVersion": OPERATING_CADENCE_VERSION,
@@ -78,7 +78,7 @@ def generate_risk_tasks_for_signals(data_version: str | None = None, limit: int 
         "strictRiskSync": risk_result,
         "operatingCadenceSync": cadence_result,
         "dailyReportSeedCount": len(cadence_result.get("topSignals") or []),
-        "rule": "V12.11.1：经营节奏任务由系统变化包 + Agent SOP增强；提交、派发、复盘统一生命周期；前端不再二次聚合后端任务。",
+        "rule": "V12.12：经营节奏任务由系统变化包 + 商品上下文 + RAG基础库 + LLM生成 + SOP校验器增强；批量任务保留商品级动作卡。",
     }
 
 
@@ -99,5 +99,5 @@ def risk_task_summary(limit: int = 30) -> Dict[str, Any]:
     summary["operatingCadenceSummary"] = cadence
     summary["lifecycleSummary"] = lifecycle_summary(limit=limit)
     summary["recapScheduleSummary"] = recap_schedule_summary()
-    summary["rule"] = "V12.11.1 aligns frontend/backend task lifecycle contracts, cleans legacy submit/manual/assign paths, and keeps approved RAG experience as generation enhancer."
+    summary["rule"] = "V12.12 adds RAG baseline retrieval, LLM SOP generation, SOP guardrail validation and product-level action cards."
     return summary
