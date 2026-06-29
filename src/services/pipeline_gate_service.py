@@ -1,9 +1,8 @@
-"""V12.13 pipeline station gate service.
+"""V12.14.1 pipeline station gate service.
 
-The main data flow is a one-way station chain, not a page-triggered full
-recalculation loop. Every station writes a gate record keyed by tenant,
-data_version, stage and input_hash. Later readers reuse finished outputs instead
-of pulling upstream raw reports again.
+The gate table is shared by business train and ops diagnostic train, but every
+record now carries run_type/is_diagnostic. Business readers hide diagnostic gates
+by default so ops checks cannot pollute business pipeline state.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import connect, ensure_columns
 
-PIPELINE_GATE_VERSION = "12.13.0"
+PIPELINE_GATE_VERSION = "12.14.1"
 
 PIPELINE_STAGES = [
     "import_uploaded",
@@ -40,6 +39,17 @@ def stable_hash(value: Any) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
+def _is_diagnostic_payload(data_version: str | None = None, input_payload: Any | None = None, output_payload: Any | None = None, run_type: str | None = None) -> bool:
+    if str(run_type or "").lower() in {"diagnostic", "ops", "ops_train"}:
+        return True
+    if str(data_version or "").startswith("DIAG-"):
+        return True
+    for payload in (input_payload, output_payload):
+        if isinstance(payload, dict) and (payload.get("isDiagnostic") or str(payload.get("dataVersion") or "").startswith("DIAG-")):
+            return True
+    return False
+
+
 def ensure_pipeline_tables() -> None:
     with connect() as conn:
         conn.execute(
@@ -59,7 +69,9 @@ def ensure_pipeline_tables() -> None:
                 error_message TEXT,
                 started_at TEXT,
                 finished_at TEXT,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                run_type TEXT DEFAULT 'business',
+                is_diagnostic INTEGER DEFAULT 0
             )
             """
         )
@@ -78,10 +90,13 @@ def ensure_pipeline_tables() -> None:
                 "error_message": "TEXT",
                 "started_at": "TEXT",
                 "finished_at": "TEXT",
+                "run_type": "TEXT DEFAULT 'business'",
+                "is_diagnostic": "INTEGER DEFAULT 0",
             },
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stage_gates_data_stage ON pipeline_stage_gates(data_version, stage, status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stage_gates_user ON pipeline_stage_gates(user_id, data_version)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stage_gates_run_type ON pipeline_stage_gates(run_type, is_diagnostic)")
         conn.commit()
 
 
@@ -118,6 +133,8 @@ def get_stage_gate(*, data_version: str | None, stage: str, input_hash: str | No
         "startedAt": row["started_at"],
         "finishedAt": row["finished_at"],
         "updatedAt": row["updated_at"],
+        "runType": row["run_type"] if "run_type" in row.keys() else "business",
+        "isDiagnostic": bool(row["is_diagnostic"]) if "is_diagnostic" in row.keys() else False,
     }
 
 
@@ -133,8 +150,12 @@ def record_stage_gate(
     upstream_stage: str | None = None,
     output_ref: str | None = None,
     error_message: str | None = None,
+    run_type: str | None = None,
+    is_diagnostic: bool | None = None,
 ) -> Dict[str, Any]:
     ensure_pipeline_tables()
+    diagnostic = _is_diagnostic_payload(data_version, input_payload, output_payload, run_type) if is_diagnostic is None else bool(is_diagnostic)
+    resolved_run_type = "diagnostic" if diagnostic else (run_type or "business")
     input_hash = stable_hash(input_payload or {"stage": stage, "dataVersion": data_version})
     output_hash = stable_hash(output_payload or {"stage": stage, "status": status})
     key = gate_key(data_version=data_version, stage=stage, input_hash=input_hash, tenant_id=tenant_id, user_id=user_id)
@@ -146,15 +167,18 @@ def record_stage_gate(
         "stage": stage,
         "input": input_payload or {},
         "output": output_payload or {},
-        "rule": "V12.13：阶段完成后写阀门；页面读取只能复用标准产物，不能回头触发上游全量计算。",
+        "runType": resolved_run_type,
+        "isDiagnostic": diagnostic,
+        "rule": "V12.14.1：业务火车和运维火车共用阀门表，但通过 run_type / is_diagnostic 隔离；业务读取默认过滤诊断阀门。",
     }
     with connect() as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO pipeline_stage_gates (
                 gate_key, tenant_id, user_id, data_version, stage, status, input_hash, output_hash,
-                upstream_stage, output_ref, payload, error_message, started_at, finished_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                upstream_stage, output_ref, payload, error_message, started_at, finished_at, updated_at,
+                run_type, is_diagnostic
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 key,
@@ -172,13 +196,15 @@ def record_stage_gate(
                 started,
                 finished,
                 now,
+                resolved_run_type,
+                1 if diagnostic else 0,
             ),
         )
         conn.commit()
-    return get_stage_gate(data_version=data_version, stage=stage, input_hash=input_hash, tenant_id=tenant_id, user_id=user_id) or {"version": PIPELINE_GATE_VERSION, "status": status, "stage": stage}
+    return get_stage_gate(data_version=data_version, stage=stage, input_hash=input_hash, tenant_id=tenant_id, user_id=user_id) or {"version": PIPELINE_GATE_VERSION, "status": status, "stage": stage, "runType": resolved_run_type, "isDiagnostic": diagnostic}
 
 
-def stage_summary(data_version: str | None = None, user_id: str | None = None, limit: int = 80) -> Dict[str, Any]:
+def stage_summary(data_version: str | None = None, user_id: str | None = None, limit: int = 80, *, include_diagnostic: bool = False) -> Dict[str, Any]:
     ensure_pipeline_tables()
     where: List[str] = []
     params: List[Any] = []
@@ -188,6 +214,10 @@ def stage_summary(data_version: str | None = None, user_id: str | None = None, l
     if user_id:
         where.append("user_id = ?")
         params.append(user_id)
+    if not include_diagnostic and not str(data_version or "").startswith("DIAG-"):
+        where.append("COALESCE(is_diagnostic, 0) = 0")
+        where.append("COALESCE(run_type, 'business') != 'diagnostic'")
+        where.append("COALESCE(data_version, '') NOT LIKE 'DIAG-%'")
     sql = "SELECT * FROM pipeline_stage_gates"
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -207,6 +237,8 @@ def stage_summary(data_version: str | None = None, user_id: str | None = None, l
             "updatedAt": row["updated_at"],
             "outputRef": row["output_ref"],
             "errorMessage": row["error_message"],
+            "runType": row["run_type"] if "run_type" in row.keys() else "business",
+            "isDiagnostic": bool(row["is_diagnostic"]) if "is_diagnostic" in row.keys() else False,
         })
     completed = {gate["stage"] for gate in gates if gate.get("status") in {"completed", "cached"}}
     return {
@@ -215,6 +247,7 @@ def stage_summary(data_version: str | None = None, user_id: str | None = None, l
         "knownStages": PIPELINE_STAGES,
         "completedStages": sorted(completed),
         "gateCount": len(gates),
+        "includeDiagnostic": include_diagnostic,
         "gates": gates,
-        "rule": "主流程为单向分站接力；只有RAG复盘回流进入学习循环。",
+        "rule": "业务火车默认只看 business gate；运维火车诊断 gate 需显式 includeDiagnostic=true 或指定 DIAG dataVersion。",
     }
