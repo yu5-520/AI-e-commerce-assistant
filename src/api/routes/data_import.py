@@ -40,8 +40,7 @@ def request_user_id(request: Request) -> str:
 
 
 def can_rollback(user_id: str) -> bool:
-    user = current_user(user_id)
-    return user.get("roleId") in ROLLBACK_ROLE_IDS
+    return current_user(user_id).get("roleId") in ROLLBACK_ROLE_IDS
 
 
 def require_rollback_permission(user_id: str) -> None:
@@ -50,8 +49,7 @@ def require_rollback_permission(user_id: str) -> None:
 
 
 def _dataset_rows(dataset_name: str | None) -> List[Dict[str, Any]]:
-    name = str(dataset_name or "").strip()
-    config = DATASET_CONFIGS.get(name)
+    config = DATASET_CONFIGS.get(str(dataset_name or "").strip())
     if not config:
         return []
     try:
@@ -111,19 +109,7 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
         result["rule"] = "V12.13.1：接口同步只写事实、经营对象和快照；任务生成由pipeline任务站触发。"
         results.append(result)
         all_rows.extend(normalized)
-    return {
-        "version": DATA_IMPORT_ROUTE_VERSION,
-        "mode": "v12_13_1_dataset_sync_without_legacy_task_triggers",
-        "datasetCount": len(results),
-        "rowCount": len(all_rows),
-        "alertCount": sum(item.get("alertCount", 0) for item in results),
-        "createdTaskCount": 0,
-        "taggedAlertCount": sum(item.get("taggedAlertCount", 0) for item in results),
-        "results": results,
-        "rows": all_rows,
-        "summary": get_v3_dashboard_summary(),
-        "rule": "导入只完成数据站点；任务生成、Agent增强、RAG/LLM不在上传请求里执行。",
-    }
+    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "v12_13_1_dataset_sync_without_legacy_task_triggers", "datasetCount": len(results), "rowCount": len(all_rows), "alertCount": sum(item.get("alertCount", 0) for item in results), "createdTaskCount": 0, "taggedAlertCount": sum(item.get("taggedAlertCount", 0) for item in results), "results": results, "rows": all_rows, "summary": get_v3_dashboard_summary(), "rule": "导入只完成数据站点；任务生成、Agent增强、RAG/LLM不在上传请求里执行。"}
 
 
 def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
@@ -131,13 +117,7 @@ def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows
     if materialized_rows:
         result["rows"] = materialized_rows
     ctx = context_from_headers(request.headers)
-    result["operatingObjectSync"] = upsert_operating_objects_from_import(
-        result,
-        materialized_rows,
-        source=source,
-        uploader_user_id=ctx.user_id,
-        uploader_role_id=ctx.role_id,
-    )
+    result["operatingObjectSync"] = upsert_operating_objects_from_import(result, materialized_rows, source=source, uploader_user_id=ctx.user_id, uploader_role_id=ctx.role_id)
     return result
 
 
@@ -152,24 +132,12 @@ def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: 
     if materialized_rows:
         result["rows"] = materialized_rows
     if parsed and isinstance(parsed.get("sheetRows"), dict) and parsed.get("sheetRows"):
-        result["metricFactSync"] = ingest_metric_facts_from_sheet_rows(
-            result,
-            parsed,
-            report_profile=_report_profile_from_result(result),
-            source_system=source_system or result.get("sourceSystem"),
-            source_report_id=source,
-        )
+        result["metricFactSync"] = ingest_metric_facts_from_sheet_rows(result, parsed, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
         return result
     if not materialized_rows:
         result["metricFactSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "rows is not a list"}
         return result
-    result["metricFactSync"] = ingest_metric_facts_from_import(
-        result,
-        materialized_rows,
-        report_profile=_report_profile_from_result(result),
-        source_system=source_system or result.get("sourceSystem"),
-        source_report_id=source,
-    )
+    result["metricFactSync"] = ingest_metric_facts_from_import(result, materialized_rows, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
     return result
 
 
@@ -178,13 +146,7 @@ def _attach_v1213_data_gap_sync(result: Dict[str, Any], rows: Any, *, source: st
     if materialized_rows:
         result["rows"] = materialized_rows
     parsed_payload = parsed if isinstance(parsed, dict) else {"rows": materialized_rows}
-    result["dataGapSync"] = ingest_data_gaps_from_import(
-        result,
-        parsed_payload,
-        report_profile=_report_profile_from_result(result),
-        source_system=source_system or result.get("sourceSystem"),
-        source_report_id=source,
-    )
+    result["dataGapSync"] = ingest_data_gaps_from_import(result, parsed_payload, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
     return result
 
 
@@ -192,7 +154,7 @@ def _data_versions_from_result(result: Dict[str, Any]) -> List[str]:
     versions: List[str] = []
     if result.get("dataVersion"):
         versions.append(str(result["dataVersion"]))
-    for item in result.get("results") if isinstance(result.get("results"), list) else []:
+    for item in (result.get("results") if isinstance(result.get("results"), list) else []):
         if isinstance(item, dict) and item.get("dataVersion"):
             versions.append(str(item["dataVersion"]))
     return list(dict.fromkeys([item for item in versions if item]))
@@ -213,16 +175,7 @@ def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, s
         snapshot = materialize_operating_unit_snapshot(user_id=ctx.user_id, data_version=version, force=True)
         result["operatingUnitSnapshotSync"] = snapshot
         gates.append(record_stage_gate(data_version=version, stage="operating_unit_snapshot_ready", status="completed", input_payload={"source": source}, output_payload={"snapshotKey": snapshot.get("snapshotKey"), "storeCount": len(snapshot.get("storeRows") or [])}, user_id=ctx.user_id, upstream_stage="operating_objects_ready", output_ref=snapshot.get("snapshotKey")))
-    result["pipelineSync"] = {
-        "version": DATA_IMPORT_ROUTE_VERSION,
-        "mode": "import_station_gates_without_task_generation",
-        "dataVersions": [item for item in versions if item],
-        "gateCount": len(gates),
-        "gates": gates,
-        "taskGeneration": "disabled_in_import_request",
-        "agentEnhancement": "disabled_in_import_request",
-        "rule": "V12.13.1：上传/同步只到经营页快照站；任务生成必须走 /api/pipeline/data-versions/{data_version}/tasks/generate。",
-    }
+    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "import_station_gates_without_task_generation", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "gates": gates, "taskGeneration": "disabled_in_import_request", "agentEnhancement": "disabled_in_import_request", "rule": "V12.13.1：上传/同步只到经营页快照站；任务生成必须走 /api/pipeline/data-versions/{data_version}/tasks/generate。"}
     return result
 
 
@@ -230,13 +183,7 @@ def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
     version = result.get("dataVersion")
     if not version and isinstance(result.get("results"), list) and result["results"]:
         version = next((item.get("dataVersion") for item in result["results"] if isinstance(item, dict) and item.get("dataVersion")), None)
-    result["importDiagnostics"] = import_diagnostics(
-        str(version) if version else None,
-        report_profile=_report_profile_from_result(result),
-        metric_fact_sync=result.get("metricFactSync") if isinstance(result.get("metricFactSync"), dict) else None,
-        data_gap_sync=result.get("dataGapSync") if isinstance(result.get("dataGapSync"), dict) else None,
-        risk_task_sync=None,
-    )
+    result["importDiagnostics"] = import_diagnostics(str(version) if version else None, report_profile=_report_profile_from_result(result), metric_fact_sync=result.get("metricFactSync") if isinstance(result.get("metricFactSync"), dict) else None, data_gap_sync=result.get("dataGapSync") if isinstance(result.get("dataGapSync"), dict) else None, risk_task_sync=None)
     return result
 
 
@@ -254,7 +201,6 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
 
 
 def _attach_v62_trend_and_risk_sync(result: Dict[str, Any], rows: Any, source_system: str | None = None) -> Dict[str, Any]:
-    """Deprecated no-op kept for old callers; it must not generate tasks."""
     result["trendSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "trend station detached from import request"}
     result["riskTaskSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task generation moved to /api/pipeline/data-versions/{data_version}/tasks/generate"}
     result["legacyRiskSyncDisabled"] = True
@@ -272,6 +218,11 @@ async def _rows_from_uploaded_file(file: UploadFile) -> Dict[str, Any]:
 @router.get("/sources")
 def data_sources() -> List[Dict[str, Any]]:
     return list_import_sources()
+
+
+@router.get("/source-connections")
+def data_source_connections() -> Dict[str, Any]:
+    return {"version": DATA_IMPORT_ROUTE_VERSION, "sources": list_data_source_connections(), "rule": "数据源配置只读，不触发同步。"}
 
 
 @router.post("/source-connections/{source_id}/sync")
