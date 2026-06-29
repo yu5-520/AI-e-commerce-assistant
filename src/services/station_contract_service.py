@@ -1,4 +1,4 @@
-"""V13.7 standard station contract service."""
+"""V14 standard station contract service."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.services.pipeline_gate_service import record_stage_gate, stage_summary
 from src.services.station_adapter_service import STATION_ADAPTER_VERSION, run_station_adapter
 from src.services.station_registry_service import STATION_REGISTRY_VERSION, get_station, list_stations
 
-STATION_CONTRACT_VERSION = "13.7.0"
+STATION_CONTRACT_VERSION = "14.0.0"
 
 DEFAULT_INPUTS = {
     "import_station": ["source", "dataVersion"],
@@ -20,8 +20,8 @@ DEFAULT_INPUTS = {
     "task_signal_station": ["dataVersion", "snapshotRef"],
     "rag_context_station": ["dataVersion", "taskSignalRef"],
     "agent_judgment_station": ["dataVersion", "ragContextRef"],
-    "task_snapshot_station": ["dataVersion", "agentJudgment", "decision"],
-    "task_pool_station": ["taskSnapshotId"],
+    "task_snapshot_station": ["dataVersion"],
+    "task_pool_station": ["dataVersion"],
     "task_acceptance_station": ["taskId"],
     "task_assignment_station": ["taskId", "assigneeId"],
     "task_submission_station": ["taskId", "evidence"],
@@ -37,11 +37,11 @@ DEFAULT_OUTPUTS = {
     "metric_fact_station": ["factCount", "outputRef"],
     "operating_object_station": ["storeCount", "productCount", "outputRef"],
     "operating_snapshot_station": ["snapshotKey", "storeRows", "outputRef"],
-    "task_signal_station": ["createdTaskCount", "outputRef"],
-    "rag_context_station": ["matchedContextCount", "outputRef"],
-    "agent_judgment_station": ["decision", "confidence", "outputRef"],
-    "task_snapshot_station": ["taskSnapshotId", "decision", "status", "outputRef"],
-    "task_pool_station": ["poolEntryId", "taskId", "createdTaskCount", "outputRef"],
+    "task_signal_station": ["signalCount", "taskSignalRef", "outputRef"],
+    "rag_context_station": ["matchedContextCount", "ragContextRef", "outputRef"],
+    "agent_judgment_station": ["decision", "confidence", "judgmentCount", "outputRef"],
+    "task_snapshot_station": ["taskSnapshotCount", "decision", "status", "outputRef"],
+    "task_pool_station": ["createdTaskCount", "outputRef"],
     "task_acceptance_station": ["taskId", "action", "outputRef"],
     "task_assignment_station": ["taskId", "action", "outputRef"],
     "task_submission_station": ["taskId", "transition", "outputRef"],
@@ -51,7 +51,14 @@ DEFAULT_OUTPUTS = {
     "rag_feedback_station": ["taskId", "candidateCount", "outputRef"],
 }
 
-REAL_ADAPTERS = {"operating_snapshot_station", "task_signal_station", "task_pool_station"}
+REAL_ADAPTERS = {
+    "operating_snapshot_station",
+    "task_signal_station",
+    "rag_context_station",
+    "agent_judgment_station",
+    "task_snapshot_station",
+    "task_pool_station",
+}
 
 
 def _is_blank(value: Any) -> bool:
@@ -82,7 +89,7 @@ def station_contract(station_id: str) -> Dict[str, Any]:
         "frontendModule": station.get("frontendModule"),
         "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"},
         "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "dedicatedLifecycleRoute": sid in {"task_acceptance_station", "task_assignment_station", "task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}, "diagnosticUsesSimulation": True},
-        "rule": "V13.7：任务生命周期站点契约覆盖接收/派发、提交/复核、复盘/RAG回流；业务动作走专用生命周期站点API。",
+        "rule": "V14：站点接口、权限、生命周期由代码控制；经营判断走 signal_pool -> RAG -> Agent -> task_snapshot。",
     }
 
 
@@ -142,10 +149,10 @@ def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *,
     except Exception as exc:
         adapter_error = str(exc)
         adapter_output = {"adapterMode": "real_adapter_failed_fallback_contract", "adapterError": adapter_error}
-    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V13-7" if diagnostic else None)
+    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V14" if diagnostic else None)
     output_ref = adapter_output.get("outputRef") or f"{station.get('outputRefPrefix')}:{data_version or body.get('taskId') or body.get('task_id') or 'latest'}"
     output = _complete_output_for_contract(station["stationId"], {**adapter_output, "dataVersion": data_version, "outputRef": output_ref, "stationId": station["stationId"], "isDiagnostic": diagnostic})
     output_check = validate_contract_payload(station["stationId"], output, direction="output")
     status = "failed" if adapter_error else "completed"
     gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"]}, output_payload=output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output_ref, error_message=adapter_error, run_type="diagnostic" if diagnostic else "business", is_diagnostic=diagnostic)
-    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V13.7：Station Interface 写标准阀门；生命周期业务动作走 /api/task-lifecycle-stations。"}
+    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V14：Station Interface写标准阀门；经营判断走RAG增强Agent，生命周期动作走专用站点。"}
