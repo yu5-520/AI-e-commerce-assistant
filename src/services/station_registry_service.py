@@ -1,226 +1,74 @@
-"""V13.4 clean business station registry.
+"""V13.7 clean business station registry.
 
-Only business mainline stations live here. Deprecated files, old hooks and legacy
-compatibility routes are registered in Deprecated Station Archive, not in the
-main Station Registry.
-
-V13.4 adds Task Pool Station: task snapshots can enter the visible task pool,
-while acceptance, assignment, submission and review remain separate lifecycle
-stations for later releases.
+Only business mainline stations live here. V13.7 completes the internal task
+lifecycle line: acceptance/assignment, submission/review, recap/RAG feedback are
+explicit stations instead of hidden todo-only actions.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-STATION_REGISTRY_VERSION = "13.4.0"
+STATION_REGISTRY_VERSION = "13.7.0"
+
+
+def station(station_id: str, stage: str, title: str, backend: str, prefix: str, next_station: str | None, line: str, domain: str, *, replayable: bool = True) -> Dict[str, Any]:
+    return {
+        "stationId": station_id,
+        "stage": stage,
+        "title": title,
+        "backendModule": backend,
+        "frontendModule": f"web_demo/stations/{station_id.replace('_', '-')}",
+        "outputRefPrefix": prefix,
+        "nextStation": next_station,
+        "stationLine": line,
+        "stationDomain": domain,
+        "replayable": replayable,
+        "diagnosticSupported": True,
+    }
+
 
 STATIONS: List[Dict[str, Any]] = [
-    {
-        "stationId": "import_station",
-        "stage": "import_uploaded",
-        "title": "报表接收站",
-        "backendModule": "src.api.routes.data_import",
-        "frontendModule": "web_demo/stations/import-station",
-        "outputRefPrefix": "import",
-        "nextStation": "report_parse_station",
-        "stationLine": "external_data_line",
-        "stationDomain": "data_ingestion",
-        "replayable": False,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "report_parse_station",
-        "stage": "report_parsed",
-        "title": "报表解析站",
-        "backendModule": "src.api.routes.data_import",
-        "frontendModule": "web_demo/stations/report-parse-station",
-        "outputRefPrefix": "rows",
-        "nextStation": "metric_fact_station",
-        "stationLine": "external_data_line",
-        "stationDomain": "data_ingestion",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "metric_fact_station",
-        "stage": "metric_facts_ready",
-        "title": "指标事实站",
-        "backendModule": "src.services.metric_fact_store_service",
-        "frontendModule": "web_demo/stations/metric-fact-station",
-        "outputRefPrefix": "metric_facts",
-        "nextStation": "operating_object_station",
-        "stationLine": "external_data_line",
-        "stationDomain": "data_fact",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "operating_object_station",
-        "stage": "operating_objects_ready",
-        "title": "商品/店铺映射站",
-        "backendModule": "src.services.operating_object_store_service",
-        "frontendModule": "web_demo/stations/operating-object-station",
-        "outputRefPrefix": "operating_objects",
-        "nextStation": "operating_snapshot_station",
-        "stationLine": "external_data_line",
-        "stationDomain": "operating_object",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "operating_snapshot_station",
-        "stage": "operating_unit_snapshot_ready",
-        "title": "经营页快照站",
-        "backendModule": "src.services.operating_unit_snapshot_service",
-        "frontendModule": "web_demo/stations/snapshot-station",
-        "outputRefPrefix": "operating_unit_snapshot",
-        "nextStation": "task_signal_station",
-        "stationLine": "external_data_line",
-        "stationDomain": "operating_snapshot",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "task_signal_station",
-        "stage": "task_signal_ready",
-        "title": "任务信号站",
-        "backendModule": "src.services.risk_task_service",
-        "frontendModule": "web_demo/stations/task-signal-station",
-        "outputRefPrefix": "task_signals",
-        "nextStation": "rag_context_station",
-        "stationLine": "agent_task_judgment_line",
-        "stationDomain": "task_signal",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "rag_context_station",
-        "stage": "rag_context_ready",
-        "title": "RAG参照站",
-        "backendModule": "src.services.rag_feedback_loop_service",
-        "frontendModule": "web_demo/stations/rag-context-station",
-        "outputRefPrefix": "rag_context",
-        "nextStation": "agent_judgment_station",
-        "stationLine": "agent_task_judgment_line",
-        "stationDomain": "rag_context",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "agent_judgment_station",
-        "stage": "agent_judgment_ready",
-        "title": "Agent判断站",
-        "backendModule": "src.stations.agent_enhance_station.service",
-        "frontendModule": "web_demo/stations/agent-judgment-station",
-        "outputRefPrefix": "agent_judgment",
-        "nextStation": "task_snapshot_station",
-        "stationLine": "agent_task_judgment_line",
-        "stationDomain": "agent_judgment",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "task_snapshot_station",
-        "stage": "task_snapshot_ready",
-        "title": "任务快照站",
-        "backendModule": "src.services.task_snapshot_station_service",
-        "frontendModule": "web_demo/stations/task-snapshot-station",
-        "outputRefPrefix": "task_snapshot",
-        "nextStation": "task_pool_station",
-        "stationLine": "agent_task_judgment_line",
-        "stationDomain": "task_snapshot",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "task_pool_station",
-        "stage": "task_pool_entered",
-        "title": "任务入池站",
-        "backendModule": "src.services.task_pool_station_service",
-        "frontendModule": "web_demo/stations/task-pool-station",
-        "outputRefPrefix": "task_pool",
-        "nextStation": "task_acceptance_station",
-        "stationLine": "internal_task_lifecycle_line",
-        "stationDomain": "task_pool",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "agent_enhance_station",
-        "stage": "task_agent_enhanced",
-        "title": "Agent增强站",
-        "backendModule": "src.stations.agent_enhance_station.service",
-        "frontendModule": "web_demo/stations/agent-enhance-station",
-        "outputRefPrefix": "task_packages",
-        "nextStation": "evidence_station",
-        "stationLine": "internal_task_lifecycle_line",
-        "stationDomain": "agent_enhance",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "evidence_station",
-        "stage": "operator_evidence_submitted",
-        "title": "运营提交站",
-        "backendModule": "src.services.task_evidence_service",
-        "frontendModule": "web_demo/stations/evidence-station",
-        "outputRefPrefix": "evidence",
-        "nextStation": "auto_recap_station",
-        "stationLine": "internal_task_lifecycle_line",
-        "stationDomain": "task_submission",
-        "replayable": False,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "auto_recap_station",
-        "stage": "system_auto_recap_completed",
-        "title": "系统复盘站",
-        "backendModule": "src.services.task_recap_scheduler_service",
-        "frontendModule": "web_demo/stations/auto-recap-station",
-        "outputRefPrefix": "recap",
-        "nextStation": "rag_feedback_station",
-        "stationLine": "internal_task_lifecycle_line",
-        "stationDomain": "auto_recap",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
-    {
-        "stationId": "rag_feedback_station",
-        "stage": "rag_candidate_ready",
-        "title": "RAG回流站",
-        "backendModule": "src.services.rag_feedback_loop_service",
-        "frontendModule": "web_demo/stations/rag-feedback-station",
-        "outputRefPrefix": "rag_candidate",
-        "nextStation": None,
-        "stationLine": "internal_task_lifecycle_line",
-        "stationDomain": "rag_feedback",
-        "replayable": True,
-        "diagnosticSupported": True,
-    },
+    station("import_station", "import_uploaded", "报表接收站", "src.api.routes.data_import", "import", "report_parse_station", "external_data_line", "data_ingestion", replayable=False),
+    station("report_parse_station", "report_parsed", "报表解析站", "src.api.routes.data_import", "rows", "metric_fact_station", "external_data_line", "data_ingestion"),
+    station("metric_fact_station", "metric_facts_ready", "指标事实站", "src.services.metric_fact_store_service", "metric_facts", "operating_object_station", "external_data_line", "data_fact"),
+    station("operating_object_station", "operating_objects_ready", "商品/店铺映射站", "src.services.operating_object_store_service", "operating_objects", "operating_snapshot_station", "external_data_line", "operating_object"),
+    station("operating_snapshot_station", "operating_unit_snapshot_ready", "经营页快照站", "src.services.operating_unit_snapshot_service", "operating_unit_snapshot", "task_signal_station", "external_data_line", "operating_snapshot"),
+    station("task_signal_station", "task_signal_ready", "任务信号站", "src.services.risk_task_service", "task_signals", "rag_context_station", "agent_task_judgment_line", "task_signal"),
+    station("rag_context_station", "rag_context_ready", "RAG参照站", "src.services.rag_feedback_loop_service", "rag_context", "agent_judgment_station", "agent_task_judgment_line", "rag_context"),
+    station("agent_judgment_station", "agent_judgment_ready", "Agent判断站", "src.stations.agent_enhance_station.service", "agent_judgment", "task_snapshot_station", "agent_task_judgment_line", "agent_judgment"),
+    station("task_snapshot_station", "task_snapshot_ready", "任务快照站", "src.services.task_snapshot_station_service", "task_snapshot", "task_pool_station", "agent_task_judgment_line", "task_snapshot"),
+    station("task_pool_station", "task_pool_entered", "任务入池站", "src.services.task_pool_station_service", "task_pool", "task_acceptance_station", "internal_task_lifecycle_line", "task_pool"),
+    station("task_acceptance_station", "task_accepted", "任务接收站", "src.services.task_acceptance_assignment_station_service", "task_acceptance", "task_submission_station", "internal_task_lifecycle_line", "task_acceptance"),
+    station("task_assignment_station", "task_assigned", "任务派发站", "src.services.task_acceptance_assignment_station_service", "task_assignment", "task_acceptance_station", "internal_task_lifecycle_line", "task_assignment"),
+    station("task_submission_station", "operator_evidence_submitted", "运营提交站", "src.services.task_submission_review_station_service", "submission", "task_review_station", "internal_task_lifecycle_line", "task_submission", replayable=False),
+    station("task_review_station", "manager_reviewed", "总管复核站", "src.services.task_submission_review_station_service", "review", "recap_schedule_station", "internal_task_lifecycle_line", "task_review", replayable=False),
+    station("recap_schedule_station", "recap_scheduled", "复盘排期站", "src.services.task_recap_rag_station_service", "recap_schedule", "recap_complete_station", "internal_task_lifecycle_line", "recap_schedule"),
+    station("recap_complete_station", "system_auto_recap_completed", "系统复盘站", "src.services.task_recap_rag_station_service", "recap", "rag_feedback_station", "internal_task_lifecycle_line", "recap_complete"),
+    station("rag_feedback_station", "rag_candidate_ready", "RAG回流站", "src.services.task_recap_rag_station_service", "rag_candidate", None, "internal_task_lifecycle_line", "rag_feedback"),
 ]
 
 
 def list_stations() -> List[Dict[str, Any]]:
-    return [{**station, "version": STATION_REGISTRY_VERSION, "interface": "/api/stations/{stationId}"} for station in STATIONS]
+    return [{**item, "version": STATION_REGISTRY_VERSION, "interface": "/api/stations/{stationId}"} for item in STATIONS]
 
 
 def get_station(station_id: str) -> Dict[str, Any] | None:
-    for station in STATIONS:
-        if station["stationId"] == station_id or station["stage"] == station_id:
-            return {**station, "version": STATION_REGISTRY_VERSION, "interface": f"/api/stations/{station['stationId']}"}
+    for item in STATIONS:
+        if item["stationId"] == station_id or item["stage"] == station_id:
+            return {**item, "version": STATION_REGISTRY_VERSION, "interface": f"/api/stations/{item['stationId']}"}
     return None
 
 
 def station_by_stage(stage: str) -> Dict[str, Any] | None:
-    for station in STATIONS:
-        if station["stage"] == stage:
-            return get_station(station["stationId"])
+    for item in STATIONS:
+        if item["stage"] == stage:
+            return get_station(item["stationId"])
     return None
 
 
 def station_order() -> List[str]:
-    return [station["stationId"] for station in STATIONS]
+    return [item["stationId"] for item in STATIONS]
 
 
 def registry_summary() -> Dict[str, Any]:
@@ -229,10 +77,10 @@ def registry_summary() -> Dict[str, Any]:
         "stationCount": len(STATIONS),
         "stations": list_stations(),
         "lines": {
-            "externalDataLine": [station["stationId"] for station in STATIONS if station.get("stationLine") == "external_data_line"],
-            "agentTaskJudgmentLine": [station["stationId"] for station in STATIONS if station.get("stationLine") == "agent_task_judgment_line"],
-            "internalTaskLifecycleLine": [station["stationId"] for station in STATIONS if station.get("stationLine") == "internal_task_lifecycle_line"],
+            "externalDataLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "external_data_line"],
+            "agentTaskJudgmentLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "agent_task_judgment_line"],
+            "internalTaskLifecycleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "internal_task_lifecycle_line"],
         },
         "mainlinePurity": "deprecated_files_excluded",
-        "rule": "V13.4：任务快照经task_pool_station进入任务池；接收/派发、提交/复核、复盘/RAG继续分站拆分。",
+        "rule": "V13.7：外部数据线、Agent判断线、任务生命周期线已经合并为完整站点闭环。",
     }
