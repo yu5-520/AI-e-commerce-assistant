@@ -54,7 +54,9 @@
     const visible = Array.isArray(task.visibleTaskActions) ? task.visibleTaskActions : [];
     const primary = task.primaryTaskAction || visible.find((item) => item?.primary) || visible[0] || null;
     if (!primary) return null;
-    if (["review", "write_recap", "recap", "approve", "reject"].includes(primary.action) && (AppApi.currentUser?.()?.roleId || "operator") === "operator") return null;
+    const actionName = String(primary.action || "");
+    const roleId = AppApi.currentUser?.()?.roleId || "operator";
+    if (roleId === "operator" && (actionName.includes("review") || actionName.includes("recap") || ["approve", "reject"].includes(actionName))) return null;
     return primary;
   }
   function actionButton(task) {
