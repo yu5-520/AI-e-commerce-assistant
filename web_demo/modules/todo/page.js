@@ -47,7 +47,7 @@
     return map[gate.decision] || (task.taskLayer === "manager_approval" ? "主管审批" : "运营执行");
   }
   function metrics(activeTasks, visibleTasks) {
-    return [["执行任务", visibleTasks.length, "按时间排序"], ["今日到期", visibleTasks.filter((t) => deadlineRank(t) <= 4).length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "总管任务"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "运营提交材料"], ["待复盘", activeTasks.filter((t) => ["已完成", "已通过", "已写入复盘"].includes(t.status)).length, "系统自动复盘"]];
+    return [["执行任务", visibleTasks.length, "按时间排序"], ["今日到期", visibleTasks.filter((t) => deadlineRank(t) <= 4).length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "总管任务"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "运营提交材料"], ["待复盘", activeTasks.filter((t) => t.workflowStatus === "等待自动复盘" || t.lifecycleStage === "recap_scheduled").length, "系统自动复盘"]];
   }
   function openTaskReport(taskId) { AppRouter.navigate("task-report", { taskId }); }
   function primaryAction(task) {
@@ -86,6 +86,12 @@
     </article>`;
   }
   async function refresh(message) { await AppApi.refreshTaskState(); notice = message; AppRouter.schedule("todo-refresh"); }
+  function applyTransitionResult(result) {
+    const task = result?.task || result;
+    if (task?.id) window.AppTaskStore?.upsert?.(task);
+    window.dispatchEvent(new CustomEvent("v129-task-transition", { detail: result }));
+    return task;
+  }
   function focusTask(taskId) { if (!taskId) return; requestAnimationFrame(() => { const card = document.querySelector(`[data-task-card="${CSS.escape(taskId)}"]`); if (!card) return; card.scrollIntoView({ behavior: "smooth", block: "center" }); card.style.boxShadow = "0 0 0 4px rgba(67, 56, 202, 0.18)"; setTimeout(() => { card.style.boxShadow = ""; }, 1800); }); }
 
   window.TodoPage = {
@@ -98,13 +104,13 @@
       const tasks = sortTasks(visibleTaskQueue(active));
       const user = AppApi.currentUser?.() || {};
       const empty = "当前账号没有需要立即处理的执行任务。候选任务、趋势信号和观察项进入日报/周报素材。";
-      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.8.3</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。列表按时间排序；任务卡只展示当前动作和详情。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
+      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.9.0</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。接收、提交、复核和复盘全部通过 V12.9 生命周期状态机写入。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
     },
     mount(ctx) {
       focusTask(ctx.state?.focusTaskId);
       ctx.delegate("[data-task-report]", "click", (_, node) => openTaskReport(node.dataset.taskReport));
-      ctx.delegate("[data-accept]", "click", async (_, node) => { await AppApi.acceptTodo(node.dataset.accept, { note: "运营已接收任务" }); await refresh("任务已接收，进入处理中。"); });
-      ctx.delegate("[data-submit]", "click", async (_, node) => { await AppApi.submitTodo(node.dataset.submit, { note: "运营已提交处理材料，等待系统复盘或总管复核。" }); await refresh("处理材料已提交，任务进入后续复核或自动复盘链路。"); });
+      ctx.delegate("[data-accept]", "click", async (_, node) => { const result = await AppApi.acceptTodo(node.dataset.accept, { note: "运营已接收任务" }); applyTransitionResult(result); await refresh("任务已接收，进入处理中。"); });
+      ctx.delegate("[data-submit]", "click", async (_, node) => { const result = await AppApi.submitTodo(node.dataset.submit, { note: "运营已提交处理材料，等待系统复盘或总管复核。" }); applyTransitionResult(result); await refresh("处理材料已提交，任务进入后续复核或自动复盘链路。"); });
     },
   };
 })();
