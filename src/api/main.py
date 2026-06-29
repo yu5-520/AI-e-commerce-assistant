@@ -9,18 +9,18 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, stations, system, task_persistence, trends, v10_product, v9_readiness, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, deprecated_stations, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, stations, system, task_persistence, trends, v10_product, v9_readiness, worker_jobs
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "12.14.1"
+API_VERSION = "12.14.2"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": ["v112_task_chain_fix", "v1211_agent_sop_enhancement", "v1212_rag_llm_agent"],
-    "mode": "station_interface_explicit_execution",
-    "rule": "V12.14.1：旧全局启动Hook不再进入主入口；任务信号、Agent增强等能力通过Station Interface显式执行。",
+    "mode": "station_interface_explicit_execution_with_deprecated_archive",
+    "rule": "V12.14.2：主入口不执行旧Hook；旧文件统一进入Deprecated Station Archive登记，正线站点保持干净。",
 }
 
 if WEB_DEMO_DIR.exists():
@@ -32,13 +32,14 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_14_1": "station_interface_mainline", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v12_14_2": "deprecated_station_archive_mainline_purity", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
 app.include_router(pipeline.router)
 app.include_router(stations.router)
 app.include_router(ops.router)
+app.include_router(deprecated_stations.router)
 app.include_router(accounts.router)
 app.include_router(health.router)
 app.include_router(llm.router)
