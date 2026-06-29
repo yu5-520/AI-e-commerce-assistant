@@ -1,29 +1,33 @@
 # Current Version
 
 ```text
-14.4.1
+14.5.0
 ```
 
-## V14.4.1 Meaning
+## V14.5 Meaning
 
-V14.4.1 adds TaskIntent PermissionEnvelope.
+V14.5 adds Permission Stamp Propagation.
 
 Mainline:
 
 ```text
-Agent judgment
-  -> TaskIntent contract
+report uploader
+  -> permission stamp
+  -> imported rows
+  -> operating objects
+  -> product projection
+  -> system product snapshot
+  -> product signal package
+  -> Agent judgment
+  -> TaskIntent
   -> PermissionEnvelope
-  -> task snapshot
-  -> task pool entry
-  -> visible task
   -> task lifecycle
 ```
 
 Core rules:
 
-- Task approval reads structured permission fields.
-- Budget reads TaskIntent budget fields only.
-- Product code, title, deadline, id, and free text cannot become budget.
-- `create_task_snapshot` can enter `operator_execution` when the envelope allows it.
-- `manager_review_required`, high risk, hard actions, and over-budget tasks enter `manager_approval`.
+- Uploading a report grants the uploader default operating ownership for rows in that report.
+- ERP/CRM explicit ownership overrides the uploader stamp.
+- Projection gates check the permission stamp before old store-scope fallback.
+- Historical unstamped rows can pass projection through operating object ownership checks.
+- System product snapshots carry permission fields forward.
