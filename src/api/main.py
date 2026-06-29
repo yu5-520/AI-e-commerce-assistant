@@ -9,14 +9,14 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, health, import_jobs, llm, modules, report_task_sync, system, task_persistence, trends, v10_product, v9_readiness, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, health, import_jobs, llm, modules, pipeline, report_task_sync, system, task_persistence, trends, v10_product, v9_readiness, worker_jobs
 from src.services.v112_task_chain_fix_service import apply_v112_task_chain_fix
 from src.services.v1211_agent_sop_enhancement_service import apply_v1211_agent_sop_enhancement
 from src.services.v1212_rag_llm_agent_service import apply_v1212_rag_llm_agent
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "12.12.0"
+API_VERSION = "12.13.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 V112_TASK_CHAIN_FIX = apply_v112_task_chain_fix()
@@ -35,11 +35,12 @@ def index() -> Any:
     return {
         "message": "AI ERP Operating Advisor API is running.",
         "version": API_VERSION,
-        "v12_12": "rag_baseline_llm_product_sop_generation",
+        "v12_13": "pipeline_station_gate_snapshot_read",
     }
 
 
 app.include_router(modules.router)
+app.include_router(pipeline.router)
 app.include_router(accounts.router)
 app.include_router(health.router)
 app.include_router(llm.router)
