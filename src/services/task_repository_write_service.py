@@ -72,7 +72,8 @@ def transition_task_with_repository(task_id: str, action: str, payload: Dict[str
         "recap_complete": "task_written_to_recap",
     }.get(action, action)
     target_status = ACTION_TARGET_STATUS.get(normalized_action)
-    assert_transition_allowed(from_status, target_status, action=normalized_action)
+    if target_status is not None:
+        assert_transition_allowed(from_status, target_status, action=normalized_action)
     from src.services.task_lifecycle_state_machine_service import transition_lifecycle_task
 
     result = transition_lifecycle_task(task_id, action, actor_user_id=payload.get("actorUserId") or ctx.user_id, payload={**payload, "traceId": trace_id}, ctx=ctx)
