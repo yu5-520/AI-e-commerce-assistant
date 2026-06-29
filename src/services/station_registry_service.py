@@ -1,16 +1,15 @@
-"""V12.14 station registry.
+"""V12.14.2 clean business station registry.
 
-A station is an independently addressable pipeline module. External callers must
-use the Station Interface instead of importing station internals. The current
-release keeps the implementation in a modular monolith, but standardizes station
-identity, stage mapping, order, health and replay metadata.
+Only business mainline stations live here. Deprecated files, old hooks and legacy
+compatibility routes are registered in Deprecated Station Archive, not in the
+main Station Registry.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-STATION_REGISTRY_VERSION = "12.14.0"
+STATION_REGISTRY_VERSION = "12.14.2"
 
 STATIONS: List[Dict[str, Any]] = [
     {
@@ -83,7 +82,7 @@ STATIONS: List[Dict[str, Any]] = [
         "stationId": "agent_enhance_station",
         "stage": "task_agent_enhanced",
         "title": "Agent增强站",
-        "backendModule": "src.services.v1212_rag_llm_agent_service",
+        "backendModule": "src.stations.agent_enhance_station.service",
         "frontendModule": "web_demo/stations/agent-enhance-station",
         "outputRefPrefix": "task_packages",
         "nextStation": "evidence_station",
@@ -153,5 +152,6 @@ def registry_summary() -> Dict[str, Any]:
         "version": STATION_REGISTRY_VERSION,
         "stationCount": len(STATIONS),
         "stations": list_stations(),
-        "rule": "每个站点独立注册，前后端只通过标准 Station Interface 和 pipeline gate 交接。",
+        "mainlinePurity": "deprecated_files_excluded",
+        "rule": "正线站点注册表只放业务主流程站点；旧文件、旧Hook、旧兼容接口进入 Deprecated Station Archive。",
     }
