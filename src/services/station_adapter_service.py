@@ -1,23 +1,23 @@
-"""V12.14.1 station adapter service.
+"""V13.4 station adapter service.
 
 Station Contract is the public interface. Adapters are the narrow bridge from a
-standard station run to existing internal services. This prevents old routes from
-calling business services directly and lets the pipeline become a compatibility
-layer around Station Interface.
+standard station run to existing internal services. V13.4 adds a real adapter for
+Task Pool Station so task snapshots can enter the visible task pool without
+skipping acceptance, assignment, submission or review stations.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-STATION_ADAPTER_VERSION = "12.14.1"
+STATION_ADAPTER_VERSION = "13.4.0"
 
 
 def _count(value: Any) -> int:
     if isinstance(value, list):
         return len(value)
     if isinstance(value, dict):
-        for key in ["createdTaskCount", "storeCount", "productCount", "storeRows", "count", "rowCount"]:
+        for key in ["createdTaskCount", "storeCount", "productCount", "storeRows", "count", "rowCount", "entryCount"]:
             raw = value.get(key)
             if isinstance(raw, int):
                 return raw
@@ -28,7 +28,7 @@ def _count(value: Any) -> int:
 
 def simulated_station_output(station: Dict[str, Any], body: Dict[str, Any] | None = None, *, diagnostic: bool = False) -> Dict[str, Any]:
     body = body or {}
-    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V12-14" if diagnostic else None)
+    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V13-4" if diagnostic else None)
     output_ref = f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
     return {
         "version": STATION_ADAPTER_VERSION,
@@ -83,6 +83,29 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
             "operatingCadenceCreatedTaskCount": result.get("operatingCadenceCreatedTaskCount", 0),
             "outputRef": f"tasks:{data_version or 'latest'}",
             "taskGeneration": result,
+            "isDiagnostic": False,
+        }
+
+    if station_id == "task_pool_station":
+        from src.services.task_pool_station_service import enter_task_pool_from_snapshot, sync_ready_task_snapshots
+
+        task_snapshot_id = body.get("taskSnapshotId") or body.get("task_snapshot_id")
+        if task_snapshot_id:
+            result = enter_task_pool_from_snapshot(str(task_snapshot_id), created_by=body.get("userId") or body.get("user_id"), force=bool(body.get("force")))
+        else:
+            result = sync_ready_task_snapshots(data_version=data_version, limit=int(body.get("limit") or 50), created_by=body.get("userId") or body.get("user_id"))
+        latest_entry = (result.get("poolEntry") or {}) if isinstance(result.get("poolEntry"), dict) else ((result.get("results") or [{}])[0].get("poolEntry") if result.get("results") else {})
+        return {
+            "version": STATION_ADAPTER_VERSION,
+            "adapterMode": "real_task_pool",
+            "stationId": station_id,
+            "stage": station.get("stage"),
+            "dataVersion": data_version or result.get("dataVersion"),
+            "poolEntryId": latest_entry.get("poolEntryId"),
+            "taskId": latest_entry.get("taskId"),
+            "createdTaskCount": result.get("createdTaskCount", 0),
+            "outputRef": f"task_pool:{latest_entry.get('poolEntryId') or data_version or 'latest'}",
+            "taskPool": result,
             "isDiagnostic": False,
         }
 
