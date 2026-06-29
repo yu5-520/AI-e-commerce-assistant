@@ -11,7 +11,7 @@ from src.services.alert_detail_service import get_alert_detail_report
 from src.services.task_report_service import get_candidate_report, get_task_report
 
 router = APIRouter()
-TASK_REPORT_ROUTE_VERSION = "12.8.1"
+TASK_REPORT_ROUTE_VERSION = "12.8.2"
 
 
 def request_user_id(request: Request) -> str:
@@ -21,13 +21,19 @@ def request_user_id(request: Request) -> str:
 def _safe_report(kind: str, entity_id: str, exc: Exception) -> Dict[str, Any]:
     return {
         "id": entity_id,
-        "title": "Detail report safe fallback",
+        "title": "详情报告临时兜底",
         "version": TASK_REPORT_ROUTE_VERSION,
         "reportType": kind,
+        "taskStatus": "详情生成异常",
         "failClosed": True,
-        "summary": "The task remains available. Report generation returned a structured fallback instead of HTTP 500.",
+        "summary": "任务本身仍可处理；详情服务返回结构化兜底，避免页面 500。下一版应从同一个 task_id 补齐 taskDetailReport。",
         "error": str(exc),
-        "sections": [{"title": "Next step", "items": ["Refresh task list", "Use the task summary", "Retry detail report after refresh"]}],
+        "taskLifecycle": {"stage": "generated", "stageLabel": "生成任务", "nextExpected": "返回任务列表继续处理"},
+        "sections": [
+            {"title": "下一步", "items": ["返回任务列表", "使用任务卡片摘要先接收或处理", "刷新后重试详情页"]},
+            {"title": "排障线索", "items": ["检查 task_id 是否存在于 /api/modules/todo", "检查聚合任务是否带 taskDetailReport", "检查 affectedProducts 是否为空"]},
+        ],
+        "fallbackRule": "safe fallback 只能兜底，不能作为正常详情页。",
     }
 
 
