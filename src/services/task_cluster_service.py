@@ -1,8 +1,8 @@
-"""V12.7.2 task clustering service.
+"""V12.12 task clustering service.
 
-Repeated product signals are merged into a real backend task object. The primary
-cluster task keeps a stable task id, affected products, detail report and status
-that can be accepted/submitted/reviewed by the same lifecycle endpoints.
+Repeated product signals are merged into a real backend task object, but the
+cluster must keep product-level context so the task detail page can show which
+products are included and let operators jump to the product archive.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 from src.services import module_task_service
 
-TASK_CLUSTER_VERSION = "12.7.2"
+TASK_CLUSTER_VERSION = "12.12.0"
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
 GROUPABLE_QUEUE_TYPES = {"daily_operating_task", "weekly_review_task"}
 GROUPABLE_ACTIONS = {"inventory_restock", "creative_material_test", "title_test", "main_image_test", "traffic_expansion", "generic_operation"}
@@ -93,13 +93,7 @@ def _store_key(task: Dict[str, Any]) -> str:
 
 
 def _group_key(task: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
-    return (
-        _store_key(task),
-        _action_type(task),
-        _reason_family(task),
-        _clean(task.get("assigneeId") or "operator"),
-        _clean(task.get("deadline") or task.get("timeBucket") or "today"),
-    )
+    return (_store_key(task), _action_type(task), _reason_family(task), _clean(task.get("assigneeId") or "operator"), _clean(task.get("deadline") or task.get("timeBucket") or "today"))
 
 
 def _groupable(task: Dict[str, Any]) -> bool:
@@ -114,16 +108,34 @@ def _groupable(task: Dict[str, Any]) -> bool:
     return _action_type(task) in GROUPABLE_ACTIONS or _reason_family(task) in REASON_LABELS
 
 
+def _product_action(task: Dict[str, Any]) -> Dict[str, Any]:
+    cards = task.get("productActionCards") or (task.get("taskDetailReport") or {}).get("productActionCards") or []
+    return cards[0] if isinstance(cards, list) and cards and isinstance(cards[0], dict) else {}
+
+
 def _affected_product(task: Dict[str, Any]) -> Dict[str, Any]:
     detail = task.get("taskDetailReport") or {}
     metrics = detail.get("evidencePack") or task.get("evidencePack") or task.get("evidence") or []
+    product_card = _product_action(task)
+    object_id = task.get("objectId") or task.get("archiveId") or task.get("productId") or task.get("entityId")
+    store_id = task.get("storeId") or ((task.get("storeIds") or task.get("visibleStoreIds") or [None])[0])
+    store_name = task.get("storeName") or task.get("store")
+    product_id = task.get("productId") or task.get("entityId")
+    product_title = task.get("productTitle") or task.get("productShort") or task.get("title") or product_id
     return {
         "taskId": task.get("id"),
-        "productId": task.get("productId") or task.get("entityId"),
-        "productTitle": task.get("title") or task.get("productTitle"),
-        "store": task.get("store") or task.get("storeName"),
+        "productId": product_id,
+        "objectId": object_id,
+        "productTitle": product_title,
+        "storeId": store_id,
+        "store": store_name,
         "platform": task.get("platform"),
-        "reason": task.get("reason") or detail.get("warningSummary") or _action_label(task),
+        "productLink": task.get("productLink") or task.get("link"),
+        "openProductRoute": "business-products",
+        "openProductState": {"productId": product_id, "productObjectId": object_id, "storeId": store_id or "", "storeName": store_name or ""},
+        "primaryAction": product_card.get("primaryAction") or task.get("actionType") or _action_label(task),
+        "why": product_card.get("why") or task.get("reason") or detail.get("warningSummary") or _action_label(task),
+        "submitEvidence": product_card.get("submitEvidence") or ["商品链接", "处理截图", "测试开始时间", "影响范围"],
         "metrics": metrics[:6] if isinstance(metrics, list) else [],
     }
 
@@ -139,29 +151,31 @@ def _merge_task(primary: Dict[str, Any], group: List[Dict[str, Any]], group_key:
     primary["clusterTaskIds"] = [task.get("id") for task in group if task.get("id")]
     primary["affectedProductCount"] = len(affected)
     primary["affectedProducts"] = affected
+    primary["productActionCards"] = affected
     primary["title"] = title
     primary["productTitle"] = title
     primary["entityType"] = "商品组"
     primary["productId"] = f"{len(affected)}个商品"
-    primary["sourceTrail"] = list(dict.fromkeys([*(primary.get("sourceTrail") or []), "V12.7.2后端真实聚合任务"]))
+    primary["sourceTrail"] = list(dict.fromkeys([*(primary.get("sourceTrail") or []), "V12.12后端真实聚合任务保留商品级动作卡"]))
     gate = dict(_gate(primary))
     if gate:
         gate["actionType"] = _action_type(primary)
         gate["actionLabel"] = action_label
-        gate["version"] = "12.7.2"
+        gate["version"] = TASK_CLUSTER_VERSION
         primary["actionAuthorization"] = gate
         primary["v127ActionGate"] = gate
         primary["v126ActionGate"] = gate
     card = dict(primary.get("taskCard") or {})
     card["title"] = title
-    card["subtitle"] = f"{action_label}｜批量执行"
+    card["subtitle"] = f"{action_label}｜批量执行｜可展开商品"
     primary["taskCard"] = card
     detail = dict(primary.get("taskDetailReport") or {})
     detail["title"] = f"批量任务详情｜{title}"
     detail["taskClusterVersion"] = TASK_CLUSTER_VERSION
     detail["affectedProducts"] = affected
+    detail["productActionCards"] = affected
     detail["affectedProductCount"] = len(affected)
-    detail["warningSummary"] = f"同一店铺出现 {len(affected)} 个同类经营信号，已合并为一个真实后端任务；接收、提交、复核和详情都使用该任务 ID。"
+    detail["warningSummary"] = f"同一店铺出现 {len(affected)} 个同类经营信号，已合并为一个真实后端任务；详情页保留每个商品的查看入口和商品级动作。"
     detail["suggestedActions"] = primary.get("sopSteps") or detail.get("suggestedActions") or []
     detail["operationChecklist"] = primary.get("sopSteps") or detail.get("operationChecklist") or []
     detail["actionAuthorization"] = primary.get("actionAuthorization")
@@ -190,4 +204,4 @@ def cluster_open_tasks() -> Dict[str, Any]:
         _merge_task(group[0], group, key)
         cluster_count += 1
         merged_count += len(group) - 1
-    return {"version": TASK_CLUSTER_VERSION, "mode": "backend_real_task_lifecycle_cluster", "clusterCount": cluster_count, "mergedDuplicateCount": merged_count}
+    return {"version": TASK_CLUSTER_VERSION, "mode": "backend_real_task_lifecycle_cluster_with_product_actions", "clusterCount": cluster_count, "mergedDuplicateCount": merged_count}
