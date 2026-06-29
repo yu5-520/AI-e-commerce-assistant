@@ -1,31 +1,14 @@
-"""V14 clean business station registry.
-
-Only business mainline stations live here. V14 connects the Agent task judgment
-line with real Signal Pool, RAG Context, Agent Judgment, Task Snapshot and Task
-Pool adapters.
-"""
+"""V14.2 clean business station registry."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-STATION_REGISTRY_VERSION = "14.0.0"
+STATION_REGISTRY_VERSION = "14.2.0"
 
 
 def station(station_id: str, stage: str, title: str, backend: str, prefix: str, next_station: str | None, line: str, domain: str, *, replayable: bool = True) -> Dict[str, Any]:
-    return {
-        "stationId": station_id,
-        "stage": stage,
-        "title": title,
-        "backendModule": backend,
-        "frontendModule": f"web_demo/stations/{station_id.replace('_', '-')}",
-        "outputRefPrefix": prefix,
-        "nextStation": next_station,
-        "stationLine": line,
-        "stationDomain": domain,
-        "replayable": replayable,
-        "diagnosticSupported": True,
-    }
+    return {"stationId": station_id, "stage": stage, "title": title, "backendModule": backend, "frontendModule": f"web_demo/stations/{station_id.replace('_', '-')}", "outputRefPrefix": prefix, "nextStation": next_station, "stationLine": line, "stationDomain": domain, "replayable": replayable, "diagnosticSupported": True}
 
 
 STATIONS: List[Dict[str, Any]] = [
@@ -33,7 +16,9 @@ STATIONS: List[Dict[str, Any]] = [
     station("report_parse_station", "report_parsed", "报表解析站", "src.api.routes.data_import", "rows", "metric_fact_station", "external_data_line", "data_ingestion"),
     station("metric_fact_station", "metric_facts_ready", "指标事实站", "src.services.metric_fact_store_service", "metric_facts", "operating_object_station", "external_data_line", "data_fact"),
     station("operating_object_station", "operating_objects_ready", "商品/店铺映射站", "src.services.operating_object_store_service", "operating_objects", "operating_snapshot_station", "external_data_line", "operating_object"),
-    station("operating_snapshot_station", "operating_unit_snapshot_ready", "经营页快照站", "src.services.operating_unit_snapshot_service", "operating_unit_snapshot", "task_signal_station", "external_data_line", "operating_snapshot"),
+    station("operating_snapshot_station", "operating_unit_snapshot_ready", "经营页快照站", "src.services.operating_unit_snapshot_service", "operating_unit_snapshot", "system_product_snapshot_station", "external_data_line", "operating_snapshot"),
+    station("system_product_snapshot_station", "system_product_snapshot_ready", "系统商品快照站", "src.services.system_product_snapshot_service", "system_product_snapshot", "product_signal_snapshot_station", "snapshot_signal_line", "system_product_snapshot"),
+    station("product_signal_snapshot_station", "product_signal_snapshot_ready", "商品信号快照站", "src.services.product_signal_snapshot_service", "product_signal_snapshot", "task_signal_station", "snapshot_signal_line", "product_signal_snapshot"),
     station("task_signal_station", "task_signal_ready", "信号池站", "src.services.signal_pool_service", "signal_pool", "rag_context_station", "agent_task_judgment_line", "task_signal"),
     station("rag_context_station", "rag_context_ready", "RAG上下文站", "src.services.rag_context_station_service", "rag_context", "agent_judgment_station", "agent_task_judgment_line", "rag_context"),
     station("agent_judgment_station", "agent_judgment_ready", "Agent判断站", "src.services.agent_judgment_station_service", "agent_judgment", "task_snapshot_station", "agent_task_judgment_line", "agent_judgment"),
@@ -72,15 +57,4 @@ def station_order() -> List[str]:
 
 
 def registry_summary() -> Dict[str, Any]:
-    return {
-        "version": STATION_REGISTRY_VERSION,
-        "stationCount": len(STATIONS),
-        "stations": list_stations(),
-        "lines": {
-            "externalDataLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "external_data_line"],
-            "agentTaskJudgmentLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "agent_task_judgment_line"],
-            "internalTaskLifecycleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "internal_task_lifecycle_line"],
-        },
-        "mainlinePurity": "v14_signal_rag_agent_snapshot_pool",
-        "rule": "V14：经营规则迁入RAG，Agent负责判断，代码负责接口、权限、生命周期和审计边界。",
-    }
+    return {"version": STATION_REGISTRY_VERSION, "stationCount": len(STATIONS), "stations": list_stations(), "lines": {"externalDataLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "external_data_line"], "snapshotSignalLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "snapshot_signal_line"], "agentTaskJudgmentLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "agent_task_judgment_line"], "internalTaskLifecycleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "internal_task_lifecycle_line"]}, "mainlinePurity": "v14_2_snapshot_signal_rag_agent_snapshot_pool", "rule": "V14.2：商品信号从系统商品快照比对生成，再进入RAG与Agent判断。"}
