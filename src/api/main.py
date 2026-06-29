@@ -13,14 +13,15 @@ from src.api.routes import accounts, approvals, architecture, audit, data_import
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "13.7.0"
+API_VERSION = "14.0.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
-    "legacyStartupHooks": ["v112_task_chain_fix", "v1211_agent_sop_enhancement", "v1212_rag_llm_agent"],
-    "mode": "full_task_lifecycle_stations",
-    "rule": "V13.7：任务入池后，接收/派发、提交/复核、复盘/RAG回流全部进入站点接口；todo页面只做投影和操作入口，不再承载隐藏生命周期。",
+    "legacyStartupHooks": [],
+    "mode": "signal_rag_agent_snapshot_lifecycle",
+    "mainline": ["operating_snapshot_station", "task_signal_station", "rag_context_station", "agent_judgment_station", "task_snapshot_station", "task_pool_station", "task_lifecycle_stations"],
+    "rule": "V14：经营规则迁入RAG，Agent负责判断，代码负责接口、权限、生命周期、审计和安全边界。",
 }
 
 if WEB_DEMO_DIR.exists():
@@ -32,7 +33,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v13_7": "full_task_lifecycle_stations", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "signal_rag_agent_snapshot_lifecycle", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
