@@ -13,15 +13,15 @@ from src.api.routes import accounts, approvals, architecture, audit, data_import
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.0.0"
+API_VERSION = "14.1.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "signal_rag_agent_snapshot_lifecycle",
+    "mode": "signal_rag_agent_snapshot_lifecycle_clean",
     "mainline": ["operating_snapshot_station", "task_signal_station", "rag_context_station", "agent_judgment_station", "task_snapshot_station", "task_pool_station", "task_lifecycle_stations"],
-    "rule": "V14：经营规则迁入RAG，Agent负责判断，代码负责接口、权限、生命周期、审计和安全边界。",
+    "rule": "V14.1：信号状态回写、任务快照幂等、旧模块直写入口已清理为快照站路径或no-op。",
 }
 
 if WEB_DEMO_DIR.exists():
@@ -33,7 +33,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "signal_rag_agent_snapshot_lifecycle", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "signal_rag_agent_snapshot_lifecycle_clean", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
