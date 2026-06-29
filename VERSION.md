@@ -1,7 +1,7 @@
 # Current Version
 
 ```text
-12.8.3
+12.9.0
 ```
 
 ## Release Contract
@@ -11,4 +11,4 @@
 - `/api/health` version must match this file.
 - `web_demo/index.html` asset query versions must match this file.
 - README baseline must match this file.
-- V12.8.3 means: V12.8.2 backend main-architecture forced gates + task card action surface and aggregate detail report closure. The task list must show a left time/order rail, one current human action plus persistent detail, and must not render review or recap buttons on operator task cards. The frontend must use backend `primaryTaskAction` / `visibleTaskActions` instead of raw `availableActions`. Aggregate tasks must have a stable Chinese detail report with affected products, trigger reason, lifecycle, evidence, authorization, recap cycles, and next step.
+- V12.9.0 means: task lifecycle state machine unified write entrance. Accept, submit, manager review, recap completion and RAG candidate creation must flow through `task_lifecycle_state_machine_service`. The same primary `task_id` must be used across the visible task queue, task detail report, lifecycle event log, SQLite mirror and frontend task store. Accepting a task must move it to `处理中` / `accepted`, create an `operator_accepted` event, update the persistent mirror, return the latest task projection, and make the frontend button change from 接收 to 提交.
