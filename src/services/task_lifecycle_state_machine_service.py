@@ -1,8 +1,8 @@
-"""V12.9.1 unified task lifecycle state machine.
+"""V12.11.1 unified task lifecycle state machine.
 
 This service is the only write entrance for visible task lifecycle transitions.
-V12.9.1 makes it repository-aware, idempotent, and auto-accepts operator tasks
-that are already inside the operator's permission boundary.
+V12.11.1 keeps auto-accept and repository hydration, and also routes manager
+assign/split through the same state machine instead of direct update_task calls.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERS
 from src.services.task_lifecycle_orchestrator_service import attach_lifecycle, complete_recap_and_create_rag_candidate, handle_evidence_submitted, handle_manager_reviewed
 from src.services.task_state_machine_service import mirror_all
 
-TASK_LIFECYCLE_STATE_MACHINE_VERSION = "12.9.1"
+TASK_LIFECYCLE_STATE_MACHINE_VERSION = "12.11.1"
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
 WAITING_ACCEPT = {"待接收", "待确认", "已派发", "待处理", "待拆分"}
 PROCESSING = {"处理中", "已退回"}
@@ -28,6 +28,8 @@ WAITING_RECAP = {"等待自动复盘", "复盘待生成"}
 EVENT_BY_ACTION = {
     "auto_accept": "system_auto_accepted",
     "accept": "operator_accepted",
+    "assign": "manager_assigned",
+    "split": "manager_assigned",
     "submit": "operator_submitted",
     "review_approve": "manager_approved",
     "review_return": "manager_returned",
@@ -138,6 +140,22 @@ def _status_patch(task: Dict[str, Any], action: str, actor_user_id: str, payload
         else:
             patch.update({"acceptedById": actor_user_id, "acceptedAt": now_iso()})
         return patch
+    if action in {"assign", "split"}:
+        assignee_id = payload.get("operator_id") or payload.get("operatorId") or payload.get("assignee_id") or payload.get("assigneeId") or task.get("assigneeId")
+        reviewer_id = payload.get("reviewer_id") or payload.get("reviewerId") or task.get("reviewerId")
+        visible_user_ids = list(dict.fromkeys([value for value in [*list(task.get("visibleUserIds") or []), assignee_id, reviewer_id] if value]))
+        return {
+            "status": "待接收",
+            "workflowStatus": "已派发",
+            "displayStatus": "待接收",
+            "assigneeId": assignee_id,
+            "reviewerId": reviewer_id,
+            "assignedById": actor_user_id,
+            "assignedAt": now_iso(),
+            "visibleUserIds": visible_user_ids,
+            "lifecycleStage": "assigned",
+            "lifecycleVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION,
+        }
     if action == "submit":
         if _is_manager_required(task):
             return {"status": "待复核", "workflowStatus": "待复核", "displayStatus": "待复核", "submissionNote": note or "运营已提交处理材料。", "submittedById": actor_user_id, "submittedAt": now_iso(), "lifecycleStage": "evidence_submitted", "lifecycleVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION}
@@ -156,6 +174,8 @@ def _transition_message(action: str, task: Dict[str, Any], payload: Dict[str, An
     return {
         "auto_accept": note or "系统已自动接收运营权限内任务，进入处理中。",
         "accept": note or "运营已接收任务，进入处理中。",
+        "assign": note or "总管已派发任务，等待运营自动接收或手动接收。",
+        "split": note or "总管已拆分并派发任务，等待运营自动接收或手动接收。",
         "submit": note or ("运营已提交处理材料，等待总管复核。" if _is_manager_required(task) else "运营已提交处理材料，系统进入自动复盘等待。"),
         "review_approve": note or "总管复核通过，系统生成自动复盘周期。",
         "review_return": note or "总管复核退回，运营补充材料后再次提交。",
@@ -183,6 +203,8 @@ def _persist_primary_task(task: Dict[str, Any] | None, ctx: Any | None = None) -
 def _apply_orchestrator(task_id: str, action: str, actor_user_id: str, payload: Dict[str, Any], ctx: Any | None = None) -> Dict[str, Any] | None:
     if action in {"accept", "auto_accept"}:
         return attach_lifecycle(task_id, stage="accepted", event=EVENT_BY_ACTION.get(action, "operator_accepted"), payload=payload, actor_user_id=actor_user_id)
+    if action in {"assign", "split"}:
+        return attach_lifecycle(task_id, stage="assigned", event="manager_assigned", payload=payload, actor_user_id=actor_user_id)
     if action == "submit":
         task, _ = _find_primary_task(task_id, ctx)
         if task and _is_manager_required(task):
@@ -218,24 +240,7 @@ def _idempotent_result(task: Dict[str, Any], resolution: Dict[str, Any], action:
     _persist_primary_task(task, ctx)
     mirror_result = _mirror_runtime()
     projected = project_lifecycle_task(task, actor_user_id)
-    return {
-        "ok": True,
-        "idempotent": True,
-        "version": TASK_LIFECYCLE_STATE_MACHINE_VERSION,
-        "orchestratorVersion": ORCHESTRATOR_VERSION,
-        "action": action,
-        "eventType": "lifecycle_noop",
-        "message": f"任务已处于{task.get('status') or '当前'}阶段，未重复写入接收事件。",
-        "resolution": resolution,
-        "fromStatus": task.get("status"),
-        "toStatus": task.get("status"),
-        "fromWorkflowStatus": task.get("workflowStatus"),
-        "toWorkflowStatus": task.get("workflowStatus"),
-        "task": projected,
-        "event": None,
-        "mirror": mirror_result,
-        "rule": "V12.9.1：接收/自动接收为幂等动作，已进入处理中或后续阶段时不重复写日志。",
-    }
+    return {"ok": True, "idempotent": True, "version": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "orchestratorVersion": ORCHESTRATOR_VERSION, "action": action, "eventType": "lifecycle_noop", "message": f"任务已处于{task.get('status')}，接收动作保持幂等。", "resolution": resolution, "task": projected, "mirror": mirror_result}
 
 
 def _is_idempotent_accept(task: Dict[str, Any], action: str) -> bool:
@@ -248,6 +253,7 @@ def _is_idempotent_accept(task: Dict[str, Any], action: str) -> bool:
 
 def transition_lifecycle_task(task_id: str, action: str, *, actor_user_id: str, payload: Dict[str, Any] | None = None, ctx: Any | None = None) -> Dict[str, Any]:
     payload = payload or {}
+    action = {"manager_assign": "assign", "manager_assigned": "assign"}.get(action, action)
     task, resolution = _find_primary_task(task_id, ctx)
     if not task:
         return {"ok": False, "version": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "action": action, "message": "任务不存在或聚合主任务未找到。", "resolution": resolution}
@@ -278,23 +284,7 @@ def transition_lifecycle_task(task_id: str, action: str, *, actor_user_id: str, 
     event = module_task_service.create_task_event(latest, event_type, actor_user_id=actor_user_id, from_status=before_status, from_workflow=before_workflow, message=_transition_message(action, latest, payload))
     mirror_result = _mirror_runtime()
     projected = project_lifecycle_task(latest, actor_user_id)
-    return {
-        "ok": True,
-        "version": TASK_LIFECYCLE_STATE_MACHINE_VERSION,
-        "orchestratorVersion": ORCHESTRATOR_VERSION,
-        "action": action,
-        "eventType": event_type,
-        "message": _transition_message(action, latest, payload),
-        "resolution": resolution,
-        "fromStatus": before_status,
-        "toStatus": latest.get("status"),
-        "fromWorkflowStatus": before_workflow,
-        "toWorkflowStatus": latest.get("workflowStatus"),
-        "task": projected,
-        "event": event,
-        "mirror": mirror_result,
-        "rule": "V12.9.1：接收、提交、复核、复盘必须通过统一生命周期状态机写状态、事件、日志、SQLite镜像和前端投影；权限内任务生成后自动接收。",
-    }
+    return {"ok": True, "version": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "orchestratorVersion": ORCHESTRATOR_VERSION, "action": action, "eventType": event_type, "message": _transition_message(action, latest, payload), "resolution": resolution, "fromStatus": before_status, "toStatus": latest.get("status"), "fromWorkflowStatus": before_workflow, "toWorkflowStatus": latest.get("workflowStatus"), "task": projected, "event": event, "mirror": mirror_result, "rule": "V12.11.1：接收、派发、提交、复核、复盘必须通过统一生命周期状态机写状态、事件、日志、SQLite镜像和前端投影。"}
 
 
 def auto_accept_ready_tasks(tasks: Iterable[Dict[str, Any]], *, viewer_id: str | None = None, ctx: Any | None = None) -> Dict[str, Any]:
@@ -318,4 +308,4 @@ def lifecycle_state_summary(limit: int = 80) -> Dict[str, Any]:
     for task in tasks:
         stage = task.get("lifecycleStage") or (task.get("taskLifecycle") or {}).get("stage") or "generated"
         counts[stage] = counts.get(stage, 0) + 1
-    return {"version": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "counts": counts, "taskCount": len(tasks), "eventCount": len(module_task_service.TASK_EVENTS), "rule": "同一个task_id贯穿生成、接收、提交、复核、自动复盘和RAG候选；权限内任务自动接收。"}
+    return {"version": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "counts": counts, "taskCount": len(tasks), "eventCount": len(module_task_service.TASK_EVENTS), "rule": "同一个task_id贯穿生成、接收、派发、提交、复核、自动复盘和RAG候选；权限内任务自动接收。"}
