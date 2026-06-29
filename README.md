@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：**V12.8.2 后端主架构强制闸门版**。
+当前基线：**V12.8.3 任务卡动作与聚合详情收口版**。
 
-V12.8.2 保留 V12.8.1 的任务生命周期闭环和前后端契约收口，本版重点修正“主架构服务存在但最终输出被短路”的问题：店铺标签必须经过 store_tag_projection_service，不能因为商品数量、已入库、ROI/GMV 表现默认显示高权重；动作审批必须经过预算权限、系统保守估算、公司基线和已确认治理权重，不能因为 actionType 是投放预算调整就一刀切主管审批；详情页 fallback 改为中文诊断兜底，并明确不能作为正常详情页。
+V12.8.3 保留 V12.8.2 的后端主架构强制闸门，本版重点收口任务生命周期在产品卡片上的表现：任务列表按左侧时间轴排序，运营任务卡只显示一个当前人工动作和常驻详情；复核只在总管任务视角出现；复盘由系统自动调度，不作为运营按钮。前端任务卡必须读取后端 `primaryTaskAction` / `visibleTaskActions`，不能直接渲染 raw `availableActions`。聚合任务详情必须稳定返回中文报告，展示关联商品、触发原因、证据链、权限判断、生命周期、自动复盘周期和下一步。
 
 ## 当前执行入口
 
@@ -27,24 +27,27 @@ V12.8.2 保留 V12.8.1 的任务生命周期闭环和前后端契约收口，本
 → operating_weight_policy_service 只信任RAG/主管/老板/多期历史贡献的治理权重
 → action_authorization_gate_service 按预算权限、保守下限、公司基线、治理权重判断审批
 → task_cluster_service 生成真实后端聚合任务
-→ /api/modules/todo 返回带 taskLifecycle 的真实任务池
-→ task_lifecycle_orchestrator_service 推进接收、提交材料、复核、复盘、RAG候选
-→ store_tag_projection_service 输出治理标签 / 数据标签 / 经营标签
+→ /api/modules/todo 返回带 taskLifecycle 和 primaryTaskAction 的真实任务池
+→ web_demo/modules/todo/page.js 只渲染当前动作 + 详情
+→ task_report_service 为聚合任务生成中文详情报告
+→ task_lifecycle_orchestrator_service 推进接收、提交材料、复核、自动复盘、RAG候选
 → RAG审核通过后，下一次任务生成自动召回经验卡
 ```
 
-## V12.8.2 硬规则
+## V12.8.3 硬规则
 
 ```text
+任务列表必须按时间顺序展示，左侧显示时间轴 / 序号 / 时效等级。
+运营任务卡只能显示：接收 → 提交 → 详情。
+总管任务卡处理复核；复核不出现在运营卡片。
+复盘由系统自动生成周期，不作为运营任务卡按钮。
+详情按钮常驻。
+前端任务卡禁止直接读取 raw availableActions 渲染按钮。
+前端任务卡必须读取 primaryTaskAction / visibleTaskActions。
+聚合任务详情必须稳定返回中文报告，不能进入空白或英文 fallback。
+详情报告必须包含 affectedProducts / taskLifecycle / actionAuthorization / recapCycles / nextStep。
 店铺标签必须经过 store_tag_projection_service。
-没有 RAG/主管/老板/多期历史贡献来源时，只能显示“权重未确认”，不能显示“高权重店铺”。
-经营表现不等于权限权重，高ROI、高GMV、商品数量、已入库不能触发高权重审批。
 投放预算调整、活动报名、扩流测试不能因 actionType 一刀切主管审批。
-预算/活动动作必须读取 operatorActivityBudgetRange。
-预算超权限、系统保守估算低于公司基线、或已确认治理高权重对象，才升级主管审批。
-同一个 task_id 必须贯穿生成、接收、提交材料、复核、复盘和RAG候选。
-前端不得再次聚合同类商品任务；聚合只能由后端 task_cluster_service 完成。
-详情页 safe fallback 只能兜底，不能作为正常详情页。
 ```
 
 ## 当前主 API
@@ -58,10 +61,10 @@ V12.8.2 保留 V12.8.1 的任务生命周期闭环和前后端契约收口，本
 /api/modules/product                   商品档案
 /api/modules/product?storeId=STORE_ID  店铺商品档案
 /api/modules/product/{product_id}      单商品事实详情
-/api/modules/todo                      带生命周期的任务队列来源
+/api/modules/todo                      带生命周期和单动作的任务队列来源
 /api/modules/todo/lifecycle/summary    任务生命周期统计
 /api/modules/todo/{id}/recap/complete  完成复盘并生成RAG候选
-/api/modules/task-reports/tasks/{id}   任务详情报告，支持 affectedProducts 和 taskLifecycle
+/api/modules/task-reports/tasks/{id}   聚合任务详情报告，支持 affectedProducts 和 taskLifecycle
 /api/modules/log                       日志
 /api/modules/recap-candidates          复盘候选
 /api/accounts                          账号
