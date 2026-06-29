@@ -9,18 +9,18 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, deprecated_stations, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, station_handoffs, stations, system, task_persistence, task_pool, task_snapshots, trends, v10_product, v9_readiness, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, deprecated_stations, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, station_handoffs, stations, system, task_lifecycle_stations, task_persistence, task_pool, task_snapshots, trends, v10_product, v9_readiness, worker_jobs
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "13.4.0"
+API_VERSION = "13.7.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": ["v112_task_chain_fix", "v1211_agent_sop_enhancement", "v1212_rag_llm_agent"],
-    "mode": "task_snapshot_to_task_pool_station",
-    "rule": "V13.4：任务快照进入任务池；任务池只负责入池、去重、权限归属和可见任务创建，接收、派发、提交、复核继续留给后续生命周期站点。",
+    "mode": "full_task_lifecycle_stations",
+    "rule": "V13.7：任务入池后，接收/派发、提交/复核、复盘/RAG回流全部进入站点接口；todo页面只做投影和操作入口，不再承载隐藏生命周期。",
 }
 
 if WEB_DEMO_DIR.exists():
@@ -32,7 +32,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v13_4": "task_pool_station", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v13_7": "full_task_lifecycle_stations", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
@@ -41,6 +41,7 @@ app.include_router(stations.router)
 app.include_router(station_handoffs.router)
 app.include_router(task_snapshots.router)
 app.include_router(task_pool.router)
+app.include_router(task_lifecycle_stations.router)
 app.include_router(ops.router)
 app.include_router(deprecated_stations.router)
 app.include_router(accounts.router)
