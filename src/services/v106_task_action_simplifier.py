@@ -1,99 +1,101 @@
-"""V10.6 task action simplifier.
+"""V12.9 task action surface simplifier.
 
-The task system may keep rich backend workflow actions, but the product surface
-must expose only the smallest useful action set for the current role.
+The task card exposes one current human action plus a persistent detail action.
+Review belongs to the manager surface. Recap is system scheduled and never shown
+as an operator card button.
 """
 
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-V106_TASK_ACTION_VERSION = "10.6.0"
+V106_TASK_ACTION_VERSION = "12.9.0"
 V106_ROLE_ACTIONS = {
-    "owner": ["view", "follow", "confirm"],
-    "manager": ["dispatch", "approve", "reject"],
+    "owner": ["view", "confirm"],
+    "manager": ["approve", "reject"],
     "operator": ["accept", "submit", "supplement"],
+    "finance": ["view"],
+    "observer": ["view"],
 }
 V106_ACTION_RULES = [
-    "one_primary_action_per_task_card",
-    "one_secondary_action_allowed",
-    "details_are_not_workflow_actions",
-    "debug_actions_stay_out_of_daily_task_cards",
-    "backend_keeps_full_events_and_logs",
+    "one_current_human_action_per_task_card",
+    "detail_action_is_persistent_and_not_workflow",
+    "operator_cards_never_show_review_or_recap",
+    "manager_cards_handle_review_only",
+    "system_recap_stays_out_of_human_task_cards",
+    "raw_available_actions_are_backend_only",
 ]
 
 ACTION_LABELS = {
     "view": "查看",
-    "follow": "关注",
     "confirm": "确认",
-    "dispatch": "派发",
-    "approve": "通过",
-    "reject": "驳回",
+    "approve": "复核",
+    "reject": "退回",
     "accept": "接收",
     "submit": "提交",
     "supplement": "补充",
+    "detail": "详情",
 }
 
 ROLE_SURFACE = {
     "owner": "progress",
-    "manager": "dispatch_review",
+    "manager": "review",
     "operator": "execution",
+    "finance": "read_only",
+    "observer": "read_only",
 }
 
 
 def _role(task: Dict[str, Any]) -> str:
-    role = task.get("viewerRoleId") or task.get("roleId") or "operator"
+    role = task.get("viewerRoleId") or task.get("roleId") or task.get("currentRoleId") or "operator"
     return role if role in V106_ROLE_ACTIONS else "operator"
 
 
 def _has(task: Dict[str, Any], action: str) -> bool:
     backend = set(task.get("availableActions") or [])
     status = str(task.get("status") or "")
-    workflow = str(task.get("workflowStatus") or "")
+    workflow = str(task.get("workflowStatus") or task.get("displayStatus") or "")
     if action == "view":
         return True
-    if action == "follow":
-        return status not in {"已完成", "已归档"}
     if action == "confirm":
-        return status in {"已完成", "已通过", "已归档"} or workflow in {"复核通过", "已完成"}
-    if action == "dispatch":
-        return "assign" in backend or status in {"待拆分", "待派发"}
+        return status in {"已完成", "已通过", "已归档"} or workflow in {"复核通过", "已完成", "等待自动复盘"}
     if action in {"approve", "reject"}:
-        return "review" in backend or status in {"已提交", "待复核"} or workflow == "待复核"
+        return "review" in backend or status in {"已提交", "待复核"} or workflow in {"待复核", "待审批", "待老板确认"}
     if action == "accept":
-        return "accept" in backend or status in {"待接收", "待确认", "已派发"} or workflow == "已派发"
+        return "accept" in backend or status in {"待接收", "待确认", "已派发", "待处理", "待拆分"} or workflow in {"已派发", "待处理", "运营接收任务"}
     if action in {"submit", "supplement"}:
         return "submit" in backend or status in {"处理中", "已退回"} or workflow in {"处理中", "已退回"}
-    return action in backend
+    return False
 
 
 def _action(role: str, action: str, task: Dict[str, Any], *, primary: bool = False) -> Dict[str, Any]:
-    return {
-        "action": action,
-        "label": ACTION_LABELS.get(action, action),
-        "role": role,
-        "primary": primary,
-        "surface": ROLE_SURFACE.get(role, "execution"),
-    }
+    return {"action": action, "label": ACTION_LABELS.get(action, action), "role": role, "primary": primary, "surface": ROLE_SURFACE.get(role, "execution"), "taskId": task.get("id")}
 
 
 def simplified_actions_for_task(task: Dict[str, Any]) -> Dict[str, Any]:
     role = _role(task)
     allowed = [action for action in V106_ROLE_ACTIONS[role] if _has(task, action)]
-    if not allowed:
-        allowed = ["view"] if role == "owner" else []
+    if role == "operator":
+        allowed = [action for action in allowed if action in {"accept", "submit", "supplement"}]
+    elif role == "manager":
+        allowed = [action for action in allowed if action in {"approve", "reject"}]
+    elif role in {"owner", "finance", "observer"}:
+        allowed = [action for action in allowed if action in {"view", "confirm"}]
     primary = allowed[0] if allowed else None
-    secondary = allowed[1] if len(allowed) > 1 else None
+    visible = [_action(role, primary, task, primary=True)] if primary else []
+    raw = list(task.get("availableActions") or [])
     return {
         "version": V106_TASK_ACTION_VERSION,
         "role": role,
         "rules": V106_ACTION_RULES,
-        "primaryAction": _action(role, primary, task, primary=True) if primary else None,
-        "secondaryAction": _action(role, secondary, task) if secondary else None,
-        "visibleActions": [_action(role, action, task, primary=(action == primary)) for action in allowed[:2]],
-        "hiddenBackendActions": [item for item in (task.get("availableActions") or []) if item not in allowed[:2]],
+        "primaryAction": visible[0] if visible else None,
+        "secondaryAction": None,
+        "visibleActions": visible,
+        "detailAction": _action(role, "detail", task, primary=False),
+        "hiddenBackendActions": [item for item in raw if item not in {primary, "report", "source"}],
         "roleAllowedActions": V106_ROLE_ACTIONS[role],
+        "rule": "V12.9：任务卡只展示一个当前人工动作；详情常驻；复核只在总管视角；复盘由系统自动执行。",
     }
 
 
@@ -103,6 +105,7 @@ def apply_v106_task_actions(task: Dict[str, Any]) -> Dict[str, Any]:
     item["taskActionVersion"] = V106_TASK_ACTION_VERSION
     item["simplifiedActions"] = simple
     item["primaryTaskAction"] = simple["primaryAction"]
-    item["secondaryTaskAction"] = simple["secondaryAction"]
+    item["secondaryTaskAction"] = None
     item["visibleTaskActions"] = simple["visibleActions"]
+    item["detailTaskAction"] = simple["detailAction"]
     return item
