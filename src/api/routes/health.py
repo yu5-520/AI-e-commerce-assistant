@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter
 
-API_VERSION = "14.4.0"
+API_VERSION = "14.4.1"
 router = APIRouter(prefix="/api", tags=["health"])
 
 
@@ -20,6 +20,6 @@ def health() -> Dict[str, Any]:
         "taskReportEntry": "/api/modules/task-reports/tasks/{task_id}",
         "runtimeDiagnosticsEntry": "/api/system/runtime-diagnostics",
         "runtimeResetEntry": "/api/system/reset-runtime-data?confirm=true",
-        "v144Rule": "task_intent_contract_lifecycle",
-        "taskIntentContract": "Agent output and task snapshots are normalized before visible task creation",
+        "v1441Rule": "task_intent_permission_envelope_lifecycle",
+        "permissionEnvelope": "structured_budget_permission_fields",
     }
