@@ -9,9 +9,9 @@
   function agent(report) { return report?.agentOperatingJudgment || task().agentOperatingJudgment || {}; }
   function recapLine(report) { return arr(report?.systemRecapLine || task().systemRecapLine || agent(report).systemRecapLine); }
   function evidence(report) {
-    const packLines = arr(changePack(report).lines);
+    const packLines = arr(changePack(report).lines).filter((item) => !item?.type || item.type === "system_metric_change");
     if (packLines.length) return packLines.slice(0, 12);
-    return arr(report?.evidence || report?.evidencePack || task().evidencePack || task().evidence).slice(0, 10);
+    return arr(report?.evidence || report?.evidencePack || task().evidencePack || task().evidence).filter((item) => !item?.type || item.type !== "agent_operating_judgment").slice(0, 10);
   }
   function renderChangePack(report) {
     const list = evidence(report);
