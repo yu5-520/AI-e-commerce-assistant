@@ -1,4 +1,4 @@
-"""Task report service for V12.8.3 aggregate lifecycle reports."""
+"""Task report service for V12.9 lifecycle-state-machine reports."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from typing import Any, Dict, List
 from src.services.account_service import get_user
 from src.services.module_task_service import find_task, list_tasks
 from src.services.task_lifecycle_orchestrator_service import TASK_LIFECYCLE_VERSION, lifecycle_snapshot
+from src.services.task_lifecycle_state_machine_service import TASK_LIFECYCLE_STATE_MACHINE_VERSION, get_lifecycle_task_projection
 
-REPORT_VERSION = "12.8.3"
+REPORT_VERSION = "12.9.0"
 
 ROLE_INSIGHTS = {
     "owner": {"title": "老板视角", "summary": "看进度、预算、责任和经营结果。", "focus": ["预算", "经营结果", "RAG候选"], "hidden": []},
@@ -49,6 +50,12 @@ def _apply_role_insight(report: Dict[str, Any], user_id: str | None = None) -> D
 
 
 def _task_lookup(task_id: str, user_id: str | None = None) -> Dict[str, Any] | None:
+    try:
+        projected = get_lifecycle_task_projection(task_id, user_id)
+        if projected:
+            return projected
+    except Exception:
+        pass
     for viewer in (user_id, None):
         try:
             task = next((item for item in list_tasks(active_only=False, viewer_id=viewer) if item.get("id") == task_id), None)
@@ -63,10 +70,12 @@ def _task_lookup(task_id: str, user_id: str | None = None) -> Dict[str, Any] | N
 
 
 def _safe_lifecycle(task: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(task.get("taskLifecycle"), dict):
+        return task["taskLifecycle"]
     try:
         return lifecycle_snapshot(task)
     except Exception as exc:
-        return {"version": TASK_LIFECYCLE_VERSION, "stage": task.get("lifecycleStage") or "generated", "stageLabel": "生成任务", "taskId": task.get("id"), "nextExpected": "返回任务列表继续处理", "error": str(exc), "recapCycles": []}
+        return {"version": TASK_LIFECYCLE_VERSION, "stateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "stage": task.get("lifecycleStage") or "generated", "stageLabel": "生成任务", "taskId": task.get("id"), "nextExpected": "返回任务列表继续处理", "error": str(exc), "recapCycles": []}
 
 
 def _task_title(task: Dict[str, Any], task_id: str) -> str:
@@ -127,6 +136,7 @@ def _source_trace(task: Dict[str, Any]) -> List[Dict[str, Any]]:
         {"label": "来源模块", "value": task.get("sourceModule") or task.get("module") or "任务系统"},
         {"label": "任务类型", "value": task.get("taskType") or task.get("queueType") or "经营任务"},
         {"label": "数据版本", "value": task.get("dataVersion") or "当前版本"},
+        {"label": "生命周期状态机", "value": TASK_LIFECYCLE_STATE_MACHINE_VERSION},
     ]
 
 
@@ -140,11 +150,12 @@ def _structure_missing_report(task_id: str, user_id: str | None = None, task: Di
         "reportType": "aggregate_task" if task.get("batchTask") or products else "task",
         "version": REPORT_VERSION,
         "lifecycleVersion": TASK_LIFECYCLE_VERSION,
+        "lifecycleStateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION,
         "module": "task",
         "sourceModule": task.get("sourceModule") or "任务系统",
         "sourceRoute": "business-actions",
         "entityId": task.get("entityId") or task.get("productId") or task_id,
-        "taskId": task_id,
+        "taskId": task.get("id") or task_id,
         "taskStatus": task.get("status") or "待处理",
         "generatedAt": _now(),
         "title": _task_title(task, task_id),
@@ -172,7 +183,7 @@ def _structure_missing_report(task_id: str, user_id: str | None = None, task: Di
         "structureMissing": bool(not task.get("taskDetailReport")),
         "failClosed": False,
         "relatedTask": task,
-        "rule": "V12.8.3：聚合任务详情必须稳定返回中文报告，不能让任务详情页进入空白 fallback。",
+        "rule": "V12.9：详情报告读取统一生命周期状态机投影，同一个task_id贯穿接收、提交、复核、自动复盘和RAG候选。",
     }
     return _apply_role_insight(report, user_id)
 
@@ -183,7 +194,7 @@ def _report_from_structured_task(task: Dict[str, Any], task_id: str, user_id: st
     for key, value in base.items():
         detail.setdefault(key, value)
     detail["version"] = REPORT_VERSION
-    detail["lifecycleVersion"] = TASK_LIFECYCLE_VERSION
+    detail["lifecycleStateMachineVersion"] = TASK_LIFECYCLE_STATE_MACHINE_VERSION
     detail["taskStatus"] = task.get("status")
     detail["taskCard"] = task.get("taskCard") or detail.get("taskCard") or {}
     detail["evidence"] = _evidence_items(task) or detail.get("evidence") or []
