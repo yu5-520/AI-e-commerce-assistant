@@ -1,23 +1,35 @@
-"""V13.4 station adapter service.
+"""V14 station adapter service.
 
 Station Contract is the public interface. Adapters are the narrow bridge from a
-standard station run to existing internal services. V13.4 adds a real adapter for
-Task Pool Station so task snapshots can enter the visible task pool without
-skipping acceptance, assignment, submission or review stations.
+standard station run to internal services. V14 turns the task generation mainline
+from rule-direct task creation into Signal Pool -> RAG Context -> Agent Judgment ->
+Task Snapshot -> Task Pool.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-STATION_ADAPTER_VERSION = "13.4.0"
+STATION_ADAPTER_VERSION = "14.0.0"
 
 
 def _count(value: Any) -> int:
     if isinstance(value, list):
         return len(value)
     if isinstance(value, dict):
-        for key in ["createdTaskCount", "storeCount", "productCount", "storeRows", "count", "rowCount", "entryCount"]:
+        for key in [
+            "createdTaskCount",
+            "taskSnapshotCount",
+            "judgmentCount",
+            "matchedContextCount",
+            "signalCount",
+            "storeCount",
+            "productCount",
+            "storeRows",
+            "count",
+            "rowCount",
+            "entryCount",
+        ]:
             raw = value.get(key)
             if isinstance(raw, int):
                 return raw
@@ -28,7 +40,7 @@ def _count(value: Any) -> int:
 
 def simulated_station_output(station: Dict[str, Any], body: Dict[str, Any] | None = None, *, diagnostic: bool = False) -> Dict[str, Any]:
     body = body or {}
-    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V13-4" if diagnostic else None)
+    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V14" if diagnostic else None)
     output_ref = f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
     return {
         "version": STATION_ADAPTER_VERSION,
@@ -69,20 +81,83 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
         }
 
     if station_id == "task_signal_station":
-        from src.services.risk_task_service import generate_risk_tasks_for_signals
+        from src.services.signal_pool_service import generate_signal_pool
 
-        result = generate_risk_tasks_for_signals(data_version=data_version, requester_role_id=body.get("requesterRoleId") or "operator")
+        result = generate_signal_pool(data_version=data_version, max_signals=int(body.get("maxSignals") or 200))
         return {
             "version": STATION_ADAPTER_VERSION,
-            "adapterMode": "real_task_signal",
+            "adapterMode": "real_signal_pool_no_task_creation",
             "stationId": station_id,
             "stage": station.get("stage"),
             "dataVersion": data_version,
-            "createdTaskCount": result.get("createdTaskCount", 0),
-            "strictRiskCreatedTaskCount": result.get("strictRiskCreatedTaskCount", 0),
-            "operatingCadenceCreatedTaskCount": result.get("operatingCadenceCreatedTaskCount", 0),
-            "outputRef": f"tasks:{data_version or 'latest'}",
-            "taskGeneration": result,
+            "signalCount": result.get("signalCount", 0),
+            "taskSignalRef": result.get("taskSignalRef"),
+            "createdTaskCount": 0,
+            "outputRef": result.get("outputRef") or f"signal_pool:{data_version or 'latest'}",
+            "signalPool": result,
+            "isDiagnostic": False,
+            "rule": "V14：信号站只生成signal_pool，不再直接生成任务。",
+        }
+
+    if station_id == "rag_context_station":
+        from src.services.rag_context_station_service import build_rag_context_snapshot
+
+        result = build_rag_context_snapshot(data_version=data_version, signal_ref=body.get("taskSignalRef") or body.get("signalRef"), limit=int(body.get("limit") or 200))
+        return {
+            "version": STATION_ADAPTER_VERSION,
+            "adapterMode": "real_rag_context",
+            "stationId": station_id,
+            "stage": station.get("stage"),
+            "dataVersion": data_version,
+            "matchedContextCount": result.get("matchedContextCount", 0),
+            "ragContextRef": result.get("ragContextRef"),
+            "outputRef": result.get("outputRef") or f"rag_context:{data_version or 'latest'}",
+            "ragContext": result,
+            "isDiagnostic": False,
+        }
+
+    if station_id == "agent_judgment_station":
+        from src.services.agent_judgment_station_service import run_agent_judgment_station
+
+        result = run_agent_judgment_station(data_version=data_version, rag_context_ref=body.get("ragContextRef"), max_signals=int(body.get("maxSignals") or 32))
+        return {
+            "version": STATION_ADAPTER_VERSION,
+            "adapterMode": "real_agent_judgment",
+            "stationId": station_id,
+            "stage": station.get("stage"),
+            "dataVersion": data_version,
+            "decision": "mixed" if result.get("judgmentCount") else "no_signals",
+            "confidence": max([float(item.get("confidence") or 0) for item in result.get("judgments") or []], default=0),
+            "judgmentCount": result.get("judgmentCount", 0),
+            "pendingTaskSnapshotCount": result.get("pendingTaskSnapshotCount", 0),
+            "agentJudgmentRef": result.get("agentJudgmentRef"),
+            "outputRef": result.get("outputRef") or f"agent_judgment:{data_version or 'latest'}",
+            "agentJudgment": result,
+            "isDiagnostic": False,
+        }
+
+    if station_id == "task_snapshot_station":
+        from src.services.agent_judgment_station_service import materialize_task_snapshots_from_judgments
+        from src.services.task_snapshot_station_service import create_task_snapshot
+
+        if body.get("agentJudgment") or body.get("taskPlan"):
+            snapshot = create_task_snapshot(body, created_by=body.get("userId") or body.get("user_id"))
+            result = {"taskSnapshotCount": 1, "snapshots": [snapshot], "outputRef": f"task_snapshot:{snapshot.get('taskSnapshotId')}"}
+        else:
+            result = materialize_task_snapshots_from_judgments(data_version=data_version, created_by=body.get("userId") or body.get("user_id"), limit=int(body.get("limit") or 50))
+        latest_snapshot = (result.get("snapshots") or [{}])[0]
+        return {
+            "version": STATION_ADAPTER_VERSION,
+            "adapterMode": "real_task_snapshot",
+            "stationId": station_id,
+            "stage": station.get("stage"),
+            "dataVersion": data_version,
+            "taskSnapshotId": latest_snapshot.get("taskSnapshotId"),
+            "decision": latest_snapshot.get("decision") or "none",
+            "status": latest_snapshot.get("status") or "empty",
+            "taskSnapshotCount": result.get("taskSnapshotCount", 0),
+            "outputRef": result.get("outputRef") or f"task_snapshot:{data_version or 'latest'}",
+            "taskSnapshot": result,
             "isDiagnostic": False,
         }
 
@@ -97,7 +172,7 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
         latest_entry = (result.get("poolEntry") or {}) if isinstance(result.get("poolEntry"), dict) else ((result.get("results") or [{}])[0].get("poolEntry") if result.get("results") else {})
         return {
             "version": STATION_ADAPTER_VERSION,
-            "adapterMode": "real_task_pool",
+            "adapterMode": "real_task_pool_from_snapshots_only",
             "stationId": station_id,
             "stage": station.get("stage"),
             "dataVersion": data_version or result.get("dataVersion"),
@@ -107,6 +182,7 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
             "outputRef": f"task_pool:{latest_entry.get('poolEntryId') or data_version or 'latest'}",
             "taskPool": result,
             "isDiagnostic": False,
+            "rule": "V14：任务池只消费任务快照，不接受旧规则直出任务。",
         }
 
     output = simulated_station_output(station, body, diagnostic=False)
