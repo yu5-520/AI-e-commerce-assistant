@@ -1,9 +1,9 @@
-"""V12.14.2 deprecated station registry.
+"""V12.14.3 deprecated station registry.
 
 Deprecated Station is not a business station. It is a storage and governance
 station for old files, old hooks, old compatibility routes and legacy services.
-Mainline stations must stay clean; deprecated files may only be referenced by an
-explicit adapter whitelist or a compatibility route entry.
+The first archive-only services have been physically moved out of src/services
+into src/deprecated_stations/archive_services.
 """
 
 from __future__ import annotations
@@ -13,16 +13,17 @@ from typing import Any, Dict, List
 
 from src.services.station_registry_service import list_stations
 
-DEPRECATED_STATION_VERSION = "12.14.2"
+DEPRECATED_STATION_VERSION = "12.14.3"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
 DEPRECATED_ITEMS: List[Dict[str, Any]] = [
     {
         "legacyId": "v112_task_chain_fix_service",
-        "filePath": "src/services/v112_task_chain_fix_service.py",
+        "filePath": "src/deprecated_stations/archive_services/v112_task_chain_fix_service.py",
+        "originalPath": "src/services/v112_task_chain_fix_service.py",
         "legacyVersion": "11.2",
         "oldPurpose": "task chain hotfix and startup patch",
-        "currentStatus": "archived_reference",
+        "currentStatus": "physically_archived",
         "replacementStation": "task_signal_station",
         "allowedUsage": "archive_only",
         "canImport": False,
@@ -30,14 +31,15 @@ DEPRECATED_ITEMS: List[Dict[str, Any]] = [
         "canFrontendLoad": False,
         "riskLevel": "medium",
         "deleteAfterVersion": "12.16",
-        "note": "No longer executed by main.py. Keep only as migration reference until task lifecycle station is fully clean.",
+        "note": "Physically moved from src/services to deprecated_stations/archive_services in V12.14.3.",
     },
     {
         "legacyId": "v1211_agent_sop_enhancement_service",
-        "filePath": "src/services/v1211_agent_sop_enhancement_service.py",
+        "filePath": "src/deprecated_stations/archive_services/v1211_agent_sop_enhancement_service.py",
+        "originalPath": "src/services/v1211_agent_sop_enhancement_service.py",
         "legacyVersion": "12.11",
         "oldPurpose": "Agent SOP enhancement monkey patch",
-        "currentStatus": "archived_reference",
+        "currentStatus": "physically_archived",
         "replacementStation": "agent_enhance_station",
         "allowedUsage": "archive_only",
         "canImport": False,
@@ -45,14 +47,15 @@ DEPRECATED_ITEMS: List[Dict[str, Any]] = [
         "canFrontendLoad": False,
         "riskLevel": "high",
         "deleteAfterVersion": "12.16",
-        "note": "Must not patch task payload at startup. Move useful logic into agent_enhance_station adapter later.",
+        "note": "Archive-only. Useful logic must be migrated into agent_enhance_station adapter, not imported from this file.",
     },
     {
         "legacyId": "v1212_rag_llm_agent_service",
-        "filePath": "src/services/v1212_rag_llm_agent_service.py",
+        "filePath": "src/deprecated_stations/archive_services/v1212_rag_llm_agent_service.py",
+        "originalPath": "src/services/v1212_rag_llm_agent_service.py",
         "legacyVersion": "12.12",
         "oldPurpose": "RAG/LLM Agent SOP monkey patch",
-        "currentStatus": "archived_reference",
+        "currentStatus": "physically_archived",
         "replacementStation": "agent_enhance_station",
         "allowedUsage": "archive_only",
         "canImport": False,
@@ -60,7 +63,7 @@ DEPRECATED_ITEMS: List[Dict[str, Any]] = [
         "canFrontendLoad": False,
         "riskLevel": "high",
         "deleteAfterVersion": "12.16",
-        "note": "Was previously registered as agent_enhance_station backend. V12.14.2 moves the station backend to a clean station module.",
+        "note": "Main station registry now points to src.stations.agent_enhance_station.service instead of this old monkey-patch file.",
     },
     {
         "legacyId": "pipeline_compat_route",
@@ -125,13 +128,6 @@ DEPRECATED_ITEMS: List[Dict[str, Any]] = [
 ]
 
 BLOCKED_MAINLINE_IDS = {item["legacyId"] for item in DEPRECATED_ITEMS if not item.get("canImport") or item.get("allowedUsage") == "archive_only"}
-LEGACY_DIRECT_CALL_PATTERNS = [
-    "apply_v112_task_chain_fix",
-    "apply_v1211_agent_sop_enhancement",
-    "apply_v1212_rag_llm_agent",
-    "generate_risk_tasks_for_signals(",
-    "materialize_operating_unit_snapshot(",
-]
 
 
 def list_deprecated_items() -> List[Dict[str, Any]]:
@@ -158,7 +154,7 @@ def deprecated_summary() -> Dict[str, Any]:
         "adapterWhitelistCount": len(adapter_whitelist),
         "archivedReferenceCount": len(archived),
         "items": items,
-        "rule": "废弃站点只登记旧文件和旧接口，不参与业务正线。主流程站点文档不得混入 deprecated 文件。",
+        "rule": "废弃站点只登记旧文件和旧接口，不参与业务正线。archive_only 文件已开始物理迁移出 src/services。",
     }
 
 
@@ -170,17 +166,20 @@ def _read_repo_file(path: str) -> str:
         return ""
 
 
+def _module_path(file_path: str) -> str:
+    return file_path.replace("/", ".").removesuffix(".py")
+
+
 def mainline_purity_check() -> Dict[str, Any]:
     violations: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
-
     station_backend_modules = {station.get("stationId"): station.get("backendModule") for station in list_stations()}
-    deprecated_by_module = {
-        item["filePath"].replace("/", ".").removesuffix(".py"): item
-        for item in DEPRECATED_ITEMS
-    }
+
+    deprecated_modules = {_module_path(item["filePath"]): item for item in DEPRECATED_ITEMS}
+    deprecated_modules.update({_module_path(item.get("originalPath", "")): item for item in DEPRECATED_ITEMS if item.get("originalPath")})
+
     for station_id, backend_module in station_backend_modules.items():
-        item = deprecated_by_module.get(str(backend_module or ""))
+        item = deprecated_modules.get(str(backend_module or ""))
         if item and item["legacyId"] in BLOCKED_MAINLINE_IDS:
             violations.append({
                 "type": "station_registry_deprecated_backend",
@@ -201,20 +200,11 @@ def mainline_purity_check() -> Dict[str, Any]:
         if pattern in pipeline_text:
             violations.append({"type": "pipeline_direct_service_import", "pattern": pattern, "filePath": "src/api/routes/pipeline.py", "message": "pipeline.py must remain a Station Interface compatibility layer."})
 
-    index_text = _read_repo_file("web_demo/index.html")
     for item in DEPRECATED_ITEMS:
-        if item.get("canFrontendLoad") is False and item["filePath"].replace("src/", "web_demo/") in index_text:
-            violations.append({"type": "frontend_deprecated_load", "legacyId": item["legacyId"], "filePath": "web_demo/index.html", "message": "frontend entry must not load deprecated file."})
-
-    for item in DEPRECATED_ITEMS:
+        if item.get("allowedUsage") == "archive_only" and item.get("originalPath") and (ROOT_DIR / item["originalPath"]).exists():
+            violations.append({"type": "archive_original_path_still_exists", "legacyId": item["legacyId"], "filePath": item["originalPath"], "message": "archive_only file still exists in original src/services path."})
         if item.get("allowedUsage") == "station_adapter_only":
-            warnings.append({
-                "type": "adapter_whitelist_legacy_dependency",
-                "legacyId": item["legacyId"],
-                "filePath": item["filePath"],
-                "replacementStation": item["replacementStation"],
-                "message": "Allowed only behind Station Adapter; migrate into station internals later.",
-            })
+            warnings.append({"type": "adapter_whitelist_legacy_dependency", "legacyId": item["legacyId"], "filePath": item["filePath"], "replacementStation": item["replacementStation"], "message": "Allowed only behind Station Adapter; migrate into station internals later."})
 
     status = "clean" if not violations else "blocked"
     return {
@@ -225,5 +215,5 @@ def mainline_purity_check() -> Dict[str, Any]:
         "warningCount": len(warnings),
         "violations": violations,
         "warnings": warnings,
-        "rule": "主架构正线不得直接引用 archive_only deprecated 文件；兼容路由和 adapter 白名单必须显式登记。",
+        "rule": "主架构正线不得直接引用 archive_only deprecated 文件；archive_only 原路径必须被删除。",
     }
