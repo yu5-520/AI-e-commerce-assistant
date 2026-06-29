@@ -1,4 +1,4 @@
-"""V12.11 system-change-pack + Agent SOP enhancement.
+"""V12.11.1 system-change-pack + Agent SOP enhancement.
 
 The operating task chain should not ask operators to split traffic sources,
 review ROI reasons, or manually recap after a test. The deterministic system
@@ -11,7 +11,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable, Dict, List
 
-V1211_AGENT_SOP_VERSION = "12.11.0"
+V1211_AGENT_SOP_VERSION = "12.11.1"
 
 _PATCHED = False
 _ORIGINAL_TASK_PAYLOAD: Callable[[Dict[str, Any]], Dict[str, Any]] | None = None
@@ -309,13 +309,13 @@ def _enhance_payload(payload: Dict[str, Any], signal: Dict[str, Any]) -> Dict[st
         "operatorManualRecapRequired": False,
         "completionGate": detail["completionGate"],
         "reviewMetrics": detail["reviewMetrics"],
-        "judgmentTags": [*list(task.get("judgmentTags") or []), "V12.11 系统拆数据", "Agent生成SOP", "系统自动复盘"],
+        "judgmentTags": [*list(task.get("judgmentTags") or []), "V12.11.1 系统拆数据", "Agent生成SOP", "系统自动复盘"],
     })
     return task
 
 
 def apply_v1211_agent_sop_enhancement() -> Dict[str, Any]:
-    """Patch operating cadence task payloads with V12.11 Agent SOP output."""
+    """Patch operating cadence task payloads with V12.11.1 Agent SOP output."""
     global _PATCHED, _ORIGINAL_TASK_PAYLOAD
     if _PATCHED:
         return {"version": V1211_AGENT_SOP_VERSION, "status": "already_applied"}
