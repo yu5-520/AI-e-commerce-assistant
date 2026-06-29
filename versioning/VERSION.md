@@ -1,5 +1,5 @@
-Current Version: 12.9.0
+Current Version: 12.9.1
 
-V12.9.0 task lifecycle state machine unified write entrance
+V12.9.1 auto-accept and idempotent repository-aware lifecycle
 
-This release makes task_lifecycle_state_machine_service the only write entrance for visible task lifecycle transitions. Accept, submit, manager review, recap completion and RAG candidate creation update status, lifecycle stage, event log, SQLite mirror and frontend task projection on the same primary task_id.
+This release keeps the V12.9 lifecycle state machine and adds automatic acceptance for operator permission-in tasks, idempotent manual accept, and SQLite TaskRepository hydration. Visible task list, accept/submit actions, task detail report, event log and frontend task store must all use the same primary task_id.
