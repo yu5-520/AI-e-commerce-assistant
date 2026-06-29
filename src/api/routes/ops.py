@@ -1,4 +1,4 @@
-"""V12.14.1 Ops Diagnostic Train routes."""
+"""V12.14.2 Ops Diagnostic Train routes."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from src.services.account_service import user_id_from_headers
 from src.services.ops_diagnostic_train_service import check_single_station, get_ops_run, latest_ops_train, list_ops_runs, run_ops_train, station_health_summary
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
-OPS_ROUTE_VERSION = "12.14.1"
+OPS_ROUTE_VERSION = "12.14.2"
 
 
 def request_user_id(request: Request) -> str:
