@@ -11,6 +11,7 @@ from src.services.account_service import user_id_from_headers
 from src.services.module_projection_service import projected_traffic
 from src.services.module_task_service import create_task, visible_candidates
 from src.services.report_alert_service import attach_alert_state
+from src.services.v1211_manual_task_package_service import wrap_manual_task_payload
 
 router = APIRouter()
 
@@ -66,4 +67,4 @@ def traffic(request: Request) -> list[Dict[str, Any]]:
 def traffic_task(request: Request, traffic_id: str) -> Dict[str, Any]:
     user_id = user_id_from_headers(request.headers)
     item = find_or_404(projected_traffic(user_id), traffic_id, "traffic")
-    return create_task(traffic_task_payload(item))
+    return create_task(wrap_manual_task_payload(traffic_task_payload(item)))
