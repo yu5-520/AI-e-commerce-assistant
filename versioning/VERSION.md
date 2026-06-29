@@ -1,18 +1,19 @@
-Current Version: 14.4.0
+Current Version: 14.4.1
 
-V14.4 TaskIntent Contract Layer
+V14.4.1 TaskIntent PermissionEnvelope
 
 Core chain:
 
-`Agent judgment -> TaskIntent contract -> task snapshot -> task pool entry -> visible task -> lifecycle stations`
+`Agent judgment -> TaskIntent contract -> PermissionEnvelope -> task snapshot -> task pool entry -> visible task -> lifecycle stations`
 
 Key updates:
 
-- Added `src/services/task_intent_contract_service.py`.
-- Updated `src/services/action_impact_estimation_service.py` to read standard `actionImpactInput.metrics` first and safely handle mixed evidence formats.
-- Updated `src/services/task_pool_station_service.py` so task pool creates visible tasks through TaskIntent instead of passing raw Agent packages into legacy task code.
-- Updated `src/api/main.py`, `src/api/routes/health.py`, `VERSION.md`, and this file to 14.4.0.
+- `task_intent_contract_service.py` now builds `permissionEnvelope` from structured budget and risk fields.
+- `action_authorization_gate_service.py` now reads permission and budget from structured fields only.
+- Approval no longer parses budget from product code, title, deadline, id, or free text.
+- Normal `create_task_snapshot` tasks can enter `operator_execution` when the envelope allows it.
+- High-risk, hard-action, manager-review, and over-budget tasks still enter `manager_approval`.
 
 Boundary:
 
-Agent output can evolve, but downstream task creation consumes the TaskIntent contract. This prevents future field-shape changes from breaking task pool and lifecycle code.
+TaskIntent controls downstream task permission. Legacy task modules do not guess budget from text.
