@@ -10,6 +10,7 @@ from src.api.routes.modules.common import find_or_404
 from src.services.account_service import current_user, user_id_from_headers, visible_store_ids_for_user
 from src.services.module_data_service import LISTINGS
 from src.services.module_task_service import create_task, visible_candidates
+from src.services.v1211_manual_task_package_service import wrap_manual_task_payload
 
 router = APIRouter()
 
@@ -60,4 +61,4 @@ def listing(request: Request) -> List[Dict[str, Any]]:
 @router.post("/listing/{listing_id}/tasks")
 def listing_task(listing_id: str) -> Dict[str, Any]:
     item = find_or_404(LISTINGS, listing_id, "listing")
-    return create_task(listing_task_payload(item))
+    return create_task(wrap_manual_task_payload(listing_task_payload(item)))
