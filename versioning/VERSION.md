@@ -1,27 +1,28 @@
-Current Version: 12.13.1
+Current Version: 12.14.0
 
-V12.13.1 Legacy Trigger Cleanup
+V12.14.0 Station Contract & Ops Diagnostic Train
 
-This release removes the old trigger points that were still affecting the V12.13 station pipeline.
+This release upgrades pipeline stations from a flow concept into standard addressable station modules.
 
 Core rule:
 
-- Import endpoints only materialize data stations and write pipeline gates.
-- Import endpoints do not synchronously generate tasks.
-- Dashboard and operating pages read snapshots instead of report projections.
-- Todo GET is read-only; lifecycle actions are explicit.
-- Demo reset clears pipeline gates and operating-unit snapshots.
+- Every station has a registered identity, stage, backend module, frontend module, contract, health surface and standard interface.
+- Frontend and backend should talk through Station Interface and pipeline gates instead of direct internal service coupling.
+- The Ops Diagnostic Train runs diagnostic station checks without carrying real business data.
+- Business pages still read snapshots and task packages only.
 
-Removed or disabled old flow effects:
+Key updates:
 
-- `data_import.py` no longer calls import-side `generate_risk_tasks_for_signals`.
-- Legacy import hooks `attach_v104_import_sync`, `attach_v107_operating_profile`, `attach_v108_tag_change_tasks`, and `attach_v116_import_closed_loop` are disabled from the import request path.
-- `_attach_v62_trend_and_risk_sync` is retained as a no-op compatibility function and cannot generate tasks.
-- `web_demo/core/api-client.js` no longer runs full module refresh after import.
-- `dashboard_service.py` no longer calls `projection_summary`, `projected_products`, or `projected_report_groups`.
-- `system_service.py` now clears `operating_unit_snapshots` and `pipeline_stage_gates`.
-- `GET /api/modules/todo` no longer clusters or auto-accepts tasks; use `POST /api/modules/todo/lifecycle/sync` for explicit lifecycle sync.
+- Added `src/services/station_registry_service.py` for station registration and ordering.
+- Added `src/services/station_contract_service.py` for input/output contracts, station health, standard run/replay and gate views.
+- Added `src/services/ops_diagnostic_train_service.py` for diagnostic train runs and station checks.
+- Added `src/api/routes/stations.py` with `/api/stations` standard station interfaces.
+- Added `src/api/routes/ops.py` with `/api/ops/train/run`, latest run, run history and station health APIs.
+- Updated `src/api/main.py` to include station and ops routers and bump API version to `12.14.0`.
+- Updated `web_demo/modules/system-status/page.js` with station health and Ops Diagnostic Train UI.
+- Updated `src/services/system_service.py` so reset/db-status include ops diagnostic tables.
+- Bumped frontend cache to `12.14.0`.
 
 Current contract:
 
-Report upload → parsed rows → metric facts → operating objects → operating-unit snapshot. Task generation is triggered only by `/api/pipeline/data-versions/{data_version}/tasks/generate`. Agent/RAG/LLM enhancement stays in the task station, and RAG feedback is the only learning loop.
+The business train carries real data. The ops train carries diagnostic inputs only. Each station exposes contract, health, run, replay, gates and latest through a standard interface. The ops train checks these interfaces to locate broken stations before users discover failures by opening pages.
