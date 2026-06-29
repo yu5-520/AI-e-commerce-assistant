@@ -13,7 +13,10 @@ from typing import Any, Dict, List
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.product_signal_snapshot_service import materialize_product_signal_snapshot
 
-SIGNAL_POOL_VERSION = "14.3.0"
+SIGNAL_POOL_VERSION = "14.3.1"
+AGENT_READY_STATUS = "pending_rag_agent"
+PACKAGE_PENDING_STATUSES = {"pending_agent_judgment", "pending_product_signal_package", "pending_signal_package", "pending_rag_agent"}
+TERMINAL_STATUSES = {"judged_pending_snapshot", "ignored_noise", "observed_only", "merge_candidate", "task_snapshot_created", "failed_retry"}
 
 
 def now_iso() -> str:
@@ -47,15 +50,25 @@ def ensure_signal_pool_tables() -> None:
         conn.commit()
 
 
+def _agent_ready_status(existing_status: str | None, incoming_status: str | None) -> str:
+    if existing_status in TERMINAL_STATUSES:
+        return str(existing_status)
+    if existing_status in PACKAGE_PENDING_STATUSES:
+        return AGENT_READY_STATUS
+    if incoming_status in PACKAGE_PENDING_STATUSES:
+        return AGENT_READY_STATUS
+    return incoming_status or AGENT_READY_STATUS
+
+
 def _save_signal(signal: Dict[str, Any]) -> Dict[str, Any]:
     ensure_signal_pool_tables()
     now = now_iso()
     signal_id = signal["signalId"]
     with connect() as conn:
         existing = conn.execute("SELECT * FROM signal_pool_v14 WHERE signal_id = ?", (signal_id,)).fetchone()
-        status = (existing["status"] if existing else None) or signal.get("status") or "pending_rag_agent"
+        status = _agent_ready_status(existing["status"] if existing else None, signal.get("status"))
         created_at = existing["created_at"] if existing else now
-        payload = {**signal, "version": SIGNAL_POOL_VERSION, "status": status}
+        payload = {**signal, "version": SIGNAL_POOL_VERSION, "status": status, "agentReadyStatus": AGENT_READY_STATUS}
         conn.execute(
             """
             INSERT OR REPLACE INTO signal_pool_v14 (signal_id, data_version, entity_type, entity_id, store_id, signal_type, signal_strength, status, source_ref, payload, created_at, updated_at)
@@ -114,7 +127,7 @@ def list_signals(data_version: str | None = None, status: str | None = None, lim
 
 
 def _normalize_snapshot_signal(signal: Dict[str, Any], source_ref: str) -> Dict[str, Any]:
-    return {**signal, "version": SIGNAL_POOL_VERSION, "sourceRef": source_ref, "status": signal.get("status") or "pending_rag_agent", "rule": "V14.3 signal_pool consumes full product_signal_packages; Agent decides task value."}
+    return {**signal, "version": SIGNAL_POOL_VERSION, "sourceRef": source_ref, "status": AGENT_READY_STATUS, "rule": "V14.3.1 signal_pool normalizes product signal packages to pending_rag_agent so Agent can consume them."}
 
 
 def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 200, user_id: str | None = None) -> Dict[str, Any]:
@@ -133,4 +146,4 @@ def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 
         by_strength[str(signal.get("signalStrength"))] += 1
         by_status[str(signal.get("status"))] += 1
     ref = f"signal_pool:{data_version or 'latest'}"
-    return {"version": SIGNAL_POOL_VERSION, "mode": "full_product_signal_package_pool_no_task_creation", "dataVersion": data_version, "productSnapshotCount": signal_snapshot.get("productSnapshotCount", 0), "productSignalPackageCount": signal_snapshot.get("productSignalPackageCount", signal_snapshot.get("productSignalCount", 0)), "productSignalCount": signal_snapshot.get("productSignalCount", 0), "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "byStatus": dict(by_status), "signals": saved, "productSignalSnapshot": signal_snapshot, "rule": "V14.3 task_signal_station queues full signal packages; it does not decide operation value."}
+    return {"version": SIGNAL_POOL_VERSION, "mode": "full_product_signal_package_pool_no_task_creation", "dataVersion": data_version, "productSnapshotCount": signal_snapshot.get("productSnapshotCount", 0), "productSignalPackageCount": signal_snapshot.get("productSignalPackageCount", signal_snapshot.get("productSignalCount", 0)), "productSignalCount": signal_snapshot.get("productSignalCount", 0), "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "byStatus": dict(by_status), "signals": saved, "productSignalSnapshot": signal_snapshot, "rule": "V14.3.1 task_signal_station queues full signal packages as pending_rag_agent; it does not decide operation value."}
