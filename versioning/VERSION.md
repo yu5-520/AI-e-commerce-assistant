@@ -1,28 +1,25 @@
-Current Version: 12.14.3
+Current Version: 13.1.0
 
-V12.14.3 Deprecated Physical Archive Migration
+V13.1 Agent-Guided Snapshot Task Handoff
 
-This release performs the first physical migration of archive-only legacy files out of `src/services` and into Deprecated Station Archive.
+This release starts V13 by connecting the external data station line to the internal task judgment line without restoring old task-generation hooks.
 
 Core rule:
 
-- Archive-only files must not sit in the main service directory.
-- Business Mainline contains only clean stations and adapter dependencies.
-- Deprecated Station Archive owns old patch files and old monkey-patch records.
-- Legacy services still used by Station Adapter remain in `src/services` until their station internals are extracted.
+- External report data becomes metric facts, operating objects and operating snapshots.
+- Operating snapshots do not directly create tasks.
+- A snapshot creates a light `station_handoff` into the task judgment line.
+- Task generation remains blocked until RAG context and Agent judgment decide whether a task snapshot should be created.
+- V13.1 records the handoff as `pending_agent_judgment` instead of using system-only rigid rules.
 
 Key updates:
 
-- Added `src/deprecated_stations/` and `src/deprecated_stations/archive_services/`.
-- Archived first-batch legacy patch records:
-  - `v112_task_chain_fix_service`
-  - `v1211_agent_sop_enhancement_service`
-  - `v1212_rag_llm_agent_service`
-- Removed the original first-batch archive-only files from `src/services`.
-- Updated `src/services/deprecated_station_registry_service.py` to point archive-only entries to their new physical archive paths.
-- Updated `mainline_purity_check()` to fail if archive-only original paths reappear.
-- Updated `src/api/main.py` to `12.14.3`.
+- Added `src/services/snapshot_task_handoff_service.py`.
+- Added `src/api/routes/station_handoffs.py` with `/api/station-handoffs` APIs.
+- Updated `src/api/main.py` to `13.1.0` and included station handoff routes.
+- Added `station_handoffs` to runtime DB status and reset scope.
+- Updated frontend API client so import refresh creates a snapshot-to-task-judgment handoff after data refresh.
 
 Current contract:
 
-Business mainline code cannot import archive-only files. The archive stores governance records and original blob references. Useful legacy logic must be migrated through explicit station adapters, not through old startup hooks or direct imports.
+The data line stops at the operating snapshot. V13.1 creates the bridge into the task judgment line. V13.2 should consume the handoff, call RAG context and Agent judgment, and only then create task snapshots.
