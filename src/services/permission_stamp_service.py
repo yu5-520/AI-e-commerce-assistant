@@ -9,11 +9,16 @@ another owner.
 from __future__ import annotations
 
 from datetime import datetime
+from sqlite3 import OperationalError
 from typing import Any, Dict, List
 from uuid import uuid4
 
+from src.repositories.sqlite_repository import connect, loads
+
 PERMISSION_STAMP_VERSION = "14.5.0"
 ERP_OWNER_KEYS = ["ownerUserId", "owner_user_id", "operatorUserId", "operator_user_id", "assignedOperatorId", "assigned_operator_id", "运营ID", "运营账号", "负责人ID", "负责人"]
+PRODUCT_KEYS = ["productId", "product_id", "商品ID", "商品id", "商品编码", "erpProductCode", "erp_product_code", "skuId", "sku_id"]
+STORE_KEYS = ["storeId", "store_id", "店铺ID", "店铺id", "店铺编号", "店铺编码", "normalizedStoreId", "normalized_store_id"]
 
 
 def _text(value: Any) -> str | None:
@@ -30,16 +35,22 @@ def _as_list(value: Any) -> List[str]:
     if isinstance(value, str):
         if value.startswith("[") and value.endswith("]"):
             return [item.strip().strip("'\"") for item in value.strip("[]").split(",") if item.strip()]
+        if "," in value:
+            return [item.strip() for item in value.split(",") if item.strip()]
         return [value]
     return [str(value)]
 
 
-def explicit_erp_owner(row: Dict[str, Any]) -> str | None:
-    for key in ERP_OWNER_KEYS:
+def _first(row: Dict[str, Any], keys: List[str]) -> str | None:
+    for key in keys:
         value = _text(row.get(key))
         if value:
             return value
     return None
+
+
+def explicit_erp_owner(row: Dict[str, Any]) -> str | None:
+    return _first(row, ERP_OWNER_KEYS)
 
 
 def make_permission_stamp(*, uploaded_by_user_id: str | None, uploader_role_id: str | None = None, data_version: str | None = None, source: str | None = None, import_batch_id: str | None = None, row: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -82,15 +93,56 @@ def row_permission_stamp(row: Dict[str, Any]) -> Dict[str, Any]:
     return {"permissionStampId": row.get("permissionStampId"), "permissionSource": row.get("permissionSource"), "uploadedByUserId": row.get("uploadedByUserId"), "ownerUserId": row.get("ownerUserId"), "assignedOperatorId": row.get("assignedOperatorId"), "visibleUserIds": _as_list(row.get("visibleUserIds")), "visibleRoleIds": _as_list(row.get("visibleRoleIds")), "importBatchId": row.get("importBatchId")}
 
 
-def permission_stamp_allows(row: Dict[str, Any], user_id: str | None, role_id: str | None = None) -> bool:
-    if not user_id:
-        return True
-    if role_id in {"owner", "manager", "finance"}:
-        return True
-    stamp = row_permission_stamp(row)
+def _stamp_allows_user(stamp: Dict[str, Any], user_id: str) -> bool:
     allowed = set(_as_list(stamp.get("visibleUserIds")))
     for key in ["uploadedByUserId", "ownerUserId", "assignedOperatorId"]:
         value = stamp.get(key)
         if value:
             allowed.add(str(value))
     return str(user_id) in allowed
+
+
+def _operating_object_allows(row: Dict[str, Any], user_id: str) -> bool:
+    product = _first(row, PRODUCT_KEYS)
+    store = _first(row, STORE_KEYS)
+    if not product and not store:
+        return False
+    clauses: List[str] = []
+    params: List[Any] = []
+    if product:
+        clauses.append("product_id = ?")
+        params.append(product)
+    if store:
+        clauses.append("(store_id = ? OR normalized_store_id = ?)")
+        params.extend([store, store])
+    where = " AND ".join(clauses) if clauses else "1=0"
+    try:
+        with connect() as conn:
+            rows = conn.execute(f"SELECT imported_by_user_id, owner_user_id, assigned_operator_id, visible_user_ids, payload FROM operating_products WHERE {where} LIMIT 20", params).fetchall()
+    except OperationalError:
+        return False
+    for item in rows:
+        visible = set(_as_list(item["visible_user_ids"]))
+        for key in ["imported_by_user_id", "owner_user_id", "assigned_operator_id"]:
+            if item[key]:
+                visible.add(str(item[key]))
+        payload = loads(item["payload"])
+        if payload:
+            visible.update(_as_list(payload.get("visibleUserIds")))
+            for key in ["importedByUserId", "ownerUserId", "assignedOperatorId"]:
+                if payload.get(key):
+                    visible.add(str(payload.get(key)))
+        if str(user_id) in visible:
+            return True
+    return False
+
+
+def permission_stamp_allows(row: Dict[str, Any], user_id: str | None, role_id: str | None = None) -> bool:
+    if not user_id:
+        return True
+    if role_id in {"owner", "manager", "finance"}:
+        return True
+    stamp = row_permission_stamp(row)
+    if _stamp_allows_user(stamp, str(user_id)):
+        return True
+    return _operating_object_allows(row, str(user_id))
