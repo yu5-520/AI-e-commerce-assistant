@@ -1,6 +1,6 @@
 Current Version: 12.14.1
 
-V12.14.1 Station Contract Cleanup
+V12.14.1 Station Interface Mainline Cleanup
 
 This release closes the remaining gap between the old Pipeline route and the V12.14 Station Interface.
 
@@ -15,8 +15,7 @@ Core rule:
 
 Key updates:
 
-- Added `src/services/station_adapter_service.py` for narrow real adapters behind Station Interface.
-- Updated `src/services/station_contract_service.py` to use station adapters and write isolated business/diagnostic gates.
+- Updated `src/services/station_contract_service.py` to use narrow real adapters and write isolated business/diagnostic gates.
 - Updated `src/services/pipeline_gate_service.py` to add `run_type` and `is_diagnostic`, and default-filter diagnostic gates.
 - Updated `src/api/routes/pipeline.py` into a Station Interface compatibility layer.
 - Updated `src/api/routes/stations.py` to support `includeDiagnostic` for gate views.
