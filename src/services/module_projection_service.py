@@ -1,6 +1,7 @@
-"""V12 data-driven module projection service with strict scope gate.
+"""V14.5 data-driven module projection service.
 
 商品模块只做商品资产和定位展示；任务模块负责交叉验证和SOP。
+V14.5：投影层先验权限印章，再验旧店铺范围。谁上传报表，谁默认拥有该报表商品/店铺处理权限；ERP显式归属优先。
 """
 
 from __future__ import annotations
@@ -25,10 +26,11 @@ from src.services.metric_catalog_service import (
     system_codes,
 )
 from src.services.module_data_service import REPORT_GROUPS
+from src.services.permission_stamp_service import permission_stamp_allows, row_permission_stamp
 
-PROJECTION_VERSION = "12.0.0"
+PROJECTION_VERSION = "14.5.0"
 DATASET_LABELS = {"products": "商品报表", "inventory": "库存报表", "orders": "订单报表", "refunds": "退款报表", "customers": "客户报表"}
-DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "ERP", "refunds": "CRM", "customers": "CRM"}
+DATASET_SOURCE = {"products": "ERP", "inventory": "ERP", "orders": "订单报表", "refunds": "CRM", "customers": "CRM"}
 
 
 def _pick(row: Dict[str, Any], *fields: str, default: Any = None) -> Any:
@@ -144,10 +146,13 @@ def _row_visible(row: Dict[str, Any], user_id: str | None) -> bool:
             return False
     if not user_id:
         return True
-    if not store_id:
-        return True
     role = current_user(user_id).get("roleId")
     if role in {"owner", "manager", "finance"}:
+        return True
+    if permission_stamp_allows(row, user_id, role):
+        row["permissionStampAccepted"] = True
+        return True
+    if not store_id:
         return True
     return store_id in _visible_store_ids(user_id)
 
@@ -195,6 +200,7 @@ def _ensure_product(products: Dict[str, Dict[str, Any]], row: Dict[str, Any], st
     key = _product_key(row, store_id)
     ident = product_identity(row)
     codes = system_codes(row)
+    stamp = row_permission_stamp(row)
     if key not in products:
         title = str(pick(row, "product_name", default=f"导入商品 {product_id}") or f"导入商品 {product_id}")
         products[key] = {
@@ -234,10 +240,18 @@ def _ensure_product(products: Dict[str, Dict[str, Any]], row: Dict[str, Any], st
             "paidVisitors": "—",
             "afterSales": "标签观察",
             "afterSalesLevel": "good",
-            "suggestion": "V12商品档案：定位商品和指标事实；任务SOP在任务详情页处理。",
+            "suggestion": "V14.5商品档案：权限印章随报表行进入商品投影；任务SOP在任务详情页处理。",
             "sourceDataVersions": [],
             "sourceDatasets": [],
             "metricFacts": [],
+            "permissionStamp": stamp,
+            "permissionStampId": stamp.get("permissionStampId"),
+            "uploadedByUserId": stamp.get("uploadedByUserId"),
+            "ownerUserId": stamp.get("ownerUserId"),
+            "assignedOperatorId": stamp.get("assignedOperatorId"),
+            "visibleUserIds": stamp.get("visibleUserIds") or [],
+            "permissionSource": stamp.get("permissionSource"),
+            "importBatchId": stamp.get("importBatchId"),
         }
     return products[key]
 
@@ -372,4 +386,4 @@ def projection_summary(user_id: str | None = None) -> Dict[str, Any]:
     reports = projected_report_groups(user_id)
     quarantined = quarantined_dataset_rows() if strict_data_scope_enabled() else []
     metric_fact_count = sum(len(item.get("metricFacts") or []) for item in products)
-    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "metricFactCount": metric_fact_count, "scopedStoreIds": sorted(_visible_store_ids(user_id)), "strictDataScope": strict_data_scope_enabled(), "quarantinedRowCount": len(quarantined)}
+    return {"version": PROJECTION_VERSION, "hasData": bool(latest_payload or products or traffic), "latestDataVersion": latest_payload.get("dataVersion") if latest_payload else None, "latestDatasetName": latest_payload.get("datasetName") if latest_payload else None, "latestSnapshotAt": latest_payload.get("createdAt") if latest_payload else None, "productCount": len(products), "trafficCardCount": len(traffic), "reportCount": sum(len(group.get("reports", [])) for group in reports), "dataVersionCount": len(latest), "metricFactCount": metric_fact_count, "scopedStoreIds": sorted(_visible_store_ids(user_id)), "strictDataScope": strict_data_scope_enabled(), "quarantinedRowCount": len(quarantined), "permissionStampProjection": True}
