@@ -1,28 +1,28 @@
-Current Version: 12.14.0
+Current Version: 12.14.1
 
-V12.14.0 Station Contract & Ops Diagnostic Train
+V12.14.1 Station Contract Cleanup
 
-This release upgrades pipeline stations from a flow concept into standard addressable station modules.
+This release closes the remaining gap between the old Pipeline route and the V12.14 Station Interface.
 
 Core rule:
 
-- Every station has a registered identity, stage, backend module, frontend module, contract, health surface and standard interface.
-- Frontend and backend should talk through Station Interface and pipeline gates instead of direct internal service coupling.
-- The Ops Diagnostic Train runs diagnostic station checks without carrying real business data.
-- Business pages still read snapshots and task packages only.
+- `/api/pipeline` is now a compatibility layer.
+- Pipeline task generation and snapshot generation delegate to Station Contract instead of calling business services directly.
+- Pipeline gates separate business gates from Ops Diagnostic Train gates with `run_type` and `is_diagnostic`.
+- Business summaries hide diagnostic gates by default.
+- Station Contract uses real adapters for `operating_snapshot_station` and `task_signal_station`; diagnostic runs remain simulated.
+- Global startup Agent/RAG monkey patches are removed from `main.py` mainline and should be executed only by explicit station flow.
 
 Key updates:
 
-- Added `src/services/station_registry_service.py` for station registration and ordering.
-- Added `src/services/station_contract_service.py` for input/output contracts, station health, standard run/replay and gate views.
-- Added `src/services/ops_diagnostic_train_service.py` for diagnostic train runs and station checks.
-- Added `src/api/routes/stations.py` with `/api/stations` standard station interfaces.
-- Added `src/api/routes/ops.py` with `/api/ops/train/run`, latest run, run history and station health APIs.
-- Updated `src/api/main.py` to include station and ops routers and bump API version to `12.14.0`.
-- Updated `web_demo/modules/system-status/page.js` with station health and Ops Diagnostic Train UI.
-- Updated `src/services/system_service.py` so reset/db-status include ops diagnostic tables.
-- Bumped frontend cache to `12.14.0`.
+- Added `src/services/station_adapter_service.py` for narrow real adapters behind Station Interface.
+- Updated `src/services/station_contract_service.py` to use station adapters and write isolated business/diagnostic gates.
+- Updated `src/services/pipeline_gate_service.py` to add `run_type` and `is_diagnostic`, and default-filter diagnostic gates.
+- Updated `src/api/routes/pipeline.py` into a Station Interface compatibility layer.
+- Updated `src/api/routes/stations.py` to support `includeDiagnostic` for gate views.
+- Updated `src/api/main.py` to `12.14.1` and remove startup monkey-patch execution from the mainline.
+- Bumped frontend cache to `12.14.1`.
 
 Current contract:
 
-The business train carries real data. The ops train carries diagnostic inputs only. Each station exposes contract, health, run, replay, gates and latest through a standard interface. The ops train checks these interfaces to locate broken stations before users discover failures by opening pages.
+The business train runs through Station Interface. The old pipeline URLs remain available for compatibility, but they forward into the relevant station. Ops Diagnostic Train records stay isolated from business gate summaries unless explicitly requested with `includeDiagnostic=true` or a `DIAG-*` data version.
