@@ -1,4 +1,8 @@
-"""V12.8.1 task lifecycle orchestrator."""
+"""V12.9 task lifecycle orchestrator.
+
+The state machine is the write entrance; this orchestrator attaches lifecycle
+snapshots, recap cycles and RAG candidate status to the same task_id.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ from src.services import module_task_service
 from src.services.rag_feedback_loop_service import RAG_FEEDBACK_LOOP_VERSION, build_rag_candidate_from_recap
 from src.services.task_recap_scheduler_service import RECAP_SCHEDULER_VERSION, complete_recap_cycle, list_recap_cycles_for_task, schedule_recap_cycles
 
-TASK_LIFECYCLE_VERSION = "12.8.1"
+TASK_LIFECYCLE_VERSION = "12.9.0"
 
 STAGE_BY_STATUS = {
     "待拆分": "generated",
@@ -20,8 +24,9 @@ STAGE_BY_STATUS = {
     "待复核": "evidence_submitted",
     "已提交": "evidence_submitted",
     "已退回": "returned",
-    "已完成": "manager_reviewed",
-    "已通过": "manager_reviewed",
+    "已完成": "recap_scheduled",
+    "等待自动复盘": "recap_scheduled",
+    "已通过": "recap_scheduled",
     "已写入复盘": "recap_scheduled",
     "已归档": "archived",
 }
@@ -44,6 +49,10 @@ def lifecycle_stage(task: Dict[str, Any]) -> str:
     lifecycle = task.get("taskLifecycle") or {}
     if lifecycle.get("stage") in STAGE_LABELS:
         return lifecycle["stage"]
+    if task.get("lifecycleStage") in STAGE_LABELS:
+        return task["lifecycleStage"]
+    if task.get("workflowStatus") == "等待自动复盘":
+        return "recap_scheduled"
     return STAGE_BY_STATUS.get(task.get("status"), "generated")
 
 
@@ -51,7 +60,7 @@ def _next_expected(stage: str) -> str:
     return {
         "generated": "运营接收任务",
         "accepted": "运营提交处理材料",
-        "evidence_submitted": "主管复核材料",
+        "evidence_submitted": "主管复核材料或系统判断自动复盘",
         "manager_reviewed": "系统生成复盘周期",
         "recap_scheduled": "系统按后续报表完成自动复盘",
         "recap_completed": "生成RAG候选并等待审核",
