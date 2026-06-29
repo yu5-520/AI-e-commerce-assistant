@@ -1,4 +1,9 @@
-"""V12.14 standard station contract service."""
+"""V12.14.1 standard station contract service.
+
+Station Interface is the only stable surface for pipeline station execution. Old
+pipeline routes must call this layer instead of reaching into service internals.
+Diagnostic runs stay simulated; business runs may use station adapters.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,7 @@ from typing import Any, Dict
 from src.services.pipeline_gate_service import record_stage_gate, stage_summary
 from src.services.station_registry_service import STATION_REGISTRY_VERSION, get_station, list_stations
 
-STATION_CONTRACT_VERSION = "12.14.0"
+STATION_CONTRACT_VERSION = "12.14.1"
 
 DEFAULT_INPUTS = {
     "import_station": ["source", "dataVersion"],
@@ -41,6 +46,13 @@ def _is_blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and value.strip() == "")
 
 
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(str(value or "0")))
+    except Exception:
+        return default
+
+
 def station_contract(station_id: str) -> Dict[str, Any]:
     station = get_station(station_id)
     if not station:
@@ -61,7 +73,8 @@ def station_contract(station_id: str) -> Dict[str, Any]:
         "backendModule": station.get("backendModule"),
         "frontendModule": station.get("frontendModule"),
         "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"},
-        "rule": "站点只暴露标准契约和标准接口，内部实现可单独维修。",
+        "adapter": {"realAdapterSupported": sid in {"operating_snapshot_station", "task_signal_station"}, "diagnosticUsesSimulation": True},
+        "rule": "站点只暴露标准契约和标准接口，内部实现可单独维修；旧Pipeline只能作为兼容层调用本站接口。",
     }
 
 
@@ -92,13 +105,52 @@ def station_health(station_id: str) -> Dict[str, Any]:
     return {"version": STATION_CONTRACT_VERSION, "stationId": station["stationId"], "stage": station["stage"], "title": station["title"], "status": "healthy" if module_ok else "degraded", "backendModule": station.get("backendModule"), "moduleImportOk": module_ok, "errorMessage": error, "gateTableOk": gates.get("gateCount") is not None, "contract": station_contract(station["stationId"]), "rule": "Health 只检查标准站点接口和模块可达性，不执行业务数据流。"}
 
 
-def station_gates(station_id: str, data_version: str | None = None, limit: int = 40) -> Dict[str, Any]:
+def station_gates(station_id: str, data_version: str | None = None, limit: int = 40, *, include_diagnostic: bool = False) -> Dict[str, Any]:
     station = get_station(station_id)
     if not station:
         return {"version": STATION_CONTRACT_VERSION, "stationId": station_id, "gates": [], "error": "station_not_found"}
-    summary = stage_summary(data_version=data_version, limit=limit)
+    summary = stage_summary(data_version=data_version, limit=limit, include_diagnostic=include_diagnostic)
     gates = [gate for gate in summary.get("gates", []) if gate.get("stage") == station["stage"]]
-    return {"version": STATION_CONTRACT_VERSION, "stationId": station["stationId"], "stage": station["stage"], "gates": gates, "gateCount": len(gates)}
+    return {"version": STATION_CONTRACT_VERSION, "stationId": station["stationId"], "stage": station["stage"], "includeDiagnostic": include_diagnostic, "gates": gates, "gateCount": len(gates)}
+
+
+def _base_output(station: Dict[str, Any], data_version: str | None, diagnostic: bool) -> Dict[str, Any]:
+    output_ref = f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
+    output = {"dataVersion": data_version, "outputRef": output_ref, "stationId": station["stationId"], "isDiagnostic": diagnostic, "adapterMode": "simulated"}
+    for key in DEFAULT_OUTPUTS.get(station["stationId"], []):
+        output.setdefault(key, output_ref if key.endswith("Ref") or key == "outputRef" else 1)
+    return output
+
+
+def _run_real_adapter(station: Dict[str, Any], body: Dict[str, Any], data_version: str | None, output: Dict[str, Any]) -> Dict[str, Any]:
+    sid = station["stationId"]
+    if sid == "operating_snapshot_station":
+        from src.services.operating_unit_snapshot_service import materialize_operating_unit_snapshot
+
+        snapshot = materialize_operating_unit_snapshot(user_id=body.get("userId") or body.get("user_id"), data_version=data_version, force=bool(body.get("force", True)))
+        output.update({
+            "adapterMode": "real_operating_snapshot_adapter",
+            "snapshotKey": snapshot.get("snapshotKey") or output.get("outputRef"),
+            "storeRows": len(snapshot.get("storeRows") or []),
+            "outputRef": snapshot.get("snapshotKey") or output.get("outputRef"),
+            "adapterResult": {"snapshotKey": snapshot.get("snapshotKey"), "hasData": snapshot.get("hasData"), "storeRows": len(snapshot.get("storeRows") or [])},
+        })
+        return output
+    if sid == "task_signal_station":
+        from src.services.risk_task_service import generate_risk_tasks_for_signals
+
+        result = generate_risk_tasks_for_signals(data_version=data_version, requester_role_id=body.get("requesterRoleId") or body.get("requester_role_id") or "operator")
+        output.update({
+            "adapterMode": "real_task_signal_adapter",
+            "createdTaskCount": _as_int(result.get("createdTaskCount")),
+            "strictRiskCreatedTaskCount": _as_int(result.get("strictRiskCreatedTaskCount")),
+            "operatingCadenceCreatedTaskCount": _as_int(result.get("operatingCadenceCreatedTaskCount")),
+            "outputRef": f"tasks:{data_version or 'latest'}",
+            "adapterResult": result,
+        })
+        return output
+    output["adapterMode"] = "contract_only_no_real_adapter"
+    return output
 
 
 def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *, diagnostic: bool = False) -> Dict[str, Any]:
@@ -108,11 +160,17 @@ def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *,
         return {"version": STATION_CONTRACT_VERSION, "ok": False, "status": "failed", "error": "station_not_found", "stationId": station_id}
     input_check = validate_contract_payload(station["stationId"], body, direction="input")
     data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V12-14" if diagnostic else None)
-    output_ref = f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
-    simulated_output = {"dataVersion": data_version, "outputRef": output_ref, "stationId": station["stationId"], "isDiagnostic": diagnostic}
-    for key in DEFAULT_OUTPUTS.get(station["stationId"], []):
-        simulated_output.setdefault(key, output_ref if key.endswith("Ref") or key == "outputRef" else 1)
-    output_check = validate_contract_payload(station["stationId"], simulated_output, direction="output")
-    status = "completed" if input_check["status"] != "failed" and output_check["status"] != "failed" else "failed"
-    gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"]}, output_payload=simulated_output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output_ref)
-    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": simulated_output, "gate": gate, "nextStation": station.get("nextStation"), "rule": "V12.14 标准站点运行只通过 Station Interface 写阀门和输出引用。"}
+    output = _base_output(station, data_version, diagnostic)
+    use_real_adapter = bool(body.get("useRealAdapter", True)) and not diagnostic
+    adapter_error = None
+    if use_real_adapter:
+        try:
+            output = _run_real_adapter(station, body, data_version, output)
+        except Exception as exc:
+            adapter_error = str(exc)
+            output["adapterMode"] = "real_adapter_failed_fallback_contract"
+            output["adapterError"] = adapter_error
+    output_check = validate_contract_payload(station["stationId"], output, direction="output")
+    status = "completed" if input_check["status"] != "failed" and output_check["status"] != "failed" and not adapter_error else "failed" if adapter_error else "completed"
+    gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"], "useRealAdapter": use_real_adapter}, output_payload=output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output.get("outputRef"), error_message=adapter_error, run_type="diagnostic" if diagnostic else "business", is_diagnostic=diagnostic)
+    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "nextStation": station.get("nextStation"), "adapterError": adapter_error, "rule": "V12.14.1：站点运行只走 Station Interface；诊断使用模拟，业务可走真实adapter。"}
