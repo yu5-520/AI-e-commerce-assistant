@@ -1,12 +1,18 @@
-Current Version: 12.11.0
+Current Version: 12.11.1
 
-V12.11.0 system change pack + Agent SOP + automatic recap
+V12.11.1 lifecycle cleanup release
 
-This release keeps the V12.10 task lifecycle and submit page split, then upgrades task quality:
+This release keeps V12.11 system change pack + Agent SOP + automatic recap, then cleans old files and old write paths that were still occupying live flow positions.
 
-- System layer extracts deterministic metric changes from uploaded reports and builds a systemChangePack.
-- Agent layer reads the change pack, generates the operating judgment, executable SOP, task title and system recap line.
-- Operator tasks no longer ask operators to split traffic sources, split ad plans, find ROI causes, or manually recap data.
-- Operators only execute the Agent SOP and submit screenshots / notes / data evidence.
-- After submission, later report uploads or interface refreshes trigger system auto-recap; recap results are written to daily reports, weekly reports and the recap library.
-- When system recap misses the recap line, the system generates the next task automatically.
+Fixed chain points:
+
+- `submit_task_evidence` now only stores evidence and no longer calls the legacy `submit_task` status writer.
+- `/api/modules/todo/{task_id}/submit-evidence` stores evidence first, then uses the unified lifecycle state machine to submit.
+- `split` and `assign` now route through `task_lifecycle_state_machine_service` instead of direct `update_task`.
+- Product, competitor, listing, traffic and report manual task creation endpoints now wrap old flat module payloads into V12.11 SOP task packages.
+- `backend/README.md` is marked deprecated and points to `src.api.main:app`.
+- API, frontend cache, todo action surface, lifecycle state machine, repository write path and risk task facade versions are aligned to V12.11.1.
+
+Current contract:
+
+System extracts data changes. Agent generates operating judgment and executable SOP. Operators execute and submit evidence. The system performs automatic recap after later report or interface data refreshes and writes the result to daily reports, weekly reports and the recap library.
