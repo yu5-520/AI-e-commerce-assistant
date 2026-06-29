@@ -18,25 +18,12 @@ from src.services.metric_fact_store_service import ensure_metric_fact_tables
 
 SIGNAL_POOL_VERSION = "14.0.0"
 TRACKED_METRICS = {
-    "roi",
-    "payment_amount",
-    "ad_spend",
-    "inventory_qty",
-    "sellable_days",
-    "payment_conversion_rate",
-    "click_rate",
-    "visitor_count",
-    "page_view_count",
-    "click_user_count",
-    "organic_visitor_count",
-    "paid_visitor_count",
-    "gross_margin_rate",
-    "refund_rate",
-    "refund_amount",
-    "payment_order_count",
+    "roi", "payment_amount", "ad_spend", "inventory_qty", "sellable_days",
+    "payment_conversion_rate", "click_rate", "visitor_count", "page_view_count",
+    "click_user_count", "organic_visitor_count", "paid_visitor_count",
+    "gross_margin_rate", "refund_rate", "refund_amount", "payment_order_count",
     "payment_unit_count",
 }
-REDLINE_HINTS = {"inventory_zero", "gross_margin_low", "refund_rate_high"}
 
 
 def now_iso() -> str:
@@ -45,22 +32,6 @@ def now_iso() -> str:
 
 def make_signal_id() -> str:
     return f"SIG-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:6].upper()}"
-
-
-def _json_list(value: Any) -> str:
-    import json
-
-    return json.dumps(value if value is not None else [], ensure_ascii=False)
-
-
-def _loads_list(value: str | None) -> List[Dict[str, Any]]:
-    import json
-
-    try:
-        data = json.loads(value or "[]")
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
 
 
 def _num(value: Any) -> float | None:
@@ -103,19 +74,7 @@ def ensure_signal_pool_tables() -> None:
             )
             """
         )
-        ensure_columns(
-            conn,
-            "signal_pool_v14",
-            {
-                "data_version": "TEXT",
-                "entity_type": "TEXT",
-                "entity_id": "TEXT",
-                "store_id": "TEXT",
-                "signal_strength": "TEXT",
-                "source_ref": "TEXT",
-                "updated_at": "TEXT",
-            },
-        )
+        ensure_columns(conn, "signal_pool_v14", {"data_version": "TEXT", "entity_type": "TEXT", "entity_id": "TEXT", "store_id": "TEXT", "signal_strength": "TEXT", "source_ref": "TEXT", "updated_at": "TEXT"})
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_pool_v14_version ON signal_pool_v14(data_version, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_pool_v14_entity ON signal_pool_v14(entity_type, entity_id, store_id, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_pool_v14_status ON signal_pool_v14(status, created_at)")
@@ -127,24 +86,30 @@ def _table_exists(conn: Any, table: str) -> bool:
 
 
 def _load_metric_facts(data_version: str | None = None, limit: int = 12000) -> List[Dict[str, Any]]:
+    """Load historical facts for comparison, while tagging this run with data_version.
+
+    V14 does not filter to only the latest data_version because that would erase the
+    multi-report comparison window. Tenant / account isolation is still handled at
+    the API and repository scope; this demo-stage query keeps history visible so
+    three uploaded reports can produce change signals.
+    """
     ensure_metric_fact_tables()
     with connect() as conn:
         if not _table_exists(conn, "product_metric_facts"):
             return []
-        where = "WHERE metric_code IN ({})".format(",".join("?" for _ in TRACKED_METRICS))
-        params: List[Any] = [*sorted(TRACKED_METRICS)]
-        if data_version:
-            where += " AND data_version = ?"
-            params.append(data_version)
         rows = conn.execute(
             f"""
             SELECT *
             FROM product_metric_facts
-            {where}
-            ORDER BY COALESCE(stat_date, updated_at) ASC, updated_at ASC
+            WHERE metric_code IN ({','.join('?' for _ in TRACKED_METRICS)})
+            ORDER BY COALESCE(product_id, sku_id, erp_product_code, ''),
+                     COALESCE(store_id, store_code, store_name, ''),
+                     metric_code,
+                     COALESCE(stat_date, updated_at) ASC,
+                     updated_at ASC
             LIMIT ?
             """,
-            [*params, limit],
+            [*sorted(TRACKED_METRICS), limit],
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -158,10 +123,9 @@ def _metric_signal_type(metric: str, latest: float | None, change_rate: float | 
         return "redline_refund_floor", "high"
     if change_rate is None:
         return "metric_observed", "low"
-    abs_change = abs(change_rate)
-    if abs_change >= 0.25:
+    if abs(change_rate) >= 0.25:
         return "metric_large_wave", "medium"
-    if abs_change >= 0.08:
+    if abs(change_rate) >= 0.08:
         return "metric_small_wave", "low"
     return "normal_wave_candidate", "low"
 
@@ -189,10 +153,11 @@ def _build_signal(product_id: str, store_id: str | None, metric: str, rows: List
     latest_value = _num(latest.get("metric_value"))
     change_rate = _change(first_value, latest_value)
     signal_type, strength = _metric_signal_type(metric, latest_value, change_rate)
-    signal = {
+    return {
         "version": SIGNAL_POOL_VERSION,
         "signalId": make_signal_id(),
         "dataVersion": data_version or latest.get("data_version"),
+        "latestSourceDataVersion": latest.get("data_version"),
         "entityType": "product",
         "entityId": product_id,
         "productId": product_id,
@@ -213,11 +178,9 @@ def _build_signal(product_id: str, store_id: str | None, metric: str, rows: List
         "status": "pending_rag_agent",
         "rule": "V14：信号池宽进，只记录事实变化和风险提示；是否生成任务由RAG增强后的Agent判断。",
     }
-    return signal
 
 
 def _build_data_gap_signals(facts: List[Dict[str, Any]], data_version: str | None) -> List[Dict[str, Any]]:
-    gaps: List[Dict[str, Any]] = []
     missing_anchor = 0
     missing_date = 0
     for row in facts:
@@ -226,30 +189,14 @@ def _build_data_gap_signals(facts: List[Dict[str, Any]], data_version: str | Non
             missing_anchor += 1
         if _safe_date(row.get("stat_date") or row.get("updated_at")) == "未知日期":
             missing_date += 1
+    gaps: List[Dict[str, Any]] = []
     for gap_type, count, reason in [
         ("data_gap_missing_product_anchor", missing_anchor, "部分指标事实缺少商品ID/SKU/ERP商品编码，无法稳定归属到商品。"),
         ("data_gap_missing_stat_date", missing_date, "部分指标事实缺少统计日期，无法稳定比较趋势。"),
     ]:
         if count <= 0:
             continue
-        gaps.append(
-            {
-                "version": SIGNAL_POOL_VERSION,
-                "signalId": make_signal_id(),
-                "dataVersion": data_version,
-                "entityType": "report",
-                "entityId": data_version or "latest",
-                "productId": None,
-                "storeId": None,
-                "signalType": gap_type,
-                "signalStrength": "medium",
-                "metricCode": "data_quality",
-                "gapCount": count,
-                "reason": reason,
-                "status": "pending_rag_agent",
-                "rule": "V14：数据缺口也是信号，可由Agent生成补数/复核任务，而不是被任务门槛吞掉。",
-            }
-        )
+        gaps.append({"version": SIGNAL_POOL_VERSION, "signalId": make_signal_id(), "dataVersion": data_version, "entityType": "report", "entityId": data_version or "latest", "productId": None, "storeId": None, "signalType": gap_type, "signalStrength": "medium", "metricCode": "data_quality", "gapCount": count, "reason": reason, "status": "pending_rag_agent", "rule": "V14：数据缺口也是信号，可由Agent生成补数/复核任务，而不是被任务门槛吞掉。"})
     return gaps
 
 
@@ -264,20 +211,7 @@ def _save_signal(signal: Dict[str, Any]) -> Dict[str, Any]:
                 signal_strength, status, source_ref, payload, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (
-                signal["signalId"],
-                signal.get("dataVersion"),
-                signal.get("entityType"),
-                signal.get("entityId"),
-                signal.get("storeId"),
-                signal.get("signalType"),
-                signal.get("signalStrength"),
-                signal.get("status") or "pending_rag_agent",
-                signal.get("sourceRef") or f"metric_facts:{signal.get('dataVersion') or 'latest'}",
-                dumps(signal),
-                created_at,
-                created_at,
-            ),
+            (signal["signalId"], signal.get("dataVersion"), signal.get("entityType"), signal.get("entityId"), signal.get("storeId"), signal.get("signalType"), signal.get("signalStrength"), signal.get("status") or "pending_rag_agent", signal.get("sourceRef") or f"metric_facts:{signal.get('dataVersion') or 'latest'}", dumps(signal), created_at, created_at),
         )
         conn.commit()
     return signal
@@ -285,19 +219,7 @@ def _save_signal(signal: Dict[str, Any]) -> Dict[str, Any]:
 
 def row_to_signal(row: Any) -> Dict[str, Any]:
     payload = loads(row["payload"])
-    return {
-        **payload,
-        "signalId": row["signal_id"],
-        "dataVersion": row["data_version"],
-        "entityType": row["entity_type"],
-        "entityId": row["entity_id"],
-        "storeId": row["store_id"],
-        "signalType": row["signal_type"],
-        "signalStrength": row["signal_strength"],
-        "status": row["status"],
-        "createdAt": row["created_at"],
-        "updatedAt": row["updated_at"],
-    }
+    return {**payload, "signalId": row["signal_id"], "dataVersion": row["data_version"], "entityType": row["entity_type"], "entityId": row["entity_id"], "storeId": row["store_id"], "signalType": row["signal_type"], "signalStrength": row["signal_strength"], "status": row["status"], "createdAt": row["created_at"], "updatedAt": row["updated_at"]}
 
 
 def list_signals(data_version: str | None = None, status: str | None = None, limit: int = 200) -> Dict[str, Any]:
@@ -328,9 +250,8 @@ def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 
     signals: List[Dict[str, Any]] = []
     for (product_id, store_id), metrics in grouped.items():
         for metric, rows in metrics.items():
-            if not rows:
-                continue
-            signals.append(_build_signal(product_id, store_id, metric, rows, data_version))
+            if rows:
+                signals.append(_build_signal(product_id, store_id, metric, rows, data_version))
     signals.extend(_build_data_gap_signals(facts, data_version))
     strength_rank = {"high": 0, "medium": 1, "low": 2}
     signals.sort(key=lambda item: (strength_rank.get(str(item.get("signalStrength")), 9), item.get("entityId") or "", item.get("metricCode") or ""))
@@ -341,16 +262,4 @@ def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 
         by_type[str(signal.get("signalType"))] += 1
         by_strength[str(signal.get("signalStrength"))] += 1
     ref = f"signal_pool:{data_version or 'latest'}"
-    return {
-        "version": SIGNAL_POOL_VERSION,
-        "mode": "wide_signal_pool_no_task_creation",
-        "dataVersion": data_version,
-        "taskSignalRef": ref,
-        "outputRef": ref,
-        "signalCount": len(saved),
-        "createdTaskCount": 0,
-        "byType": dict(by_type),
-        "byStrength": dict(by_strength),
-        "signals": saved,
-        "rule": "V14：task_signal_station只生成信号池，不再绕过RAG/Agent直接创建任务。",
-    }
+    return {"version": SIGNAL_POOL_VERSION, "mode": "wide_signal_pool_no_task_creation", "dataVersion": data_version, "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "signals": saved, "rule": "V14：task_signal_station只生成信号池，不再绕过RAG/Agent直接创建任务。"}
