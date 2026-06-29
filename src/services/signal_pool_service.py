@@ -1,8 +1,7 @@
-"""V14.2 signal pool service.
+"""V14.3 signal pool service.
 
-Signal Pool consumes signal snapshots generated from system snapshots. The main
-path is product snapshot -> product signal snapshot -> signal pool. Low-level
-fact scanning is no longer the primary task signal source.
+Signal Pool consumes full product signal packages. Normal products are not
+dropped before Agent judgment; normal_state packages are still queued.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from typing import Any, Dict, List
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.product_signal_snapshot_service import materialize_product_signal_snapshot
 
-SIGNAL_POOL_VERSION = "14.2.0"
+SIGNAL_POOL_VERSION = "14.3.0"
 
 
 def now_iso() -> str:
@@ -62,7 +61,7 @@ def _save_signal(signal: Dict[str, Any]) -> Dict[str, Any]:
             INSERT OR REPLACE INTO signal_pool_v14 (signal_id, data_version, entity_type, entity_id, store_id, signal_type, signal_strength, status, source_ref, payload, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (signal_id, signal.get("dataVersion"), signal.get("entityType"), signal.get("entityId"), signal.get("storeId"), signal.get("signalType"), signal.get("signalStrength"), status, signal.get("sourceRef") or f"product_signal_snapshot:{signal.get('dataVersion') or 'latest'}", dumps(payload), created_at, now),
+            (signal_id, signal.get("dataVersion"), signal.get("entityType"), signal.get("entityId"), signal.get("storeId"), signal.get("signalType"), signal.get("signalStrength"), status, signal.get("sourceRef") or f"product_signal_package:{signal.get('dataVersion') or 'latest'}", dumps(payload), created_at, now),
         )
         conn.commit()
     signal["status"] = status
@@ -104,7 +103,7 @@ def list_signals(data_version: str | None = None, status: str | None = None, lim
         params.append(status)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with connect() as conn:
-        rows = conn.execute(f"SELECT * FROM signal_pool_v14 {where} ORDER BY created_at DESC LIMIT ?", [*params, limit]).fetchall()
+        rows = conn.execute(f"SELECT * FROM signal_pool_v14 {where} ORDER BY created_at ASC LIMIT ?", [*params, limit]).fetchall()
     items = [row_to_signal(row) for row in rows]
     by_type: Dict[str, int] = defaultdict(int)
     by_status: Dict[str, int] = defaultdict(int)
@@ -115,21 +114,15 @@ def list_signals(data_version: str | None = None, status: str | None = None, lim
 
 
 def _normalize_snapshot_signal(signal: Dict[str, Any], source_ref: str) -> Dict[str, Any]:
-    return {
-        **signal,
-        "version": SIGNAL_POOL_VERSION,
-        "sourceRef": source_ref,
-        "status": signal.get("status") or "pending_rag_agent",
-        "rule": "V14.2 signal_pool consumes product_signal_snapshot from system product snapshot comparison.",
-    }
+    return {**signal, "version": SIGNAL_POOL_VERSION, "sourceRef": source_ref, "status": signal.get("status") or "pending_rag_agent", "rule": "V14.3 signal_pool consumes full product_signal_packages; Agent decides task value."}
 
 
 def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 200, user_id: str | None = None) -> Dict[str, Any]:
     ensure_signal_pool_tables()
     signal_snapshot = materialize_product_signal_snapshot(data_version=data_version, user_id=user_id, force=True)
     source_ref = signal_snapshot.get("productSignalSnapshotRef") or signal_snapshot.get("outputRef") or f"product_signal_snapshot:{data_version or 'latest'}"
-    raw_signals = signal_snapshot.get("signals") or []
-    strength_rank = {"high": 0, "medium": 1, "low": 2}
+    raw_signals = signal_snapshot.get("productSignalPackages") or signal_snapshot.get("signals") or []
+    strength_rank = {"high": 0, "medium": 1, "low": 2, "normal": 3}
     raw_signals.sort(key=lambda item: (strength_rank.get(str(item.get("signalStrength")), 9), item.get("entityId") or "", item.get("metricCode") or ""))
     saved = [_save_signal(_normalize_snapshot_signal(signal, source_ref)) for signal in raw_signals[:max_signals]]
     by_type: Dict[str, int] = defaultdict(int)
@@ -140,4 +133,4 @@ def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 
         by_strength[str(signal.get("signalStrength"))] += 1
         by_status[str(signal.get("status"))] += 1
     ref = f"signal_pool:{data_version or 'latest'}"
-    return {"version": SIGNAL_POOL_VERSION, "mode": "snapshot_signal_pool_no_task_creation", "dataVersion": data_version, "productSnapshotCount": signal_snapshot.get("productSnapshotCount", 0), "productSignalCount": signal_snapshot.get("productSignalCount", 0), "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "byStatus": dict(by_status), "signals": saved, "productSignalSnapshot": signal_snapshot, "rule": "V14.2 task_signal_station consumes product_signal_snapshot; it does not scan low-level fact tables as mainline."}
+    return {"version": SIGNAL_POOL_VERSION, "mode": "full_product_signal_package_pool_no_task_creation", "dataVersion": data_version, "productSnapshotCount": signal_snapshot.get("productSnapshotCount", 0), "productSignalPackageCount": signal_snapshot.get("productSignalPackageCount", signal_snapshot.get("productSignalCount", 0)), "productSignalCount": signal_snapshot.get("productSignalCount", 0), "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "byStatus": dict(by_status), "signals": saved, "productSignalSnapshot": signal_snapshot, "rule": "V14.3 task_signal_station queues full signal packages; it does not decide operation value."}
