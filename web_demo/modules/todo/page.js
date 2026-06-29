@@ -90,7 +90,7 @@
   function applyTransitionResult(result) {
     const task = result?.task || result;
     if (task?.id) window.AppTaskStore?.upsert?.(task);
-    window.dispatchEvent(new CustomEvent("v1210-task-transition", { detail: result }));
+    window.dispatchEvent(new CustomEvent("v1211-task-transition", { detail: result }));
     return task;
   }
   function focusTask(taskId) { if (!taskId) return; requestAnimationFrame(() => { const card = document.querySelector(`[data-task-card="${CSS.escape(taskId)}"]`); if (!card) return; card.scrollIntoView({ behavior: "smooth", block: "center" }); card.style.boxShadow = "0 0 0 4px rgba(67, 56, 202, 0.18)"; setTimeout(() => { card.style.boxShadow = ""; }, 1800); }); }
@@ -105,7 +105,7 @@
       const tasks = sortTasks(visibleTaskQueue(active));
       const user = AppApi.currentUser?.() || {};
       const empty = "当前账号没有需要立即处理的执行任务。候选任务、趋势信号和观察项进入日报/周报素材。";
-      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.10</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。任务自动接收后进入提交页，提交材料后再进入复核或自动复盘。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
+      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.11.1</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。任务自动接收后进入提交页，提交材料后进入复核或系统自动复盘。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
     },
     mount(ctx) {
       focusTask(ctx.state?.focusTaskId);
