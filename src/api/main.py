@@ -13,15 +13,15 @@ from src.api.routes import accounts, approvals, architecture, audit, data_import
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.4.0"
+API_VERSION = "14.4.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "task_intent_contract_lifecycle",
+    "mode": "task_intent_permission_envelope_lifecycle",
     "mainline": ["operating_snapshot_station", "system_product_snapshot_station", "product_signal_snapshot_station", "task_signal_station", "rag_context_station", "agent_judgment_station", "task_snapshot_station", "task_pool_station", "task_lifecycle_stations"],
-    "rule": "V14.4：任务链路新增TaskIntent契约层。Agent输出、任务快照、任务池和旧任务系统之间不再互相读取内部字段，统一先归一成标准任务意图，再进入可见任务与生命周期。",
+    "rule": "V14.4.1：TaskIntent增加PermissionEnvelope，旧权限门只读取结构化预算和权限字段，禁止从商品编号、标题、期限和自由文本抓数字误判审批。",
 }
 
 if WEB_DEMO_DIR.exists():
@@ -33,7 +33,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "task_intent_contract_lifecycle", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "task_intent_permission_envelope_lifecycle", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
