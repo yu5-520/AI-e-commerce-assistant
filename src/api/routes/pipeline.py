@@ -1,4 +1,4 @@
-"""V14.2 Pipeline compatibility routes."""
+"""V14.3 Pipeline compatibility routes."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from src.services.account_service import user_id_from_headers
 from src.services.pipeline_gate_service import PIPELINE_GATE_VERSION, PIPELINE_STAGES, record_stage_gate, stage_summary
 from src.services.station_contract_service import run_station_contract
 from src.services.station_registry_service import station_by_stage
-from src.services.v142_task_mainline_service import run_v142_task_mainline
+from src.services.v142_task_mainline_service import DEFAULT_AGENT_BATCH_SIZE, run_v143_task_mainline
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
-PIPELINE_ROUTE_VERSION = "14.2.0"
+PIPELINE_ROUTE_VERSION = "14.3.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -56,5 +56,5 @@ def build_operating_unit_snapshot(request: Request, data_version: str, force: bo
 @router.post("/data-versions/{data_version}/tasks/generate")
 def generate_tasks_station(request: Request, data_version: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
     body = body or {}
-    max_signals = int(body.get("maxSignals") or 50)
-    return run_v142_task_mainline(data_version, user_id=request_user_id(request), max_signals=max_signals, force=bool(body.get("force", True)), source=body.get("source") or "pipeline_route")
+    max_signals = int(body.get("maxSignals") or body.get("agentBatchSize") or DEFAULT_AGENT_BATCH_SIZE)
+    return run_v143_task_mainline(data_version, user_id=request_user_id(request), max_signals=max_signals, force=bool(body.get("force", True)), source=body.get("source") or "pipeline_route")
