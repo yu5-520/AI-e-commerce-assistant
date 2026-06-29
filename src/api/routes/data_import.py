@@ -1,8 +1,7 @@
-"""V14.2 Data Hub routes.
+"""V14.5.1 Data Hub routes.
 
-Import endpoints still write facts, objects and snapshots first. After that they run
-V14.2 snapshot-driven task mainline so uploaded reports do not depend on front-end
-refresh to create signals and tasks.
+Import writes rows, facts, objects, snapshots, and task mainline outputs to backend
+storage. API responses return compact counters and refs only.
 """
 
 from __future__ import annotations
@@ -32,7 +31,8 @@ from src.services.v142_task_mainline_service import run_v142_task_mainline
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
 DEFAULT_SYNC_DATASETS = ["inventory", "refunds", "orders", "products"]
-DATA_IMPORT_ROUTE_VERSION = "14.2.0"
+DATA_IMPORT_ROUTE_VERSION = "14.5.1"
+HEAVY_KEYS = {"rows", "sampleRows", "stationRuns", "outputs", "products", "signals", "productSignalPackages", "agentProductSnapshotPackages", "judgments", "snapshots", "taskPackage", "snapshot", "payload"}
 
 
 def request_user_id(request: Request) -> str:
@@ -87,67 +87,8 @@ def _materialize_import_rows(result: Dict[str, Any], rows: Any = None) -> List[D
             item_rows = item.get("sampleRows") if isinstance(item.get("sampleRows"), list) else None
         if not item_rows:
             item_rows = _dataset_rows(item.get("datasetName"))
-        normalized = _normalize_result_rows(item, item_rows or [])
-        if normalized:
-            item["rows"] = normalized
-            all_rows.extend(normalized)
-    if all_rows:
-        result["rows"] = all_rows
+        all_rows.extend(_normalize_result_rows(item, item_rows or []))
     return all_rows
-
-
-def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | None = None) -> Dict[str, Any]:
-    selected = [str(name) for name in (dataset_names or DEFAULT_SYNC_DATASETS)]
-    results: List[Dict[str, Any]] = []
-    all_rows: List[Dict[str, Any]] = []
-    for name in selected:
-        rows = _dataset_rows(name)
-        result = import_report_dataset(name, rows=rows, auto_create_tasks=False)
-        normalized = _normalize_result_rows(result, rows)
-        result["rows"] = normalized
-        result["legacyTaskCreationDisabled"] = True
-        result["rule"] = "V14.2：接口同步只写事实、经营对象和快照；任务生成由V14.2快照主链触发。"
-        results.append(result)
-        all_rows.extend(normalized)
-    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "dataset_sync_without_legacy_task_triggers", "datasetCount": len(results), "rowCount": len(all_rows), "alertCount": sum(item.get("alertCount", 0) for item in results), "createdTaskCount": 0, "taggedAlertCount": sum(item.get("taggedAlertCount", 0) for item in results), "results": results, "rows": all_rows, "summary": get_v3_dashboard_summary(), "rule": "导入先完成数据站点；任务生成走V14.2系统快照主链。"}
-
-
-def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
-    materialized_rows = _materialize_import_rows(result, rows)
-    if materialized_rows:
-        result["rows"] = materialized_rows
-    ctx = context_from_headers(request.headers)
-    result["operatingObjectSync"] = upsert_operating_objects_from_import(result, materialized_rows, source=source, uploader_user_id=ctx.user_id, uploader_role_id=ctx.role_id)
-    return result
-
-
-def _report_profile_from_result(result: Dict[str, Any]) -> Dict[str, Any] | None:
-    upload_meta = result.get("uploadMeta") if isinstance(result.get("uploadMeta"), dict) else {}
-    profile = upload_meta.get("reportProfile") if isinstance(upload_meta, dict) else None
-    return profile if isinstance(profile, dict) else result.get("reportProfile") if isinstance(result.get("reportProfile"), dict) else None
-
-
-def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None, parsed: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    materialized_rows = _materialize_import_rows(result, rows)
-    if materialized_rows:
-        result["rows"] = materialized_rows
-    if parsed and isinstance(parsed.get("sheetRows"), dict) and parsed.get("sheetRows"):
-        result["metricFactSync"] = ingest_metric_facts_from_sheet_rows(result, parsed, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
-        return result
-    if not materialized_rows:
-        result["metricFactSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "rows is not a list"}
-        return result
-    result["metricFactSync"] = ingest_metric_facts_from_import(result, materialized_rows, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
-    return result
-
-
-def _attach_v1213_data_gap_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None, parsed: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    materialized_rows = _materialize_import_rows(result, rows)
-    if materialized_rows:
-        result["rows"] = materialized_rows
-    parsed_payload = parsed if isinstance(parsed, dict) else {"rows": materialized_rows}
-    result["dataGapSync"] = ingest_data_gaps_from_import(result, parsed_payload, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
-    return result
 
 
 def _data_versions_from_result(result: Dict[str, Any]) -> List[str]:
@@ -160,20 +101,129 @@ def _data_versions_from_result(result: Dict[str, Any]) -> List[str]:
     return list(dict.fromkeys([item for item in versions if item]))
 
 
+def _compact_value(value: Any, depth: int = 0) -> Any:
+    if depth > 4:
+        return "<compact>"
+    if isinstance(value, list):
+        if len(value) > 20:
+            return {"count": len(value), "items": [_compact_value(item, depth + 1) for item in value[:5]], "truncated": True}
+        return [_compact_value(item, depth + 1) for item in value]
+    if isinstance(value, dict):
+        compact: Dict[str, Any] = {}
+        for key, item in value.items():
+            if key in HEAVY_KEYS:
+                compact[f"{key}Count"] = len(item) if isinstance(item, list) else (1 if item else 0)
+                continue
+            compact[key] = _compact_value(item, depth + 1)
+        return compact
+    return value
+
+
+def _mainline_compact(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    totals = {"createdTaskCount": 0, "productSnapshotCount": 0, "productSignalPackageCount": 0, "productSignalCount": 0, "signalCount": 0, "judgmentCount": 0, "taskSnapshotCount": 0}
+    compact_runs = []
+    for run in runs:
+        task_generation = run.get("taskGeneration") or {}
+        for key in totals:
+            try:
+                totals[key] += int(task_generation.get(key) or 0)
+            except Exception:
+                pass
+        compact_runs.append({"version": run.get("version"), "mode": run.get("mode"), "dataVersion": run.get("dataVersion"), "refs": run.get("refs") or task_generation.get("refs") or {}, "taskGeneration": {key: task_generation.get(key) for key in [*totals.keys(), "mode", "version", "refs", "stations"] if key in task_generation}})
+    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "compact_task_mainline_sync", "runCount": len(runs), "runs": compact_runs, **totals, "rule": "V14.5.1 returns counters and refs only."}
+
+
+def _compact_import_response(result: Dict[str, Any], *, source: str, rows: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    rows = rows or []
+    versions = _data_versions_from_result(result)
+    mainline = result.get("taskMainlineSync") or result.get("v142TaskMainlineSync") or {}
+    upload_meta = result.get("uploadMeta") if isinstance(result.get("uploadMeta"), dict) else {}
+    return {
+        "ok": True,
+        "version": DATA_IMPORT_ROUTE_VERSION,
+        "mode": "compact_import_response",
+        "source": source,
+        "dataVersion": result.get("dataVersion"),
+        "dataVersions": versions,
+        "datasetName": result.get("datasetName"),
+        "rowCount": len(rows) or result.get("rowCount") or result.get("rowsCount") or 0,
+        "alertCount": result.get("alertCount", 0),
+        "taggedAlertCount": result.get("taggedAlertCount", 0),
+        "createdTaskCount": result.get("createdTaskCount", 0),
+        "uploadMeta": _compact_value(upload_meta),
+        "operatingObjectSync": _compact_value(result.get("operatingObjectSync") or {}),
+        "metricFactSync": _compact_value(result.get("metricFactSync") or {}),
+        "dataGapSync": _compact_value(result.get("dataGapSync") or {}),
+        "pipelineSync": _compact_value(result.get("pipelineSync") or {}),
+        "taskMainlineSync": _compact_value(mainline),
+        "importDiagnostics": _compact_value(result.get("importDiagnostics") or {}),
+        "summary": _compact_value(result.get("summary") or {}),
+        "responseBoundary": {"heavyPayloadReturned": False, "strippedKeys": sorted(HEAVY_KEYS), "rule": "Rows, snapshots, station outputs, signals and packages stay in backend storage."},
+    }
+
+
+def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | None = None) -> Dict[str, Any]:
+    selected = [str(name) for name in (dataset_names or DEFAULT_SYNC_DATASETS)]
+    results: List[Dict[str, Any]] = []
+    all_rows: List[Dict[str, Any]] = []
+    for name in selected:
+        rows = _dataset_rows(name)
+        result = import_report_dataset(name, rows=rows, auto_create_tasks=False)
+        result["legacyTaskCreationDisabled"] = True
+        results.append(result)
+        all_rows.extend(_normalize_result_rows(result, rows))
+    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "dataset_sync_without_legacy_task_triggers", "datasetCount": len(results), "rowCount": len(all_rows), "alertCount": sum(item.get("alertCount", 0) for item in results), "createdTaskCount": 0, "taggedAlertCount": sum(item.get("taggedAlertCount", 0) for item in results), "results": results, "summary": get_v3_dashboard_summary(), "_rows": all_rows}
+
+
+def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
+    materialized_rows = _materialize_import_rows(result, rows)
+    ctx = context_from_headers(request.headers)
+    result["operatingObjectSync"] = upsert_operating_objects_from_import(result, materialized_rows, source=source, uploader_user_id=ctx.user_id, uploader_role_id=ctx.role_id)
+    result["_rows"] = materialized_rows
+    return result
+
+
+def _report_profile_from_result(result: Dict[str, Any]) -> Dict[str, Any] | None:
+    upload_meta = result.get("uploadMeta") if isinstance(result.get("uploadMeta"), dict) else {}
+    profile = upload_meta.get("reportProfile") if isinstance(upload_meta, dict) else None
+    return profile if isinstance(profile, dict) else result.get("reportProfile") if isinstance(result.get("reportProfile"), dict) else None
+
+
+def _attach_v121_metric_fact_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None, parsed: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    materialized_rows = _materialize_import_rows(result, rows) or result.get("_rows") or []
+    if parsed and isinstance(parsed.get("sheetRows"), dict) and parsed.get("sheetRows"):
+        result["metricFactSync"] = ingest_metric_facts_from_sheet_rows(result, parsed, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
+    elif materialized_rows:
+        result["metricFactSync"] = ingest_metric_facts_from_import(result, materialized_rows, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
+    else:
+        result["metricFactSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "rows is not a list"}
+    result["_rows"] = materialized_rows
+    return result
+
+
+def _attach_v1213_data_gap_sync(result: Dict[str, Any], rows: Any, *, source: str, source_system: str | None = None, parsed: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    materialized_rows = _materialize_import_rows(result, rows) or result.get("_rows") or []
+    parsed_payload = parsed if isinstance(parsed, dict) else {"rows": materialized_rows}
+    result["dataGapSync"] = ingest_data_gaps_from_import(result, parsed_payload, report_profile=_report_profile_from_result(result), source_system=source_system or result.get("sourceSystem"), source_report_id=source)
+    result["_rows"] = materialized_rows
+    return result
+
+
 def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
     ctx = context_from_headers(request.headers)
     versions = _data_versions_from_result(result) or [None]  # type: ignore[list-item]
+    rows = result.get("_rows") or []
     gates = []
     for version in versions:
-        gate_input = {"source": source, "rowCount": len(result.get("rows") or []), "sourceSystem": result.get("sourceSystem")}
+        gate_input = {"source": source, "rowCount": len(rows), "sourceSystem": result.get("sourceSystem")}
         gates.append(record_stage_gate(data_version=version, stage="import_uploaded", status="completed", input_payload=gate_input, output_payload={"dataVersion": version}, user_id=ctx.user_id, output_ref=f"import:{version or 'latest'}"))
-        gates.append(record_stage_gate(data_version=version, stage="report_parsed", status="completed", input_payload=gate_input, output_payload={"rowCount": len(result.get("rows") or [])}, user_id=ctx.user_id, upstream_stage="import_uploaded", output_ref=f"rows:{version or 'latest'}"))
+        gates.append(record_stage_gate(data_version=version, stage="report_parsed", status="completed", input_payload=gate_input, output_payload={"rowCount": len(rows)}, user_id=ctx.user_id, upstream_stage="import_uploaded", output_ref=f"rows:{version or 'latest'}"))
         gates.append(record_stage_gate(data_version=version, stage="metric_facts_ready", status="completed", input_payload={"metricFactSync": result.get("metricFactSync")}, output_payload={"summary": result.get("metricFactSync")}, user_id=ctx.user_id, upstream_stage="report_parsed", output_ref=f"metric_facts:{version or 'latest'}"))
         gates.append(record_stage_gate(data_version=version, stage="operating_objects_ready", status="completed", input_payload={"operatingObjectSync": result.get("operatingObjectSync")}, output_payload={"summary": result.get("operatingObjectSync")}, user_id=ctx.user_id, upstream_stage="metric_facts_ready", output_ref=f"operating_objects:{version or 'latest'}"))
         snapshot = materialize_operating_unit_snapshot(user_id=ctx.user_id, data_version=version, force=True)
-        result["operatingUnitSnapshotSync"] = snapshot
-        gates.append(record_stage_gate(data_version=version, stage="operating_unit_snapshot_ready", status="completed", input_payload={"source": source}, output_payload={"snapshotKey": snapshot.get("snapshotKey"), "storeCount": len(snapshot.get("storeRows") or [])}, user_id=ctx.user_id, upstream_stage="operating_objects_ready", output_ref=snapshot.get("snapshotKey")))
-    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "import_station_gates_then_v142_task_mainline", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "gates": gates, "taskGeneration": "v142_mainline_after_import", "rule": "V14.2：上传/同步先到经营页快照站，再进入系统商品快照与商品信号快照主链。"}
+        result["operatingUnitSnapshotSync"] = {"snapshotKey": snapshot.get("snapshotKey"), "storeCount": len(snapshot.get("storeRows") or []), "productCount": len(snapshot.get("productRows") or [])}
+        gates.append(record_stage_gate(data_version=version, stage="operating_unit_snapshot_ready", status="completed", input_payload={"source": source}, output_payload=result["operatingUnitSnapshotSync"], user_id=ctx.user_id, upstream_stage="operating_objects_ready", output_ref=snapshot.get("snapshotKey")))
+    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "compact_import_station_gates", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "taskGeneration": "compact_mainline_after_import"}
     return result
 
 
@@ -188,32 +238,31 @@ def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
 def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = True) -> Dict[str, Any]:
     if upsert_objects:
         result = _attach_operating_object_sync(request, result, rows, source=source)
-        result = _attach_v121_metric_fact_sync(result, rows, source=source)
-        result = _attach_v1213_data_gap_sync(result, rows, source=source)
+        result = _attach_v121_metric_fact_sync(result, result.get("_rows"), source=source)
+        result = _attach_v1213_data_gap_sync(result, result.get("_rows"), source=source)
     result["legacyImportTaskHooksDisabled"] = True
-    result["legacyHooksRemoved"] = ["attach_v104_import_sync", "attach_v107_operating_profile", "attach_v108_tag_change_tasks", "attach_v116_import_closed_loop", "_attach_v62_trend_and_risk_sync"]
     result.setdefault("createdTaskCount", 0)
-    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_v142_snapshot_mainline"})
-    result["rule"] = "V14.2：导入接口保留旧任务隔绝，并触发系统商品快照主链。"
+    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_compact_snapshot_mainline"})
     return _attach_import_diagnostics(result)
 
 
-def _attach_v142_task_mainline(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+def _attach_task_mainline(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
     ctx = context_from_headers(request.headers)
     versions = _data_versions_from_result(result)
     if not versions and result.get("dataVersion"):
         versions = [str(result["dataVersion"])]
-    runs = []
-    for version in versions:
-        runs.append(run_v142_task_mainline(version, user_id=ctx.user_id, max_signals=50, force=True, source=source))
-    result["v142TaskMainlineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "runCount": len(runs), "runs": runs, "createdTaskCount": sum((run.get("taskGeneration") or {}).get("createdTaskCount", 0) for run in runs), "productSnapshotCount": sum((run.get("taskGeneration") or {}).get("productSnapshotCount", 0) for run in runs), "productSignalCount": sum((run.get("taskGeneration") or {}).get("productSignalCount", 0) for run in runs), "signalCount": sum((run.get("taskGeneration") or {}).get("signalCount", 0) for run in runs), "judgmentCount": sum((run.get("taskGeneration") or {}).get("judgmentCount", 0) for run in runs), "taskSnapshotCount": sum((run.get("taskGeneration") or {}).get("taskSnapshotCount", 0) for run in runs), "rule": "V14.2：上传后端自动执行系统商品快照→商品信号快照→RAG→Agent→任务快照→任务池。"}
-    result["createdTaskCount"] = result["v142TaskMainlineSync"]["createdTaskCount"]
+    runs = [run_v142_task_mainline(version, user_id=ctx.user_id, max_signals=50, force=True, source=source) for version in versions]
+    result["taskMainlineSync"] = _mainline_compact(runs)
+    result["v142TaskMainlineSync"] = result["taskMainlineSync"]
+    result["createdTaskCount"] = result["taskMainlineSync"].get("createdTaskCount", 0)
     return result
 
 
 def _finalize_import(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = False) -> Dict[str, Any]:
     final = _attach_import_product_contracts(request, result, rows, source=source, upsert_objects=upsert_objects)
-    return _attach_v142_task_mainline(request, final, source=source)
+    final = _attach_task_mainline(request, final, source=source)
+    rows_for_count = final.get("_rows") or _materialize_import_rows(final, rows)
+    return _compact_import_response(final, source=source, rows=rows_for_count)
 
 
 async def _rows_from_uploaded_file(file: UploadFile) -> Dict[str, Any]:
@@ -245,11 +294,11 @@ def sync_source_connection(request: Request, source_id: str) -> Dict[str, Any]:
     result = _run_dataset_imports_without_legacy_tasks(source.get("datasetNames") or None)
     result["sourceConnection"] = build_source_sync_summary(source_id, result)
     result["dataSourceSync"] = result["sourceConnection"]
-    objected = _attach_operating_object_sync(request, result, result.get("rows"), source=f"{source_id}_api_sync")
-    facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
-    gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source=f"{source_id}_api_sync", source_system=source_id)
+    objected = _attach_operating_object_sync(request, result, result.get("_rows"), source=f"{source_id}_api_sync")
+    facted = _attach_v121_metric_fact_sync(objected, objected.get("_rows"), source=f"{source_id}_api_sync", source_system=source_id)
+    gapped = _attach_v1213_data_gap_sync(facted, facted.get("_rows"), source=f"{source_id}_api_sync", source_system=source_id)
     staged = _attach_pipeline_station_sync(request, gapped, source=f"{source_id}_api_sync")
-    return _finalize_import(request, staged, staged.get("rows"), source=f"{source_id}_api_sync", upsert_objects=False)
+    return _finalize_import(request, staged, staged.get("_rows"), source=f"{source_id}_api_sync", upsert_objects=False)
 
 
 @router.post("/validate")
@@ -334,7 +383,7 @@ async def preview_upload(file: UploadFile = File(...), dataset_name: str = Form(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     preview["uploadMeta"] = compact_upload_meta(parsed)
-    return preview
+    return _compact_value(preview)
 
 
 @router.post("/upload/confirm")
@@ -359,7 +408,8 @@ def preview_report(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[st
     if not dataset_name:
         raise HTTPException(status_code=400, detail="dataset_name is required")
     try:
-        return preview_report_dataset(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        preview = preview_report_dataset(str(dataset_name), rows=body.get("rows"), field_mapping=body.get("field_mapping") or body.get("fieldMapping"), source_system=body.get("source_system") or body.get("sourceSystem"))
+        return _compact_value(preview)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -404,11 +454,11 @@ def import_report(request: Request, body: Dict[str, Any] = Body(default_factory=
 def import_mock_alerts(request: Request) -> Dict[str, Any]:
     result = _run_dataset_imports_without_legacy_tasks()
     result["v3Summary"] = get_v3_dashboard_summary()
-    objected = _attach_operating_object_sync(request, result, result.get("rows"), source="mock_alerts_import")
-    facted = _attach_v121_metric_fact_sync(objected, objected.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
-    gapped = _attach_v1213_data_gap_sync(facted, facted.get("rows"), source="mock_alerts_import", source_system="mock_alerts")
+    objected = _attach_operating_object_sync(request, result, result.get("_rows"), source="mock_alerts_import")
+    facted = _attach_v121_metric_fact_sync(objected, objected.get("_rows"), source="mock_alerts_import", source_system="mock_alerts")
+    gapped = _attach_v1213_data_gap_sync(facted, facted.get("_rows"), source="mock_alerts_import", source_system="mock_alerts")
     staged = _attach_pipeline_station_sync(request, gapped, source="mock_alerts_import")
-    return _finalize_import(request, staged, staged.get("rows"), source="mock_alerts_import", upsert_objects=False)
+    return _finalize_import(request, staged, staged.get("_rows"), source="mock_alerts_import", upsert_objects=False)
 
 
 @router.get("/v3-summary")
