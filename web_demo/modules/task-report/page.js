@@ -8,6 +8,8 @@
   function changePack(report) { return report?.systemChangePack || task().systemChangePack || {}; }
   function agent(report) { return report?.agentOperatingJudgment || task().agentOperatingJudgment || {}; }
   function recapLine(report) { return arr(report?.systemRecapLine || task().systemRecapLine || agent(report).systemRecapLine); }
+  function productCards(report) { return arr(report?.productActionCards || report?.affectedProducts || task().productActionCards || task().affectedProducts); }
+  function ragContext(report) { return report?.ragRetrievedContext || task().ragRetrievedContext || {}; }
   function evidence(report) {
     const packLines = arr(changePack(report).lines).filter((item) => !item?.type || item.type === "system_metric_change");
     if (packLines.length) return packLines.slice(0, 12);
@@ -25,8 +27,22 @@
     const info = agent(report);
     const judgment = info.judgment || report?.warningSummary || task().reason;
     if (!judgment) return "";
-    const tags = [info.roiChange && `ROI ${info.roiChange}`, info.gmvChange && `GMV ${info.gmvChange}`, info.adSpendChange && `广告 ${info.adSpendChange}`, info.clickChange && `点击 ${info.clickChange}`, info.conversionChange && `转化 ${info.conversionChange}`].filter(Boolean);
-    return `<section class="page-section"><div class="section-header"><h3>Agent经营判断</h3><span class="status-badge">基于变化包生成</span></div><div class="agent-judgment-card"><strong>${s(info.title || "经营判断")}</strong><p>${s(judgment)}</p>${tags.length ? `<div class="todo-compact-tags">${tags.map((item) => `<em>${s(item)}</em>`).join("")}</div>` : ""}</div></section>`;
+    const tags = [info.roiChange && `ROI ${info.roiChange}`, info.gmvChange && `GMV ${info.gmvChange}`, info.adSpendChange && `广告 ${info.adSpendChange}`, info.clickChange && `点击 ${info.clickChange}`, info.conversionChange && `转化 ${info.conversionChange}`, info.llmStatus && `LLM ${info.llmStatus}`].filter(Boolean);
+    return `<section class="page-section"><div class="section-header"><h3>Agent经营判断</h3><span class="status-badge">RAG + LLM增强</span></div><div class="agent-judgment-card"><strong>${s(info.title || "经营判断")}</strong><p>${s(judgment)}</p>${tags.length ? `<div class="todo-compact-tags">${tags.map((item) => `<em>${s(item)}</em>`).join("")}</div>` : ""}</div></section>`;
+  }
+  function renderRagContext(report) {
+    const rag = ragContext(report);
+    const cards = arr(rag.retrievedCards).slice(0, 5);
+    if (!cards.length) return "";
+    return `<section class="page-section"><div class="section-header"><h3>RAG召回依据</h3><span class="status-badge">${s(rag.problemType || "经营场景")}</span></div><div class="report-card-list compact-report-list">${cards.map((card) => `<article class="report-card compact"><strong>${s(card.title || card.caseId)}</strong><p>${s(card.initialJudgment || card.resultSummary || "基础经验卡")}</p></article>`).join("")}</div></section>`;
+  }
+  function renderProducts(report) {
+    const list = productCards(report);
+    if (!list.length) return "";
+    return `<section class="page-section"><div class="section-header"><h3>涉及商品</h3><span class="status-badge">${list.length} 个商品</span></div><div class="report-card-list compact-report-list product-action-card-list">${list.map((item, index) => {
+      const state = item.openProductState || { productId: item.productId, productObjectId: item.objectId, storeId: item.storeId || "", storeName: item.store || item.storeName || "" };
+      return `<article class="report-card compact product-action-card"><strong>${index + 1}. ${s(item.productTitle || item.title || item.productId || "商品")}</strong><p>${s(item.why || item.reason || item.primaryAction || "商品级动作待确认")}</p><div class="todo-compact-tags"><em>${s(item.productId || "商品ID待确认")}</em>${item.primaryAction ? `<em>${s(item.primaryAction)}</em>` : ""}</div><div class="report-actions small"><button type="button" data-open-product='${s(JSON.stringify(state))}'>查看商品</button>${item.productLink ? `<a class="secondary" href="${s(item.productLink)}" target="_blank" rel="noreferrer">平台链接</a>` : ""}</div></article>`;
+    }).join("")}</div></section>`;
   }
   function renderSteps(report) {
     const list = steps(report);
@@ -59,7 +75,7 @@
     const info = agent(report);
     const title = report.title || t.title || info.title || t.productTitle || "任务详情";
     const reason = report.warningSummary || info.judgment || t.reason || "系统已拆分数据变化，Agent生成执行SOP。";
-    return `<section class="report-hero"><div><p class="eyebrow">TASK SOP · V12.11</p><h2>${s(title)}</h2><p>${s(reason)}</p></div><div class="report-hero-side"><span>任务状态</span><strong>${s(report.taskStatus || t.status || "处理中")}</strong><small>系统拆数据 · Agent生成SOP</small></div></section>${renderChangePack(report)}${renderAgentJudgment(report)}${renderSteps(report)}${renderAutoRecap(report)}${renderDataGaps(report)}${renderResponsibility(report)}<section class="page-section"><div class="section-header"><h3>下一步</h3><span class="status-badge">提交后系统复盘</span></div><p>运营只执行Agent SOP并提交材料；后续报表或接口数据更新后，系统自动复盘并写入日报、周报和复盘库。</p><div class="report-actions">${actionButtons(report)}</div></section>`;
+    return `<section class="report-hero"><div><p class="eyebrow">TASK SOP · V12.12</p><h2>${s(title)}</h2><p>${s(reason)}</p></div><div class="report-hero-side"><span>任务状态</span><strong>${s(report.taskStatus || t.status || "处理中")}</strong><small>RAG + LLM · 商品级SOP</small></div></section>${renderProducts(report)}${renderChangePack(report)}${renderAgentJudgment(report)}${renderRagContext(report)}${renderSteps(report)}${renderAutoRecap(report)}${renderDataGaps(report)}${renderResponsibility(report)}<section class="page-section"><div class="section-header"><h3>下一步</h3><span class="status-badge">提交后系统复盘</span></div><p>运营只执行Agent SOP并提交材料；后续报表或接口数据更新后，系统自动复盘并写入日报、周报和复盘库。</p><div class="report-actions">${actionButtons(report)}</div></section>`;
   }
 
   window.TaskReportPage = {
@@ -76,6 +92,7 @@
     mount(ctx) {
       ctx.delegate("[data-back]", "click", () => AppRouter.navigate("business-actions", lastReport?.taskId ? { focusTaskId: lastReport.taskId } : null));
       ctx.delegate("[data-open-submit]", "click", (_, node) => AppRouter.navigate("task-submit", { taskId: node.dataset.openSubmit }));
+      ctx.delegate("[data-open-product]", "click", (_, node) => { try { AppRouter.navigate("business-products", JSON.parse(node.dataset.openProduct || "{}")); } catch { AppRouter.navigate("business-products"); } });
     },
   };
 })();
