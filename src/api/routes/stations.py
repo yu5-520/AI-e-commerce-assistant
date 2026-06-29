@@ -1,4 +1,4 @@
-"""V12.14 standard Station Interface routes."""
+"""V12.14.1 standard Station Interface routes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.services.station_contract_service import list_station_contracts, run_st
 from src.services.station_registry_service import registry_summary, get_station
 
 router = APIRouter(prefix="/api/stations", tags=["stations"])
-STATION_ROUTE_VERSION = "12.14.0"
+STATION_ROUTE_VERSION = "12.14.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -50,14 +50,14 @@ def station_health_endpoint(station_id: str) -> Dict[str, Any]:
 
 
 @router.get("/{station_id}/gates")
-def station_gates_endpoint(station_id: str, data_version: str | None = Query(default=None, alias="dataVersion"), limit: int = Query(default=40, ge=1, le=200)) -> Dict[str, Any]:
-    return station_gates(station_id, data_version=data_version, limit=limit)
+def station_gates_endpoint(station_id: str, data_version: str | None = Query(default=None, alias="dataVersion"), limit: int = Query(default=40, ge=1, le=200), include_diagnostic: bool = Query(default=False, alias="includeDiagnostic")) -> Dict[str, Any]:
+    return station_gates(station_id, data_version=data_version, limit=limit, include_diagnostic=include_diagnostic)
 
 
 @router.get("/{station_id}/latest")
-def station_latest_endpoint(station_id: str, data_version: str | None = Query(default=None, alias="dataVersion")) -> Dict[str, Any]:
-    gates = station_gates(station_id, data_version=data_version, limit=1)
-    return {"version": STATION_ROUTE_VERSION, "stationId": station_id, "latest": (gates.get("gates") or [None])[0], "gateCount": gates.get("gateCount", 0)}
+def station_latest_endpoint(station_id: str, data_version: str | None = Query(default=None, alias="dataVersion"), include_diagnostic: bool = Query(default=False, alias="includeDiagnostic")) -> Dict[str, Any]:
+    gates = station_gates(station_id, data_version=data_version, limit=1, include_diagnostic=include_diagnostic)
+    return {"version": STATION_ROUTE_VERSION, "stationId": station_id, "latest": (gates.get("gates") or [None])[0], "gateCount": gates.get("gateCount", 0), "includeDiagnostic": include_diagnostic}
 
 
 @router.post("/{station_id}/run")
