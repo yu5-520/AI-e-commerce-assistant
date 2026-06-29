@@ -2,21 +2,12 @@
   let notice = "";
   const s = (value) => AppShell.escape(value ?? "");
 
-  function hasAction(task, action) { return (task.availableActions || []).includes(action); }
-  function queueName(task) {
-    const map = { urgent_execution: "紧急", today_execution: "今日", daily_operating_task: "今日", weekly_review_task: "复盘", candidate_only: "候选", report_seed_only: "素材" };
-    return map[task.queueType] || "执行";
-  }
-  function actionDecision(task) {
-    const gate = task.actionAuthorization || task.v127ActionGate || task.v126ActionGate || {};
-    const map = { auto_execute: "运营执行", manager_approval_required: "主管审批", owner_approval_required: "老板确认" };
-    return map[gate.decision] || (task.taskLayer === "manager_approval" ? "主管审批" : task.taskLayer === "operator_execution" ? "运营执行" : "任务");
-  }
   function visibleTaskQueue(tasks) {
     return tasks.filter((task) => !["backend_tag", "store_product_tag", "observe_candidate", "candidate_only", "report_seed_only", "merged_duplicate"].includes(task.queueType) && task.displayState !== "backend_only");
   }
+  function deadlineText(task) { return task.deadline || task.timeBucket || "今日内"; }
   function deadlineRank(task) {
-    const text = String(task.deadline || task.timeBucket || "");
+    const text = String(deadlineText(task));
     if (text.includes("2小时")) return 1;
     if (text.includes("6小时")) return 2;
     if (text.includes("12小时")) return 3;
@@ -26,7 +17,14 @@
     return 9;
   }
   function priorityRank(task) { return { 高: 1, 中: 2, 低: 3 }[task.priority] || 9; }
-  function sortTasks(tasks) { return [...tasks].sort((a, b) => priorityRank(a) - priorityRank(b) || deadlineRank(a) - deadlineRank(b) || String(a.createdAt || "").localeCompare(String(b.createdAt || ""))); }
+  function sortTasks(tasks) { return [...tasks].sort((a, b) => deadlineRank(a) - deadlineRank(b) || priorityRank(a) - priorityRank(b) || String(a.createdAt || "").localeCompare(String(b.createdAt || ""))); }
+  function timeLevel(task) {
+    const rank = deadlineRank(task);
+    if (rank <= 2 || task.priority === "高") return "紧急";
+    if (rank <= 4) return "今日";
+    if (rank <= 6) return "本周";
+    return "排期";
+  }
   function reasonFamily(task) {
     const text = [task.riskDomain, task.reason, task.task, task.actionType, (task.taskDetailReport || {}).warningSummary].join(" ");
     if (text.includes("库存") || text.includes("补货") || text.includes("可售")) return "库存警告";
@@ -43,30 +41,45 @@
   function lifecycleNext(task) {
     return (task.taskLifecycle || {}).nextExpected || task.displayStatus || task.workflowStatus || task.status || "待处理";
   }
+  function actionDecision(task) {
+    const gate = task.actionAuthorization || task.v1282ActionGate || task.v127ActionGate || task.v126ActionGate || {};
+    const map = { auto_execute: "运营执行", manager_approval_required: "主管审批", owner_approval_required: "老板确认" };
+    return map[gate.decision] || (task.taskLayer === "manager_approval" ? "主管审批" : "运营执行");
+  }
   function metrics(activeTasks, visibleTasks) {
-    return [["执行任务", visibleTasks.length, "后端队列"], ["紧急/高", visibleTasks.filter((t) => t.priority === "高").length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "权限闸门"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "执行中"], ["待复盘", activeTasks.filter((t) => ["已完成", "已通过", "已写入复盘"].includes(t.status)).length, "周期回看"]];
+    return [["执行任务", visibleTasks.length, "按时间排序"], ["今日到期", visibleTasks.filter((t) => deadlineRank(t) <= 4).length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "总管任务"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "运营提交材料"], ["待复盘", activeTasks.filter((t) => ["已完成", "已通过", "已写入复盘"].includes(t.status)).length, "系统自动复盘"]];
   }
   function openTaskReport(taskId) { AppRouter.navigate("task-report", { taskId }); }
+  function primaryAction(task) {
+    const visible = Array.isArray(task.visibleTaskActions) ? task.visibleTaskActions : [];
+    const primary = task.primaryTaskAction || visible.find((item) => item?.primary) || visible[0] || null;
+    if (!primary) return null;
+    if (["review", "write_recap", "recap", "approve", "reject"].includes(primary.action) && (AppApi.currentUser?.()?.roleId || "operator") === "operator") return null;
+    return primary;
+  }
+  function actionButton(task) {
+    const action = primaryAction(task);
+    if (!action) return "";
+    const id = s(task.id);
+    if (action.action === "accept") return `<button type="button" class="primary" data-accept="${id}">接收</button>`;
+    if (action.action === "submit" || action.action === "supplement") return `<button type="button" class="primary" data-submit="${id}">提交</button>`;
+    if (action.action === "approve" || action.action === "reject") return `<button type="button" class="primary" data-task-report="${id}">复核</button>`;
+    if (action.action === "confirm") return `<button type="button" class="primary" data-task-report="${id}">确认</button>`;
+    return "";
+  }
   function actionButtons(task) {
     const id = s(task.id);
-    const buttons = [`<button type="button" data-task-report="${id}">详情</button>`];
-    if (hasAction(task, "accept")) buttons.unshift(`<button type="button" class="primary" data-accept="${id}">接收</button>`);
-    if (hasAction(task, "submit")) buttons.unshift(`<button type="button" class="primary" data-task-report="${id}">提交</button>`);
-    if (hasAction(task, "review")) buttons.unshift(`<button type="button" class="primary" data-task-report="${id}">复核</button>`);
-    if (hasAction(task, "write_recap")) buttons.unshift(`<button type="button" class="primary" data-task-report="${id}">复盘</button>`);
-    return buttons.join("");
+    return `${actionButton(task)}<button type="button" class="secondary" data-task-report="${id}">详情</button>`;
   }
   function row(task, index, focusTaskId = "") {
     const focused = focusTaskId && task.id === focusTaskId;
-    const gate = task.actionAuthorization || task.v127ActionGate || task.v126ActionGate || {};
-    const workflow = task.displayStatus || task.workflowStatus || task.status || "待处理";
-    const batch = task.batchTask ? `<em>${s(task.affectedProductCount)}品</em>` : "";
-    const lifecycle = lifecycleLabel(task);
-    return `<article class="todo-queue-row ${focused ? "focused-task" : ""}" data-task-card="${s(task.id)}">
-      <div class="todo-queue-rank">${index + 1}</div>
-      <div class="todo-queue-main"><strong>${s(task.title || task.productTitle)}</strong><span>${s(task.store || task.storeName || "任务池")} · ${s(task.platform || "经营单元")} · ${s(gate.actionLabel || task.actionType || reasonFamily(task))}</span></div>
-      <div class="todo-queue-badges"><em>${s(task.priority || "中")}</em><em>${s(task.deadline || task.timeBucket || "今日内")}</em><em>${s(queueName(task))}</em><em>${s(lifecycle)}</em>${batch}</div>
-      <div class="todo-queue-status"><strong>${s(actionDecision(task))}</strong><span>${s(workflow)} · ${s(lifecycleNext(task))}</span></div>
+    const gate = task.actionAuthorization || task.v1282ActionGate || task.v127ActionGate || task.v126ActionGate || {};
+    const batch = task.batchTask ? `${s(task.affectedProductCount)}个商品` : (task.affectedProductCount ? `${s(task.affectedProductCount)}个商品` : "");
+    const title = task.title || task.productTitle || "经营任务";
+    return `<article class="todo-queue-row todo-queue-row-v1283 ${focused ? "focused-task" : ""}" data-task-card="${s(task.id)}">
+      <div class="todo-time-rail"><span>${String(index + 1).padStart(2, "0")}</span><strong>${s(deadlineText(task))}</strong><em>${s(timeLevel(task))}</em></div>
+      <div class="todo-queue-main"><strong>${s(title)}</strong><span>${s(task.store || task.storeName || "任务池")} · ${s(task.platform || "经营单元")} · ${s(gate.actionLabel || task.actionType || reasonFamily(task))}</span><div class="todo-compact-tags"><em>${s(task.priority || "中")}</em><em>${s(reasonFamily(task))}</em>${batch ? `<em>${batch}</em>` : ""}</div></div>
+      <div class="todo-queue-status"><strong>${s(actionDecision(task))}</strong><span>${s(lifecycleLabel(task))} · ${s(lifecycleNext(task))}</span></div>
       <div class="todo-actions v106-minimal-actions">${actionButtons(task)}</div>
     </article>`;
   }
@@ -83,12 +96,13 @@
       const tasks = sortTasks(visibleTaskQueue(active));
       const user = AppApi.currentUser?.() || {};
       const empty = "当前账号没有需要立即处理的执行任务。候选任务、趋势信号和观察项进入日报/周报素材。";
-      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.8.1</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。前端不再二次聚合；接收、提交、复核、复盘全部围绕同一个 task_id 流转。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
+      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.8.3</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。列表按时间排序；任务卡只展示当前动作和详情。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
     },
     mount(ctx) {
       focusTask(ctx.state?.focusTaskId);
       ctx.delegate("[data-task-report]", "click", (_, node) => openTaskReport(node.dataset.taskReport));
       ctx.delegate("[data-accept]", "click", async (_, node) => { await AppApi.acceptTodo(node.dataset.accept, { note: "运营已接收任务" }); await refresh("任务已接收，进入处理中。"); });
+      ctx.delegate("[data-submit]", "click", async (_, node) => { await AppApi.submitTodo(node.dataset.submit, { note: "运营已提交处理材料，等待系统复盘或总管复核。" }); await refresh("处理材料已提交，任务进入后续复核或自动复盘链路。"); });
     },
   };
 })();
