@@ -1,4 +1,8 @@
-"""V14.1 Agent Judgment Station service."""
+"""V14.3 Agent Judgment Station service.
+
+Agent judges every product signal package under RAG operation-value boundaries.
+Generated task snapshots must carry operation budget estimates and SOP evidence.
+"""
 
 from __future__ import annotations
 
@@ -9,13 +13,14 @@ from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.llm_provider_service import generate_json
+from src.services.operation_budget_service import estimate_operation_budget, reserve_budget_for_task
 from src.services.rag_context_station_service import build_rag_context_snapshot, latest_rag_context
 from src.services.signal_pool_service import list_signals, update_signal_status
 from src.services.task_snapshot_station_service import create_task_snapshot
 
-AGENT_JUDGMENT_STATION_VERSION = "14.1.0"
-VALID_DECISIONS = {"create_task_snapshot", "manager_review_required", "observe_only", "ignore_noise"}
-SNAPSHOT_DECISIONS = {"create_task_snapshot", "manager_review_required"}
+AGENT_JUDGMENT_STATION_VERSION = "14.3.0"
+VALID_DECISIONS = {"create_task_snapshot", "manager_review_required", "observe_only", "ignore_noise", "data_gap_required", "merge_candidate"}
+SNAPSHOT_DECISIONS = {"create_task_snapshot", "manager_review_required", "data_gap_required"}
 
 
 def now_iso() -> str:
@@ -89,43 +94,89 @@ def list_agent_judgments(data_version: str | None = None, status: str | None = N
     return {"version": AGENT_JUDGMENT_STATION_VERSION, "dataVersion": data_version, "judgmentCount": len(items), "byDecision": dict(by_decision), "byStatus": dict(by_status), "judgments": items}
 
 
+def _budget_task_type(signal: Dict[str, Any]) -> str:
+    signal_type = str(signal.get("signalType") or "")
+    metric = str(signal.get("metricCode") or "")
+    if metric in {"roas", "roi", "adSpend"} or "roas" in signal_type:
+        return "roas_increase" if str(signal.get("signalStrength")) in {"medium", "high"} else "roas_decrease"
+    if signal_type.startswith("product_refund"):
+        return "after_sales_check"
+    if signal_type.startswith("product_inventory"):
+        return "replenishment"
+    if signal_type.startswith("data_gap"):
+        return "data_gap_fix"
+    return "detail_page_test"
+
+
+def _budget_payload_from_signal(signal: Dict[str, Any], risk_level: str) -> Dict[str, Any]:
+    metric = signal.get("productMetricSnapshot") or (signal.get("agentProductSnapshotPackage") or {}).get("metricSnapshot") or {}
+    latest = (signal.get("trendWindows") or {}).get("windows") or {}
+    return {
+        "riskLevel": risk_level,
+        "currentDailyAdSpend": metric.get("adSpend"),
+        "adSpend": metric.get("adSpend"),
+        "increaseRate": 0.15,
+        "decreaseRate": 0.2,
+        "testDays": 2,
+        "observeDays": 2,
+        "suggestedGoodsValue": metric.get("inventoryValue") or metric.get("paymentAmount") or 0,
+        "expectedUnits": metric.get("paymentUnitCount") or metric.get("inventory") or 0,
+        "unitDiscount": metric.get("unitDiscount") or 0,
+        "unitSubsidy": metric.get("unitSubsidy") or 0,
+        "campaignAdSpend": metric.get("campaignAdSpend") or 0,
+        "trendWindows": latest,
+    }
+
+
+def _risk_from_signal(signal: Dict[str, Any]) -> tuple[str, str]:
+    strength = str(signal.get("signalStrength") or "normal")
+    signal_type = str(signal.get("signalType") or "")
+    if strength == "high" or signal_type.startswith("redline_"):
+        return "high", "高"
+    if strength == "medium":
+        return "medium", "中"
+    return "low", "低"
+
+
 def _decision_template(signal: Dict[str, Any], rag_context: Dict[str, Any]) -> Dict[str, Any]:
     signal_type = str(signal.get("signalType") or "")
-    strength = str(signal.get("signalStrength") or "low")
+    strength = str(signal.get("signalStrength") or "normal")
     metric = signal.get("metricCode") or "经营指标"
     entity_type = signal.get("entityType") or "product"
     entity_id = signal.get("entityId") or signal.get("productId") or signal.get("dataVersion") or "latest"
-    if signal_type.startswith("redline_"):
+    risk_level, priority = _risk_from_signal(signal)
+    if risk_level == "high":
         decision = "manager_review_required"
-        priority = "高"
-        task_type = "红线复核任务"
-        reason = "信号命中红线风险，建议进入复核链路。"
+        task_type = "高风险经营复核任务"
+        reason = "高风险信号必须进入总管审核，不受普通运营额度限制。"
+    elif signal_type == "normal_state":
+        decision = "observe_only"
+        task_type = "正常状态观察留痕"
+        reason = "全量信号包进入Agent判断；当前为正常状态，默认观察留痕。"
     elif signal_type.startswith("data_gap_"):
-        decision = "create_task_snapshot"
-        priority = "中"
+        decision = "data_gap_required"
         task_type = "数据补齐/归属复核任务"
-        reason = "该信号暴露数据缺口，影响后续趋势判断。"
-    elif signal_type == "metric_large_wave" or strength == "medium":
+        reason = "数据缺口影响后续判断，需要补齐或复核归属。"
+    elif strength == "medium":
         decision = "create_task_snapshot"
-        priority = "中"
         task_type = "经营波动复核任务"
-        reason = "指标出现较大波动，需要结合RAG上下文复核。"
-    elif signal_type == "normal_wave_candidate":
-        decision = "ignore_noise"
-        priority = "低"
-        task_type = "正常波动留痕"
-        reason = "波动幅度较小，默认留痕。"
+        reason = "中风险信号具备运营操作价值，但必须校验运营额度。"
     else:
         decision = "observe_only"
-        priority = "低"
         task_type = "观察信号"
-        reason = "该信号进入观察池，暂不进入可见任务池。"
+        reason = "低风险信号进入观察池，避免任务泛滥。"
     deadline = "6小时内" if priority == "高" else "24小时内" if priority == "中" else "后台观察"
+    budget_task_type = _budget_task_type(signal)
+    operation_budget = estimate_operation_budget(budget_task_type, _budget_payload_from_signal(signal, risk_level))
     evidence = ["对应报表来源", "指标事实值", "运营补充说明"]
-    if signal_type.startswith("data_gap_"):
-        evidence = ["缺失字段样例", "正确商品/店铺归属", "补齐后的报表或截图"]
-    task_plan = {"title": f"{task_type}｜{entity_id}", "subtitle": signal_type, "entityType": entity_type, "entityId": entity_id, "taskType": task_type, "actionType": "agent_judgment_required", "priority": priority, "deadline": deadline, "riskDomain": metric, "sopSteps": [f"{deadline}复核 {metric} 信号与原始报表证据。", "结合店铺/商品权重、类目基线、历史复盘和运营上下文确认处理方向。", "提交截图、数据口径、处理结论和需要复核的指标。"], "evidenceRequirements": evidence, "reviewMetrics": ["ROI", "GMV/支付金额", "点击率", "转化率", "退款率", "毛利率", "库存"], "needManagerReview": decision == "manager_review_required", "reason": reason}
-    return {"decision": decision, "confidence": 0.78 if decision in SNAPSHOT_DECISIONS else 0.62, "reason": reason, "taskPlan": task_plan, "evidenceRequirements": evidence, "reviewMetrics": task_plan["reviewMetrics"], "riskBoundary": ["Agent outputs structured judgment only.", "Station interfaces and lifecycle remain deterministic."], "ragContextApplied": bool(rag_context)}
+    if budget_task_type in {"roas_increase", "roas_decrease"}:
+        evidence = ["投放后台截图", "ROAS变化", "广告消耗变化", "点击率/转化率变化"]
+    elif budget_task_type == "campaign_apply":
+        evidence = ["活动报名信息", "预计让利/补贴", "活动价截图", "毛利测算"]
+    elif budget_task_type == "replenishment":
+        evidence = ["库存截图", "可售天数", "供应链反馈", "补货建议"]
+    task_plan = {"title": f"{task_type}｜{entity_id}", "subtitle": signal_type, "entityType": entity_type, "entityId": entity_id, "productId": signal.get("productId"), "storeId": signal.get("storeId"), "verticalCategory": signal.get("verticalCategory"), "taskType": budget_task_type, "actionType": "agent_budgeted_operation", "priority": priority, "riskLevel": risk_level, "deadline": deadline, "riskDomain": metric, "operationBudget": operation_budget, "sopSteps": [f"{deadline}复核 {metric} 信号、垂直类目和原始报表证据。", "根据RAG类目基线、ROAS规则、任务额度和历史复盘确认处理动作。", "如果涉及ROAS增投/降投，必须提交预算公式、预估额度、止损线和复盘时间。", "提交截图、数据口径、处理结论和需要复核的指标。"], "evidenceRequirements": evidence, "reviewMetrics": ["ROAS", "广告消耗", "GMV/支付金额", "点击率", "转化率", "退款率", "毛利率", "库存"], "needManagerReview": decision == "manager_review_required", "reason": reason}
+    return {"decision": decision, "confidence": 0.8 if decision in SNAPSHOT_DECISIONS else 0.62, "reason": reason, "taskPlan": task_plan, "operationBudget": operation_budget, "evidenceRequirements": evidence, "reviewMetrics": task_plan["reviewMetrics"], "riskBoundary": ["Agent outputs structured judgment and budget estimate only.", "System validates budget, reserves quota, and controls lifecycle.", "High-risk signals enter manager review and cannot be ignored by ordinary quota."], "ragContextApplied": bool(rag_context)}
 
 
 def _normalize_llm_output(output: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:
@@ -140,16 +191,19 @@ def _normalize_llm_output(output: Dict[str, Any], fallback: Dict[str, Any]) -> D
         merged["confidence"] = fallback.get("confidence") or 0.5
     if not isinstance(merged.get("taskPlan"), dict):
         merged["taskPlan"] = fallback.get("taskPlan") or {}
+    if not isinstance(merged.get("operationBudget"), dict):
+        merged["operationBudget"] = (merged.get("taskPlan") or {}).get("operationBudget") or fallback.get("operationBudget") or {}
     if not isinstance(merged.get("evidenceRequirements"), list):
         merged["evidenceRequirements"] = fallback.get("evidenceRequirements") or []
     if not isinstance(merged.get("reviewMetrics"), list):
         merged["reviewMetrics"] = fallback.get("reviewMetrics") or []
+    merged["taskPlan"]["operationBudget"] = merged.get("operationBudget")
     return merged
 
 
 def _judge_signal(signal: Dict[str, Any], rag_context: Dict[str, Any]) -> Dict[str, Any]:
     fallback = _decision_template(signal, rag_context)
-    llm_result = generate_json(prompt_name="task_signal_agent_judgment", payload={"signal": signal, "ragContext": rag_context, "fallbackDecision": fallback, "interfaceBoundary": "Agent outputs judgment; code controls station boundary."}, expected_keys=["decision", "confidence", "reason", "taskPlan"], agent_name="V14 Task Signal Agent", schema_name="v14_agent_judgment")
+    llm_result = generate_json(prompt_name="v143_operation_value_budget_judgment", payload={"signalPackage": signal, "ragContext": rag_context, "fallbackDecision": fallback, "interfaceBoundary": "Agent judges operation value and budget estimate; code controls budget reservation and lifecycle."}, expected_keys=["decision", "confidence", "reason", "taskPlan", "operationBudget"], agent_name="V14.3 Operation Value Agent", schema_name="v143_agent_budget_judgment")
     output = llm_result.get("output") or {}
     judgment = _normalize_llm_output(output, fallback)
     judgment["llm"] = {"provider": llm_result.get("provider"), "model": llm_result.get("model"), "status": llm_result.get("status"), "fallbackUsed": llm_result.get("fallbackUsed"), "trace": llm_result.get("trace")}
@@ -161,6 +215,8 @@ def _signal_status_for_decision(decision: str) -> str:
         return "judged_pending_snapshot"
     if decision == "ignore_noise":
         return "ignored_noise"
+    if decision == "merge_candidate":
+        return "merge_candidate"
     return "observed_only"
 
 
@@ -172,7 +228,7 @@ def _save_judgment(signal: Dict[str, Any], rag_context: Dict[str, Any], judgment
     judgment_id = make_judgment_id()
     created_at = now_iso()
     status = "pending_task_snapshot" if judgment.get("decision") in SNAPSHOT_DECISIONS else "judgment_recorded"
-    payload = {"version": AGENT_JUDGMENT_STATION_VERSION, "judgmentId": judgment_id, "stationId": "agent_judgment_station", "dataVersion": signal.get("dataVersion"), "signalId": signal.get("signalId"), "entityType": signal.get("entityType"), "entityId": signal.get("entityId"), "signal": signal, "ragContextRef": rag_context.get("ragContextRef") or rag_context.get("outputRef"), "ragContext": rag_context, "decision": judgment.get("decision"), "confidence": judgment.get("confidence") or 0, "reason": judgment.get("reason"), "taskPlan": judgment.get("taskPlan") or {}, "evidenceRequirements": judgment.get("evidenceRequirements") or [], "reviewMetrics": judgment.get("reviewMetrics") or [], "riskBoundary": judgment.get("riskBoundary") or [], "agentJudgment": judgment, "directInterfaceControlAllowed": False, "rule": "V14.1 Agent judgment is idempotent by signalId."}
+    payload = {"version": AGENT_JUDGMENT_STATION_VERSION, "judgmentId": judgment_id, "stationId": "agent_judgment_station", "dataVersion": signal.get("dataVersion"), "signalId": signal.get("signalId"), "entityType": signal.get("entityType"), "entityId": signal.get("entityId"), "signal": signal, "ragContextRef": rag_context.get("ragContextRef") or rag_context.get("outputRef"), "ragContext": rag_context, "decision": judgment.get("decision"), "confidence": judgment.get("confidence") or 0, "reason": judgment.get("reason"), "taskPlan": judgment.get("taskPlan") or {}, "operationBudget": judgment.get("operationBudget") or {}, "evidenceRequirements": judgment.get("evidenceRequirements") or [], "reviewMetrics": judgment.get("reviewMetrics") or [], "riskBoundary": judgment.get("riskBoundary") or [], "agentJudgment": judgment, "directInterfaceControlAllowed": False, "rule": "V14.3 Agent judgment is idempotent by signalId and carries operation budget."}
     with connect() as conn:
         conn.execute("""
             INSERT INTO agent_judgments_v14 (judgment_id, data_version, signal_id, entity_type, entity_id, decision, confidence, status, rag_context_ref, payload, created_at, updated_at)
@@ -180,7 +236,7 @@ def _save_judgment(signal: Dict[str, Any], rag_context: Dict[str, Any], judgment
         """, (judgment_id, signal.get("dataVersion"), signal.get("signalId"), signal.get("entityType"), signal.get("entityId"), judgment.get("decision"), float(judgment.get("confidence") or 0), status, payload["ragContextRef"], dumps(payload), created_at, created_at))
         conn.commit()
         row = conn.execute("SELECT * FROM agent_judgments_v14 WHERE judgment_id = ?", (judgment_id,)).fetchone()
-    update_signal_status(signal.get("signalId"), _signal_status_for_decision(str(judgment.get("decision") or "")), {"agentJudgmentId": judgment_id, "decision": judgment.get("decision")})
+    update_signal_status(signal.get("signalId"), _signal_status_for_decision(str(judgment.get("decision") or "")), {"agentJudgmentId": judgment_id, "decision": judgment.get("decision"), "operationBudget": judgment.get("operationBudget")})
     return _row_to_judgment(row)
 
 
@@ -195,24 +251,29 @@ def run_agent_judgment_station(data_version: str | None = None, *, rag_context_r
     for item in judgments:
         by_decision[str(item.get("decision"))] += 1
     ref = f"agent_judgment:{data_version or 'latest'}"
-    return {"version": AGENT_JUDGMENT_STATION_VERSION, "mode": "rag_enhanced_agent_judgment_no_interface_control", "dataVersion": data_version, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "agentJudgmentRef": ref, "outputRef": ref, "signalCount": len(signals), "judgmentCount": len(judgments), "pendingTaskSnapshotCount": sum(1 for item in judgments if item.get("decision") in SNAPSHOT_DECISIONS), "byDecision": dict(by_decision), "judgments": judgments, "rule": "V14.1 judged signals are no longer reprocessed as pending."}
+    return {"version": AGENT_JUDGMENT_STATION_VERSION, "mode": "rag_operation_value_budget_agent_judgment", "dataVersion": data_version, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "agentJudgmentRef": ref, "outputRef": ref, "signalCount": len(signals), "judgmentCount": len(judgments), "pendingTaskSnapshotCount": sum(1 for item in judgments if item.get("decision") in SNAPSHOT_DECISIONS), "byDecision": dict(by_decision), "judgments": judgments, "rule": "V14.3 Agent judges full signal packages under RAG operation-value and budget boundaries."}
 
 
 def materialize_task_snapshots_from_judgments(data_version: str | None = None, *, created_by: str | None = None, limit: int = 50) -> Dict[str, Any]:
     result = list_agent_judgments(data_version=data_version, status="pending_task_snapshot", limit=limit)
     snapshots: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
+    budget_ledgers: List[Dict[str, Any]] = []
     for item in result.get("judgments") or []:
         decision = item.get("decision")
         if decision not in SNAPSHOT_DECISIONS:
             skipped.append({"judgmentId": item.get("judgmentId"), "reason": "decision_not_for_task_snapshot", "decision": decision})
             continue
-        snapshot = create_task_snapshot({"dataVersion": item.get("dataVersion"), "decision": decision, "confidence": item.get("confidence"), "entityType": item.get("entityType"), "entityId": item.get("entityId"), "signalRef": item.get("signalId"), "ragContext": item.get("ragContext") or {}, "agentJudgment": item.get("agentJudgment") or {}, "taskPlan": item.get("taskPlan") or {}, "evidenceRequirements": item.get("evidenceRequirements") or [], "systemFacts": {"signal": item.get("signal") or {}, "judgmentId": item.get("judgmentId")}, "source": "agent_judgment_station"}, created_by=created_by)
+        plan = item.get("taskPlan") or {}
+        plan["operationBudget"] = item.get("operationBudget") or plan.get("operationBudget") or {}
+        snapshot = create_task_snapshot({"dataVersion": item.get("dataVersion"), "decision": decision, "confidence": item.get("confidence"), "entityType": item.get("entityType"), "entityId": item.get("entityId"), "productId": plan.get("productId") or (item.get("signal") or {}).get("productId"), "storeId": plan.get("storeId") or (item.get("signal") or {}).get("storeId"), "riskLevel": plan.get("riskLevel") or (item.get("operationBudget") or {}).get("riskLevel"), "operationBudget": item.get("operationBudget") or {}, "signalRef": item.get("signalId"), "ragContext": item.get("ragContext") or {}, "agentJudgment": item.get("agentJudgment") or {}, "taskPlan": plan, "evidenceRequirements": item.get("evidenceRequirements") or [], "systemFacts": {"signal": item.get("signal") or {}, "judgmentId": item.get("judgmentId"), "operationBudget": item.get("operationBudget") or {}}, "source": "agent_judgment_station"}, created_by=created_by)
         snapshots.append(snapshot)
+        budget_ledgers.append(reserve_budget_for_task({**snapshot, "operationBudget": item.get("operationBudget") or {}, "riskLevel": plan.get("riskLevel") or (item.get("operationBudget") or {}).get("riskLevel"), "storeId": plan.get("storeId") or (item.get("signal") or {}).get("storeId"), "productId": plan.get("productId") or (item.get("signal") or {}).get("productId")}, user_id=created_by))
         with connect() as conn:
             payload = dict(item)
             payload["taskSnapshotId"] = snapshot.get("taskSnapshotId")
+            payload["budgetLedger"] = budget_ledgers[-1]
             conn.execute("UPDATE agent_judgments_v14 SET status = ?, payload = ?, updated_at = ? WHERE judgment_id = ?", ("task_snapshot_created", dumps(payload), now_iso(), item.get("judgmentId")))
             conn.commit()
-        update_signal_status(item.get("signalId"), "task_snapshot_created", {"taskSnapshotId": snapshot.get("taskSnapshotId"), "judgmentId": item.get("judgmentId")})
-    return {"version": AGENT_JUDGMENT_STATION_VERSION, "dataVersion": data_version, "taskSnapshotCount": len(snapshots), "snapshots": snapshots, "skipped": skipped, "outputRef": f"task_snapshot:{data_version or 'latest'}", "rule": "V14.1 snapshots are materialized once per signal decision."}
+        update_signal_status(item.get("signalId"), "task_snapshot_created", {"taskSnapshotId": snapshot.get("taskSnapshotId"), "judgmentId": item.get("judgmentId"), "budgetLedger": budget_ledgers[-1]})
+    return {"version": AGENT_JUDGMENT_STATION_VERSION, "dataVersion": data_version, "taskSnapshotCount": len(snapshots), "snapshots": snapshots, "budgetLedgers": budget_ledgers, "skipped": skipped, "outputRef": f"task_snapshot:{data_version or 'latest'}", "rule": "V14.3 snapshots are materialized immediately with budget reservation."}
