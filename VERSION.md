@@ -1,33 +1,26 @@
 # Current Version
 
 ```text
-14.5.0
+14.5.1
 ```
 
-## V14.5 Meaning
+## V14.5.1 Meaning
 
-V14.5 adds Permission Stamp Propagation.
+V14.5.1 separates permission stamps from business payloads and compacts import responses.
 
 Mainline:
 
 ```text
-report uploader
-  -> permission stamp
-  -> imported rows
-  -> operating objects
-  -> product projection
-  -> system product snapshot
-  -> product signal package
-  -> Agent judgment
-  -> TaskIntent
-  -> PermissionEnvelope
-  -> task lifecycle
+report import
+  -> backend storage
+  -> compact counters and refs
+  -> station details by paged diagnostics only
 ```
 
 Core rules:
 
-- Uploading a report grants the uploader default operating ownership for rows in that report.
-- ERP/CRM explicit ownership overrides the uploader stamp.
-- Projection gates check the permission stamp before old store-scope fallback.
-- Historical unstamped rows can pass projection through operating object ownership checks.
-- System product snapshots carry permission fields forward.
+- Permission stamp is a station scan reference, not business payload content.
+- Product snapshots carry `permissionStampId` and `permissionGateStatus`, not the full permission object.
+- Agent packages do not carry owner, assignee, or visible-user details.
+- Upload/confirm endpoints return counters and refs only.
+- Rows, station outputs, product packages, signal packages, and task packages stay in backend storage.
