@@ -1,8 +1,8 @@
-"""V14.3 task generation mainline orchestrator.
+"""V14.4.2 task generation mainline orchestrator.
 
-The mainline runs full product signal packages in batches. Agent judgment creates
-budgeted task snapshots immediately; task lifecycle does not wait for all signal
-packages to finish.
+Compatibility functions keep older imports working, but the returned contract is
+V14.4.2: full product signal packages -> RAG -> Agent -> TaskIntent ->
+PermissionEnvelope -> task snapshots -> task pool.
 """
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ from typing import Any, Dict
 
 from src.services.station_contract_service import run_station_contract
 
-V142_TASK_MAINLINE_VERSION = "14.3.0"
-V143_TASK_MAINLINE_VERSION = "14.3.0"
+V142_TASK_MAINLINE_VERSION = "14.4.2"
+V143_TASK_MAINLINE_VERSION = "14.4.2"
+V144_TASK_MAINLINE_VERSION = "14.4.2"
 DEFAULT_AGENT_BATCH_SIZE = 20
 
 
@@ -29,7 +30,7 @@ def _batch_size(max_signals: int | None) -> int:
     return max(1, min(requested, DEFAULT_AGENT_BATCH_SIZE))
 
 
-def run_v142_task_mainline(data_version: str, *, user_id: str | None = None, max_signals: int = DEFAULT_AGENT_BATCH_SIZE, force: bool = True, source: str = "v143_mainline") -> Dict[str, Any]:
+def run_v142_task_mainline(data_version: str, *, user_id: str | None = None, max_signals: int = DEFAULT_AGENT_BATCH_SIZE, force: bool = True, source: str = "v1442_mainline") -> Dict[str, Any]:
     batch_size = _batch_size(max_signals)
     base = {"dataVersion": data_version, "userId": user_id, "maxSignals": batch_size, "force": force, "source": source, "agentBatchSize": batch_size}
     operating = run_station_contract("operating_snapshot_station", {**base, "operatingObjectRef": f"operating_objects:{data_version}", "upstreamStage": "operating_objects_ready"})
@@ -48,8 +49,12 @@ def run_v142_task_mainline(data_version: str, *, user_id: str | None = None, max
     judgment_count = _count(outputs["agentJudgment"], "judgmentCount")
     task_snapshot_count = _count(outputs["taskSnapshot"], "taskSnapshotCount")
     created_count = _count(outputs["taskPool"], "createdTaskCount")
-    return {"version": V143_TASK_MAINLINE_VERSION, "mode": "full_signal_package_rag_budget_agent_queue", "dataVersion": data_version, "source": source, "agentBatchSize": batch_size, "stationRuns": {"operatingSnapshot": operating, "productSnapshot": product_snapshot, "productSignalSnapshot": product_signal, "signal": signal, "rag": rag, "agent": agent, "taskSnapshot": task_snapshot, "taskPool": pool}, "taskGeneration": {"version": V143_TASK_MAINLINE_VERSION, "mode": "full_signal_package_to_budgeted_task_snapshot", "productSnapshotCount": product_snapshot_count, "productSignalPackageCount": product_signal_package_count, "productSignalCount": product_signal_count, "signalCount": signal_count, "judgmentCount": judgment_count, "taskSnapshotCount": task_snapshot_count, "createdTaskCount": created_count, "observeOrNoiseCount": max(judgment_count - task_snapshot_count, 0), "outputs": outputs}, "rule": "V14.3：系统全量生成商品信号包，RAG定义运营价值和预算边界，Agent每批最多20个包；任务一生成就进入快照、预算预占和任务池。"}
+    return {"version": V144_TASK_MAINLINE_VERSION, "mode": "v1442_task_intent_permission_mainline", "dataVersion": data_version, "source": source, "agentBatchSize": batch_size, "compatibilityFunction": "run_v142_task_mainline", "stationRuns": {"operatingSnapshot": operating, "productSnapshot": product_snapshot, "productSignalSnapshot": product_signal, "signal": signal, "rag": rag, "agent": agent, "taskSnapshot": task_snapshot, "taskPool": pool}, "taskGeneration": {"version": V144_TASK_MAINLINE_VERSION, "mode": "full_signal_package_to_task_intent_permission_task_pool", "productSnapshotCount": product_snapshot_count, "productSignalPackageCount": product_signal_package_count, "productSignalCount": product_signal_count, "signalCount": signal_count, "judgmentCount": judgment_count, "taskSnapshotCount": task_snapshot_count, "createdTaskCount": created_count, "observeOrNoiseCount": max(judgment_count - task_snapshot_count, 0), "outputs": outputs}, "rule": "V14.4.2：导入后主链生成全量信号包，RAG与Agent判断后统一进入TaskIntent和PermissionEnvelope，再生成任务快照与任务池。"}
 
 
-def run_v143_task_mainline(data_version: str, *, user_id: str | None = None, max_signals: int = DEFAULT_AGENT_BATCH_SIZE, force: bool = True, source: str = "v143_mainline") -> Dict[str, Any]:
+def run_v143_task_mainline(data_version: str, *, user_id: str | None = None, max_signals: int = DEFAULT_AGENT_BATCH_SIZE, force: bool = True, source: str = "v1442_mainline") -> Dict[str, Any]:
+    return run_v142_task_mainline(data_version, user_id=user_id, max_signals=max_signals, force=force, source=source)
+
+
+def run_v144_task_mainline(data_version: str, *, user_id: str | None = None, max_signals: int = DEFAULT_AGENT_BATCH_SIZE, force: bool = True, source: str = "v1442_mainline") -> Dict[str, Any]:
     return run_v142_task_mainline(data_version, user_id=user_id, max_signals=max_signals, force=force, source=source)
