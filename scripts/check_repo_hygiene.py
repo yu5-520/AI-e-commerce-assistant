@@ -26,6 +26,7 @@ REQUIRED_FILES = [
     "src/services/store_tag_projection_service.py",
     "src/services/operating_weight_policy_service.py",
     "src/services/action_authorization_gate_service.py",
+    "src/services/task_report_service.py",
     "src/services/action_impact_estimation_service.py",
     "src/services/task_lifecycle_orchestrator_service.py",
     "src/services/task_recap_scheduler_service.py",
@@ -33,21 +34,26 @@ REQUIRED_FILES = [
     "web_demo/index.html",
     "web_demo/core/api-client.js",
     "web_demo/modules/todo/page.js",
+    "web_demo/modules/task-report/page.js",
+    "web_demo/sop-ui.css",
 ]
 
 STATIC_MUST_CONTAIN = {
-    "README.md": ["V12.8.2", "后端主架构强制闸门", "store_tag_projection_service", "预算权限"],
-    "src/api/routes/modules/operating_unit.py": ["OPERATING_UNIT_VERSION = \"12.8.2\"", "project_store_tags", "权重未确认", "商品数量和已入库状态不能生成高权重店铺"],
+    "README.md": ["V12.8.3", "任务卡动作", "primaryTaskAction", "聚合任务详情"],
+    "web_demo/modules/todo/page.js": ["TASK CENTER · V12.8.3", "todo-time-rail", "primaryTaskAction", "data-submit"],
+    "web_demo/modules/task-report/page.js": ["lifecycleBlock", "affectedProductsBlock", "authorizationBlock", "聚合任务"],
+    "web_demo/sop-ui.css": ["todo-queue-row-v1283", "todo-time-rail", "todo-compact-tags"],
+    "src/services/task_report_service.py": ["REPORT_VERSION = \"12.8.3\"", "aggregate_task", "affectedProducts", "V12.8.3"],
+    "src/api/routes/modules/task_report.py": ["TASK_REPORT_ROUTE_VERSION = \"12.8.3\"", "详情报告临时兜底", "safe fallback 只能兜底"],
+    "src/api/routes/modules/operating_unit.py": ["OPERATING_UNIT_VERSION = \"12.8.2\"", "project_store_tags", "权重未确认"],
     "src/services/store_tag_projection_service.py": ["STORE_TAG_PROJECTION_VERSION = \"12.8.2\"", "governanceTag", "dataTags", "businessTags"],
     "src/services/operating_weight_policy_service.py": ["OPERATING_WEIGHT_POLICY_VERSION = \"12.8.2\"", "TRUSTED_GOVERNANCE_SOURCES", "ignoredImportedHighWeightLabel"],
     "src/services/action_authorization_gate_service.py": ["ACTION_AUTHORIZATION_VERSION = \"12.8.2\"", "operatorActivityBudgetRange", "budgetActionIsNotAutomaticManagerApproval", "belowCompanyFloor"],
-    "src/api/routes/modules/task_report.py": ["TASK_REPORT_ROUTE_VERSION = \"12.8.2\"", "详情报告临时兜底", "safe fallback 只能兜底"],
     "web_demo/core/api-client.js": ["lifecycleSummary", "completeRecapTodo"],
-    "web_demo/modules/todo/page.js": ["TASK CENTER · V12.8.1", "后端真实任务队列", "前端不再二次聚合"],
 }
 
 FORBIDDEN_CONTAINS = {
-    "web_demo/modules/todo/page.js": ["function clusterTasks", "taskClusterVersion: \"12.7.1\"", "TASK CENTER · V12.7.1"],
+    "web_demo/modules/todo/page.js": ["function clusterTasks", "taskClusterVersion: \"12.7.1\"", "TASK CENTER · V12.7.1", "write_recap", "data-review"],
     "src/api/routes/modules/operating_unit.py": ["len(products) >= 10", "return \"高权重店铺\""],
     "src/services/action_authorization_gate_service.py": ["HIGH_RISK_ACTIONS = {\"price_adjustment\", \"ad_budget_adjustment\""],
 }
