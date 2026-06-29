@@ -1,18 +1,19 @@
 # Current Version
 
 ```text
-14.4.0
+14.4.1
 ```
 
-## V14.4 Meaning
+## V14.4.1 Meaning
 
-V14.4 is a structural task-chain update. It adds a stable TaskIntent contract between Agent output, task snapshots, task pool, and visible tasks.
+V14.4.1 adds TaskIntent PermissionEnvelope.
 
 Mainline:
 
 ```text
 Agent judgment
   -> TaskIntent contract
+  -> PermissionEnvelope
   -> task snapshot
   -> task pool entry
   -> visible task
@@ -21,8 +22,8 @@ Agent judgment
 
 Core rules:
 
-- Downstream services do not read raw Agent package internals directly.
-- Task pool normalizes snapshots through TaskIntent before creating visible tasks.
-- Legacy impact estimation reads `actionImpactInput.metrics` first.
-- Mixed evidence formats must not break visible task creation.
-- TaskIntent is the anti-corruption layer between V14+ and older task modules.
+- Task approval reads structured permission fields.
+- Budget reads TaskIntent budget fields only.
+- Product code, title, deadline, id, and free text cannot become budget.
+- `create_task_snapshot` can enter `operator_execution` when the envelope allows it.
+- `manager_review_required`, high risk, hard actions, and over-budget tasks enter `manager_approval`.
