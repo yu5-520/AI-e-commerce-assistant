@@ -1,4 +1,4 @@
-"""Todo module routes for V12.9.1."""
+"""Todo module routes for V12.11.1."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from src.core.context import UserContext, context_from_headers, get_current_context
 from src.repositories.task_repository import TaskRepository
 from src.services.account_service import current_user, user_has_permission, user_id_from_headers
-from src.services.module_task_service import get_task_counters_for_user, list_task_events_for_user, list_tasks, pin_task, reorder_task, update_task
+from src.services.module_task_service import get_task_counters_for_user, list_task_events_for_user, list_tasks, pin_task, reorder_task
 from src.services.task_cluster_service import TASK_CLUSTER_VERSION, cluster_open_tasks
 from src.services.task_evidence_service import get_task_evidence, review_task_evidence, submit_task_evidence
 from src.services.task_lifecycle_state_machine_service import TASK_LIFECYCLE_STATE_MACHINE_VERSION, auto_accept_ready_tasks, get_lifecycle_task_projection, lifecycle_state_summary, project_lifecycle_task, transition_lifecycle_task
@@ -17,7 +17,7 @@ from src.services.task_repository_write_service import reset_tasks_with_reposito
 
 router = APIRouter()
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
-TODO_VERSION = "12.9.1"
+TODO_VERSION = "12.11.1"
 
 
 def request_user_id(request: Request) -> str:
@@ -103,9 +103,9 @@ def todo(request: Request, scope: str = Query(default="all"), assignee_id: str |
         "scope": scope,
         "viewer": current_user(viewer_id),
         "source": source,
-        "repositoryFallback": {"version": TODO_VERSION, "used": "repository" in source, "rule": "V12.9.1状态机可读取并回灌Repository任务。"},
+        "repositoryFallback": {"version": TODO_VERSION, "used": "repository" in source, "rule": "V12.11.1状态机可读取并回灌Repository任务。"},
         "taskActionSurface": {"version": TODO_VERSION, "taskClusterVersion": TASK_CLUSTER_VERSION, "lifecycleStateMachineVersion": TASK_LIFECYCLE_STATE_MACHINE_VERSION, "rule": "权限内运营任务自动接收，卡片默认进入提交材料阶段。"},
-        "rule": "V12.9.1：权限内任务生成后自动接收；人工接收保持幂等。",
+        "rule": "V12.11.1：权限内任务自动接收；提交、派发、复核、复盘统一走生命周期状态机。",
     }
 
 
@@ -203,21 +203,17 @@ def complete_todo(request: Request, task_id: str, ctx: UserContext = Depends(get
 
 
 @router.post("/todo/{task_id}/split")
-def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+def split_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
-    body = body or {}
-    assignee_id = body.get("operator_id") or body.get("operatorId") or body.get("assignee_id") or body.get("assigneeId")
-    reviewer_id = body.get("reviewer_id") or body.get("reviewerId")
-    task = update_task(task_id, {"status": "待接收", "workflowStatus": "已派发", "assigneeId": assignee_id, "reviewerId": reviewer_id}, log_type="任务派发", action="manager_assigned", result="任务已派发，等待运营接收。")
-    if not task:
-        raise HTTPException(status_code=404, detail="task not found")
-    return {"ok": True, "version": TODO_VERSION, "action": "manager_assigned", "task": get_lifecycle_task_projection(task_id, viewer_id) or _project_task(task, viewer_id)}
+    return _transition_or_404(task_id, "split", viewer_id=viewer_id, payload=body or {}, ctx=ctx)
 
 
 @router.post("/todo/{task_id}/assign")
-def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
-    return split_todo(request, task_id, body)
+def assign_todo(request: Request, task_id: str, body: Dict[str, Any] | None = Body(default=None), ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
+    return _transition_or_404(task_id, "assign", viewer_id=viewer_id, payload=body or {}, ctx=ctx)
 
 
 @router.post("/todo/{task_id}/pin")
@@ -227,19 +223,21 @@ def pin_todo(request: Request, task_id: str) -> Dict[str, Any]:
     task = pin_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="task not found")
-    return _project_task(task, viewer_id)
+    return {"ok": True, "version": TODO_VERSION, "task": get_lifecycle_task_projection(task_id, viewer_id) or _project_task(task, viewer_id)}
 
 
 @router.post("/todo/{task_id}/reorder")
-def reorder_todo(request: Request, task_id: str, direction: str = "down") -> Dict[str, Any]:
+def reorder_todo(request: Request, task_id: str, direction: str = Query(default="down")) -> Dict[str, Any]:
     viewer_id = request_user_id(request)
     require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
-    task = reorder_task(task_id, direction)
+    task = reorder_task(task_id, direction=direction)
     if not task:
-        raise HTTPException(status_code=400, detail="cannot reorder task")
-    return _project_task(task, viewer_id)
+        raise HTTPException(status_code=404, detail="task not found")
+    return {"ok": True, "version": TODO_VERSION, "task": get_lifecycle_task_projection(task_id, viewer_id) or _project_task(task, viewer_id)}
 
 
 @router.post("/todo/reset")
 def reset_todo(request: Request, ctx: UserContext = Depends(get_current_context)) -> Dict[str, Any]:
+    viewer_id = request_user_id(request)
+    require_any_permission(viewer_id, {"assign_tasks", "dispatch_tasks"})
     return reset_tasks_with_repository(ctx, reason="todo reset")
