@@ -1,18 +1,19 @@
-"""V13.3 clean business station registry.
+"""V13.4 clean business station registry.
 
 Only business mainline stations live here. Deprecated files, old hooks and legacy
 compatibility routes are registered in Deprecated Station Archive, not in the
 main Station Registry.
 
-V13.3 adds Agent-guided task judgment stations. Task snapshots are the formal
-entry package before task pool and lifecycle stations.
+V13.4 adds Task Pool Station: task snapshots can enter the visible task pool,
+while acceptance, assignment, submission and review remain separate lifecycle
+stations for later releases.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-STATION_REGISTRY_VERSION = "13.3.0"
+STATION_REGISTRY_VERSION = "13.4.0"
 
 STATIONS: List[Dict[str, Any]] = [
     {
@@ -126,9 +127,22 @@ STATIONS: List[Dict[str, Any]] = [
         "backendModule": "src.services.task_snapshot_station_service",
         "frontendModule": "web_demo/stations/task-snapshot-station",
         "outputRefPrefix": "task_snapshot",
-        "nextStation": "agent_enhance_station",
+        "nextStation": "task_pool_station",
         "stationLine": "agent_task_judgment_line",
         "stationDomain": "task_snapshot",
+        "replayable": True,
+        "diagnosticSupported": True,
+    },
+    {
+        "stationId": "task_pool_station",
+        "stage": "task_pool_entered",
+        "title": "任务入池站",
+        "backendModule": "src.services.task_pool_station_service",
+        "frontendModule": "web_demo/stations/task-pool-station",
+        "outputRefPrefix": "task_pool",
+        "nextStation": "task_acceptance_station",
+        "stationLine": "internal_task_lifecycle_line",
+        "stationDomain": "task_pool",
         "replayable": True,
         "diagnosticSupported": True,
     },
@@ -220,5 +234,5 @@ def registry_summary() -> Dict[str, Any]:
             "internalTaskLifecycleLine": [station["stationId"] for station in STATIONS if station.get("stationLine") == "internal_task_lifecycle_line"],
         },
         "mainlinePurity": "deprecated_files_excluded",
-        "rule": "V13.3：外部数据线到经营快照；任务判断线经RAG、Agent和任务快照；任务生命周期线后续继续拆分。",
+        "rule": "V13.4：任务快照经task_pool_station进入任务池；接收/派发、提交/复核、复盘/RAG继续分站拆分。",
     }
