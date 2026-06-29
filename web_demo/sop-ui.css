@@ -68,6 +68,45 @@
   background: #ffffff;
 }
 
+.todo-queue-row-v1283 {
+  grid-template-columns: 118px minmax(360px, 1.7fr) minmax(220px, 0.75fr) minmax(178px, auto);
+  min-height: 102px;
+  align-items: center;
+}
+
+.todo-time-rail {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.todo-time-rail span {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.todo-time-rail strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.todo-time-rail em {
+  width: max-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+}
+
 .todo-queue-rank {
   font-size: 15px;
   font-weight: 900;
@@ -90,6 +129,10 @@
   letter-spacing: -0.04em;
 }
 
+.todo-queue-row-v1283 .todo-queue-main strong {
+  font-size: clamp(20px, 2vw, 28px);
+}
+
 .todo-queue-main span,
 .todo-queue-status span {
   overflow: hidden;
@@ -100,12 +143,14 @@
   font-weight: 850;
 }
 
+.todo-compact-tags,
 .todo-queue-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
+.todo-compact-tags em,
 .todo-queue-badges em {
   padding: 6px 9px;
   border-radius: 999px;
@@ -120,6 +165,22 @@
   font-size: 14px;
   font-weight: 950;
   color: #111827;
+}
+
+.todo-queue-row-v1283 .todo-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 10px;
+  margin-top: 0 !important;
+}
+
+.todo-queue-row-v1283 .todo-actions button {
+  min-width: 96px;
+}
+
+.todo-queue-row-v1283 .todo-actions button.secondary {
+  min-width: 82px;
 }
 
 .task-report-sop-list {
@@ -153,10 +214,11 @@
 }
 
 @media (max-width: 1100px) {
-  .todo-queue-row {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+  .todo-queue-row,
+  .todo-queue-row-v1283 {
+    grid-template-columns: 108px minmax(0, 1fr) auto;
   }
-  .todo-queue-badges,
+  .todo-compact-tags,
   .todo-queue-status {
     grid-column: 2 / -1;
   }
@@ -170,10 +232,12 @@
 
 @media (max-width: 640px) {
   .task-report-metric-grid,
-  .task-report-sop-step {
+  .task-report-sop-step,
+  .todo-queue-row,
+  .todo-queue-row-v1283 {
     grid-template-columns: 1fr;
   }
-  .todo-queue-row {
-    grid-template-columns: 1fr;
+  .todo-queue-row-v1283 .todo-actions {
+    justify-content: flex-start;
   }
 }
