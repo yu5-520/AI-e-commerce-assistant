@@ -1,46 +1,32 @@
-Current Version: 13.7.0
+Current Version: 14.2.0
 
-V13.7 Full Task Lifecycle Stations
+V14.2 System Product Snapshot Signal Mainline
 
-This release completes the V13 task lifecycle station plan:
+This release aligns the product module state and task signal generation path.
 
-- V13.5 Task Acceptance / Assignment Station
-- V13.6 Submission / Review Station
-- V13.7 Recap / RAG Feedback Station
+Core chain:
 
-Core rule:
-
-- Task Pool Station only creates visible task-pool tasks.
-- Acceptance and assignment are explicit lifecycle stations.
-- Submission records operator evidence, then advances the lifecycle state machine.
-- Review records manager review, then advances to return or recap scheduling.
-- Recap scheduling, recap completion and RAG candidate creation are explicit lifecycle stations.
-- Todo pages are now projections and operation entrances, not hidden lifecycle owners.
+`report import -> operating_snapshot_station -> system_product_snapshot_station -> product_signal_snapshot_station -> task_signal_station -> rag_context_station -> agent_judgment_station -> task_snapshot_station -> task_pool_station -> lifecycle stations`
 
 Key updates:
 
-- Added `src/services/task_acceptance_assignment_station_service.py`.
-- Added `src/services/task_submission_review_station_service.py`.
-- Added `src/services/task_recap_rag_station_service.py`.
-- Added `src/api/routes/task_lifecycle_stations.py`.
-- Updated `src/api/main.py` to `13.7.0` and included task lifecycle station routes.
-- Updated `station_registry_service.py` with the full internal task lifecycle line.
-- Updated `station_contract_service.py` with V13.7 lifecycle station contracts.
+- Added `src/services/system_product_snapshot_service.py`.
+- Added `src/services/product_signal_snapshot_service.py`.
+- Added `src/services/v142_task_mainline_service.py`.
+- Updated `src/services/signal_pool_service.py` to consume product signal snapshots.
+- Updated `src/services/station_registry_service.py` with snapshot signal stations.
+- Updated `src/services/station_contract_service.py` with V14.2 contracts.
+- Updated `src/services/station_adapter_service.py` with real snapshot signal adapters.
+- Updated `src/api/routes/pipeline.py` to run the V14.2 mainline.
+- Updated `src/api/routes/data_import.py` to run the V14.2 mainline after imports.
+- Updated `src/api/main.py` to `14.2.0`.
+- Added `docs/V14_2_UPDATE_SUMMARY.md`.
+- Added `docs/V14_OLD_CHAIN_ISOLATION.md`.
 
-Current full chain:
+Runtime counters:
 
-External data line:
+`productSnapshotCount`, `productSignalCount`, `signalCount`, `judgmentCount`, `taskSnapshotCount`, `createdTaskCount`, `observeOrNoiseCount`.
 
-`import_station → report_parse_station → metric_fact_station → operating_object_station → operating_snapshot_station`
+Boundary:
 
-Agent judgment line:
-
-`task_signal_station → rag_context_station → agent_judgment_station → task_snapshot_station`
-
-Internal task lifecycle line:
-
-`task_pool_station → task_acceptance_station / task_assignment_station → task_submission_station → task_review_station → recap_schedule_station → recap_complete_station → rag_feedback_station`
-
-Current boundary:
-
-The Station Registry and dedicated lifecycle APIs are V13.7-complete. Station Interface can still write standard gates for every station. The dedicated lifecycle APIs perform the real task operations for acceptance, assignment, submission, review, recap and RAG feedback.
+Legacy routes may remain for archive, compatibility or diagnostics. The visible task path must pass through `task_snapshot_station`.
