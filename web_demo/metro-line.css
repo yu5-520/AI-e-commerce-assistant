@@ -38,7 +38,7 @@
 .metro-line {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(6, minmax(76px, 1fr));
+  grid-template-columns: repeat(7, minmax(64px, 1fr));
   gap: 10px;
   align-items: start;
   padding: 18px 4px 16px;
@@ -48,8 +48,8 @@
 .metro-line::before {
   content: "";
   position: absolute;
-  left: 42px;
-  right: 42px;
+  left: 36px;
+  right: 36px;
   top: 30px;
   height: 5px;
   border-radius: 999px;
@@ -60,7 +60,7 @@
   content: "";
   position: absolute;
   top: 30px;
-  left: 42px;
+  left: 36px;
   width: 70px;
   height: 5px;
   border-radius: 999px;
@@ -148,7 +148,7 @@
 
 @media (max-width: 900px) {
   .metro-line {
-    grid-template-columns: repeat(3, minmax(80px, 1fr));
+    grid-template-columns: repeat(4, minmax(76px, 1fr));
     row-gap: 24px;
   }
   .metro-line::before,
