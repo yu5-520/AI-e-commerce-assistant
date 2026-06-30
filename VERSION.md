@@ -1,25 +1,26 @@
 # Current Version
 
 ```text
-14.6.0
+14.6.1
 ```
 
-## V14.6 Meaning
+## V14.6.1 Meaning
 
-V14.6 upgrades the product from a synchronous long-chain request into a three-system asynchronous station queue runtime.
+V14.6.1 adds automatic station queue consumption.
 
-Three systems:
+Mainline:
 
 ```text
 report import system
-  -> task generation system
+  -> enqueue task generation
+  -> background station queue worker
   -> task lifecycle system
 ```
 
 Core rules:
 
-- Report import APIs finish the import system only.
-- Task generation is enqueued into `pipeline_jobs` and `station_queue`.
-- A queue worker runs one station at a time: product snapshot, signal snapshot, signal pool, RAG, Agent, task snapshot, task pool.
-- Agent and task materialization failures are isolated to station queue state; they no longer crash the upload request.
-- Frontend receives `import completed + task generation queued`, then polls queue/gate status.
+- FastAPI startup starts a conservative background `station_queue` worker.
+- The worker runs outside upload requests and consumes a small bounded number of stations per tick.
+- Pipeline API exposes worker status, start, stop, and one-tick controls.
+- Manual batch execution remains available for debugging.
+- Upload requests still finish after import and enqueue; they do not wait for Agent or task materialization.
