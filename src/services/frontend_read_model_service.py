@@ -1,8 +1,8 @@
-"""V14.8 frontend read model service.
+"""V14.8.2 frontend read model service.
 
-Frontend pages must read pre-built view models only. This service creates and
-refreshes lightweight read tables from already persisted runtime results. It does
-not run materialize/generate/Agent/worker functions.
+Frontend pages read cached view models only. V14.8.2 also makes task read
+models use taskId as the frontend id and filters background observations out of
+the visible execution queue.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 
-FRONTEND_READ_MODEL_VERSION = "14.8.0"
+FRONTEND_READ_MODEL_VERSION = "14.8.2"
 VIEW_TABLES = [
     "frontend_dashboard_view",
     "frontend_product_view",
@@ -21,6 +21,9 @@ VIEW_TABLES = [
     "frontend_store_view",
     "frontend_system_status_view",
 ]
+DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
+BACKGROUND_TASK_TYPES = {"observe_only", "backend_observation", "candidate_only", "report_seed_only", "merged_duplicate"}
+GENERIC_TITLES = {"经营任务", "后台观察", "商品经营观察", "任务"}
 
 
 def now_iso() -> str:
@@ -154,27 +157,76 @@ def refresh_product_views(data_version: str | None = None) -> Dict[str, Any]:
     return {"version": FRONTEND_READ_MODEL_VERSION, "updated": len(bundles), "status": "product_views_refreshed", "rule": "Refreshed from persisted fullProductBundle snapshot only."}
 
 
+def _first_store_id(task: Dict[str, Any]) -> str | None:
+    stores = task.get("storeIds") or task.get("visibleStoreIds") or []
+    if isinstance(stores, list) and stores:
+        return stores[0]
+    return task.get("storeId")
+
+
+def _task_title(task: Dict[str, Any]) -> str:
+    card = task.get("taskCard") if isinstance(task.get("taskCard"), dict) else {}
+    intent = task.get("taskIntent") if isinstance(task.get("taskIntent"), dict) else {}
+    plan = (task.get("taskDetailReport") or {}).get("taskPlan") if isinstance(task.get("taskDetailReport"), dict) else {}
+    title = task.get("title") or card.get("title") or plan.get("title") or intent.get("title")
+    if str(title or "").strip() in GENERIC_TITLES:
+        title = plan.get("title") or intent.get("title") or task.get("productTitle") or title
+    return title or "经营任务"
+
+
+def _visible_task(task: Dict[str, Any]) -> bool:
+    if not isinstance(task, dict):
+        return False
+    if task.get("status") in DONE_STATUS or task.get("workflowStatus") in DONE_STATUS:
+        return False
+    card = task.get("taskCard") if isinstance(task.get("taskCard"), dict) else {}
+    detail = task.get("taskDetailReport") if isinstance(task.get("taskDetailReport"), dict) else {}
+    judgment = task.get("agentJudgment") if isinstance(task.get("agentJudgment"), dict) else {}
+    intent = task.get("taskIntent") if isinstance(task.get("taskIntent"), dict) else {}
+    task_type = str(task.get("taskType") or intent.get("taskType") or "")
+    action_type = str(task.get("actionType") or (task.get("actionAuthorization") or {}).get("actionType") or "")
+    deadline = str(task.get("deadline") or card.get("deadline") or "")
+    decision = str(judgment.get("decision") or detail.get("decision") or task.get("decision") or "")
+    if deadline == "后台观察" or task_type in BACKGROUND_TASK_TYPES or action_type in BACKGROUND_TASK_TYPES or decision == "observe_only":
+        return False
+    return bool(task.get("id") or task.get("taskId"))
+
+
 def _task_summary(task: Dict[str, Any]) -> Dict[str, Any]:
     card = task.get("taskCard") if isinstance(task.get("taskCard"), dict) else {}
     auth = task.get("actionAuthorization") if isinstance(task.get("actionAuthorization"), dict) else {}
+    task_id = task.get("id") or task.get("taskId")
     return {
         "viewVersion": FRONTEND_READ_MODEL_VERSION,
-        "taskId": task.get("id"),
-        "title": task.get("title") or card.get("title"),
-        "subtitle": card.get("subtitle"),
+        "id": task_id,
+        "taskId": task_id,
+        "title": _task_title(task),
+        "subtitle": card.get("subtitle") or task.get("subtitle"),
         "status": task.get("status"),
         "workflowStatus": task.get("workflowStatus"),
+        "displayStatus": task.get("displayStatus"),
         "taskLayer": task.get("taskLayer"),
         "priority": task.get("priority"),
-        "deadline": task.get("deadline"),
+        "deadline": task.get("deadline") or card.get("deadline"),
         "productId": task.get("productId"),
+        "entityId": task.get("entityId"),
         "storeIds": task.get("storeIds") or task.get("visibleStoreIds") or [],
-        "storeId": (task.get("storeIds") or task.get("visibleStoreIds") or [None])[0],
+        "storeId": _first_store_id(task),
+        "store": task.get("store") or task.get("storeName"),
+        "storeName": task.get("storeName") or task.get("store"),
+        "platform": task.get("platform"),
+        "riskDomain": task.get("riskDomain"),
+        "actionType": task.get("actionType"),
+        "taskType": task.get("taskType"),
+        "reason": task.get("reason") or (task.get("taskDetailReport") or {}).get("warningSummary") if isinstance(task.get("taskDetailReport"), dict) else task.get("reason"),
         "assigneeId": task.get("assigneeId"),
         "assigneeName": task.get("assigneeName"),
         "reviewerId": task.get("reviewerId"),
         "reviewerName": task.get("reviewerName"),
         "managerApproval": auth.get("decision") in {"manager_approval_required", "owner_approval_required"} or task.get("taskLayer") in {"manager_dispatch", "manager_approval"},
+        "actionAuthorization": auth,
+        "primaryTaskAction": task.get("primaryTaskAction"),
+        "visibleTaskActions": task.get("visibleTaskActions") or task.get("availableActions") or [],
         "availableActions": task.get("availableActions") or [],
         "updatedAt": task.get("updatedAt") or now_iso(),
     }
@@ -187,15 +239,20 @@ def refresh_task_views(limit: int = 300) -> Dict[str, Any]:
             return {"version": FRONTEND_READ_MODEL_VERSION, "updated": 0, "status": "no_source_table"}
         rows = conn.execute("SELECT * FROM task_pool_entries ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
         updated = 0
+        skipped = 0
         now = now_iso()
+        conn.execute("DELETE FROM frontend_task_view")
+        conn.execute("DELETE FROM frontend_task_detail_view")
         for row in rows:
             payload = loads(row["payload"])
             task = payload.get("task") if isinstance(payload.get("task"), dict) else None
-            if not task:
+            if not task or not _visible_task(task):
+                skipped += 1
                 continue
             summary = _task_summary(task)
             task_id = summary.get("taskId")
             if not task_id:
+                skipped += 1
                 continue
             conn.execute(
                 """
@@ -204,12 +261,12 @@ def refresh_task_views(limit: int = 300) -> Dict[str, Any]:
                 """,
                 (task_id, summary.get("status"), summary.get("workflowStatus"), summary.get("taskLayer"), summary.get("priority"), summary.get("deadline"), summary.get("storeId"), summary.get("productId"), dumps(summary), now),
             )
-            detail = {"viewVersion": FRONTEND_READ_MODEL_VERSION, "taskId": task_id, "taskCard": task.get("taskCard"), "taskDetailReport": task.get("taskDetailReport"), "evidencePack": task.get("evidencePack"), "sopSteps": task.get("sopSteps"), "reviewMetrics": task.get("reviewMetrics"), "completionGate": task.get("completionGate"), "failureThreshold": task.get("failureThreshold"), "agentJudgment": task.get("agentJudgment"), "ownership": task.get("ownership"), "updatedAt": summary.get("updatedAt")}
+            detail = {"viewVersion": FRONTEND_READ_MODEL_VERSION, "id": task_id, "taskId": task_id, "relatedTask": task, "taskCard": task.get("taskCard"), "taskDetailReport": task.get("taskDetailReport"), "evidencePack": task.get("evidencePack"), "sopSteps": task.get("sopSteps"), "reviewMetrics": task.get("reviewMetrics"), "completionGate": task.get("completionGate"), "failureThreshold": task.get("failureThreshold"), "agentJudgment": task.get("agentJudgment"), "ownership": task.get("ownership"), "updatedAt": summary.get("updatedAt")}
             conn.execute("INSERT OR REPLACE INTO frontend_task_detail_view (task_id, payload, updated_at) VALUES (?, ?, ?)", (task_id, dumps(detail), now))
             updated += 1
         conn.commit()
     refresh_dashboard_view()
-    return {"version": FRONTEND_READ_MODEL_VERSION, "updated": updated, "status": "task_views_refreshed", "rule": "Refreshed from persisted task_pool_entries only."}
+    return {"version": FRONTEND_READ_MODEL_VERSION, "updated": updated, "skippedBackgroundOrInvalid": skipped, "status": "task_views_refreshed", "rule": "Refreshed from persisted task_pool_entries; background observations are filtered out."}
 
 
 def refresh_dashboard_view() -> Dict[str, Any]:
@@ -220,7 +277,7 @@ def refresh_dashboard_view() -> Dict[str, Any]:
         queues = []
         if _table_exists(conn, "station_queue"):
             queues = [dict(row) for row in conn.execute("SELECT station_id, status, COUNT(*) AS count FROM station_queue GROUP BY station_id, status").fetchall()]
-        active = [item for item in tasks if item.get("status") not in {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}]
+        active = [item for item in tasks if item.get("status") not in DONE_STATUS]
         manager = [item for item in active if item.get("managerApproval") or item.get("status") in {"待复核", "待拆分"}]
         processing = [item for item in active if item.get("status") == "处理中"]
         recap = [item for item in active if item.get("status") in {"已完成", "待复盘"}]
@@ -236,9 +293,9 @@ def refresh_after_station(station_id: str | None = None, data_version: str | Non
     result: Dict[str, Any] = {"version": FRONTEND_READ_MODEL_VERSION, "stationId": station_id, "dataVersion": data_version, "updates": []}
     if station_id in {"product_signal_snapshot_station", "task_signal_station"}:
         result["updates"].append(refresh_product_views(data_version=data_version))
-    if station_id in {"task_pool_station", "task_snapshot_station"}:
+    if station_id in {"task_pool_station", "task_snapshot_station", "agent_judgment_station"}:
         result["updates"].append(refresh_task_views())
-    if station_id in {"agent_judgment_station", "rag_context_station", "station_queue"}:
+    if station_id in {"rag_context_station", "station_queue"}:
         result["updates"].append(refresh_dashboard_view())
     if not result["updates"]:
         result["updates"].append(refresh_dashboard_view())
@@ -281,7 +338,8 @@ def read_task_views(status: str | None = None, limit: int = 200) -> Dict[str, An
     with connect() as conn:
         rows = conn.execute(f"SELECT payload, updated_at FROM frontend_task_view {where} ORDER BY updated_at DESC LIMIT ?", (*params, limit)).fetchall()
     items = [loads(row["payload"]) for row in rows]
-    return {"version": FRONTEND_READ_MODEL_VERSION, "ready": bool(rows), "count": len(items), "items": items, "rule": "Read-only cached task list view."}
+    items = [item for item in items if item.get("id") or item.get("taskId")]
+    return {"version": FRONTEND_READ_MODEL_VERSION, "ready": bool(items), "count": len(items), "items": items, "rule": "Read-only cached task list view."}
 
 
 def read_task_detail(task_id: str) -> Dict[str, Any]:
