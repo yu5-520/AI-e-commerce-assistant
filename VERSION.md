@@ -1,12 +1,12 @@
 # Current Version
 
 ```text
-14.8.1
+14.8.2
 ```
 
-## V14.8.1 Meaning
+## V14.8.2 Meaning
 
-V14.8.1 is a breakpoint repair over V14.8. It keeps frontend read isolation, but fixes two regressions found in product detail and task generation.
+V14.8.2 is a task-quality and detail-page repair over V14.8.1.
 
 Mainline:
 
@@ -17,20 +17,18 @@ report import system
   -> fullProductBundle assembly
   -> RAG volatility boundary context
   -> Agent product diagnosis soft routing
-  -> mature judgment immediately creates V11.8 SOP task snapshot
-  -> data-gap judgment creates formal data verification SOP task
-  -> mature/data-gap task immediately enters task pool
+  -> only mature judgment / severe data gap creates V11.8 SOP task snapshot
+  -> observe-only and background observation stay out of formal task pool
+  -> taskId becomes the unified frontend detail key
   -> frontend read model refresh
-  -> frontend reads /api/view/* and /api/modules/product bridge only
 ```
 
 Core rules:
 
-- Frontend page switching reads cached read models only.
-- `/api/view/*` endpoints do not run materialize, generate, enqueue, Agent judgment, worker execution, or task sync.
-- Product page can merge `frontend_product_view` with runtime product projection so SKU, product positioning, metric sections, traffic facts and missing-field summaries remain visible.
-- One mature Agent judgment can stream into task snapshot and task pool immediately; it does not wait for the full worker batch.
-- Missing core product facts are not hard blockers. They become formal data verification SOP tasks.
-- Observe, evidence-only and merge routes stay outside the formal task pool, but must carry explicit reasons.
-- Formal task output still remains the repository V11.8 SOP package.
-- SQLite uses WAL and busy_timeout to reduce read/write blocking on low-config ECS.
+- Product metric cards display business data date, for example `2026.6.25`, not engineering labels such as cache/read model/projection.
+- Report date priority: report field date first, filename/dataVersion date second, upload/create date third.
+- LLM may enrich Agent wording, but it may not upgrade `observe_only` into a task-pool entry.
+- Only mature operating judgments and serious data gaps enter `task_snapshot -> task_pool`.
+- Background observation is filtered out of the execution queue.
+- Task read model must expose `id = taskId` so list cards and detail pages use the same key.
+- Detail fallback remains backend-driven; frontend should not depend on local transient state only.
