@@ -1,8 +1,8 @@
-"""V14.6.1 background station queue worker.
+"""V14.6.2 background station queue worker.
 
-The worker consumes station_queue outside user upload requests. It is intentionally
-small and conservative for demo ECS instances: each tick runs only a bounded
-number of station jobs, then sleeps.
+The worker consumes station_queue outside user upload requests. V14.6.2 keeps the
+worker conservative, but the queue itself now prioritizes mature task snapshots
+and task pool entries through a fast lane.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any, Dict
 
 from src.services.station_queue_service import STATION_QUEUE_VERSION, queue_summary, run_next_station_job
 
-STATION_QUEUE_WORKER_VERSION = "14.6.1"
+STATION_QUEUE_WORKER_VERSION = "14.6.2"
 
 _STATE: Dict[str, Any] = {
     "enabled": False,
@@ -65,9 +65,10 @@ def worker_config() -> Dict[str, Any]:
         "version": STATION_QUEUE_WORKER_VERSION,
         "queueVersion": STATION_QUEUE_VERSION,
         "enabledByEnv": _env_bool("STATION_QUEUE_WORKER_ENABLED", True),
-        "intervalSeconds": _env_float("STATION_QUEUE_WORKER_INTERVAL", 3.0, 1.0, 60.0),
-        "maxJobsPerTick": _env_int("STATION_QUEUE_WORKER_MAX_JOBS_PER_TICK", 2, 1, 10),
+        "intervalSeconds": _env_float("STATION_QUEUE_WORKER_INTERVAL", 2.0, 1.0, 60.0),
+        "maxJobsPerTick": _env_int("STATION_QUEUE_WORKER_MAX_JOBS_PER_TICK", 3, 1, 10),
         "systemType": os.getenv("STATION_QUEUE_WORKER_SYSTEM_TYPE", "task_generation"),
+        "fastLaneRule": "Queue priority, not batch completion, determines next station. task_pool=1, task_snapshot=5.",
     }
 
 
@@ -79,7 +80,7 @@ def _set_state(**kwargs: Any) -> None:
 def worker_status(include_queue: bool = True) -> Dict[str, Any]:
     with _LOCK:
         state = dict(_STATE)
-    result = {"version": STATION_QUEUE_WORKER_VERSION, "config": worker_config(), "state": state, "rule": "V14.6.1 worker consumes station_queue outside upload requests."}
+    result = {"version": STATION_QUEUE_WORKER_VERSION, "config": worker_config(), "state": state, "rule": "V14.6.2 worker consumes fast-lane station_queue outside upload requests."}
     if include_queue:
         try:
             result["queueSummary"] = queue_summary(limit=20)
