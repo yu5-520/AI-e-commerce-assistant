@@ -68,9 +68,9 @@
   animation: metro-flow 2.6s linear infinite;
 }
 
-.metro-waiting::after { display: none; }
-.metro-completed::after { opacity: .55; }
-.metro-attention::after { background: linear-gradient(90deg, rgba(217,119,6,0), rgba(217,119,6,.95), rgba(217,119,6,0)); }
+.metro-line.metro-waiting::after { display: none; }
+.metro-line.metro-completed::after { opacity: .55; }
+.metro-line.metro-attention::after { background: linear-gradient(90deg, rgba(217,119,6,0), rgba(217,119,6,.95), rgba(217,119,6,0)); }
 
 .metro-station {
   position: relative;
@@ -103,36 +103,36 @@
   font-weight: 850;
 }
 
-.metro-passed,
-.metro-current,
-.metro-empty {
+.metro-station.metro-passed,
+.metro-station.metro-current,
+.metro-station.metro-empty {
   color: #065f46;
 }
 
-.metro-passed .metro-dot {
+.metro-station.metro-passed .metro-dot {
   border-color: #059669;
   background: #10b981;
 }
 
-.metro-current .metro-dot {
+.metro-station.metro-current .metro-dot {
   border-color: #059669;
   background: #dcfce7;
   animation: metro-pulse 1.5s ease-in-out infinite;
 }
 
-.metro-empty .metro-dot {
+.metro-station.metro-empty .metro-dot {
   border-color: #059669;
   background: #ffffff;
 }
 
-.metro-attention .metro-dot,
-.metro-error .metro-dot {
+.metro-station.metro-attention .metro-dot,
+.metro-station.metro-error .metro-dot {
   border-color: #dc2626;
   background: #fee2e2;
 }
 
-.metro-attention,
-.metro-error {
+.metro-station.metro-attention,
+.metro-station.metro-error {
   color: #b91c1c;
 }
 
