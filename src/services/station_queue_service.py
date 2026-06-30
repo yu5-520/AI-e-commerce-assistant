@@ -1,14 +1,10 @@
-"""V14.6.2 station queue runtime with streaming task pool fast lane.
+"""V14.8 station queue runtime.
 
-The product is split into three asynchronous systems:
-
-1. import system: report rows -> operating objects -> metric facts -> operating snapshot
-2. task generation system: product snapshot -> signal snapshot -> signal pool -> RAG -> Agent -> task snapshot
-3. lifecycle system: task snapshot -> task pool -> receive/submit/review/recap
-
-V14.6.2 changes the queue from async batch processing to streaming task intake:
-once Agent produces task-worthy judgments, task_snapshot_station and task_pool_station
-are inserted into a fast lane and consumed before lower-priority snapshot/signal work.
+The queue is a backend compute pipeline. Frontend pages read cached read models and
+must not consume queue jobs or trigger station execution. Mature Agent judgments
+stream into SOP task snapshots/task pool inside the Agent station; the queue only
+continues to task_snapshot_station when there are explicit pending snapshots to
+materialize.
 """
 
 from __future__ import annotations
@@ -21,26 +17,18 @@ from src.repositories.sqlite_repository import connect, dumps, ensure_columns, l
 from src.services.pipeline_gate_service import record_stage_gate
 from src.services.station_contract_service import run_station_contract
 
-STATION_QUEUE_VERSION = "14.6.2"
+STATION_QUEUE_VERSION = "14.8.0"
 TASK_GENERATION_SEQUENCE = [
     ("system_product_snapshot_station", "system_product_snapshot_ready"),
-    ("product_signal_snapshot_station", "product_signal_snapshot_ready"),
-    ("task_signal_station", "task_signal_ready"),
-    ("rag_context_station", "rag_context_ready"),
-    ("agent_judgment_station", "agent_judgment_ready"),
+    ("product_signal_snapshot_station", "full_product_bundle_ready"),
+    ("task_signal_station", "full_product_bundle_queued"),
+    ("rag_context_station", "rag_volatility_context_ready"),
+    ("agent_judgment_station", "agent_soft_routing_streamed"),
     ("task_snapshot_station", "task_snapshot_ready"),
     ("task_pool_station", "task_pool_ready"),
 ]
 STATION_INDEX = {station: index for index, (station, _stage) in enumerate(TASK_GENERATION_SEQUENCE)}
-STATION_PRIORITY = {
-    "task_pool_station": 1,
-    "task_snapshot_station": 5,
-    "agent_judgment_station": 30,
-    "rag_context_station": 40,
-    "task_signal_station": 50,
-    "product_signal_snapshot_station": 60,
-    "system_product_snapshot_station": 70,
-}
+STATION_PRIORITY = {"task_pool_station": 1, "task_snapshot_station": 5, "agent_judgment_station": 30, "rag_context_station": 40, "task_signal_station": 50, "product_signal_snapshot_station": 60, "system_product_snapshot_station": 70}
 FAST_LANE_STATIONS = {"task_snapshot_station", "task_pool_station"}
 
 
@@ -58,8 +46,7 @@ def _priority_for(station_id: str, default: int = 50) -> int:
 
 def ensure_queue_tables() -> None:
     with connect() as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS pipeline_jobs (
                 job_id TEXT PRIMARY KEY,
                 system_type TEXT NOT NULL,
@@ -75,10 +62,8 @@ def ensure_queue_tables() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
-        conn.execute(
-            """
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS station_queue (
                 station_job_id TEXT PRIMARY KEY,
                 parent_job_id TEXT NOT NULL,
@@ -99,8 +84,7 @@ def ensure_queue_tables() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
         ensure_columns(conn, "pipeline_jobs", {"system_type": "TEXT", "tenant_id": "TEXT", "actor_user_id": "TEXT", "data_version": "TEXT", "status": "TEXT", "current_station": "TEXT", "input_ref": "TEXT", "output_ref": "TEXT", "payload": "TEXT", "error_message": "TEXT", "updated_at": "TEXT"})
         ensure_columns(conn, "station_queue", {"parent_job_id": "TEXT", "system_type": "TEXT", "station_id": "TEXT", "stage": "TEXT", "data_version": "TEXT", "status": "TEXT", "priority": "INTEGER DEFAULT 50", "input_ref": "TEXT", "output_ref": "TEXT", "payload": "TEXT", "attempt_count": "INTEGER DEFAULT 0", "max_attempts": "INTEGER DEFAULT 3", "locked_by": "TEXT", "locked_until": "TEXT", "error_message": "TEXT", "updated_at": "TEXT"})
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_status ON pipeline_jobs(system_type, status, updated_at)")
@@ -130,13 +114,10 @@ def _insert_station_job(conn: Any, *, parent_job_id: str, system_type: str, stat
     body["fastLane"] = station_id in FAST_LANE_STATIONS
     selected_priority = _priority_for(station_id, priority if priority is not None else 50)
     now = now_iso()
-    conn.execute(
-        """
+    conn.execute("""
         INSERT INTO station_queue (station_job_id, parent_job_id, system_type, station_id, stage, data_version, status, priority, input_ref, payload, attempt_count, max_attempts, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, 3, ?, ?)
-        """,
-        (station_job_id, parent_job_id, system_type, station_id, stage, data_version, int(selected_priority), input_ref, dumps(body), now, now),
-    )
+    """, (station_job_id, parent_job_id, system_type, station_id, stage, data_version, int(selected_priority), input_ref, dumps(body), now, now))
     return station_job_id
 
 
@@ -144,33 +125,27 @@ def enqueue_task_generation(data_version: str | None, *, actor_user_id: str | No
     ensure_queue_tables()
     now = now_iso()
     with connect() as conn:
-        existing = conn.execute(
-            """
+        existing = conn.execute("""
             SELECT * FROM pipeline_jobs
             WHERE system_type = 'task_generation'
               AND COALESCE(data_version, '') = COALESCE(?, '')
               AND status IN ('queued', 'running')
             ORDER BY updated_at DESC LIMIT 1
-            """,
-            (data_version,),
-        ).fetchone()
+        """, (data_version,)).fetchone()
         if existing:
             return {"version": STATION_QUEUE_VERSION, "queued": False, "idempotentHit": True, "job": _row_to_job(existing), "rule": "Task generation job already queued or running for this data version."}
         job_id = _job_id("JOB-TASKGEN")
         first_station, first_stage = TASK_GENERATION_SEQUENCE[0]
-        payload = {"version": STATION_QUEUE_VERSION, "source": source, "force": force, "dataVersion": data_version, "actorUserId": actor_user_id, "sequence": [station for station, _ in TASK_GENERATION_SEQUENCE], "boundary": "import system completed; task generation continues asynchronously", "streamingFastLane": True}
-        conn.execute(
-            """
+        payload = {"version": STATION_QUEUE_VERSION, "source": source, "force": force, "dataVersion": data_version, "actorUserId": actor_user_id, "sequence": [station for station, _ in TASK_GENERATION_SEQUENCE], "boundary": "import system completed; task generation continues asynchronously", "frontendReadModelIsolated": True, "agentStreamsMatureTasks": True}
+        conn.execute("""
             INSERT INTO pipeline_jobs (job_id, system_type, actor_user_id, data_version, status, current_station, input_ref, payload, created_at, updated_at)
             VALUES (?, 'task_generation', ?, ?, 'queued', ?, ?, ?, ?, ?)
-            """,
-            (job_id, actor_user_id, data_version, first_station, input_ref or f"operating_unit_snapshot:{data_version or 'latest'}", dumps(payload), now, now),
-        )
+        """, (job_id, actor_user_id, data_version, first_station, input_ref or f"operating_unit_snapshot:{data_version or 'latest'}", dumps(payload), now, now))
         station_job_id = _insert_station_job(conn, parent_job_id=job_id, system_type="task_generation", station_id=first_station, stage=first_stage, data_version=data_version, actor_user_id=actor_user_id, input_ref=input_ref or f"operating_unit_snapshot:{data_version or 'latest'}", payload={"dataVersion": data_version, "userId": actor_user_id, "force": force, "source": source, "agentBatchSize": 20, "maxSignals": 20}, priority=priority)
         conn.commit()
         job = conn.execute("SELECT * FROM pipeline_jobs WHERE job_id = ?", (job_id,)).fetchone()
-    record_stage_gate(data_version=data_version, stage="task_generation_queued", status="queued", input_payload={"source": source, "inputRef": input_ref}, output_payload={"jobId": job_id, "stationJobId": station_job_id, "streamingFastLane": True}, user_id=actor_user_id, upstream_stage="operating_unit_snapshot_ready", output_ref=f"pipeline_job:{job_id}")
-    return {"version": STATION_QUEUE_VERSION, "queued": True, "job": _row_to_job(job), "stationJobId": station_job_id, "status": "queued", "rule": "Import returned; task generation is queued station-by-station with streaming fast lane."}
+    record_stage_gate(data_version=data_version, stage="task_generation_queued", status="queued", input_payload={"source": source, "inputRef": input_ref}, output_payload={"jobId": job_id, "stationJobId": station_job_id, "frontendReadModelIsolated": True}, user_id=actor_user_id, upstream_stage="operating_unit_snapshot_ready", output_ref=f"pipeline_job:{job_id}")
+    return {"version": STATION_QUEUE_VERSION, "queued": True, "job": _row_to_job(job), "stationJobId": station_job_id, "status": "queued", "rule": "V14.8：导入请求返回后由worker异步生成；前端页面只读read model。"}
 
 
 def _claim_next_station(system_type: str = "task_generation", *, worker_id: str = "manual-worker") -> Dict[str, Any] | None:
@@ -178,17 +153,14 @@ def _claim_next_station(system_type: str = "task_generation", *, worker_id: str 
     now = now_iso()
     lock_until = (datetime.now() + timedelta(minutes=10)).isoformat()
     with connect() as conn:
-        row = conn.execute(
-            """
+        row = conn.execute("""
             SELECT * FROM station_queue
             WHERE system_type = ?
               AND status IN ('queued', 'retry')
               AND (locked_until IS NULL OR locked_until < ?)
             ORDER BY priority ASC, created_at ASC
             LIMIT 1
-            """,
-            (system_type, now),
-        ).fetchone()
+        """, (system_type, now)).fetchone()
         if not row:
             return None
         conn.execute("UPDATE station_queue SET status = 'running', locked_by = ?, locked_until = ?, attempt_count = attempt_count + 1, updated_at = ? WHERE station_job_id = ?", (worker_id, lock_until, now, row["station_job_id"]))
@@ -237,10 +209,15 @@ def _output_ref(output: Dict[str, Any], station_id: str, data_version: str | Non
 
 def _should_stream_to_next(station_id: str, output: Dict[str, Any]) -> bool:
     if station_id == "agent_judgment_station":
-        return int(output.get("pendingTaskSnapshotCount") or 0) > 0 or int(output.get("judgmentCount") or 0) > 0
+        return int(output.get("pendingTaskSnapshotCount") or 0) > 0 and int(output.get("streamedTaskSnapshotCount") or 0) <= 0
     if station_id == "task_snapshot_station":
         return int(output.get("taskSnapshotCount") or 0) > 0
     return True
+
+
+def _compact_output(output: Dict[str, Any]) -> Dict[str, Any]:
+    keys = ["version", "mode", "dataVersion", "productCount", "productSnapshotCount", "productSignalPackageCount", "productSignalCount", "signalCount", "matchedContextCount", "judgmentCount", "pendingTaskSnapshotCount", "streamedTaskSnapshotCount", "streamedTaskPoolCount", "taskSnapshotCount", "createdTaskCount", "outputRef", "productSnapshotRef", "productSignalSnapshotRef", "taskSignalRef", "ragContextRef", "agentJudgmentRef"]
+    return {key: output.get(key) for key in keys if key in output and output.get(key) is not None}
 
 
 def run_next_station_job(*, worker_id: str = "manual-worker", system_type: str = "task_generation") -> Dict[str, Any]:
@@ -267,12 +244,12 @@ def run_next_station_job(*, worker_id: str = "manual-worker", system_type: str =
                 inserted_next_id = _insert_station_job(conn, parent_job_id=job["jobId"], system_type=job["systemType"], station_id=next_id, stage=next_stage, data_version=job.get("dataVersion"), actor_user_id=job.get("actorUserId"), input_ref=output_ref, payload={"dataVersion": job.get("dataVersion"), "userId": job.get("actorUserId"), "force": True, "source": "station_queue_fast_lane" if next_id in FAST_LANE_STATIONS else "station_queue", "maxSignals": 20, "agentBatchSize": 20, "fastLane": next_id in FAST_LANE_STATIONS}, priority=_priority_for(next_id))
                 conn.execute("UPDATE pipeline_jobs SET status = 'running', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (next_id, output_ref, now, job["jobId"]))
             elif next_station:
-                conn.execute("UPDATE pipeline_jobs SET status = 'running', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (next_station[0], output_ref, now, job["jobId"]))
+                conn.execute("UPDATE pipeline_jobs SET status = 'completed', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (station_id, output_ref, now, job["jobId"]))
             else:
                 conn.execute("UPDATE pipeline_jobs SET status = 'completed', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (station_id, output_ref, now, job["jobId"]))
             conn.commit()
         record_stage_gate(data_version=job.get("dataVersion"), stage=station_job.get("stage") or station_id, status="completed", input_payload={"stationJobId": station_job["stationJobId"], "inputRef": station_job.get("inputRef"), "fastLane": station_job.get("fastLane")}, output_payload=_compact_output(output), user_id=job.get("actorUserId"), upstream_stage=None, output_ref=output_ref)
-        return {"version": STATION_QUEUE_VERSION, "ran": True, "status": "completed", "stationJobId": station_job["stationJobId"], "stationId": station_id, "fastLane": station_job.get("fastLane"), "dataVersion": job.get("dataVersion"), "outputRef": output_ref, "nextStation": next_station[0] if next_station else None, "insertedNextStationJobId": inserted_next_id, "output": _compact_output(output), "rule": "V14.6.2 runs one station and prioritizes task_snapshot/task_pool fast lane."}
+        return {"version": STATION_QUEUE_VERSION, "ran": True, "status": "completed", "stationJobId": station_job["stationJobId"], "stationId": station_id, "fastLane": station_job.get("fastLane"), "dataVersion": job.get("dataVersion"), "outputRef": output_ref, "nextStation": next_station[0] if next_station and inserted_next_id else None, "insertedNextStationJobId": inserted_next_id, "output": _compact_output(output), "rule": "V14.8 runs one worker station; Agent mature tasks stream into SOP task pool and frontend read model refreshes separately."}
     except Exception as exc:
         now = now_iso()
         status = "failed"
@@ -284,12 +261,7 @@ def run_next_station_job(*, worker_id: str = "manual-worker", system_type: str =
             conn.execute("UPDATE pipeline_jobs SET status = ?, error_message = ?, updated_at = ? WHERE job_id = ?", ("failed" if status == "failed" else "running", str(exc), now, job["jobId"]))
             conn.commit()
         record_stage_gate(data_version=job.get("dataVersion"), stage=station_job.get("stage") or station_id, status=status, input_payload={"stationJobId": station_job["stationJobId"], "fastLane": station_job.get("fastLane")}, output_payload={}, user_id=job.get("actorUserId"), error_message=str(exc), output_ref=station_job.get("inputRef"))
-        return {"version": STATION_QUEUE_VERSION, "ran": True, "status": status, "stationJobId": station_job["stationJobId"], "stationId": station_id, "fastLane": station_job.get("fastLane"), "error": str(exc), "rule": "Station failure is isolated to queue state; import request is not affected."}
-
-
-def _compact_output(output: Dict[str, Any]) -> Dict[str, Any]:
-    keys = ["version", "mode", "dataVersion", "productCount", "productSnapshotCount", "productSignalPackageCount", "productSignalCount", "signalCount", "matchedContextCount", "judgmentCount", "pendingTaskSnapshotCount", "taskSnapshotCount", "createdTaskCount", "outputRef", "productSnapshotRef", "productSignalSnapshotRef", "taskSignalRef", "ragContextRef", "agentJudgmentRef"]
-    return {key: output.get(key) for key in keys if key in output and output.get(key) is not None}
+        return {"version": STATION_QUEUE_VERSION, "ran": True, "status": status, "stationJobId": station_job["stationJobId"], "stationId": station_id, "fastLane": station_job.get("fastLane"), "error": str(exc), "rule": "Station failure is isolated to queue state; import request and frontend read APIs are not affected."}
 
 
 def queue_summary(data_version: str | None = None, *, limit: int = 50) -> Dict[str, Any]:
@@ -311,4 +283,4 @@ def queue_summary(data_version: str | None = None, *, limit: int = 50) -> Dict[s
         by_station_status[f"{row['station_id']}:{row['status']}"] = by_station_status.get(f"{row['station_id']}:{row['status']}", 0) + 1
         if row["station_id"] in FAST_LANE_STATIONS or int(row["priority"] or 50) <= 5:
             fast_lane_count += 1
-    return {"version": STATION_QUEUE_VERSION, "mode": "streaming_fast_lane", "jobCount": len(jobs), "stationJobCount": len(stations), "fastLaneCount": fast_lane_count, "stationByStatus": by_status, "stationByStationStatus": by_station_status, "priorities": STATION_PRIORITY, "jobs": [_row_to_job(row) for row in jobs], "stationJobs": [_row_to_station(row) for row in stations], "rule": "V14.6.2 queue summary prioritizes mature task snapshots and task pool entries."}
+    return {"version": STATION_QUEUE_VERSION, "mode": "v14_8_frontend_isolated_streaming_worker", "jobCount": len(jobs), "stationJobCount": len(stations), "fastLaneCount": fast_lane_count, "stationByStatus": by_status, "stationByStationStatus": by_station_status, "priorities": STATION_PRIORITY, "jobs": [_row_to_job(row) for row in jobs], "stationJobs": [_row_to_station(row) for row in stations], "rule": "V14.8：队列只负责后台计算；前端只读read model；Agent成熟任务已在Agent站内流式入池。"}
