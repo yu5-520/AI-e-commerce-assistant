@@ -1,7 +1,7 @@
-"""V14.5.1 Data Hub routes.
+"""V14.6 Data Hub routes.
 
-Import writes rows, facts, objects, snapshots, and task mainline outputs to backend
-storage. API responses return compact counters and refs only.
+Import APIs run the import system only, then enqueue the task generation system.
+Agent/RAG/task snapshot/task pool stations are pulled by the station queue worker.
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ from src.services.operating_unit_snapshot_service import materialize_operating_u
 from src.services.pipeline_gate_service import record_stage_gate
 from src.services.report_alert_service import get_v3_dashboard_summary, import_report_dataset, list_alert_events, list_alerts_for_entity
 from src.services.report_schema_service import confirm_report_import, get_report_templates, preview_report_dataset
-from src.services.v142_task_mainline_service import run_v142_task_mainline
+from src.services.station_queue_service import enqueue_task_generation
 
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
 DEFAULT_SYNC_DATASETS = ["inventory", "refunds", "orders", "products"]
-DATA_IMPORT_ROUTE_VERSION = "14.5.1"
+DATA_IMPORT_ROUTE_VERSION = "14.6.0"
 HEAVY_KEYS = {"rows", "sampleRows", "stationRuns", "outputs", "products", "signals", "productSignalPackages", "agentProductSnapshotPackages", "judgments", "snapshots", "taskPackage", "snapshot", "payload"}
 
 
@@ -119,29 +119,15 @@ def _compact_value(value: Any, depth: int = 0) -> Any:
     return value
 
 
-def _mainline_compact(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    totals = {"createdTaskCount": 0, "productSnapshotCount": 0, "productSignalPackageCount": 0, "productSignalCount": 0, "signalCount": 0, "judgmentCount": 0, "taskSnapshotCount": 0}
-    compact_runs = []
-    for run in runs:
-        task_generation = run.get("taskGeneration") or {}
-        for key in totals:
-            try:
-                totals[key] += int(task_generation.get(key) or 0)
-            except Exception:
-                pass
-        compact_runs.append({"version": run.get("version"), "mode": run.get("mode"), "dataVersion": run.get("dataVersion"), "refs": run.get("refs") or task_generation.get("refs") or {}, "taskGeneration": {key: task_generation.get(key) for key in [*totals.keys(), "mode", "version", "refs", "stations"] if key in task_generation}})
-    return {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "compact_task_mainline_sync", "runCount": len(runs), "runs": compact_runs, **totals, "rule": "V14.5.1 returns counters and refs only."}
-
-
 def _compact_import_response(result: Dict[str, Any], *, source: str, rows: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     rows = rows or []
     versions = _data_versions_from_result(result)
-    mainline = result.get("taskMainlineSync") or result.get("v142TaskMainlineSync") or {}
+    queue_sync = result.get("taskMainlineSync") or {}
     upload_meta = result.get("uploadMeta") if isinstance(result.get("uploadMeta"), dict) else {}
     return {
         "ok": True,
         "version": DATA_IMPORT_ROUTE_VERSION,
-        "mode": "compact_import_response",
+        "mode": "import_system_completed_task_generation_queued",
         "source": source,
         "dataVersion": result.get("dataVersion"),
         "dataVersions": versions,
@@ -149,16 +135,17 @@ def _compact_import_response(result: Dict[str, Any], *, source: str, rows: List[
         "rowCount": len(rows) or result.get("rowCount") or result.get("rowsCount") or 0,
         "alertCount": result.get("alertCount", 0),
         "taggedAlertCount": result.get("taggedAlertCount", 0),
-        "createdTaskCount": result.get("createdTaskCount", 0),
+        "createdTaskCount": 0,
+        "taskGenerationStatus": "queued",
         "uploadMeta": _compact_value(upload_meta),
         "operatingObjectSync": _compact_value(result.get("operatingObjectSync") or {}),
         "metricFactSync": _compact_value(result.get("metricFactSync") or {}),
         "dataGapSync": _compact_value(result.get("dataGapSync") or {}),
         "pipelineSync": _compact_value(result.get("pipelineSync") or {}),
-        "taskMainlineSync": _compact_value(mainline),
+        "taskMainlineSync": _compact_value(queue_sync),
         "importDiagnostics": _compact_value(result.get("importDiagnostics") or {}),
         "summary": _compact_value(result.get("summary") or {}),
-        "responseBoundary": {"heavyPayloadReturned": False, "strippedKeys": sorted(HEAVY_KEYS), "rule": "Rows, snapshots, station outputs, signals and packages stay in backend storage."},
+        "responseBoundary": {"heavyPayloadReturned": False, "syncMainlineExecuted": False, "strippedKeys": sorted(HEAVY_KEYS), "rule": "Import request only completes import system; task generation runs from station queue."},
     }
 
 
@@ -223,7 +210,7 @@ def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, s
         snapshot = materialize_operating_unit_snapshot(user_id=ctx.user_id, data_version=version, force=True)
         result["operatingUnitSnapshotSync"] = {"snapshotKey": snapshot.get("snapshotKey"), "storeCount": len(snapshot.get("storeRows") or []), "productCount": len(snapshot.get("productRows") or [])}
         gates.append(record_stage_gate(data_version=version, stage="operating_unit_snapshot_ready", status="completed", input_payload={"source": source}, output_payload=result["operatingUnitSnapshotSync"], user_id=ctx.user_id, upstream_stage="operating_objects_ready", output_ref=snapshot.get("snapshotKey")))
-    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "compact_import_station_gates", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "taskGeneration": "compact_mainline_after_import"}
+    result["pipelineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "import_system_station_gates", "dataVersions": [item for item in versions if item], "gateCount": len(gates), "taskGeneration": "queued_after_import"}
     return result
 
 
@@ -242,7 +229,7 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
         result = _attach_v1213_data_gap_sync(result, result.get("_rows"), source=source)
     result["legacyImportTaskHooksDisabled"] = True
     result.setdefault("createdTaskCount", 0)
-    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_compact_snapshot_mainline"})
+    result.setdefault("riskTaskSync", {"version": DATA_IMPORT_ROUTE_VERSION, "skipped": True, "reason": "task_generation_moved_to_station_queue"})
     return _attach_import_diagnostics(result)
 
 
@@ -251,10 +238,12 @@ def _attach_task_mainline(request: Request, result: Dict[str, Any], *, source: s
     versions = _data_versions_from_result(result)
     if not versions and result.get("dataVersion"):
         versions = [str(result["dataVersion"])]
-    runs = [run_v142_task_mainline(version, user_id=ctx.user_id, max_signals=50, force=True, source=source) for version in versions]
-    result["taskMainlineSync"] = _mainline_compact(runs)
+    queued = []
+    for version in versions:
+        queued.append(enqueue_task_generation(version, actor_user_id=ctx.user_id, input_ref=f"operating_unit_snapshot:{version or 'latest'}", source=source, force=True))
+    result["taskMainlineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "queued_async_task_generation", "runCount": len(queued), "queuedCount": sum(1 for item in queued if item.get("queued") or item.get("idempotentHit")), "jobs": queued, "createdTaskCount": 0, "rule": "V14.6：上传只投递任务生成队列，不同步执行RAG/Agent/任务快照/任务池。"}
     result["v142TaskMainlineSync"] = result["taskMainlineSync"]
-    result["createdTaskCount"] = result["taskMainlineSync"].get("createdTaskCount", 0)
+    result["createdTaskCount"] = 0
     return result
 
 
@@ -296,7 +285,7 @@ def sync_source_connection(request: Request, source_id: str) -> Dict[str, Any]:
     result["dataSourceSync"] = result["sourceConnection"]
     objected = _attach_operating_object_sync(request, result, result.get("_rows"), source=f"{source_id}_api_sync")
     facted = _attach_v121_metric_fact_sync(objected, objected.get("_rows"), source=f"{source_id}_api_sync", source_system=source_id)
-    gapped = _attach_v1213_data_gap_sync(facted, facted.get("_rows"), source=f"{source_id}_api_sync", source_system=source_id)
+    gapped = _attach_v1213_data_gap_sync(facted, facted.get("_rows"), source_system=source_id, source=f"{source_id}_api_sync")
     staged = _attach_pipeline_station_sync(request, gapped, source=f"{source_id}_api_sync")
     return _finalize_import(request, staged, staged.get("_rows"), source=f"{source_id}_api_sync", upsert_objects=False)
 
@@ -473,7 +462,7 @@ def alerts(active_only: bool = Query(default=True)) -> List[Dict[str, Any]]:
 
 @router.get("/alerts/events")
 def alert_events(active_only: bool = Query(default=True)) -> List[Dict[str, Any]]:
-    return list_alert_events(active_only=active_only)
+    return list_alert_events(active_only)
 
 
 @router.get("/versions")
