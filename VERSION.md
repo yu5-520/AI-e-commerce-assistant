@@ -1,30 +1,33 @@
 # Current Version
 
 ```text
-14.6.2
+14.7.0
 ```
 
-## V14.6.2 Meaning
+## V14.7 Meaning
 
-V14.6.2 upgrades the station queue from asynchronous batch processing to streaming task pool fast lane.
+V14.7 corrects the task generation grain from fragmented metric/dataVersion signals to one full product bundle per product.
 
 Mainline:
 
 ```text
 report import system
-  -> enqueue task generation
-  -> background station queue worker
-  -> Agent judgment
-  -> task_snapshot fast lane
-  -> task_pool fast lane
+  -> system product layered snapshot
+  -> fullProductBundle assembly
+  -> fullProductBundle queue
+  -> RAG volatility boundary context
+  -> Agent product diagnosis soft routing
+  -> V11.8 SOP task snapshot when route is create_task / manager_review
+  -> task pool
   -> task lifecycle system
 ```
 
 Core rules:
 
-- Mature tasks do not wait for the whole dataVersion batch to finish.
-- `task_pool_station` has the highest queue priority.
-- `task_snapshot_station` has the second-highest queue priority.
-- Agent judgments with pending task snapshots immediately stream into the fast lane.
-- The worker still runs outside upload requests and keeps bounded per-tick execution.
-- Task lifecycle starts as soon as a task pool entry is created.
+- `fullProductBundle` is not a fourth fact layer. It is the contract that combines product profile layer, product data layer and product snapshot layer for Agent input.
+- Signals are evidence inside the product bundle, not independent task entry points.
+- RAG provides volatility boundary and operating context; it does not hard-block Agent.
+- Agent soft routing can return create task, manager review, observe, merge, evidence-only or data-gap routes.
+- Only create task / manager review routes become formal V11.8 SOP task snapshots.
+- Missing fields lower confidence and request evidence; missing ROI or impact estimate does not automatically become manager approval.
+- The formal task output remains the repository SOP package: taskCard, taskDetailReport, evidencePack, sopSteps, reviewMetrics, completionGate, failureThreshold, agentJudgment and ownership.
