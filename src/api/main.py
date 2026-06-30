@@ -14,15 +14,15 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.8.0"
+API_VERSION = "14.8.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "frontend_read_model_compute_read_isolation_runtime",
-    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent_soft_routing", "streaming_sop_task_pool", "frontend_read_model"],
-    "rule": "V14.8：计算归worker，前端归read model。页面切换只读/api/view/*，不触发materialize/generate/Agent/worker。",
+    "mode": "frontend_read_model_compute_read_isolation_runtime_data_gap_safe",
+    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent_soft_routing", "data_gap_safe_sop_task", "streaming_sop_task_pool", "frontend_read_model"],
+    "rule": "V14.8.1：计算归worker，前端归read model。页面切换只读/api/view/*；Agent成熟判断和数据缺口判断都会流式进入任务快照/任务池，缺字段不再硬阻断任务。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "frontend_read_model_compute_read_isolation_runtime", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "frontend_read_model_compute_read_isolation_runtime_data_gap_safe", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
