@@ -1,20 +1,21 @@
-Current Version: 14.8.3
+Current Version: 14.9
 
-V14.8.3 Station Chain Contract + Metro Line UI
+V14.9 Dual-Agent Product Judgment Package Pipeline
 
 Core chain:
 
-`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent soft routing -> task_generation_run -> optional task pool -> frontend read model -> data metro line`
+`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent1 analysis -> product_judgment_package -> Agent2 task generation -> task-pool admission -> frontend read model -> data metro line`
 
 Key updates:
 
-- Task generation is now a stable run contract. Even if Agent produces zero formal tasks, the run is recorded as completed.
-- `task_generation_runs_v14` records input bundles, Agent judgments, formal task count, observe-only count, task-pool created count, and reason.
-- Data page sync summary is replaced with a metro-line station UI: 接入、建档、全量包、判断、任务、展示.
-- Main page hides engineering sync strings such as `同步：总览 / 经营 / 任务 / 数据 / 日志`.
-- `GET /api/view/data-line` returns a read-only product-facing chain status object.
-- Observe-only is a valid station result; it does not enter `task_pool`, but it still proves the chain completed.
+- Agent1 analyzes fullProductBundle and writes raw metric/product judgments only.
+- System integration compresses raw judgments into one product_judgment_package per product.
+- Agent2 generates task decisions only from product_judgment_package.
+- Task pool receives only admitted product-level SOP tasks.
+- New runtime tables: `agent_product_judgments_v15`, `product_judgment_packages_v15`, `task_generation_decisions_v15`.
+- Metro line now includes the integration station: 接入、建档、全量包、判断、整合、任务、展示.
+- Judgment can be metric-level and detailed; tasks must be product-level and compressed.
 
 Boundary:
 
-Agent task strategy can change later without breaking the chain contract. Frontend shows pipeline state separately from formal task count.
+Fixing Agent1 judgment quality must not affect task generation chain integrity. Fixing Agent2 SOP quality must not change raw product analysis. System package compression is the stable contract between them.
