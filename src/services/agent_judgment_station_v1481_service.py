@@ -1,9 +1,7 @@
-"""V14.8.2 streaming Agent bridge.
+"""V14.8.3 streaming Agent bridge.
 
-The Agent can create formal SOP tasks only when the deterministic routing baseline
-says the judgment is mature. LLM output may enrich wording, but it may not upgrade
-observe-only items into task-pool entries. Serious data gaps become executable
-verification tasks; ordinary observation stays in labels/logs.
+Agent judgment quality may evolve independently, but pipeline completion must be
+stable. Zero formal tasks is a completed generation result, not a broken chain.
 """
 
 from __future__ import annotations
@@ -17,10 +15,11 @@ from src.repositories.sqlite_repository import connect, dumps, ensure_columns, l
 from src.services.llm_provider_service import generate_json
 from src.services.rag_context_station_service import build_rag_context_snapshot, latest_rag_context
 from src.services.signal_pool_service import list_signals, update_signal_status
+from src.services.task_generation_run_service import record_task_generation_run
 from src.services.task_pool_station_service import enter_task_pool_from_snapshot
 from src.services.task_snapshot_station_service import create_task_snapshot
 
-AGENT_JUDGMENT_STATION_V1481_VERSION = "14.8.2"
+AGENT_JUDGMENT_STATION_V1481_VERSION = "14.8.3"
 FORMAL_DECISIONS = {"create_task_snapshot", "manager_review_required"}
 CORE_FIELDS = ["paymentAmount", "roi", "roas", "adSpend", "refundRate", "inventory"]
 CRITICAL_FIELDS = {"paymentAmount", "inventory", "refundRate"}
@@ -163,28 +162,7 @@ def _fallback_judgment(bundle: Dict[str, Any], rag_context: Dict[str, Any]) -> D
         evidence = []
         risk_domain = metric_code
 
-    task_plan = {
-        "title": title,
-        "subtitle": bundle.get("primarySignalType") or bundle.get("signalType") or "full_product_bundle",
-        "entityType": bundle.get("entityType") or "product",
-        "entityId": entity_id,
-        "productId": product_id,
-        "storeId": bundle.get("storeId") or profile.get("storeId"),
-        "verticalCategory": bundle.get("verticalCategory") or profile.get("verticalCategory"),
-        "taskType": task_type,
-        "actionType": action_type,
-        "priority": priority,
-        "riskLevel": "high" if priority == "高" else "medium" if priority == "中" else "low",
-        "deadline": deadline,
-        "riskDomain": risk_domain,
-        "operationBudget": {"taskType": task_type, "riskLevel": "medium" if data_gap else "low", "budgetUpperBound": 0, "operatorBudgetApplies": False, "requiresApproval": decision == "manager_review_required"},
-        "sopSteps": sop_steps,
-        "evidenceRequirements": evidence,
-        "reviewMetrics": ["支付金额", "ROAS/ROI", "广告消耗", "点击率", "转化率", "退款率", "毛利率", "库存"],
-        "needManagerReview": decision == "manager_review_required",
-        "reason": reason,
-        "missingFields": scored["missingFields"],
-    }
+    task_plan = {"title": title, "subtitle": bundle.get("primarySignalType") or bundle.get("signalType") or "full_product_bundle", "entityType": bundle.get("entityType") or "product", "entityId": entity_id, "productId": product_id, "storeId": bundle.get("storeId") or profile.get("storeId"), "verticalCategory": bundle.get("verticalCategory") or profile.get("verticalCategory"), "taskType": task_type, "actionType": action_type, "priority": priority, "riskLevel": "high" if priority == "高" else "medium" if priority == "中" else "low", "deadline": deadline, "riskDomain": risk_domain, "operationBudget": {"taskType": task_type, "riskLevel": "medium" if data_gap else "low", "budgetUpperBound": 0, "operatorBudgetApplies": False, "requiresApproval": decision == "manager_review_required"}, "sopSteps": sop_steps, "evidenceRequirements": evidence, "reviewMetrics": ["支付金额", "ROAS/ROI", "广告消耗", "点击率", "转化率", "退款率", "毛利率", "库存"], "needManagerReview": decision == "manager_review_required", "reason": reason, "missingFields": scored["missingFields"]}
     return {"decision": decision, "confidence": max(0.45, min(0.92, scored["score"])), "reason": reason, "taskPlan": task_plan, "operationBudget": task_plan["operationBudget"], "evidenceRequirements": evidence, "reviewMetrics": task_plan["reviewMetrics"], "softRouting": {**scored, "ragContextApplied": bool(rag_context), "metricSample": {key: metric.get(key) for key in CORE_FIELDS}}, "agentDiagnosis": {"mainDiagnosis": reason, "missingFields": scored["missingFields"], "evidenceCompleteness": scored["evidenceCompleteness"]}, "ragContextApplied": bool(rag_context)}
 
 
@@ -197,11 +175,11 @@ def _judge(bundle: Dict[str, Any], rag_context: Dict[str, Any]) -> Dict[str, Any
     fallback = _fallback_judgment(bundle, rag_context)
     try:
         llm_result = generate_json(
-            prompt_name="v1482_streaming_product_agent",
-            payload={"fullProductBundle": bundle, "ragContext": rag_context, "fallbackDecision": fallback, "hardRule": "LLM只能丰富fallback，不能把observe_only升级为正式任务；后台观察不进入任务池。"},
+            prompt_name="v1483_streaming_product_agent",
+            payload={"fullProductBundle": bundle, "ragContext": rag_context, "fallbackDecision": fallback, "hardRule": "LLM只能丰富fallback，不能把observe_only升级为正式任务；后台观察不进入任务池；无正式任务仍要写任务生成运行快照。"},
             expected_keys=["decision", "confidence", "reason", "taskPlan", "operationBudget", "softRouting"],
-            agent_name="V14.8.2 Streaming Product Agent",
-            schema_name="v1482_streaming_product_agent",
+            agent_name="V14.8.3 Streaming Product Agent",
+            schema_name="v1483_streaming_product_agent",
         )
         output = llm_result.get("output") or {}
     except Exception as exc:
@@ -230,7 +208,7 @@ def _save_judgment(signal: Dict[str, Any], rag_context: Dict[str, Any], judgment
     decision = str(judgment.get("decision") or "observe_only")
     status = "pending_task_snapshot" if decision in FORMAL_DECISIONS else "judgment_recorded"
     created_at = now_iso()
-    payload = {"version": AGENT_JUDGMENT_STATION_V1481_VERSION, "judgmentId": judgment_id, "stationId": "agent_judgment_station", "dataVersion": signal.get("dataVersion"), "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "entityType": signal.get("entityType"), "entityId": signal.get("entityId"), "signal": signal, "fullProductBundle": signal, "ragContextRef": rag_context.get("ragContextRef") or rag_context.get("outputRef"), "ragContext": rag_context, "decision": decision, "confidence": judgment.get("confidence") or 0, "reason": judgment.get("reason"), "taskPlan": judgment.get("taskPlan") or {}, "operationBudget": judgment.get("operationBudget") or {}, "evidenceRequirements": judgment.get("evidenceRequirements") or [], "reviewMetrics": judgment.get("reviewMetrics") or [], "softRouting": judgment.get("softRouting") or {}, "agentDiagnosis": judgment.get("agentDiagnosis") or {}, "agentJudgment": {**judgment, "decision": decision}, "rule": "V14.8.2 only deterministic mature/data-gap routes enter task pool; LLM cannot upgrade observation."}
+    payload = {"version": AGENT_JUDGMENT_STATION_V1481_VERSION, "judgmentId": judgment_id, "stationId": "agent_judgment_station", "dataVersion": signal.get("dataVersion"), "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "entityType": signal.get("entityType"), "entityId": signal.get("entityId"), "signal": signal, "fullProductBundle": signal, "ragContextRef": rag_context.get("ragContextRef") or rag_context.get("outputRef"), "ragContext": rag_context, "decision": decision, "confidence": judgment.get("confidence") or 0, "reason": judgment.get("reason"), "taskPlan": judgment.get("taskPlan") or {}, "operationBudget": judgment.get("operationBudget") or {}, "evidenceRequirements": judgment.get("evidenceRequirements") or [], "reviewMetrics": judgment.get("reviewMetrics") or [], "softRouting": judgment.get("softRouting") or {}, "agentDiagnosis": judgment.get("agentDiagnosis") or {}, "agentJudgment": {**judgment, "decision": decision}, "rule": "V14.8.3 only deterministic mature/data-gap routes enter task pool; all runs write task_generation_run."}
     with connect() as conn:
         conn.execute("""
             INSERT INTO agent_judgments_v14 (judgment_id, data_version, signal_id, entity_type, entity_id, decision, confidence, status, rag_context_ref, payload, created_at, updated_at)
@@ -250,7 +228,7 @@ def _stream_to_task_pool(judgment: Dict[str, Any], *, created_by: str | None = N
     if plan.get("deadline") == "后台观察" or plan.get("taskType") == "observe_only":
         return {"ok": False, "skipped": True, "reason": "backend_observation_not_task_pool", "decision": decision, "judgmentId": judgment.get("judgmentId")}
     full_bundle = judgment.get("fullProductBundle") or judgment.get("signal") or {}
-    snapshot = create_task_snapshot({"dataVersion": judgment.get("dataVersion"), "decision": decision, "confidence": judgment.get("confidence"), "entityType": judgment.get("entityType"), "entityId": judgment.get("entityId"), "productId": plan.get("productId") or full_bundle.get("productId"), "storeId": plan.get("storeId") or full_bundle.get("storeId"), "signalRef": judgment.get("signalId"), "bundleRef": judgment.get("bundleId"), "ragContext": judgment.get("ragContext") or {}, "agentJudgment": judgment.get("agentJudgment") or {}, "taskPlan": plan, "operationBudget": judgment.get("operationBudget") or plan.get("operationBudget") or {}, "evidenceRequirements": judgment.get("evidenceRequirements") or plan.get("evidenceRequirements") or [], "systemFacts": {"fullProductBundle": full_bundle, "judgmentId": judgment.get("judgmentId"), "softRouting": judgment.get("softRouting") or {}, "agentDiagnosis": judgment.get("agentDiagnosis") or {}, "operationBudget": judgment.get("operationBudget") or {}}, "source": "agent_judgment_station_v1482"}, created_by=created_by)
+    snapshot = create_task_snapshot({"dataVersion": judgment.get("dataVersion"), "decision": decision, "confidence": judgment.get("confidence"), "entityType": judgment.get("entityType"), "entityId": judgment.get("entityId"), "productId": plan.get("productId") or full_bundle.get("productId"), "storeId": plan.get("storeId") or full_bundle.get("storeId"), "signalRef": judgment.get("signalId"), "bundleRef": judgment.get("bundleId"), "ragContext": judgment.get("ragContext") or {}, "agentJudgment": judgment.get("agentJudgment") or {}, "taskPlan": plan, "operationBudget": judgment.get("operationBudget") or plan.get("operationBudget") or {}, "evidenceRequirements": judgment.get("evidenceRequirements") or plan.get("evidenceRequirements") or [], "systemFacts": {"fullProductBundle": full_bundle, "judgmentId": judgment.get("judgmentId"), "softRouting": judgment.get("softRouting") or {}, "agentDiagnosis": judgment.get("agentDiagnosis") or {}, "operationBudget": judgment.get("operationBudget") or {}}, "source": "agent_judgment_station_v1483"}, created_by=created_by)
     pool = enter_task_pool_from_snapshot(str(snapshot.get("taskSnapshotId")), created_by=created_by, force=False)
     with connect() as conn:
         payload = dict(judgment)
@@ -293,4 +271,7 @@ def run_agent_judgment_station_v1481(data_version: str | None = None, *, rag_con
     ref = f"agent_judgment:{data_version or 'latest'}"
     streamed_snapshots = sum(1 for item in streamed if item.get("ok"))
     skipped = [item for item in streamed if item.get("skipped")]
-    return {"version": AGENT_JUDGMENT_STATION_V1481_VERSION, "mode": "v1482_full_product_bundle_streaming_agent_mature_only", "dataVersion": data_version, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "agentJudgmentRef": ref, "outputRef": ref, "signalCount": len(signals), "judgmentCount": len(judgments), "idempotentJudgmentCount": idempotent, "pendingTaskSnapshotCount": 0, "streamedTaskSnapshotCount": streamed_snapshots, "streamedTaskPoolCount": sum(int(item.get("createdTaskCount") or 0) for item in streamed), "skippedFormalCount": len(skipped), "byDecision": dict(by_decision), "zeroTaskReasons": [item.get("reason") for item in judgments if item.get("decision") not in FORMAL_DECISIONS][:20], "judgments": judgments, "streamed": streamed, "rule": "V14.8.2: observe-only/background observation never enters task pool; serious data gaps and mature judgments stream directly into SOP task snapshots."}
+    zero_task_reasons = [item.get("reason") for item in judgments if item.get("decision") not in FORMAL_DECISIONS][:20]
+    task_pool_created_count = sum(int(item.get("createdTaskCount") or 0) for item in streamed)
+    generation_run = record_task_generation_run(data_version=data_version, input_bundle_count=len(signals), agent_judgment_count=len(judgments), by_decision=dict(by_decision), streamed_task_snapshot_count=streamed_snapshots, task_pool_created_count=task_pool_created_count, skipped_formal_count=len(skipped), zero_task_reasons=zero_task_reasons, source="agent_judgment_station_v1483")
+    return {"version": AGENT_JUDGMENT_STATION_V1481_VERSION, "mode": "v1483_full_product_bundle_streaming_agent_chain_contract", "dataVersion": data_version, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "agentJudgmentRef": ref, "outputRef": ref, "signalCount": len(signals), "judgmentCount": len(judgments), "idempotentJudgmentCount": idempotent, "pendingTaskSnapshotCount": 0, "streamedTaskSnapshotCount": streamed_snapshots, "streamedTaskPoolCount": task_pool_created_count, "skippedFormalCount": len(skipped), "byDecision": dict(by_decision), "zeroTaskReasons": zero_task_reasons, "taskGenerationRun": generation_run, "judgments": judgments, "streamed": streamed, "rule": "V14.8.3: task generation run is always recorded; observe-only/background observation never enters task pool; zero formal task is a completed business result."}
