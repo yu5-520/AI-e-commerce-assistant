@@ -14,15 +14,15 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.8.2"
+API_VERSION = "14.8.3"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "frontend_read_model_compute_read_isolation_runtime_mature_task_only",
-    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent_soft_routing", "mature_or_severe_data_gap_sop_task", "streaming_sop_task_pool", "frontend_read_model"],
-    "rule": "V14.8.2：商品指标显示业务数据时间；Agent只有成熟经营判断或严重数据缺口才能进任务池；后台观察不进入正式执行队列；任务详情统一使用taskId。",
+    "mode": "frontend_read_model_compute_read_isolation_station_metro_line_chain_contract",
+    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent_soft_routing", "task_generation_run", "optional_formal_task_pool", "frontend_read_model", "data_metro_line"],
+    "rule": "V14.8.3：链路完成不等于生成任务。Agent判断无正式任务也必须写task_generation_run；数据页用地铁站点图展示接入、建档、全量包、判断、任务、展示。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "frontend_read_model_compute_read_isolation_runtime_mature_task_only", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "frontend_read_model_compute_read_isolation_station_metro_line_chain_contract", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
