@@ -10,19 +10,31 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, deprecated_stations, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, station_handoffs, stations, system, task_lifecycle_stations, task_persistence, task_pool, task_snapshots, trends, v10_product, v9_readiness, worker_jobs
+from src.services.station_queue_worker_service import start_station_queue_worker, stop_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.4.1"
+API_VERSION = "14.6.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "task_intent_permission_envelope_lifecycle",
-    "mainline": ["operating_snapshot_station", "system_product_snapshot_station", "product_signal_snapshot_station", "task_signal_station", "rag_context_station", "agent_judgment_station", "task_snapshot_station", "task_pool_station", "task_lifecycle_stations"],
-    "rule": "V14.4.1：TaskIntent增加PermissionEnvelope，旧权限门只读取结构化预算和权限字段，禁止从商品编号、标题、期限和自由文本抓数字误判审批。",
+    "mode": "three_system_station_queue_runtime",
+    "mainline": ["import_system", "task_generation_queue", "task_lifecycle_system"],
+    "rule": "V14.6.1：上传只完成报表导入系统；任务生成由后台站点队列worker逐站消费，Agent和任务快照失败只落到队列状态。",
 }
+
+
+@app.on_event("startup")
+def startup_station_queue_worker() -> None:
+    start_station_queue_worker(worker_id="fastapi-auto-worker")
+
+
+@app.on_event("shutdown")
+def shutdown_station_queue_worker() -> None:
+    stop_station_queue_worker()
+
 
 if WEB_DEMO_DIR.exists():
     app.mount("/web_demo", StaticFiles(directory=WEB_DEMO_DIR), name="web_demo")
@@ -33,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "task_intent_permission_envelope_lifecycle", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "three_system_station_queue_runtime", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
