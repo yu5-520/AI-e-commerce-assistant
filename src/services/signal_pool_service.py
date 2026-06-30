@@ -1,7 +1,8 @@
-"""V14.3 signal pool service.
+"""V14.7 signal pool service.
 
-Signal Pool consumes full product signal packages. Normal products are not
-dropped before Agent judgment; normal_state packages are still queued.
+Signal Pool consumes fullProductBundle packages. A signal here is the queue handle
+for one product's complete profile/data/snapshot bundle. Metric and report
+changes are evidence inside the bundle, not independent task triggers.
 """
 
 from __future__ import annotations
@@ -13,10 +14,10 @@ from typing import Any, Dict, List
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.product_signal_snapshot_service import materialize_product_signal_snapshot
 
-SIGNAL_POOL_VERSION = "14.3.1"
+SIGNAL_POOL_VERSION = "14.7.0"
 AGENT_READY_STATUS = "pending_rag_agent"
 PACKAGE_PENDING_STATUSES = {"pending_agent_judgment", "pending_product_signal_package", "pending_signal_package", "pending_rag_agent"}
-TERMINAL_STATUSES = {"judged_pending_snapshot", "ignored_noise", "observed_only", "merge_candidate", "task_snapshot_created", "failed_retry"}
+TERMINAL_STATUSES = {"judged_pending_snapshot", "ignored_noise", "observed_only", "data_gap_observed", "merge_candidate", "task_snapshot_created", "failed_retry"}
 
 
 def now_iso() -> str:
@@ -74,7 +75,7 @@ def _save_signal(signal: Dict[str, Any]) -> Dict[str, Any]:
             INSERT OR REPLACE INTO signal_pool_v14 (signal_id, data_version, entity_type, entity_id, store_id, signal_type, signal_strength, status, source_ref, payload, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (signal_id, signal.get("dataVersion"), signal.get("entityType"), signal.get("entityId"), signal.get("storeId"), signal.get("signalType"), signal.get("signalStrength"), status, signal.get("sourceRef") or f"product_signal_package:{signal.get('dataVersion') or 'latest'}", dumps(payload), created_at, now),
+            (signal_id, signal.get("dataVersion"), signal.get("entityType"), signal.get("entityId"), signal.get("storeId"), signal.get("signalType"), signal.get("signalStrength"), status, signal.get("sourceRef") or f"full_product_bundle:{signal.get('dataVersion') or 'latest'}", dumps(payload), created_at, now),
         )
         conn.commit()
     signal["status"] = status
@@ -127,7 +128,7 @@ def list_signals(data_version: str | None = None, status: str | None = None, lim
 
 
 def _normalize_snapshot_signal(signal: Dict[str, Any], source_ref: str) -> Dict[str, Any]:
-    return {**signal, "version": SIGNAL_POOL_VERSION, "sourceRef": source_ref, "status": AGENT_READY_STATUS, "rule": "V14.3.1 signal_pool normalizes product signal packages to pending_rag_agent so Agent can consume them."}
+    return {**signal, "version": SIGNAL_POOL_VERSION, "sourceRef": source_ref, "status": AGENT_READY_STATUS, "rule": "V14.7 signal_pool queues one fullProductBundle per product; report/metric changes remain evidence inside the bundle."}
 
 
 def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 200, user_id: str | None = None) -> Dict[str, Any]:
@@ -146,4 +147,4 @@ def generate_signal_pool(data_version: str | None = None, *, max_signals: int = 
         by_strength[str(signal.get("signalStrength"))] += 1
         by_status[str(signal.get("status"))] += 1
     ref = f"signal_pool:{data_version or 'latest'}"
-    return {"version": SIGNAL_POOL_VERSION, "mode": "full_product_signal_package_pool_no_task_creation", "dataVersion": data_version, "productSnapshotCount": signal_snapshot.get("productSnapshotCount", 0), "productSignalPackageCount": signal_snapshot.get("productSignalPackageCount", signal_snapshot.get("productSignalCount", 0)), "productSignalCount": signal_snapshot.get("productSignalCount", 0), "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "byStatus": dict(by_status), "signals": saved, "productSignalSnapshot": signal_snapshot, "rule": "V14.3.1 task_signal_station queues full signal packages as pending_rag_agent; it does not decide operation value."}
+    return {"version": SIGNAL_POOL_VERSION, "mode": "full_product_bundle_pool_no_task_creation", "dataVersion": data_version, "productSnapshotCount": signal_snapshot.get("productSnapshotCount", 0), "productSignalPackageCount": signal_snapshot.get("productSignalPackageCount", signal_snapshot.get("productSignalCount", 0)), "productSignalCount": signal_snapshot.get("productSignalCount", 0), "taskSignalRef": ref, "outputRef": ref, "signalCount": len(saved), "createdTaskCount": 0, "byType": dict(by_type), "byStrength": dict(by_strength), "byStatus": dict(by_status), "signals": saved, "productSignalSnapshot": signal_snapshot, "rule": "V14.7 task_signal_station queues fullProductBundle packages. It does not decide operation value and does not create tasks."}
