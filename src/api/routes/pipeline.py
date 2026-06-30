@@ -1,4 +1,4 @@
-"""V14.6.1 Pipeline routes with station queue runtime and background worker."""
+"""V14.6.2 Pipeline routes with station queue streaming fast lane."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from src.services.station_registry_service import station_by_stage
 from src.services.v142_task_mainline_service import DEFAULT_AGENT_BATCH_SIZE, run_v143_task_mainline
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
-PIPELINE_ROUTE_VERSION = "14.6.1"
+PIPELINE_ROUTE_VERSION = "14.6.2"
 
 
 def request_user_id(request: Request) -> str:
@@ -32,7 +32,7 @@ def _station_body(request: Request, data_version: str, body: Dict[str, Any] | No
 
 @router.get("/stages")
 def pipeline_stages(request: Request, data_version: str | None = Query(default=None, alias="dataVersion"), include_diagnostic: bool = Query(default=False, alias="includeDiagnostic")) -> Dict[str, Any]:
-    return {"version": PIPELINE_ROUTE_VERSION, "gateVersion": PIPELINE_GATE_VERSION, "queueVersion": STATION_QUEUE_VERSION, "workerVersion": STATION_QUEUE_WORKER_VERSION, "compatibilityLayer": "station_queue_runtime", **stage_summary(data_version=data_version, user_id=request_user_id(request), limit=120, include_diagnostic=include_diagnostic)}
+    return {"version": PIPELINE_ROUTE_VERSION, "gateVersion": PIPELINE_GATE_VERSION, "queueVersion": STATION_QUEUE_VERSION, "workerVersion": STATION_QUEUE_WORKER_VERSION, "compatibilityLayer": "streaming_fast_lane_queue_runtime", **stage_summary(data_version=data_version, user_id=request_user_id(request), limit=120, include_diagnostic=include_diagnostic)}
 
 
 @router.get("/queue")
@@ -76,7 +76,7 @@ def run_queue_batch(body: Dict[str, Any] | None = Body(default=None)) -> Dict[st
     body = body or {}
     limit = max(1, min(int(body.get("limit") or 1), 20))
     results = [run_next_station_job(worker_id=body.get("workerId") or "api-worker", system_type=body.get("systemType") or "task_generation") for _ in range(limit)]
-    return {"version": PIPELINE_ROUTE_VERSION, "queueVersion": STATION_QUEUE_VERSION, "workerVersion": STATION_QUEUE_WORKER_VERSION, "requested": limit, "ranCount": sum(1 for item in results if item.get("ran")), "results": results, "rule": "V14.6.1 supports both background worker and bounded manual batches."}
+    return {"version": PIPELINE_ROUTE_VERSION, "queueVersion": STATION_QUEUE_VERSION, "workerVersion": STATION_QUEUE_WORKER_VERSION, "requested": limit, "ranCount": sum(1 for item in results if item.get("ran")), "results": results, "rule": "V14.6.2 prioritizes task_pool and task_snapshot fast lane before lower-priority generation work."}
 
 
 @router.post("/data-versions/{data_version}/task-generation/enqueue")
