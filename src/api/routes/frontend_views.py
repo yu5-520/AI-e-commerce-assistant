@@ -1,7 +1,8 @@
-"""V14.8 read-only frontend view routes.
+"""V14.8.3 read-only frontend view routes.
 
 These endpoints are for page rendering only. They read cached read-model tables and
-must not trigger materialize/generate/Agent/worker execution.
+must not trigger materialize/generate/Agent/worker execution. The data-line view
+is a product-facing metro-line status, not a compute trigger.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from src.services.frontend_read_model_service import (
     read_task_views,
     refresh_all_read_models,
 )
+from src.services.task_generation_run_service import read_data_line_status
 
 router = APIRouter(prefix="/api/view", tags=["frontend-read-model"])
 
@@ -62,6 +64,13 @@ def task_detail_view(task_id: str) -> Dict[str, Any]:
 @router.get("/system-status")
 def system_status_view() -> Dict[str, Any]:
     result = read_system_status_view()
+    result["routeRule"] = "read_only_frontend_view_no_compute"
+    return result
+
+
+@router.get("/data-line")
+def data_line_view() -> Dict[str, Any]:
+    result = read_data_line_status()
     result["routeRule"] = "read_only_frontend_view_no_compute"
     return result
 
