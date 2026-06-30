@@ -36,16 +36,21 @@
   async function loadAccount() { account = await request("/api/accounts"); return account; }
   async function applyAccountMutation(path, body) { const result = await request(path, null, { method: "POST", body }); account = result?.account || (await loadAccount()); window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } })); return result; }
   function clearViewState() { ["manager_task_state_v241", "manager_task_sort_v241", "manager_selected_task_v241", "owner_review_state", "owner_dashboard_state"].forEach((key) => localStorage.removeItem(key)); }
-  function clearClientRuntime() { clearViewState(); window.AppMockData.products = []; window.AppMockData.competitors = []; window.AppMockData.listings = []; window.AppMockData.traffic = []; window.AppMockData.reportGroups = []; window.AppMockData.reportDetails = {}; window.AppMockData.v3 = { version: "14.2.0", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] }; window.AppMockData.recentAlerts = []; status.lastImportSync = null; window.AppTaskStore?.hydrate?.([], [], [], {}); }
+  function clearClientRuntime() { clearViewState(); window.AppMockData.products = []; window.AppMockData.competitors = []; window.AppMockData.listings = []; window.AppMockData.traffic = []; window.AppMockData.reportGroups = []; window.AppMockData.reportDetails = {}; window.AppMockData.v3 = { version: "14.8.0", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] }; window.AppMockData.recentAlerts = []; status.lastImportSync = null; window.AppTaskStore?.hydrate?.([], [], [], {}); }
   function dataVersionFromImport(result = {}) { return result?.dataVersion || result?.syncState?.latestDataVersion || result?.operatingUnitSnapshotSync?.syncState?.latestDataVersion || result?.pipelineSync?.dataVersions?.[0] || result?.results?.find?.((item) => item?.dataVersion)?.dataVersion || ""; }
-  function rememberImportSync(result) { status.lastImportSync = result?.v142TaskMainlineSync || result?.taskGeneration || result?.snapshotTaskHandoff || result?.pipelineSync || result?.importDiagnostics || result?.riskTaskSync || null; window.dispatchEvent(new CustomEvent("v14-import-station-sync", { detail: { result, sync: status.lastImportSync } })); return result; }
+  function rememberImportSync(result) { status.lastImportSync = result?.taskGeneration || result?.pipelineSync || result?.importDiagnostics || null; window.dispatchEvent(new CustomEvent("v148-import-queued", { detail: { result, sync: status.lastImportSync } })); return result; }
   function productFormatters() { return { money(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).startsWith("¥") ? String(value) : `¥${value}`; }, percent(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).includes("%") ? String(value) : `${value}%`; } }; }
-  function normalizeTodoPayload(payload = {}) { const tasks = Array.isArray(payload.tasks) ? payload.tasks : []; const active = Array.isArray(payload.activeTasks) ? payload.activeTasks : tasks.filter((task) => !["已完成", "已归档", "已写入复盘"].includes(task.status)); const events = Array.isArray(payload.events) ? payload.events : []; const counters = payload.counters && typeof payload.counters === "object" ? payload.counters : {}; return { tasks, activeTasks: active, events, counters, payload }; }
+  function normalizeTodoPayload(payload = {}) { const tasks = Array.isArray(payload.tasks) ? payload.tasks : Array.isArray(payload.items) ? payload.items : []; const active = Array.isArray(payload.activeTasks) ? payload.activeTasks : tasks.filter((task) => !["已完成", "已归档", "已写入复盘"].includes(task.status)); const events = Array.isArray(payload.events) ? payload.events : []; const counters = payload.counters && typeof payload.counters === "object" ? payload.counters : payload.counts && typeof payload.counts === "object" ? payload.counts : {}; return { tasks, activeTasks: active, events, counters, payload }; }
 
   const api = {
     status, failureSummary, getCurrentUserId, setCurrentUserId, currentUser, currentPermissions, can, productFormatters,
     dashboard: () => request("/api/modules/dashboard"),
+    dashboardView: () => request("/api/view/dashboard"),
     operatingUnit: (params = {}) => request(`/api/modules/operating-unit${buildQuery(params)}`),
+    productView: (params = {}) => request(`/api/view/products${buildQuery(params)}`),
+    taskView: (params = {}) => request(`/api/view/tasks${buildQuery(params)}`),
+    systemStatusView: () => request("/api/view/system-status"),
+    refreshReadModel: (dataVersion = "") => api.post(`/api/view/refresh${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`, null, {}),
     pipelineStages: (dataVersion = "") => request(`/api/pipeline/stages${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`),
     rebuildOperatingSnapshot: (dataVersion = "") => api.post(`/api/modules/operating-unit/snapshot/rebuild${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`, null, {}),
     generateTasksStation: (dataVersion, body = {}) => api.post(`/api/pipeline/data-versions/${encodeURIComponent(dataVersion)}/tasks/generate`, null, body),
@@ -104,19 +109,18 @@
     refreshAfterDataImport: async (result = {}) => {
       rememberImportSync(result);
       const dataVersion = dataVersionFromImport(result);
-      const taskGeneration = result?.v142TaskMainlineSync ? result.v142TaskMainlineSync : dataVersion ? await api.generateTasksStation(dataVersion, { source: "frontend_import_refresh", maxSignals: 50 }).catch((error) => ({ optionalError: error?.message || String(error || "V14.2任务主链失败") })) : null;
-      const lifecycleSync = await api.syncTodoLifecycle().catch(() => null);
-      const [operatingUnit, pipeline, taskState] = await Promise.all([api.operatingUnit(dataVersion ? { dataVersion } : {}), api.pipelineStages(dataVersion).catch(() => null), api.refreshTaskState().catch(() => null)]);
-      const detail = { result, dataVersion, operatingUnit, pipeline, taskGeneration, lifecycleSync, taskState };
-      window.dispatchEvent(new CustomEvent("v142-data-to-agent-task-refresh", { detail }));
-      return { ...detail, rule: "V14.2导入后自动跑：商品快照→商品信号快照→信号池→RAG→Agent判断→任务快照→任务入池。" };
+      const readModel = await api.refreshReadModel(dataVersion).catch((error) => ({ optionalError: error?.message || String(error || "读模型刷新失败") }));
+      const [operatingUnit, pipeline, taskState] = await Promise.all([api.operatingUnit(dataVersion ? { dataVersion } : {}).catch(() => null), api.pipelineStages(dataVersion).catch(() => null), api.refreshTaskState().catch(() => null)]);
+      const detail = { result, dataVersion, readModel, operatingUnit, pipeline, taskState };
+      window.dispatchEvent(new CustomEvent("v148-read-model-refresh", { detail }));
+      return { ...detail, rule: "V14.8导入后前端只刷新read model；任务生成由后台station_queue worker异步处理，不在页面刷新里强跑Agent。" };
     },
-    todo: (params = {}) => { const query = new URLSearchParams(); if (params.scope) query.set("scope", params.scope); if (params.assigneeId) query.set("assignee_id", params.assigneeId); const suffix = query.toString() ? `?${query.toString()}` : ""; return request(`/api/modules/todo${suffix}`); },
+    todo: (params = {}) => { const query = new URLSearchParams(); if (params.status) query.set("status", params.status); if (params.limit) query.set("limit", params.limit); const suffix = query.toString() ? `?${query.toString()}` : ""; return request(`/api/view/tasks${suffix}`); },
     todoEvents: () => request("/api/modules/todo/events"),
     todoCounters: () => request("/api/modules/todo/counters"),
     lifecycleSummary: () => request("/api/modules/todo/lifecycle/summary"),
     syncTodoLifecycle: () => api.post("/api/modules/todo/lifecycle/sync", null, {}),
-    refreshTaskState: async (params = {}) => { const payload = await api.todo(params); const normalized = normalizeTodoPayload(payload); window.AppTaskStore?.hydrate?.(normalized.tasks, [], normalized.events, normalized.counters); window.dispatchEvent(new CustomEvent("v1281-task-state-refresh", { detail: normalized })); return normalized; },
+    refreshTaskState: async (params = {}) => { const payload = await api.todo(params); const normalized = normalizeTodoPayload(payload); window.AppTaskStore?.hydrate?.(normalized.tasks, [], normalized.events, normalized.counters); window.dispatchEvent(new CustomEvent("v148-task-read-model-refresh", { detail: normalized })); return normalized; },
     log: () => request("/api/modules/log"),
     recapCandidates: (target = "") => request(`/api/modules/recap-candidates${target ? `?target=${encodeURIComponent(target)}` : ""}`),
     taskReport: (id) => request(`/api/modules/task-reports/tasks/${encodeURIComponent(id)}`),
