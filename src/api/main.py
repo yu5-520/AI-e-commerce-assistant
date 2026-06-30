@@ -14,15 +14,15 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.6.2"
+API_VERSION = "14.7.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "three_system_streaming_fast_lane_runtime",
-    "mainline": ["import_system", "task_generation_queue", "streaming_task_pool_fast_lane", "task_lifecycle_system"],
-    "rule": "V14.6.2：上传只完成报表导入系统；Agent生成任务意图后优先进入task_snapshot/task_pool快速通道，成熟任务不等待整批dataVersion完成。",
+    "mode": "full_product_bundle_rag_soft_routing_runtime",
+    "mainline": ["import_system", "system_product_layered_snapshot", "full_product_bundle_queue", "rag_volatility_boundary", "agent_soft_routing", "sop_task_snapshot", "task_lifecycle_system"],
+    "rule": "V14.7：任务生成从碎片信号触发改为单商品全量包驱动；RAG提供波动边界，Agent软路由，正式任务仍输出V11.8 SOP包。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "three_system_streaming_fast_lane_runtime", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "full_product_bundle_rag_soft_routing_runtime", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
