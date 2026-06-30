@@ -1,8 +1,8 @@
-"""V14.4 Task Pool Station service.
+"""V14.7 Task Pool Station service.
 
 Task Pool consumes persisted task snapshots and creates visible lifecycle tasks.
-The pool does not pass raw Agent packages into legacy task code. It normalizes
-through TaskIntent first, then adapts to the legacy visible-task payload.
+Agent soft-routing metadata is kept inside taskDetailReport/agentJudgment; the
+visible task itself still uses the repository V11.8 SOP task package contract.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from src.services.module_task_service import create_task, find_task
 from src.services.task_intent_contract_service import to_legacy_task_payload
 from src.services.task_snapshot_station_service import get_task_snapshot, list_task_snapshots
 
-TASK_POOL_STATION_VERSION = "14.4.0"
+TASK_POOL_STATION_VERSION = "14.7.0"
 READY_SNAPSHOT_STATUSES = {"snapshot_ready", "manager_review_required"}
 READY_DECISIONS = {"create_task_snapshot", "manager_review_required"}
 
@@ -33,8 +33,7 @@ def make_pool_entry_id() -> str:
 
 def ensure_task_pool_tables() -> None:
     with connect() as conn:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS task_pool_entries (
                 pool_entry_id TEXT PRIMARY KEY,
                 task_snapshot_id TEXT NOT NULL,
@@ -52,8 +51,7 @@ def ensure_task_pool_tables() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
         ensure_columns(conn, "task_pool_entries", {"task_id": "TEXT", "data_version": "TEXT", "decision": "TEXT", "task_layer": "TEXT", "assignee_id": "TEXT", "reviewer_id": "TEXT", "dedupe_key": "TEXT", "reason": "TEXT", "payload": "TEXT", "created_by": "TEXT"})
         conn.execute("CREATE INDEX IF NOT EXISTS idx_task_pool_entries_snapshot ON task_pool_entries(task_snapshot_id, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_task_pool_entries_task ON task_pool_entries(task_id, created_at)")
@@ -78,10 +76,11 @@ def _row_to_pool_entry(row: Any) -> Dict[str, Any]:
 
 def _first_store_id(snapshot: Dict[str, Any], plan: Dict[str, Any]) -> str | None:
     system_facts = (snapshot.get("payload") or {}).get("systemFacts") if isinstance(snapshot.get("payload"), dict) else {}
+    full_bundle = (system_facts or {}).get("fullProductBundle") if isinstance(system_facts, dict) else {}
     store_ids = plan.get("storeIds") or plan.get("visibleStoreIds") or (system_facts or {}).get("storeIds") or []
     if isinstance(store_ids, list) and store_ids:
         return str(store_ids[0])
-    store_id = plan.get("storeId") or (system_facts or {}).get("storeId") or snapshot.get("storeId")
+    store_id = plan.get("storeId") or (full_bundle or {}).get("storeId") or (system_facts or {}).get("storeId") or snapshot.get("storeId")
     return str(store_id) if store_id else None
 
 
@@ -105,19 +104,30 @@ def _as_list(value: Any, fallback: List[Any] | None = None) -> List[Any]:
     return fallback or []
 
 
+def _metric_source(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    system_facts = (snapshot.get("payload") or {}).get("systemFacts") if isinstance(snapshot.get("payload"), dict) else {}
+    if not isinstance(system_facts, dict):
+        return {}
+    full_bundle = system_facts.get("fullProductBundle") if isinstance(system_facts.get("fullProductBundle"), dict) else {}
+    if isinstance(full_bundle.get("metricLayer"), dict):
+        return full_bundle.get("metricLayer") or {}
+    if isinstance(full_bundle.get("productMetricSnapshot"), dict):
+        return full_bundle.get("productMetricSnapshot") or {}
+    signal = system_facts.get("signal") if isinstance(system_facts.get("signal"), dict) else {}
+    return signal.get("productMetricSnapshot") if isinstance(signal.get("productMetricSnapshot"), dict) else {}
+
+
 def _metric_facts(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
     facts: List[Dict[str, Any]] = []
-    system_facts = (snapshot.get("payload") or {}).get("systemFacts") if isinstance(snapshot.get("payload"), dict) else {}
-    signal = (system_facts or {}).get("signal") if isinstance(system_facts, dict) else {}
-    metric_snapshot = signal.get("productMetricSnapshot") if isinstance(signal, dict) else {}
-    if isinstance(metric_snapshot, dict):
-        for code in ["roas", "roi", "paymentAmount", "adSpend", "clickRate", "conversionRate", "refundRate", "grossMargin", "inventory"]:
-            value = metric_snapshot.get(code)
-            if value not in {None, "", "—", "未识别"}:
-                facts.append({"metricCode": code, "label": code, "value": value})
+    metric_snapshot = _metric_source(snapshot)
+    for code in ["roas", "roi", "paymentAmount", "adSpend", "clickRate", "conversionRate", "refundRate", "grossMargin", "inventory"]:
+        value = metric_snapshot.get(code)
+        if value not in {None, "", "—", "未识别"}:
+            facts.append({"metricCode": code, "label": code, "value": value})
     review_metrics = (snapshot.get("taskPlan") or {}).get("reviewMetrics") or []
     for label in review_metrics:
-        facts.append({"label": str(label), "value": None})
+        if not any(item.get("label") == str(label) or item.get("metricCode") == str(label) for item in facts):
+            facts.append({"label": str(label), "value": None})
     return facts
 
 
@@ -125,6 +135,7 @@ def _build_task_package(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     plan = snapshot.get("taskPlan") or {}
     judgment = snapshot.get("agentJudgment") or {}
     rag_context = snapshot.get("ragContext") or {}
+    system_facts = (snapshot.get("payload") or {}).get("systemFacts") if isinstance(snapshot.get("payload"), dict) else {}
     evidence = _as_list(snapshot.get("evidenceRequirements")) or _as_list(plan.get("evidenceRequirements"), ["对应后台截图", "指标变化记录", "运营处理说明"])
     entity_type = snapshot.get("entityType") or plan.get("entityType") or "商品"
     entity_id = snapshot.get("entityId") or plan.get("entityId") or snapshot.get("taskSnapshotId")
@@ -141,7 +152,8 @@ def _build_task_package(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     task_layer = "manager_dispatch" if need_manager else "operator_execution"
     title = plan.get("title") or f"{task_type}｜{entity_id}"
     subtitle = plan.get("subtitle") or judgment.get("trendType") or snapshot.get("trendType") or "系统判断"
-    base = {"taskGenerationMode": "v11_8_sop_package", "taskSnapshotId": snapshot.get("taskSnapshotId"), "sourceModule": "task_snapshot_station", "sourceEvent": snapshot.get("taskSnapshotId"), "sourceRoute": "business-actions", "productRoute": "business-products", "entityType": entity_type, "entityId": entity_id, "productId": plan.get("productId") or snapshot.get("productId") or entity_id, "storeIds": ownership.get("storeIds") or [], "store": (store or {}).get("name") or "经营单元", "platform": (store or {}).get("platform") or "经营平台", "riskDomain": plan.get("riskDomain") or task_type, "actionType": action_type, "taskType": task_type, "priority": priority, "deadline": deadline, "taskLayer": task_layer, "status": "待拆分" if task_layer == "manager_dispatch" else "待接收", "workflowStatus": "待拆分" if task_layer == "manager_dispatch" else "待接收", "taskCard": {"title": title, "subtitle": subtitle, "priority": priority, "deadline": deadline, "decision": snapshot.get("decision"), "confidence": snapshot.get("confidence")}, "taskDetailReport": {"version": TASK_POOL_STATION_VERSION, "taskSnapshotId": snapshot.get("taskSnapshotId"), "warningSummary": judgment.get("reason") or plan.get("reason") or "系统判断该经营变化需要进入任务池。", "systemFacts": (snapshot.get("payload") or {}).get("systemFacts") if isinstance(snapshot.get("payload"), dict) else {}, "ragContext": rag_context, "agentJudgment": judgment, "taskPlan": plan, "poolBoundary": "任务池只完成入池，接收、派发、提交、复核由后续生命周期站处理。"}, "evidencePack": [{"title": item, "value": None} for item in evidence], "sopSteps": [str(item) for item in sop_steps], "reviewMetrics": [str(item) for item in review_metrics], "metricFacts": _metric_facts(snapshot), "operationBudget": snapshot.get("operationBudget") or plan.get("operationBudget") or {}, "completionGate": {"type": "evidence_and_recap_required", "requiredEvidence": evidence, "reviewMetrics": review_metrics}, "failureThreshold": {"rule": "复盘周期内核心指标未改善或反向恶化，则进入复核退回或二次判断。", "metrics": review_metrics}, "agentJudgment": {**judgment, "status": "agent_guided_task_snapshot", "decision": snapshot.get("decision"), "confidence": snapshot.get("confidence"), "ragContextApplied": bool(rag_context)}, "ownership": ownership}
+    metric_facts = _metric_facts(snapshot)
+    base = {"taskGenerationMode": "v11_8_sop_package", "taskSnapshotId": snapshot.get("taskSnapshotId"), "sourceModule": "task_snapshot_station", "sourceEvent": snapshot.get("taskSnapshotId"), "sourceRoute": "business-actions", "productRoute": "business-products", "entityType": entity_type, "entityId": entity_id, "productId": plan.get("productId") or snapshot.get("productId") or entity_id, "storeIds": ownership.get("storeIds") or [], "store": (store or {}).get("name") or "经营单元", "platform": (store or {}).get("platform") or "经营平台", "riskDomain": plan.get("riskDomain") or task_type, "actionType": action_type, "taskType": task_type, "priority": priority, "deadline": deadline, "taskLayer": task_layer, "status": "待拆分" if task_layer == "manager_dispatch" else "待接收", "workflowStatus": "待拆分" if task_layer == "manager_dispatch" else "待接收", "taskCard": {"title": title, "subtitle": subtitle, "priority": priority, "deadline": deadline, "decision": snapshot.get("decision"), "confidence": snapshot.get("confidence")}, "taskDetailReport": {"version": TASK_POOL_STATION_VERSION, "taskSnapshotId": snapshot.get("taskSnapshotId"), "warningSummary": judgment.get("reason") or plan.get("reason") or "系统判断该经营变化需要进入任务池。", "systemFacts": system_facts, "ragContext": rag_context, "agentJudgment": judgment, "taskPlan": plan, "agentDiagnosis": system_facts.get("agentDiagnosis") if isinstance(system_facts, dict) else {}, "softRouting": system_facts.get("softRouting") if isinstance(system_facts, dict) else {}, "poolBoundary": "任务池只完成入池，接收、派发、提交、复核由后续生命周期站处理。"}, "evidencePack": [{"title": item, "value": None} for item in evidence], "sopSteps": [str(item) for item in sop_steps], "reviewMetrics": [str(item) for item in review_metrics], "metricFacts": metric_facts, "operationBudget": snapshot.get("operationBudget") or plan.get("operationBudget") or {}, "completionGate": {"type": "evidence_and_recap_required", "requiredEvidence": evidence, "reviewMetrics": review_metrics}, "failureThreshold": {"rule": "复盘周期内核心指标未改善或反向恶化，则进入复核退回或二次判断。", "metrics": review_metrics}, "agentJudgment": {**judgment, "status": "agent_guided_task_snapshot", "decision": snapshot.get("decision"), "confidence": snapshot.get("confidence"), "ragContextApplied": bool(rag_context)}, "ownership": ownership}
     return to_legacy_task_payload(base)
 
 
@@ -188,7 +200,7 @@ def enter_task_pool_from_snapshot(task_snapshot_id: str, *, created_by: str | No
         row = conn.execute("SELECT * FROM task_pool_entries WHERE pool_entry_id = ?", (pool_entry_id,)).fetchone()
     _update_snapshot_pool_status(task_snapshot_id, "entered_task_pool", task.get("id"))
     entry = _row_to_pool_entry(row)
-    return {"version": TASK_POOL_STATION_VERSION, "ok": True, "status": "entered_task_pool", "poolEntry": entry, "task": task, "createdTaskCount": 1, "rule": "TaskSnapshot -> TaskIntent -> visible task."}
+    return {"version": TASK_POOL_STATION_VERSION, "ok": True, "status": "entered_task_pool", "poolEntry": entry, "task": task, "createdTaskCount": 1, "rule": "TaskSnapshot -> TaskIntent -> visible V11.8 SOP task."}
 
 
 def sync_ready_task_snapshots(*, data_version: str | None = None, limit: int = 50, created_by: str | None = None) -> Dict[str, Any]:
@@ -197,7 +209,7 @@ def sync_ready_task_snapshots(*, data_version: str | None = None, limit: int = 5
     snapshots = [item for item in snapshot_result.get("snapshots", []) if item.get("decision") in READY_DECISIONS and item.get("status") in READY_SNAPSHOT_STATUSES and item.get("taskPoolStatus") != "entered_task_pool"]
     results = [enter_task_pool_from_snapshot(item["taskSnapshotId"], created_by=created_by) for item in snapshots]
     created = sum(int(item.get("createdTaskCount") or 0) for item in results)
-    return {"version": TASK_POOL_STATION_VERSION, "status": "completed", "dataVersion": data_version, "candidateSnapshotCount": len(snapshots), "createdTaskCount": created, "results": results, "rule": "只同步已判断为可入池的任务快照；observe_only和ignore_noise不会进入任务池。"}
+    return {"version": TASK_POOL_STATION_VERSION, "status": "completed", "dataVersion": data_version, "candidateSnapshotCount": len(snapshots), "createdTaskCount": created, "results": results, "rule": "只同步已判断为可入池的任务快照；observe_only、data_gap和evidence_only不会进入任务池。"}
 
 
 def list_task_pool_entries(limit: int = 80) -> Dict[str, Any]:
