@@ -1,10 +1,10 @@
-"""V14.8.2 station adapter service."""
+"""V14.8.3 station adapter service."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-STATION_ADAPTER_VERSION = "14.8.2"
+STATION_ADAPTER_VERSION = "14.8.3"
 DEFAULT_AGENT_BATCH_SIZE = 20
 
 
@@ -31,7 +31,7 @@ def _refresh_read_model(station_id: str, data_version: str | None, output: Dict[
 
 def simulated_station_output(station: Dict[str, Any], body: Dict[str, Any] | None = None, *, diagnostic: bool = False) -> Dict[str, Any]:
     body = body or {}
-    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V14.8.2" if diagnostic else None)
+    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V14.8.3" if diagnostic else None)
     output_ref = f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
     return {"version": STATION_ADAPTER_VERSION, "adapterMode": "diagnostic_simulated" if diagnostic else "contract_only", "stationId": station.get("stationId"), "stage": station.get("stage"), "dataVersion": data_version, "outputRef": output_ref, "isDiagnostic": diagnostic, "count": 1, "rule": "standard station output"}
 
@@ -54,19 +54,19 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
     if station_id == "system_product_snapshot_station":
         from src.services.system_product_snapshot_service import materialize_system_product_snapshot
         result = materialize_system_product_snapshot(data_version=data_version, user_id=user_id, force=bool(body.get("force", True)))
-        return {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_layered_system_product_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productCount", 0), "productSnapshotRef": result.get("productSnapshotRef"), "outputRef": result.get("outputRef") or f"system_product_snapshot:{data_version or 'latest'}", "productSnapshot": result, "isDiagnostic": False, "rule": "V14.8.2 freezes product layers; frontend still reads only read model."}
+        return {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_layered_system_product_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productCount", 0), "productSnapshotRef": result.get("productSnapshotRef"), "outputRef": result.get("outputRef") or f"system_product_snapshot:{data_version or 'latest'}", "productSnapshot": result, "isDiagnostic": False, "rule": "V14.8.3 freezes product layers; frontend still reads only read model."}
 
     if station_id == "product_signal_snapshot_station":
         from src.services.product_signal_snapshot_service import materialize_product_signal_snapshot
         result = materialize_product_signal_snapshot(data_version=data_version, user_id=user_id, force=bool(body.get("force", True)))
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_full_product_bundle_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productSnapshotCount", 0), "productSignalPackageCount": result.get("productSignalPackageCount", result.get("productSignalCount", 0)), "productSignalCount": result.get("productSignalCount", 0), "productSignalSnapshotRef": result.get("productSignalSnapshotRef"), "outputRef": result.get("outputRef") or f"product_signal_snapshot:{data_version or 'latest'}", "productSignalSnapshot": result, "isDiagnostic": False, "rule": "V14.8.2 outputs fullProductBundle and refreshes frontend_product_view."}
+        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_full_product_bundle_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productSnapshotCount", 0), "productSignalPackageCount": result.get("productSignalPackageCount", result.get("productSignalCount", 0)), "productSignalCount": result.get("productSignalCount", 0), "productSignalSnapshotRef": result.get("productSignalSnapshotRef"), "outputRef": result.get("outputRef") or f"product_signal_snapshot:{data_version or 'latest'}", "productSignalSnapshot": result, "isDiagnostic": False, "rule": "V14.8.3 outputs fullProductBundle and refreshes frontend_product_view."}
         output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
         return output
 
     if station_id == "task_signal_station":
         from src.services.signal_pool_service import generate_signal_pool
         result = generate_signal_pool(data_version=data_version, max_signals=batch_size, user_id=user_id)
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_full_product_bundle_pool_no_task_creation", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productSnapshotCount", 0), "productSignalPackageCount": result.get("productSignalPackageCount", result.get("productSignalCount", 0)), "productSignalCount": result.get("productSignalCount", 0), "signalCount": result.get("signalCount", 0), "taskSignalRef": result.get("taskSignalRef"), "createdTaskCount": 0, "outputRef": result.get("outputRef") or f"signal_pool:{data_version or 'latest'}", "signalPool": result, "isDiagnostic": False, "rule": "V14.8.2 queues fullProductBundle packages; frontend reads cache only."}
+        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_full_product_bundle_pool_no_task_creation", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productSnapshotCount", 0), "productSignalPackageCount": result.get("productSignalPackageCount", result.get("productSignalCount", 0)), "productSignalCount": result.get("productSignalCount", 0), "signalCount": result.get("signalCount", 0), "taskSignalRef": result.get("taskSignalRef"), "createdTaskCount": 0, "outputRef": result.get("outputRef") or f"signal_pool:{data_version or 'latest'}", "signalPool": result, "isDiagnostic": False, "rule": "V14.8.3 queues fullProductBundle packages; frontend reads cache only."}
         output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
         return output
 
@@ -78,7 +78,7 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
     if station_id == "agent_judgment_station":
         from src.services.agent_judgment_station_v1481_service import run_agent_judgment_station_v1481
         result = run_agent_judgment_station_v1481(data_version=data_version, rag_context_ref=body.get("ragContextRef"), max_signals=batch_size, created_by=user_id)
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_full_product_bundle_agent_soft_routing_streaming_v1482", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "decision": "mixed" if result.get("judgmentCount") else "no_bundles", "confidence": max([float(item.get("confidence") or 0) for item in result.get("judgments") or []], default=0), "judgmentCount": result.get("judgmentCount", 0), "pendingTaskSnapshotCount": result.get("pendingTaskSnapshotCount", 0), "streamedTaskSnapshotCount": result.get("streamedTaskSnapshotCount", 0), "streamedTaskPoolCount": result.get("streamedTaskPoolCount", 0), "agentJudgmentRef": result.get("agentJudgmentRef"), "outputRef": result.get("outputRef") or f"agent_judgment:{data_version or 'latest'}", "agentJudgment": result, "isDiagnostic": False, "rule": "V14.8.2 streams mature and severe data-gap judgments only; observe-only remains out of task pool."}
+        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_full_product_bundle_agent_chain_contract_streaming_v1483", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "decision": "mixed" if result.get("judgmentCount") else "no_bundles", "confidence": max([float(item.get("confidence") or 0) for item in result.get("judgments") or []], default=0), "judgmentCount": result.get("judgmentCount", 0), "pendingTaskSnapshotCount": result.get("pendingTaskSnapshotCount", 0), "streamedTaskSnapshotCount": result.get("streamedTaskSnapshotCount", 0), "streamedTaskPoolCount": result.get("streamedTaskPoolCount", 0), "taskGenerationRun": result.get("taskGenerationRun"), "agentJudgmentRef": result.get("agentJudgmentRef"), "outputRef": result.get("outputRef") or f"agent_judgment:{data_version or 'latest'}", "agentJudgment": result, "isDiagnostic": False, "rule": "V14.8.3 records task_generation_run even when formal tasks are zero; observe-only remains out of task pool."}
         output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
         return output
 
