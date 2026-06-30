@@ -14,15 +14,15 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.6.1"
+API_VERSION = "14.6.2"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "three_system_station_queue_runtime",
-    "mainline": ["import_system", "task_generation_queue", "task_lifecycle_system"],
-    "rule": "V14.6.1：上传只完成报表导入系统；任务生成由后台站点队列worker逐站消费，Agent和任务快照失败只落到队列状态。",
+    "mode": "three_system_streaming_fast_lane_runtime",
+    "mainline": ["import_system", "task_generation_queue", "streaming_task_pool_fast_lane", "task_lifecycle_system"],
+    "rule": "V14.6.2：上传只完成报表导入系统；Agent生成任务意图后优先进入task_snapshot/task_pool快速通道，成熟任务不等待整批dataVersion完成。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "three_system_station_queue_runtime", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "three_system_streaming_fast_lane_runtime", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
