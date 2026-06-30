@@ -1,26 +1,25 @@
 # Current Version
 
 ```text
-14.5.1
+14.6.0
 ```
 
-## V14.5.1 Meaning
+## V14.6 Meaning
 
-V14.5.1 separates permission stamps from business payloads and compacts import responses.
+V14.6 upgrades the product from a synchronous long-chain request into a three-system asynchronous station queue runtime.
 
-Mainline:
+Three systems:
 
 ```text
-report import
-  -> backend storage
-  -> compact counters and refs
-  -> station details by paged diagnostics only
+report import system
+  -> task generation system
+  -> task lifecycle system
 ```
 
 Core rules:
 
-- Permission stamp is a station scan reference, not business payload content.
-- Product snapshots carry `permissionStampId` and `permissionGateStatus`, not the full permission object.
-- Agent packages do not carry owner, assignee, or visible-user details.
-- Upload/confirm endpoints return counters and refs only.
-- Rows, station outputs, product packages, signal packages, and task packages stay in backend storage.
+- Report import APIs finish the import system only.
+- Task generation is enqueued into `pipeline_jobs` and `station_queue`.
+- A queue worker runs one station at a time: product snapshot, signal snapshot, signal pool, RAG, Agent, task snapshot, task pool.
+- Agent and task materialization failures are isolated to station queue state; they no longer crash the upload request.
+- Frontend receives `import completed + task generation queued`, then polls queue/gate status.
