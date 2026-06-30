@@ -1,12 +1,12 @@
 # Current Version
 
 ```text
-14.6.1
+14.6.2
 ```
 
-## V14.6.1 Meaning
+## V14.6.2 Meaning
 
-V14.6.1 adds automatic station queue consumption.
+V14.6.2 upgrades the station queue from asynchronous batch processing to streaming task pool fast lane.
 
 Mainline:
 
@@ -14,13 +14,17 @@ Mainline:
 report import system
   -> enqueue task generation
   -> background station queue worker
+  -> Agent judgment
+  -> task_snapshot fast lane
+  -> task_pool fast lane
   -> task lifecycle system
 ```
 
 Core rules:
 
-- FastAPI startup starts a conservative background `station_queue` worker.
-- The worker runs outside upload requests and consumes a small bounded number of stations per tick.
-- Pipeline API exposes worker status, start, stop, and one-tick controls.
-- Manual batch execution remains available for debugging.
-- Upload requests still finish after import and enqueue; they do not wait for Agent or task materialization.
+- Mature tasks do not wait for the whole dataVersion batch to finish.
+- `task_pool_station` has the highest queue priority.
+- `task_snapshot_station` has the second-highest queue priority.
+- Agent judgments with pending task snapshots immediately stream into the fast lane.
+- The worker still runs outside upload requests and keeps bounded per-tick execution.
+- Task lifecycle starts as soon as a task pool entry is created.
