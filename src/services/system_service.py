@@ -23,7 +23,8 @@ V131_RUNTIME_RESET_MARKER = "v13_1_snapshot_task_handoff_runtime_reset_applied"
 V133_RUNTIME_RESET_MARKER = "v13_3_task_snapshot_runtime_reset_applied"
 V134_RUNTIME_RESET_MARKER = "v13_4_task_pool_runtime_reset_applied"
 V1442_RUNTIME_RESET_MARKER = "v14_4_2_full_runtime_reset_applied"
-SYSTEM_SERVICE_VERSION = "14.4.2"
+V146_RUNTIME_RESET_MARKER = "v14_6_station_queue_runtime_reset_applied"
+SYSTEM_SERVICE_VERSION = "14.6.0"
 
 TABLES = [
     {"table_name": "workflow_runs", "time_expression": "COALESCE(MAX(finished_at), MAX(started_at))"},
@@ -53,6 +54,8 @@ TABLES = [
     {"table_name": "signal_pool_v14", "time_expression": "MAX(updated_at)"},
     {"table_name": "agent_judgments_v14", "time_expression": "MAX(updated_at)"},
     {"table_name": "operation_budget_ledger_v14", "time_expression": "MAX(updated_at)"},
+    {"table_name": "pipeline_jobs", "time_expression": "MAX(updated_at)"},
+    {"table_name": "station_queue", "time_expression": "MAX(updated_at)"},
     {"table_name": "pipeline_stage_gates", "time_expression": "MAX(updated_at)"},
     {"table_name": "station_handoffs", "time_expression": "MAX(updated_at)"},
     {"table_name": "task_snapshots", "time_expression": "MAX(updated_at)"},
@@ -62,12 +65,12 @@ TABLES = [
 ]
 
 RUNTIME_TABLES = [
-    "task_reviews", "task_submissions", "task_assignments", "approval_records", "task_status", "alert_events", "business_signals_v6", "operating_cadence_signals", "metric_snapshots", "product_metric_facts", "store_metric_facts", "traffic_source_facts", "data_gap_events", "data_snapshots", "imported_report_rows", "report_records", "import_records", "execution_logs", "workflow_runs", "operating_products", "operating_stores", "operating_unit_snapshots", "system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14", "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_stage_gates", "station_handoffs", "task_snapshots", "task_pool_entries", "ops_station_checks", "ops_diagnostic_runs",
+    "task_reviews", "task_submissions", "task_assignments", "approval_records", "task_status", "alert_events", "business_signals_v6", "operating_cadence_signals", "metric_snapshots", "product_metric_facts", "store_metric_facts", "traffic_source_facts", "data_gap_events", "data_snapshots", "imported_report_rows", "report_records", "import_records", "execution_logs", "workflow_runs", "operating_products", "operating_stores", "operating_unit_snapshots", "system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14", "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_jobs", "station_queue", "pipeline_stage_gates", "station_handoffs", "task_snapshots", "task_pool_entries", "ops_station_checks", "ops_diagnostic_runs",
 ]
 
-V14_RUNTIME_TABLES = ["system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14", "agent_judgments_v14", "operation_budget_ledger_v14"]
+V14_RUNTIME_TABLES = ["system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14", "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_jobs", "station_queue"]
 FACT_SOURCE_TABLES = ["imported_report_rows", "operating_products", "operating_stores", "product_metric_facts", "store_metric_facts"]
-RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、经营对象、指标事实、经营快照、V14商品快照、商品信号快照、信号池、Agent判断、预算账本、任务快照、任务池、pipeline阀门和运行日志；账号、角色、权限和基础店铺配置保留。"
+RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、经营对象、指标事实、经营快照、V14商品快照、商品信号快照、信号池、Agent判断、预算账本、站点队列、任务快照、任务池、pipeline阀门和运行日志；账号、角色、权限和基础店铺配置保留。"
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -126,7 +129,7 @@ def _runtime_dirty_diagnostics(table_status: List[Dict[str, Any]]) -> Dict[str, 
     fact_count = sum(counts.get(name, 0) for name in FACT_SOURCE_TABLES)
     v14_count = sum(counts.get(name, 0) for name in V14_RUNTIME_TABLES)
     dirty = fact_count == 0 and v14_count > 0
-    return {"version": SYSTEM_SERVICE_VERSION, "status": "failed" if dirty else "passed", "runtimeDirty": dirty, "factSourceCount": fact_count, "v14ResidualCount": v14_count, "v14ResidualTables": {name: counts.get(name, 0) for name in V14_RUNTIME_TABLES}, "rule": "If fact sources are empty, V14 snapshots/signals/judgments must also be empty."}
+    return {"version": SYSTEM_SERVICE_VERSION, "status": "failed" if dirty else "passed", "runtimeDirty": dirty, "factSourceCount": fact_count, "v14ResidualCount": v14_count, "v14ResidualTables": {name: counts.get(name, 0) for name in V14_RUNTIME_TABLES}, "rule": "If fact sources are empty, V14 snapshots/signals/judgments/queue must also be empty."}
 
 
 def get_db_status() -> Dict[str, Any]:
@@ -148,26 +151,8 @@ def get_db_status() -> Dict[str, Any]:
         task_snapshot_marker = _meta_get(conn, V133_RUNTIME_RESET_MARKER)
         task_pool_marker = _meta_get(conn, V134_RUNTIME_RESET_MARKER)
         v1442_marker = _meta_get(conn, V1442_RUNTIME_RESET_MARKER)
-    return {
-        "ok": not dirty.get("runtimeDirty"),
-        "version": SYSTEM_SERVICE_VERSION,
-        "database": {"type": "sqlite", "path": str(db_path), "exists": db_path.exists(), "size_bytes": db_path.stat().st_size if db_path.exists() else 0},
-        "tables": table_status,
-        "summary": {"table_count": len(table_status), "total_records": total_records, "latest_at": max(latest_times) if latest_times else None},
-        "runtimeDirtyDiagnostics": dirty,
-        "runtime_boundary": {"real_erp_connected": False, "real_crm_connected": False, "real_shop_backend_connected": False, "auto_high_risk_execution": False, "note": RUNTIME_BOUNDARY_NOTE},
-        "v5RuntimeReset": {"marker": V5_RUNTIME_RESET_MARKER, "applied": reset_marker == "done"},
-        "v1114RuntimeFullReset": {"marker": V1114_RUNTIME_RESET_MARKER, "applied": full_reset_marker == "done"},
-        "v121MetricFactRuntimeReset": {"marker": V121_RUNTIME_RESET_MARKER, "applied": metric_fact_reset_marker == "done"},
-        "v1213DataGapRuntimeReset": {"marker": V1213_RUNTIME_RESET_MARKER, "applied": data_gap_reset_marker == "done"},
-        "v124OperatingCadenceRuntimeReset": {"marker": V124_RUNTIME_RESET_MARKER, "applied": operating_cadence_reset_marker == "done"},
-        "v12131PipelineSnapshotRuntimeReset": {"marker": V12131_RUNTIME_RESET_MARKER, "applied": pipeline_snapshot_reset_marker == "done"},
-        "v12140StationOpsRuntimeReset": {"marker": V12140_RUNTIME_RESET_MARKER, "applied": station_ops_reset_marker == "done"},
-        "v131SnapshotTaskHandoffRuntimeReset": {"marker": V131_RUNTIME_RESET_MARKER, "applied": snapshot_task_handoff_marker == "done"},
-        "v133TaskSnapshotRuntimeReset": {"marker": V133_RUNTIME_RESET_MARKER, "applied": task_snapshot_marker == "done"},
-        "v134TaskPoolRuntimeReset": {"marker": V134_RUNTIME_RESET_MARKER, "applied": task_pool_marker == "done"},
-        "v1442RuntimeReset": {"marker": V1442_RUNTIME_RESET_MARKER, "applied": v1442_marker == "done"},
-    }
+        v146_marker = _meta_get(conn, V146_RUNTIME_RESET_MARKER)
+    return {"ok": not dirty.get("runtimeDirty"), "version": SYSTEM_SERVICE_VERSION, "database": {"type": "sqlite", "path": str(db_path), "exists": db_path.exists(), "size_bytes": db_path.stat().st_size if db_path.exists() else 0}, "tables": table_status, "summary": {"table_count": len(table_status), "total_records": total_records, "latest_at": max(latest_times) if latest_times else None}, "runtimeDirtyDiagnostics": dirty, "runtime_boundary": {"real_erp_connected": False, "real_crm_connected": False, "real_shop_backend_connected": False, "auto_high_risk_execution": False, "note": RUNTIME_BOUNDARY_NOTE}, "v5RuntimeReset": {"marker": V5_RUNTIME_RESET_MARKER, "applied": reset_marker == "done"}, "v1114RuntimeFullReset": {"marker": V1114_RUNTIME_RESET_MARKER, "applied": full_reset_marker == "done"}, "v121MetricFactRuntimeReset": {"marker": V121_RUNTIME_RESET_MARKER, "applied": metric_fact_reset_marker == "done"}, "v1213DataGapRuntimeReset": {"marker": V1213_RUNTIME_RESET_MARKER, "applied": data_gap_reset_marker == "done"}, "v124OperatingCadenceRuntimeReset": {"marker": V124_RUNTIME_RESET_MARKER, "applied": operating_cadence_reset_marker == "done"}, "v12131PipelineSnapshotRuntimeReset": {"marker": V12131_RUNTIME_RESET_MARKER, "applied": pipeline_snapshot_reset_marker == "done"}, "v12140StationOpsRuntimeReset": {"marker": V12140_RUNTIME_RESET_MARKER, "applied": station_ops_reset_marker == "done"}, "v131SnapshotTaskHandoffRuntimeReset": {"marker": V131_RUNTIME_RESET_MARKER, "applied": snapshot_task_handoff_marker == "done"}, "v133TaskSnapshotRuntimeReset": {"marker": V133_RUNTIME_RESET_MARKER, "applied": task_snapshot_marker == "done"}, "v134TaskPoolRuntimeReset": {"marker": V134_RUNTIME_RESET_MARKER, "applied": task_pool_marker == "done"}, "v1442RuntimeReset": {"marker": V1442_RUNTIME_RESET_MARKER, "applied": v1442_marker == "done"}, "v146RuntimeReset": {"marker": V146_RUNTIME_RESET_MARKER, "applied": v146_marker == "done"}}
 
 
 def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual_reset") -> Dict[str, Any]:
@@ -175,7 +160,7 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
     removed_files: List[str] = []
     with connect() as conn:
         deleted_tables = _delete_runtime_tables(conn)
-        for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER]:
+        for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER, V146_RUNTIME_RESET_MARKER]:
             _meta_set(conn, marker, "done")
             _meta_set(conn, f"{marker}_reason", reason)
         conn.commit()
@@ -185,7 +170,7 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
             if path.exists():
                 path.unlink()
                 removed_files.append(str(path))
-    return {"ok": True, "version": SYSTEM_SERVICE_VERSION, "message": "演示运行态已全链路清空：导入行、经营对象、指标事实、V14商品快照、信号快照、信号池、Agent判断、预算账本、任务快照、任务池、pipeline阀门、任务、日志均回到空状态。", "reason": reason, "deletedTables": deleted_tables, "removedFiles": removed_files, "includeAuditLogs": include_audit_logs, "boundary": RUNTIME_BOUNDARY_NOTE, "db_status": get_db_status()}
+    return {"ok": True, "version": SYSTEM_SERVICE_VERSION, "message": "演示运行态已全链路清空：导入行、经营对象、指标事实、V14快照、信号池、Agent判断、预算账本、站点队列、任务快照、任务池、日志均回到空状态。", "reason": reason, "deletedTables": deleted_tables, "removedFiles": removed_files, "includeAuditLogs": include_audit_logs, "boundary": RUNTIME_BOUNDARY_NOTE, "db_status": get_db_status()}
 
 
 def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
@@ -195,18 +180,18 @@ def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
 def reset_legacy_runtime_once() -> Dict[str, Any]:
     init_db()
     with connect() as conn:
-        if any(_meta_get(conn, marker) == "done" for marker in [V1442_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V5_RUNTIME_RESET_MARKER]):
-            return {"ok": True, "skipped": True, "marker": V1442_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
+        if any(_meta_get(conn, marker) == "done" for marker in [V146_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V5_RUNTIME_RESET_MARKER]):
+            return {"ok": True, "skipped": True, "marker": V146_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
         stale_count = sum(_table_count(conn, table_name) for table_name in RUNTIME_TABLES)
     if stale_count <= 0:
         with connect() as conn:
-            for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER]:
+            for marker in [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER, V146_RUNTIME_RESET_MARKER]:
                 _meta_set(conn, marker, "done")
                 _meta_set(conn, f"{marker}_reason", "empty_runtime_noop")
             conn.commit()
         reset_tasks()
-        return {"ok": True, "skipped": True, "marker": V1442_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
-    result = clear_runtime_data(include_audit_logs=False, reason="v1442_startup_one_time_full_runtime_cleanup")
+        return {"ok": True, "skipped": True, "marker": V146_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
+    result = clear_runtime_data(include_audit_logs=False, reason="v146_startup_one_time_station_queue_cleanup")
     result["staleRecordCount"] = stale_count
-    result["marker"] = V1442_RUNTIME_RESET_MARKER
+    result["marker"] = V146_RUNTIME_RESET_MARKER
     return result
