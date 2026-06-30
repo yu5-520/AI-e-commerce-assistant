@@ -36,7 +36,7 @@
   async function loadAccount() { account = await request("/api/accounts"); return account; }
   async function applyAccountMutation(path, body) { const result = await request(path, null, { method: "POST", body }); account = result?.account || (await loadAccount()); window.dispatchEvent(new CustomEvent("mock-account-change", { detail: { account } })); return result; }
   function clearViewState() { ["manager_task_state_v241", "manager_task_sort_v241", "manager_selected_task_v241", "owner_review_state", "owner_dashboard_state"].forEach((key) => localStorage.removeItem(key)); }
-  function clearClientRuntime() { clearViewState(); window.AppMockData.products = []; window.AppMockData.competitors = []; window.AppMockData.listings = []; window.AppMockData.traffic = []; window.AppMockData.reportGroups = []; window.AppMockData.reportDetails = {}; window.AppMockData.v3 = { version: "14.8.0", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] }; window.AppMockData.recentAlerts = []; status.lastImportSync = null; window.AppTaskStore?.hydrate?.([], [], [], {}); }
+  function clearClientRuntime() { clearViewState(); window.AppMockData.products = []; window.AppMockData.competitors = []; window.AppMockData.listings = []; window.AppMockData.traffic = []; window.AppMockData.reportGroups = []; window.AppMockData.reportDetails = {}; window.AppMockData.v3 = { version: "14.8.3", activeAlertCount: 0, highPriorityAlertCount: 0, latestAlerts: [] }; window.AppMockData.recentAlerts = []; status.lastImportSync = null; window.AppTaskStore?.hydrate?.([], [], [], {}); }
   function dataVersionFromImport(result = {}) { return result?.dataVersion || result?.syncState?.latestDataVersion || result?.operatingUnitSnapshotSync?.syncState?.latestDataVersion || result?.pipelineSync?.dataVersions?.[0] || result?.results?.find?.((item) => item?.dataVersion)?.dataVersion || ""; }
   function rememberImportSync(result) { status.lastImportSync = result?.taskGeneration || result?.pipelineSync || result?.importDiagnostics || null; window.dispatchEvent(new CustomEvent("v148-import-queued", { detail: { result, sync: status.lastImportSync } })); return result; }
   function productFormatters() { return { money(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).startsWith("¥") ? String(value) : `¥${value}`; }, percent(value) { return value === null || value === undefined || value === "" || value === "—" || value === "未识别" ? "未识别" : String(value).includes("%") ? String(value) : `${value}%`; } }; }
@@ -50,6 +50,7 @@
     productView: (params = {}) => request(`/api/view/products${buildQuery(params)}`),
     taskView: (params = {}) => request(`/api/view/tasks${buildQuery(params)}`),
     systemStatusView: () => request("/api/view/system-status"),
+    dataLineView: () => optionalRequest("/api/view/data-line", { ready: false, headline: "等待数据接入", lineStatus: "waiting", stations: [], formalTaskCount: 0, observeOnlyCount: 0 }),
     refreshReadModel: (dataVersion = "") => api.post(`/api/view/refresh${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`, null, {}),
     pipelineStages: (dataVersion = "") => request(`/api/pipeline/stages${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`),
     rebuildOperatingSnapshot: (dataVersion = "") => api.post(`/api/modules/operating-unit/snapshot/rebuild${dataVersion ? `?dataVersion=${encodeURIComponent(dataVersion)}` : ""}`, null, {}),
@@ -110,10 +111,10 @@
       rememberImportSync(result);
       const dataVersion = dataVersionFromImport(result);
       const readModel = await api.refreshReadModel(dataVersion).catch((error) => ({ optionalError: error?.message || String(error || "读模型刷新失败") }));
-      const [operatingUnit, pipeline, taskState] = await Promise.all([api.operatingUnit(dataVersion ? { dataVersion } : {}).catch(() => null), api.pipelineStages(dataVersion).catch(() => null), api.refreshTaskState().catch(() => null)]);
-      const detail = { result, dataVersion, readModel, operatingUnit, pipeline, taskState };
+      const [operatingUnit, pipeline, taskState, dataLine] = await Promise.all([api.operatingUnit(dataVersion ? { dataVersion } : {}).catch(() => null), api.pipelineStages(dataVersion).catch(() => null), api.refreshTaskState().catch(() => null), api.dataLineView().catch(() => null)]);
+      const detail = { result, dataVersion, readModel, operatingUnit, pipeline, taskState, dataLine };
       window.dispatchEvent(new CustomEvent("v148-read-model-refresh", { detail }));
-      return { ...detail, rule: "V14.8导入后前端只刷新read model；任务生成由后台station_queue worker异步处理，不在页面刷新里强跑Agent。" };
+      return { ...detail, rule: "V14.8.3导入后前端只刷新read model与地铁线路状态；任务生成由后台station_queue worker异步处理，不在页面刷新里强跑Agent。" };
     },
     todo: (params = {}) => { const query = new URLSearchParams(); if (params.status) query.set("status", params.status); if (params.limit) query.set("limit", params.limit); const suffix = query.toString() ? `?${query.toString()}` : ""; return request(`/api/view/tasks${suffix}`); },
     todoEvents: () => request("/api/modules/todo/events"),
