@@ -9,20 +9,20 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, deprecated_stations, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, station_handoffs, stations, system, task_lifecycle_stations, task_persistence, task_pool, task_snapshots, trends, v10_product, v9_readiness, worker_jobs
+from src.api.routes import accounts, approvals, architecture, audit, data_import, data_source_compat, deprecated_stations, frontend_views, health, import_jobs, llm, modules, ops, pipeline, report_task_sync, station_handoffs, stations, system, task_lifecycle_stations, task_persistence, task_pool, task_snapshots, trends, v10_product, v9_readiness, worker_jobs
 from src.services.station_queue_worker_service import start_station_queue_worker, stop_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.7.0"
+API_VERSION = "14.8.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "full_product_bundle_rag_soft_routing_runtime",
-    "mainline": ["import_system", "system_product_layered_snapshot", "full_product_bundle_queue", "rag_volatility_boundary", "agent_soft_routing", "sop_task_snapshot", "task_lifecycle_system"],
-    "rule": "V14.7：任务生成从碎片信号触发改为单商品全量包驱动；RAG提供波动边界，Agent软路由，正式任务仍输出V11.8 SOP包。",
+    "mode": "frontend_read_model_compute_read_isolation_runtime",
+    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent_soft_routing", "streaming_sop_task_pool", "frontend_read_model"],
+    "rule": "V14.8：计算归worker，前端归read model。页面切换只读/api/view/*，不触发materialize/generate/Agent/worker。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "full_product_bundle_rag_soft_routing_runtime", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "frontend_read_model_compute_read_isolation_runtime", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
@@ -55,6 +55,7 @@ app.include_router(station_handoffs.router)
 app.include_router(task_snapshots.router)
 app.include_router(task_pool.router)
 app.include_router(task_lifecycle_stations.router)
+app.include_router(frontend_views.router)
 app.include_router(ops.router)
 app.include_router(deprecated_stations.router)
 app.include_router(accounts.router)
