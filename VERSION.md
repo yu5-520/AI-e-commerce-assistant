@@ -1,33 +1,34 @@
 # Current Version
 
 ```text
-14.7.0
+14.8.0
 ```
 
-## V14.7 Meaning
+## V14.8 Meaning
 
-V14.7 corrects the task generation grain from fragmented metric/dataVersion signals to one full product bundle per product.
+V14.8 separates frontend reads from backend compute and turns task handoff into a streaming pipeline.
 
 Mainline:
 
 ```text
 report import system
+  -> background worker compute
   -> system product layered snapshot
   -> fullProductBundle assembly
-  -> fullProductBundle queue
   -> RAG volatility boundary context
   -> Agent product diagnosis soft routing
-  -> V11.8 SOP task snapshot when route is create_task / manager_review
-  -> task pool
-  -> task lifecycle system
+  -> mature judgment immediately creates V11.8 SOP task snapshot
+  -> mature task immediately enters task pool
+  -> frontend read model refresh
+  -> frontend reads /api/view/* only
 ```
 
 Core rules:
 
-- `fullProductBundle` is not a fourth fact layer. It is the contract that combines product profile layer, product data layer and product snapshot layer for Agent input.
-- Signals are evidence inside the product bundle, not independent task entry points.
-- RAG provides volatility boundary and operating context; it does not hard-block Agent.
-- Agent soft routing can return create task, manager review, observe, merge, evidence-only or data-gap routes.
-- Only create task / manager review routes become formal V11.8 SOP task snapshots.
-- Missing fields lower confidence and request evidence; missing ROI or impact estimate does not automatically become manager approval.
-- The formal task output remains the repository SOP package: taskCard, taskDetailReport, evidencePack, sopSteps, reviewMetrics, completionGate, failureThreshold, agentJudgment and ownership.
+- Frontend page switching reads cached read models only.
+- `/api/view/*` endpoints do not run materialize, generate, enqueue, Agent judgment, worker execution, or task sync.
+- Worker compute writes results into `frontend_*_view` tables after key stations complete.
+- One mature Agent judgment can stream into task snapshot and task pool immediately; it does not wait for the full worker batch.
+- Observe, evidence-only, data-gap, and merge routes do not enter the formal task pool.
+- Formal task output still remains the repository V11.8 SOP package.
+- SQLite uses WAL and busy_timeout to reduce read/write blocking on low-config ECS.
