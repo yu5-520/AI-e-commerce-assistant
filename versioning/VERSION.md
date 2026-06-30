@@ -1,19 +1,21 @@
-Current Version: 14.8.1
+Current Version: 14.8.2
 
-V14.8.1 Product Facts + Data-Gap Safe Task Streaming
+V14.8.2 Product Data Date + Mature Task Queue
 
 Core chain:
 
-`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent soft routing -> task snapshot -> task pool -> frontend read model`
+`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent soft routing -> mature/severe-gap task snapshot -> task pool -> frontend read model`
 
 Key updates:
 
-- Product detail no longer depends only on the compact frontend read model. It merges runtime product projection so SKU, 商品定位, 指标事实, 流量事实 and 数据缺口摘要 are visible again.
-- Agent判断中的关键字段缺失 no longer stops task generation. It creates a formal data verification SOP task.
-- The Agent station streams mature/data-gap judgments into task snapshot and task pool immediately.
-- Product manual task creation also routes missing metrics into 数据核验任务.
-- Frontend read isolation remains: page switching still must not run materialize/generate/Agent/worker.
+- Product metric facts show business data date such as `2026.6.25`, not cache/read-model/projection labels.
+- Report date resolution uses report fields first, filename/dataVersion second, upload/create time third.
+- Agent deterministic routing is the only authority for entering the formal task pool.
+- LLM can enrich wording but cannot upgrade background observation into a formal task.
+- Observation items stay in labels/logs; mature经营判断 and severe数据缺口 enter SOP task snapshots.
+- Frontend task read model exposes `id = taskId`, so list detail and task report use one key.
+- Read-model refresh clears stale task rows before rebuilding visible queue rows.
 
 Boundary:
 
-Read APIs stay read-only. Compute happens in worker/stations. Data gaps become executable tasks, not hard blocking rules.
+Read APIs stay read-only. Compute happens in worker/stations. Observation is not execution; task pool only holds actionable SOP tasks.
