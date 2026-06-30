@@ -1,4 +1,4 @@
-"""V14.3 standard station contract service."""
+"""V14.7 standard station contract service."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from src.services.pipeline_gate_service import record_stage_gate, stage_summary
 from src.services.station_adapter_service import STATION_ADAPTER_VERSION, run_station_adapter
 from src.services.station_registry_service import STATION_REGISTRY_VERSION, get_station, list_stations
 
-STATION_CONTRACT_VERSION = "14.3.0"
+STATION_CONTRACT_VERSION = "14.7.0"
 
 DEFAULT_INPUTS = {
     "import_station": ["source", "dataVersion"],
@@ -67,7 +67,7 @@ def station_contract(station_id: str) -> Dict[str, Any]:
     if not station:
         return {"version": STATION_CONTRACT_VERSION, "ok": False, "error": "station_not_found", "stationId": station_id}
     sid = station["stationId"]
-    return {"version": STATION_CONTRACT_VERSION, "registryVersion": STATION_REGISTRY_VERSION, "adapterVersion": STATION_ADAPTER_VERSION, "ok": True, "stationId": sid, "stage": station["stage"], "title": station["title"], "stationLine": station.get("stationLine"), "stationDomain": station.get("stationDomain"), "input": {"required": DEFAULT_INPUTS.get(sid, ["dataVersion"])}, "output": {"required": DEFAULT_OUTPUTS.get(sid, ["outputRef"])}, "nextStation": station.get("nextStation"), "replayable": bool(station.get("replayable")), "diagnosticSupported": bool(station.get("diagnosticSupported")), "backendModule": station.get("backendModule"), "frontendModule": station.get("frontendModule"), "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"}, "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "dedicatedLifecycleRoute": sid in {"task_acceptance_station", "task_assignment_station", "task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}, "diagnosticUsesSimulation": True}, "rule": "V14.3：全量信号包进入Agent预算判断；系统控制预算预占和生命周期。"}
+    return {"version": STATION_CONTRACT_VERSION, "registryVersion": STATION_REGISTRY_VERSION, "adapterVersion": STATION_ADAPTER_VERSION, "ok": True, "stationId": sid, "stage": station["stage"], "title": station["title"], "stationLine": station.get("stationLine"), "stationDomain": station.get("stationDomain"), "input": {"required": DEFAULT_INPUTS.get(sid, ["dataVersion"])}, "output": {"required": DEFAULT_OUTPUTS.get(sid, ["outputRef"])}, "nextStation": station.get("nextStation"), "replayable": bool(station.get("replayable")), "diagnosticSupported": bool(station.get("diagnosticSupported")), "backendModule": station.get("backendModule"), "frontendModule": station.get("frontendModule"), "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"}, "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "dedicatedLifecycleRoute": sid in {"task_acceptance_station", "task_assignment_station", "task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}, "diagnosticUsesSimulation": True}, "rule": "V14.7：商品三层数据先收敛为fullProductBundle；RAG给波动边界；Agent软路由；正式任务仍按V11.8 SOP契约输出。"}
 
 
 def list_station_contracts() -> Dict[str, Any]:
@@ -126,10 +126,10 @@ def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *,
     except Exception as exc:
         adapter_error = str(exc)
         adapter_output = {"adapterMode": "real_adapter_failed_fallback_contract", "adapterError": adapter_error}
-    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V14.3" if diagnostic else None)
+    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V14.7" if diagnostic else None)
     output_ref = adapter_output.get("outputRef") or f"{station.get('outputRefPrefix')}:{data_version or body.get('taskId') or body.get('task_id') or 'latest'}"
     output = _complete_output_for_contract(station["stationId"], {**adapter_output, "dataVersion": data_version, "outputRef": output_ref, "stationId": station["stationId"], "isDiagnostic": diagnostic})
     output_check = validate_contract_payload(station["stationId"], output, direction="output")
     status = "failed" if adapter_error else "completed"
     gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"]}, output_payload=output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output_ref, error_message=adapter_error, run_type="diagnostic" if diagnostic else "business", is_diagnostic=diagnostic)
-    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V14.3：系统快照生成全量信号包，RAG与Agent预算判断任务去向。"}
+    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V14.7：fullProductBundle进入Agent软路由，正式任务按SOP输出，观察/证据/数据缺口不入正式任务池。"}
