@@ -1,8 +1,10 @@
-"""V14.3 product signal package snapshot service.
+"""V14.7 full product bundle contract service.
 
-Every product gets a signal package. The system does not pre-filter by whether a
-metric crossed a threshold. Agent judgment decides whether a package becomes a
-task, observation, data-gap request or normal archive.
+Full product bundle here means one product's complete operating package, not all
+products. The station collects the product profile layer, metric layer and
+snapshot/trend layer into one Agent input contract. Metric changes, profile
+changes and cross-report facts are evidence inside the bundle; they are not
+separate task triggers.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from typing import Any, Dict, List
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 from src.services.system_product_snapshot_service import get_product_snapshot, materialize_system_product_snapshot, product_snapshot_history
 
-PRODUCT_SIGNAL_SNAPSHOT_VERSION = "14.3.0"
+PRODUCT_SIGNAL_SNAPSHOT_VERSION = "14.7.0"
 COMPARE_FIELDS = {
     "inventory": "product_inventory_changed",
     "paymentAmount": "product_payment_changed",
@@ -82,8 +84,16 @@ def _change(old: Any, new: Any) -> float | None:
     return (new_num - old_num) / abs(old_num)
 
 
+def _hash(seed: str, size: int = 14) -> str:
+    return hashlib.sha1(seed.encode("utf-8")).hexdigest()[:size].upper()
+
+
 def _signal_id(seed: str) -> str:
-    return "PSIG-" + hashlib.sha1(seed.encode("utf-8")).hexdigest()[:14].upper()
+    return "PSIG-" + _hash(seed)
+
+
+def _bundle_id(seed: str) -> str:
+    return "FPB-" + _hash(seed, 16)
 
 
 def _index_products(snapshot: Dict[str, Any] | None) -> Dict[str, Dict[str, Any]]:
@@ -144,29 +154,81 @@ def _strength(field: str, latest: Any, previous: Any, trend_windows: Dict[str, A
     return "normal"
 
 
-def _primary_signal_type(item: Dict[str, Any], old: Dict[str, Any] | None, trend_windows: Dict[str, Any]) -> tuple[str, str, str | None]:
+def _field_signal(field: str, item: Dict[str, Any], old: Dict[str, Any] | None, trend_windows: Dict[str, Any]) -> Dict[str, Any]:
+    latest = _metric(item, field)
+    previous = _metric(old, field) if old else None
+    strength = _strength(field, latest, previous, trend_windows)
+    windows = ((trend_windows.get("windows") or {}).get(field) or {})
+    evidence = {
+        "metricCode": field,
+        "signalType": COMPARE_FIELDS[field],
+        "signalStrength": strength,
+        "latest": _num(latest),
+        "previous": _num(previous),
+        "changeVsPrevious": _change(previous, latest),
+        "windows": windows,
+    }
+    return evidence
+
+
+def _source_versions(item: Dict[str, Any], history_items: List[Dict[str, Any]]) -> List[str]:
+    versions: List[str] = []
+    for candidate in [item, *history_items]:
+        metric = candidate.get("metricSnapshot") if isinstance(candidate.get("metricSnapshot"), dict) else {}
+        for value in [*(candidate.get("sourceDataVersions") or []), *(metric.get("sourceDataVersions") or [])]:
+            if value:
+                versions.append(str(value))
+    return list(dict.fromkeys(versions))
+
+
+def _cross_validation(item: Dict[str, Any], history_items: List[Dict[str, Any]], field_signals: List[Dict[str, Any]]) -> Dict[str, Any]:
+    metric = item.get("metricSnapshot") if isinstance(item.get("metricSnapshot"), dict) else {}
+    source_versions = _source_versions(item, history_items)
+    source_datasets = list(dict.fromkeys(str(value) for value in [*(item.get("sourceDatasets") or []), *(metric.get("sourceDatasets") or [])] if value))
+    abnormal = [sig for sig in field_signals if sig.get("signalStrength") in {"high", "medium"}]
+    changed = [sig for sig in field_signals if sig.get("signalStrength") in {"high", "medium", "low"}]
+    return {
+        "sourceDataVersions": source_versions,
+        "sourceDatasets": source_datasets,
+        "sourceVersionCount": len(source_versions),
+        "sourceDatasetCount": len(source_datasets),
+        "changedMetricCount": len(changed),
+        "abnormalMetricCount": len(abnormal),
+        "topAbnormalMetrics": abnormal[:5],
+        "rule": "V14.7 cross validation is evidence inside one product bundle, not multiple task triggers.",
+    }
+
+
+def _primary_signal(field_signals: List[Dict[str, Any]], old: Dict[str, Any] | None) -> tuple[str, str, str | None]:
     if not old:
         return "product_newly_seen", "low", "product_snapshot"
     best = ("normal_state", "normal", None)
     rank = {"high": 3, "medium": 2, "low": 1, "normal": 0}
-    for field, signal_type in COMPARE_FIELDS.items():
-        latest = _metric(item, field)
-        previous = _metric(old, field)
-        strength = _strength(field, latest, previous, trend_windows)
-        if rank[strength] > rank[best[1]]:
-            best = (signal_type, strength, field)
+    for signal in field_signals:
+        strength = str(signal.get("signalStrength") or "normal")
+        if rank.get(strength, 0) > rank.get(best[1], 0):
+            best = (str(signal.get("signalType")), strength, str(signal.get("metricCode")))
     return best
 
 
-def _package_for_product(data_version: str | None, key: str, item: Dict[str, Any], old: Dict[str, Any] | None, history: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_full_product_bundle(data_version: str | None, key: str, item: Dict[str, Any], old: Dict[str, Any] | None, history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    history_items = [candidate for snapshot in history for k, candidate in _index_products(snapshot).items() if k == key]
     trend = _trend_windows(key, item, history)
-    signal_type, strength, metric_code = _primary_signal_type(item, old, trend)
-    seed = f"{data_version}|{key}|{signal_type}|{metric_code or 'all'}"
+    field_signals = [_field_signal(field, item, old, trend) for field in COMPARE_FIELDS]
+    signal_type, strength, metric_code = _primary_signal(field_signals, old)
     profile = item.get("profileSnapshot") if isinstance(item.get("profileSnapshot"), dict) else {}
     metric = item.get("metricSnapshot") if isinstance(item.get("metricSnapshot"), dict) else {}
+    cross_validation = _cross_validation(item, history_items, field_signals)
+    source_versions = cross_validation.get("sourceDataVersions") or []
+    digest_seed = dumps({"key": key, "metric": metric, "sources": source_versions, "fieldSignals": field_signals[:5]})
+    bundle_seed = f"full_product_bundle|{key}|{_hash(digest_seed, 16)}"
+    bundle_id = _bundle_id(bundle_seed)
+    signal_id = _signal_id(bundle_seed)
+    evidence_refs = [{"type": "metric_signal", "metricCode": sig.get("metricCode"), "signalStrength": sig.get("signalStrength"), "signalType": sig.get("signalType")} for sig in field_signals if sig.get("signalStrength") != "normal"]
     return {
-        "signalId": _signal_id(seed),
-        "packageId": _signal_id(seed).replace("PSIG-", "PKG-"),
+        "signalId": signal_id,
+        "packageId": bundle_id.replace("FPB-", "PKG-"),
+        "bundleId": bundle_id,
         "version": PRODUCT_SIGNAL_SNAPSHOT_VERSION,
         "dataVersion": data_version,
         "entityType": "product",
@@ -175,22 +237,31 @@ def _package_for_product(data_version: str | None, key: str, item: Dict[str, Any
         "storeId": item.get("storeId"),
         "platform": profile.get("platform") or item.get("platform"),
         "verticalCategory": profile.get("verticalCategory") or item.get("verticalCategory") or "未归类",
-        "signalType": signal_type,
+        "signalType": "full_product_bundle",
+        "primarySignalType": signal_type,
         "signalStrength": strength,
         "metricCode": metric_code or "all_metrics",
+        "profileLayer": profile,
+        "metricLayer": metric,
+        "snapshotLayer": {"trendWindows": trend, "fieldSignals": field_signals, "previousProductMetricSnapshot": old.get("metricSnapshot") if isinstance(old, dict) else None},
+        "crossValidation": cross_validation,
+        "evidenceRefs": evidence_refs,
         "productProfileSnapshot": profile,
         "productMetricSnapshot": metric,
         "trendWindows": trend,
         "previousProductMetricSnapshot": old.get("metricSnapshot") if isinstance(old, dict) else None,
         "agentProductSnapshotPackage": {
-            "profileSnapshot": profile,
-            "metricSnapshot": metric,
-            "signalSummary": {"signalType": signal_type, "signalStrength": strength, "metricCode": metric_code or "all_metrics"},
-            "trendWindows": trend,
-            "ragRequest": {"verticalCategory": profile.get("verticalCategory") or "未归类", "platform": profile.get("platform"), "taskValueLayer": "operation_value_budget_boundary"},
+            "contract": "fullProductBundle",
+            "bundleId": bundle_id,
+            "profileLayer": profile,
+            "metricLayer": metric,
+            "snapshotLayer": {"trendWindows": trend, "fieldSignals": field_signals},
+            "crossValidation": cross_validation,
+            "signalSummary": {"signalType": "full_product_bundle", "primarySignalType": signal_type, "signalStrength": strength, "metricCode": metric_code or "all_metrics"},
+            "ragRequest": {"verticalCategory": profile.get("verticalCategory") or "未归类", "platform": profile.get("platform"), "taskValueLayer": "volatility_boundary_soft_routing"},
         },
         "status": "pending_agent_judgment",
-        "rule": "V14.3 full signal package: every product is sent to Agent judgment; normal_state is still a package, not dropped.",
+        "rule": "V14.7 fullProductBundle: profile/data/snapshot layers are collected into one product Agent input. Signals are evidence, not task entry points.",
     }
 
 
@@ -200,13 +271,15 @@ def _build_signal_packages(current: Dict[str, Any], history: List[Dict[str, Any]
     previous_products = _index_products(history[0] if history else None)
     packages: List[Dict[str, Any]] = []
     for key, item in current_products.items():
-        packages.append(_package_for_product(data_version, key, item, previous_products.get(key), history))
+        packages.append(_build_full_product_bundle(data_version, key, item, previous_products.get(key), history))
     for key, old in previous_products.items():
         if key in current_products:
             continue
-        seed = f"{data_version}|{key}|product_missing_from_latest"
         profile = old.get("profileSnapshot") if isinstance(old.get("profileSnapshot"), dict) else {}
-        packages.append({"signalId": _signal_id(seed), "packageId": _signal_id(seed).replace("PSIG-", "PKG-"), "version": PRODUCT_SIGNAL_SNAPSHOT_VERSION, "dataVersion": data_version, "entityType": "product", "entityId": old.get("objectId") or key, "productId": old.get("productId"), "storeId": old.get("storeId"), "platform": profile.get("platform"), "verticalCategory": profile.get("verticalCategory") or "未归类", "signalType": "product_missing_from_latest", "signalStrength": "medium", "metricCode": "product_presence", "productProfileSnapshot": profile, "productMetricSnapshot": None, "previousProductMetricSnapshot": old.get("metricSnapshot"), "trendWindows": {"historyWindowCount": len(history), "windows": {}}, "agentProductSnapshotPackage": {"profileSnapshot": profile, "metricSnapshot": None, "signalSummary": {"signalType": "product_missing_from_latest", "signalStrength": "medium"}}, "status": "pending_agent_judgment", "rule": "V14.3 missing products also enter Agent judgment as packages."})
+        bundle_seed = f"full_product_bundle|missing|{key}|{data_version or 'latest'}"
+        signal_id = _signal_id(bundle_seed)
+        bundle_id = _bundle_id(bundle_seed)
+        packages.append({"signalId": signal_id, "packageId": bundle_id.replace("FPB-", "PKG-"), "bundleId": bundle_id, "version": PRODUCT_SIGNAL_SNAPSHOT_VERSION, "dataVersion": data_version, "entityType": "product", "entityId": old.get("objectId") or key, "productId": old.get("productId"), "storeId": old.get("storeId"), "platform": profile.get("platform"), "verticalCategory": profile.get("verticalCategory") or "未归类", "signalType": "full_product_bundle", "primarySignalType": "product_missing_from_latest", "signalStrength": "medium", "metricCode": "product_presence", "profileLayer": profile, "metricLayer": {}, "snapshotLayer": {"trendWindows": {"historyWindowCount": len(history), "windows": {}}}, "crossValidation": {"sourceDataVersions": [], "sourceDatasetCount": 0, "changedMetricCount": 1}, "evidenceRefs": [{"type": "product_presence", "signalType": "product_missing_from_latest"}], "productProfileSnapshot": profile, "productMetricSnapshot": None, "previousProductMetricSnapshot": old.get("metricSnapshot"), "trendWindows": {"historyWindowCount": len(history), "windows": {}}, "agentProductSnapshotPackage": {"contract": "fullProductBundle", "bundleId": bundle_id, "profileLayer": profile, "metricLayer": {}, "snapshotLayer": {}, "crossValidation": {}, "signalSummary": {"signalType": "full_product_bundle", "primarySignalType": "product_missing_from_latest", "signalStrength": "medium"}}, "status": "pending_agent_judgment", "rule": "V14.7 missing product is one bundle-level evidence item, not a metric task trigger."})
     return packages
 
 
@@ -232,7 +305,7 @@ def materialize_product_signal_snapshot(data_version: str | None = None, *, user
     previous = history[0] if history else None
     packages = _build_signal_packages(current, history)
     snapshot_id = signal_snapshot_id_for(data_version)
-    payload = {"version": PRODUCT_SIGNAL_SNAPSHOT_VERSION, "signalSnapshotId": snapshot_id, "dataVersion": data_version, "stationId": "product_signal_snapshot_station", "productSnapshotId": current.get("snapshotId"), "previousSnapshotId": previous.get("snapshotId") if previous else None, "productSnapshotCount": current.get("productCount") or len(current.get("products") or []), "productSignalPackageCount": len(packages), "productSignalCount": len(packages), "signals": packages, "productSignalPackages": packages, "windowPolicy": {"historyLimit": 90, "windows": WINDOWS}, "rule": "V14.3 product signals are full product signal packages; system does not drop normal products before Agent judgment."}
+    payload = {"version": PRODUCT_SIGNAL_SNAPSHOT_VERSION, "signalSnapshotId": snapshot_id, "dataVersion": data_version, "stationId": "product_signal_snapshot_station", "contract": "fullProductBundle", "productSnapshotId": current.get("snapshotId"), "previousSnapshotId": previous.get("snapshotId") if previous else None, "productSnapshotCount": current.get("productCount") or len(current.get("products") or []), "productSignalPackageCount": len(packages), "productSignalCount": len(packages), "signals": packages, "productSignalPackages": packages, "windowPolicy": {"historyLimit": 90, "windows": WINDOWS}, "rule": "V14.7 product signal snapshot outputs one fullProductBundle per product. Profile/data/snapshot layers are bundled before Agent judgment."}
     now = now_iso()
     with connect() as conn:
         conn.execute(
