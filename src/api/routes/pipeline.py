@@ -1,4 +1,4 @@
-"""V14.3 Pipeline compatibility routes."""
+"""V14.6 Pipeline routes with station queue runtime."""
 
 from __future__ import annotations
 
@@ -9,11 +9,12 @@ from fastapi import APIRouter, Body, Query, Request
 from src.services.account_service import user_id_from_headers
 from src.services.pipeline_gate_service import PIPELINE_GATE_VERSION, PIPELINE_STAGES, record_stage_gate, stage_summary
 from src.services.station_contract_service import run_station_contract
+from src.services.station_queue_service import STATION_QUEUE_VERSION, enqueue_task_generation, queue_summary, run_next_station_job
 from src.services.station_registry_service import station_by_stage
 from src.services.v142_task_mainline_service import DEFAULT_AGENT_BATCH_SIZE, run_v143_task_mainline
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
-PIPELINE_ROUTE_VERSION = "14.3.0"
+PIPELINE_ROUTE_VERSION = "14.6.0"
 
 
 def request_user_id(request: Request) -> str:
@@ -30,7 +31,32 @@ def _station_body(request: Request, data_version: str, body: Dict[str, Any] | No
 
 @router.get("/stages")
 def pipeline_stages(request: Request, data_version: str | None = Query(default=None, alias="dataVersion"), include_diagnostic: bool = Query(default=False, alias="includeDiagnostic")) -> Dict[str, Any]:
-    return {"version": PIPELINE_ROUTE_VERSION, "gateVersion": PIPELINE_GATE_VERSION, "compatibilityLayer": "station_interface", **stage_summary(data_version=data_version, user_id=request_user_id(request), limit=120, include_diagnostic=include_diagnostic)}
+    return {"version": PIPELINE_ROUTE_VERSION, "gateVersion": PIPELINE_GATE_VERSION, "queueVersion": STATION_QUEUE_VERSION, "compatibilityLayer": "station_queue_runtime", **stage_summary(data_version=data_version, user_id=request_user_id(request), limit=120, include_diagnostic=include_diagnostic)}
+
+
+@router.get("/queue")
+def station_queue_status(data_version: str | None = Query(default=None, alias="dataVersion"), limit: int = Query(default=50, ge=1, le=200)) -> Dict[str, Any]:
+    return queue_summary(data_version=data_version, limit=limit)
+
+
+@router.post("/queue/run-next")
+def run_next_queue_station(body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    return run_next_station_job(worker_id=body.get("workerId") or "api-worker", system_type=body.get("systemType") or "task_generation")
+
+
+@router.post("/queue/run-batch")
+def run_queue_batch(body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    limit = max(1, min(int(body.get("limit") or 1), 20))
+    results = [run_next_station_job(worker_id=body.get("workerId") or "api-worker", system_type=body.get("systemType") or "task_generation") for _ in range(limit)]
+    return {"version": PIPELINE_ROUTE_VERSION, "queueVersion": STATION_QUEUE_VERSION, "requested": limit, "ranCount": sum(1 for item in results if item.get("ran")), "results": results, "rule": "V14.6 runs queue stations in bounded batches; uploads never wait for this."}
+
+
+@router.post("/data-versions/{data_version}/task-generation/enqueue")
+def enqueue_task_generation_route(request: Request, data_version: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
+    body = body or {}
+    return enqueue_task_generation(data_version, actor_user_id=request_user_id(request), input_ref=body.get("inputRef") or f"operating_unit_snapshot:{data_version}", source=body.get("source") or "manual_enqueue", force=bool(body.get("force", True)))
 
 
 @router.post("/data-versions/{data_version}/stage/{stage}/complete")
@@ -56,5 +82,7 @@ def build_operating_unit_snapshot(request: Request, data_version: str, force: bo
 @router.post("/data-versions/{data_version}/tasks/generate")
 def generate_tasks_station(request: Request, data_version: str, body: Dict[str, Any] | None = Body(default=None)) -> Dict[str, Any]:
     body = body or {}
-    max_signals = int(body.get("maxSignals") or body.get("agentBatchSize") or DEFAULT_AGENT_BATCH_SIZE)
-    return run_v143_task_mainline(data_version, user_id=request_user_id(request), max_signals=max_signals, force=bool(body.get("force", True)), source=body.get("source") or "pipeline_route")
+    if body.get("sync") is True:
+        max_signals = int(body.get("maxSignals") or body.get("agentBatchSize") or DEFAULT_AGENT_BATCH_SIZE)
+        return run_v143_task_mainline(data_version, user_id=request_user_id(request), max_signals=max_signals, force=bool(body.get("force", True)), source=body.get("source") or "pipeline_route_sync_legacy")
+    return enqueue_task_generation(data_version, actor_user_id=request_user_id(request), input_ref=body.get("inputRef") or f"operating_unit_snapshot:{data_version}", source=body.get("source") or "pipeline_route_queue", force=bool(body.get("force", True)))
