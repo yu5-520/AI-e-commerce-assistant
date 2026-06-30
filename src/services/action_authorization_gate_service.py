@@ -1,9 +1,9 @@
-"""V14.4.1 operating action authorization gate.
+"""V14.7 operating action authorization gate.
 
 Authorization reads TaskIntent PermissionEnvelope first. Budget is never inferred
-from free text, product codes, deadlines, titles, or IDs. This prevents normal
-operator tasks from being pushed to manager approval because a product code such
-as P10006 was parsed as a budget.
+from free text, product codes, deadlines, titles, or IDs. V14.7 also separates
+real below-company-floor evidence from missing/untrusted impact estimates so
+missing ROI does not become automatic manager approval.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from src.services.operating_weight_policy_service import OPERATING_WEIGHT_POLICY_VERSION, infer_operating_weight, is_governance_high_weight
 
-ACTION_AUTHORIZATION_VERSION = "14.4.1"
+ACTION_AUTHORIZATION_VERSION = "14.7.0"
 
 ACTION_LABELS = {
     "activity_participation": "活动报名 / 活动承接",
@@ -163,13 +163,40 @@ def _conservative_floor(task: Dict[str, Any], metric: str) -> float | None:
     return _as_float(target.get("conservative"))
 
 
-def _below_company_floor(task: Dict[str, Any]) -> bool:
+def _metric_rows(task: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for source in [task.get("metricFacts"), (task.get("actionImpactInput") or {}).get("metrics") if isinstance(task.get("actionImpactInput"), dict) else None]:
+        if isinstance(source, list):
+            rows.extend(item for item in source if isinstance(item, dict))
+    return rows
+
+
+def _has_metric_evidence(task: Dict[str, Any], names: List[str]) -> bool:
+    wanted = set(names)
+    for item in _metric_rows(task):
+        label = str(item.get("metricCode") or item.get("label") or item.get("title") or item.get("name") or "")
+        if not label:
+            continue
+        if label in wanted or any(name in label for name in wanted):
+            if _as_float(item.get("value") if item.get("value") is not None else item.get("metric")) is not None:
+                return True
+    return False
+
+
+def _impact_floor_state(task: Dict[str, Any]) -> Dict[str, Any]:
     baseline = _company_baseline(task)
     roi_floor = _conservative_floor(task, "roi")
     margin_floor = _conservative_floor(task, "grossMarginRate")
     min_roi = _as_float(baseline.get("minRoi"))
     min_margin = _as_float(baseline.get("minGrossMarginRate"))
-    return bool((roi_floor is not None and min_roi is not None and roi_floor < min_roi) or (margin_floor is not None and min_margin is not None and margin_floor < min_margin))
+    has_roi_evidence = _has_metric_evidence(task, ["ROI", "roi", "ROAS", "roas"])
+    has_margin_evidence = _has_metric_evidence(task, ["毛利率", "grossMargin", "grossMarginRate"])
+    roi_missing_or_untrusted = roi_floor is None or (roi_floor <= 0 and not has_roi_evidence)
+    margin_missing_or_untrusted = margin_floor is None or (margin_floor <= 0 and not has_margin_evidence)
+    real_below_roi = bool(roi_floor is not None and min_roi is not None and roi_floor < min_roi and not roi_missing_or_untrusted)
+    real_below_margin = bool(margin_floor is not None and min_margin is not None and margin_floor < min_margin and not margin_missing_or_untrusted)
+    estimate_missing = bool(roi_missing_or_untrusted or margin_missing_or_untrusted)
+    return {"realBelowCompanyFloor": bool(real_below_roi or real_below_margin), "estimateMissingOrUntrusted": estimate_missing, "roiConservativeFloor": roi_floor, "marginConservativeFloor": margin_floor, "hasRoiEvidence": has_roi_evidence, "hasMarginEvidence": has_margin_evidence, "companyBaseline": baseline}
 
 
 def _operator_fields(action_type: str) -> List[str]:
@@ -208,31 +235,32 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
         budget_over_limit = bool(envelope.get("budgetOverLimit"))
     else:
         budget_over_limit = bool(budget is not None and budget_max and budget > budget_max)
-    below_floor = _below_company_floor(task)
+    impact_state = _impact_floor_state(task)
+    real_below_floor = bool(impact_state.get("realBelowCompanyFloor"))
     needs_weight_approval = confirmed_high_weight and operator_level != "high" and action_type in APPROVAL_ACTIONS_ON_CONFIRMED_HIGH_WEIGHT
     if envelope_requires_review is True:
         decision = "manager_approval_required"
         layer = "manager_approval"
         reason = envelope.get("reviewReason") or "结构化权限信封要求主管确认。"
-    elif envelope_requires_review is False and not hard_action and not below_floor and not needs_weight_approval:
+    elif envelope_requires_review is False and not hard_action and not budget_over_limit and not real_below_floor and not needs_weight_approval:
         decision = "auto_execute"
         layer = "operator_execution"
-        reason = "TaskIntent权限信封确认该任务在运营可执行范围内。"
+        reason = "TaskIntent权限信封确认该任务在运营可执行范围内；缺失影响估算只补证据，不自动升级审批。"
     elif hard_action and confirmed_high_weight and task.get("priority") == "高":
         decision = "owner_approval_required"
         layer = "manager_approval"
         reason = "硬风险动作作用于已确认治理高权重/战略对象，需要老板或总管确认。"
-    elif hard_action or budget_over_limit or below_floor or needs_weight_approval:
+    elif hard_action or budget_over_limit or real_below_floor or needs_weight_approval:
         decision = "manager_approval_required"
         layer = "manager_approval"
-        reason = "动作超过运营权限、保守估算低于公司基线、或作用于已确认治理高权重对象，需要主管确认。"
+        reason = "动作触发结构化审批原因，需要主管确认。"
     else:
         decision = "auto_execute"
         layer = "operator_execution"
-        reason = "动作在当前账号权限和公司基线内；投放/活动类任务未因动作类型一刀切升级审批。"
+        reason = "动作在当前账号权限和公司基线内；缺字段降低置信度但不替代Agent判断。"
     return {
         "version": ACTION_AUTHORIZATION_VERSION,
-        "mode": "task_intent_permission_envelope_v14_4_1",
+        "mode": "task_intent_permission_envelope_v14_7_soft_impact",
         "actionType": action_type,
         "actionLabel": ACTION_LABELS.get(action_type, "经营处理"),
         "operatorPermissionLevel": operator_level,
@@ -241,26 +269,18 @@ def authorize_action(task: Dict[str, Any]) -> Dict[str, Any]:
         "decision": decision,
         "taskLayer": layer,
         "approvalReason": reason,
+        "triggeredReasons": {"hardAction": hard_action, "budgetOverLimit": budget_over_limit, "realBelowCompanyFloor": real_below_floor, "estimateMissingOrUntrusted": bool(impact_state.get("estimateMissingOrUntrusted")), "needsWeightApproval": needs_weight_approval, "envelopeRequiresReview": envelope_requires_review is True},
         "operatorFactFields": _operator_fields(action_type),
         "permissionEnvelope": envelope,
-        "budgetGate": {"isBudgetAction": budget_action, "requestedBudget": budget, "operatorBudgetMin": budget_min, "operatorBudgetMax": budget_max, "budgetOverLimit": budget_over_limit, "budgetSource": "structured_only", "freeTextBudgetParsingAllowed": False},
-        "impactGate": {"usesSystemEstimate": True, "belowCompanyFloor": below_floor, "roiConservativeFloor": _conservative_floor(task, "roi"), "marginConservativeFloor": _conservative_floor(task, "grossMarginRate"), "companyBaseline": _company_baseline(task)},
-        "policy": {
-            "operatorProvidesFactsOnly": True,
-            "systemEstimatesImpact": True,
-            "approvalUsesConservativeFloor": True,
-            "reportPerformanceIsNotGovernanceWeight": True,
-            "inventorySignalsBeforeCreativeWords": True,
-            "budgetActionIsNotAutomaticManagerApproval": True,
-            "freeTextBudgetParsingAllowed": False,
-            "rule": "V14.4.1：审批预算只读取TaskIntent/PermissionEnvelope结构化字段，禁止从标题、商品编码、期限和自由文本抓数字。",
-        },
+        "budgetGate": {"isBudgetAction": budget_action, "requestedBudget": budget, "operatorBudgetMin": budget_min, "operatorBudgetMax": budget_max, "budgetOverLimit": budget_over_limit, "budgetBelowSuggestedMin": bool(budget is not None and budget_min and budget < budget_min), "budgetSource": "structured_only", "freeTextBudgetParsingAllowed": False},
+        "impactGate": {"usesSystemEstimate": True, "belowCompanyFloor": real_below_floor, **impact_state},
+        "policy": {"operatorProvidesFactsOnly": True, "systemEstimatesImpact": True, "approvalUsesRealBelowFloorOnly": True, "estimateMissingDoesNotAutoApprove": True, "reportPerformanceIsNotGovernanceWeight": True, "inventorySignalsBeforeCreativeWords": True, "budgetActionIsNotAutomaticManagerApproval": True, "freeTextBudgetParsingAllowed": False, "rule": "V14.7：审批预算只读取结构化字段；缺失ROI/影响估算进入补证据，不自动变主管审批。"},
     }
 
 
 def apply_action_authorization(task: Dict[str, Any]) -> Dict[str, Any]:
     gate = authorize_action(task)
-    next_task = {**task, "actionAuthorization": gate, "v1441ActionGate": gate, "v1282ActionGate": gate, "v127ActionGate": gate, "v126ActionGate": gate}
+    next_task = {**task, "actionAuthorization": gate, "v147ActionGate": gate, "v1441ActionGate": gate, "v1282ActionGate": gate, "v127ActionGate": gate, "v126ActionGate": gate}
     if gate["decision"] in {"manager_approval_required", "owner_approval_required"}:
         next_task["taskLayer"] = gate.get("taskLayer") or "manager_approval"
         next_task["assigneeId"] = None
