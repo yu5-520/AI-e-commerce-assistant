@@ -1,7 +1,7 @@
 (function () {
   const s = (value) => AppShell.escape(value ?? "");
   let lastImportSync = null;
-  let sourceMessage = "主链路优先：接口同步负责日常更新，手动上传只用于补数。";
+  let sourceMessage = "主链路优先：接口同步负责日常更新，手动上传用于补数。";
 
   const FALLBACK_SOURCES = [
     { sourceId: "erp", label: "ERP 接口", priority: "primary", displayStatus: "待配置", cadence: "15分钟 / 1小时", dataScope: ["商品", "订单", "库存", "成本"], targetModules: ["总览", "经营", "任务", "数据", "日志"], actionLabel: "同步 ERP" },
@@ -27,11 +27,12 @@
 
   function fallbackLine(latest) {
     const hasData = latest.status === "已更新" || latest.rows > 0 || latest.taskCount > 0;
-    return { headline: hasData ? `数据已接入，生成 ${latest.taskCount || 0} 个正式任务` : "等待数据接入", lineStatus: hasData ? "completed" : "waiting", formalTaskCount: latest.taskCount || 0, observeOnlyCount: 0, stations: [
+    return { headline: hasData ? `数据已接入，生成 ${latest.taskCount || 0} 个正式任务` : "等待数据接入", lineStatus: hasData ? "completed" : "waiting", formalTaskCount: latest.taskCount || 0, observeOnlyCount: 0, productJudgmentPackageCount: hasData ? 0 : 0, stations: [
       { id: "import", label: "接入", status: hasData ? "passed" : "waiting", note: hasData ? "已接入" : "等待" },
       { id: "profile", label: "建档", status: hasData ? "passed" : "waiting", note: "商品建档" },
       { id: "bundle", label: "全量包", status: hasData ? "passed" : "waiting", note: "全量包" },
-      { id: "agent", label: "判断", status: hasData ? "passed" : "waiting", note: "Agent" },
+      { id: "judgment", label: "判断", status: hasData ? "passed" : "waiting", note: "Agent1" },
+      { id: "package", label: "整合", status: hasData ? "passed" : "waiting", note: "商品判断包" },
       { id: "task", label: "任务", status: latest.taskCount ? "passed" : hasData ? "empty" : "waiting", note: latest.taskCount ? `正式 ${latest.taskCount}` : "无正式任务" },
       { id: "view", label: "展示", status: hasData ? "passed" : "waiting", note: "前端" },
     ] };
@@ -44,13 +45,8 @@
   function metroStrip(line, latest) {
     const dataLine = line?.stations?.length ? line : fallbackLine(latest);
     const statusText = dataLine.lineStatus === "attention" ? "需检查" : dataLine.lineStatus === "waiting" ? "待接入" : dataLine.lineStatus === "processing" ? "流动中" : "已完成";
-    const resultText = `正式任务 ${dataLine.formalTaskCount || 0} · 观察记录 ${dataLine.observeOnlyCount || 0}`;
-    return `<section class="data-metro-card">
-      <div class="data-metro-head"><div><strong>${s(dataLine.headline || "数据链路状态")}</strong><span>${s(resultText)}</span></div><button type="button" class="secondary" data-open-line>${s((dataLine.formalTaskCount || 0) > 0 ? "查看任务" : "查看链路")}</button></div>
-      <div class="metro-line metro-${s(dataLine.lineStatus || "waiting")}">${(dataLine.stations || []).map(stationNode).join("")}</div>
-      <p data-source-message>${s(sourceMessage)}</p>
-      <span class="status-badge">${s(statusText)}</span>
-    </section>`;
+    const resultText = `判断 ${dataLine.rawJudgmentCount || dataLine.agentJudgmentCount || 0} · 判断包 ${dataLine.productJudgmentPackageCount || 0} · 正式任务 ${dataLine.formalTaskCount || 0}`;
+    return `<section class="data-metro-card"><div class="data-metro-head"><div><strong>${s(dataLine.headline || "数据链路状态")}</strong><span>${s(resultText)}</span></div><button type="button" class="secondary" data-open-line>${s((dataLine.formalTaskCount || 0) > 0 ? "查看任务" : "查看链路")}</button></div><div class="metro-line metro-${s(dataLine.lineStatus || "waiting")}">${(dataLine.stations || []).map(stationNode).join("")}</div><p data-source-message>${s(sourceMessage)}</p><span class="status-badge">${s(statusText)}</span></section>`;
   }
 
   function recordRow(item) { return `<article class="report-record-row"><strong>${s(item.name || item.label || "同步记录")}</strong><span>${s(item.status || "已处理")}</span><span>生成 ${s(item.createdTaskCount ?? item.taskCount ?? 0)} 个任务</span><button type="button" data-report-task="${s(item.id || item.name || "report")}">查看任务</button></article>`; }
@@ -84,12 +80,12 @@
       return `<section class="v102-hero report-workbench"><div><h2>经营数据接入</h2><strong>ERP、CRM、平台后台和广告后台是主链路；手动上传用于补数。</strong></div></section>${metroStrip(linePayload, latest)}<section class="page-section v102-main-section"><div class="section-header"><h3>已接入数据源</h3><span class="status-badge">接口主链路</span></div><div class="platform-grid">${primarySources.map(sourceCard).join("")}</div></section>${uploadSection()}<section class="page-section v102-main-section"><div class="section-header"><h3>同步记录</h3><button type="button" class="secondary" data-reset-demo>清空测试数据</button></div><div class="report-record-list">${records.length ? records.map(recordRow).join("") : emptyRecordRow()}</div></section>`;
     },
     mount(ctx) {
-      ctx.delegate("[data-source-sync]", "click", async (event, target) => { const sourceId = target.getAttribute("data-source-sync") || "erp"; const oldText = target.textContent; target.disabled = true; target.textContent = "同步中"; setSourceMessage(`正在同步 ${sourceId.toUpperCase()} 数据源。`); const result = await AppApi.syncDataSource(sourceId); if (!result) { target.disabled = false; target.textContent = oldText; setSourceMessage("接口同步失败：请确认后端服务已更新。"); return; } await AppApi.refreshAfterDataImport(result); lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null; AppRouter.schedule("v1483-source-sync"); });
+      ctx.delegate("[data-source-sync]", "click", async (event, target) => { const sourceId = target.getAttribute("data-source-sync") || "erp"; const oldText = target.textContent; target.disabled = true; target.textContent = "同步中"; setSourceMessage(`正在同步 ${sourceId.toUpperCase()} 数据源。`); const result = await AppApi.syncDataSource(sourceId); if (!result) { target.disabled = false; target.textContent = oldText; setSourceMessage("接口同步失败：请确认后端服务已更新。"); return; } await AppApi.refreshAfterDataImport(result); lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null; AppRouter.schedule("v149-source-sync"); });
       ctx.delegate("[data-open-source-config]", "click", (event, target) => { const sourceId = target.getAttribute("data-open-source-config") || "数据源"; setSourceMessage(`${sourceId.toUpperCase()} 接口配置入口已预留。`); });
       ctx.delegate("[data-open-upload]", "click", () => AppShell.view()?.querySelector("[data-manual-file-input]")?.click());
-      ctx.delegate("[data-import-demo]", "click", async (event, target) => { const oldText = target.textContent; target.disabled = true; target.textContent = "运行中"; const result = await AppApi.importMockAlerts(); await AppApi.refreshAfterDataImport(result); lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null; AppRouter.schedule("v1483-demo-sync"); });
-      ctx.delegate("[data-reset-demo]", "click", async (event, target) => { if (!window.confirm("清空演示测试数据？这会重置总览、经营、任务、数据和日志。")) return; const oldText = target.textContent; target.disabled = true; target.textContent = "清空中"; await AppApi.resetRuntimeData(true); lastImportSync = null; setSourceMessage("测试数据已清空。"); await AppApi.refreshAfterDataImport({ v104ImportTaskSync: null }); target.disabled = false; target.textContent = oldText; AppRouter.schedule("v1483-reset-demo"); });
-      ctx.on("[data-manual-file-input]", "change", async (event) => { const file = event.target.files?.[0]; if (!file) return; setSourceMessage(`正在上传并解析备用文件：${file.name}`); try { let result = await AppApi.uploadReportFile?.(file, "auto", "manual_upload"); if (!result && /\.(csv|json)$/i.test(file.name || "")) { const rows = await parseUploadFile(file); if (!rows.length) throw new Error("没有读取到有效数据行。"); result = await AppApi.confirmReportImport("auto", rows, {}, "manual_upload"); } if (!result) throw new Error("后端导入接口不可用，或文件格式暂未被当前服务支持。"); await AppApi.refreshAfterDataImport(result); lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null; setSourceMessage(uploadSummary(result, file)); AppRouter.schedule("v1483-manual-upload"); } catch (error) { setSourceMessage(`备用上传失败：${error.message || error}`); } finally { event.target.value = ""; } });
+      ctx.delegate("[data-import-demo]", "click", async (event, target) => { const oldText = target.textContent; target.disabled = true; target.textContent = "运行中"; const result = await AppApi.importMockAlerts(); await AppApi.refreshAfterDataImport(result); lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null; AppRouter.schedule("v149-demo-sync"); });
+      ctx.delegate("[data-reset-demo]", "click", async (event, target) => { if (!window.confirm("清空演示测试数据？这会重置总览、经营、任务、数据和日志。")) return; const oldText = target.textContent; target.disabled = true; target.textContent = "清空中"; await AppApi.resetRuntimeData(true); lastImportSync = null; setSourceMessage("测试数据已清空。"); await AppApi.refreshAfterDataImport({ v104ImportTaskSync: null }); target.disabled = false; target.textContent = oldText; AppRouter.schedule("v149-reset-demo"); });
+      ctx.on("[data-manual-file-input]", "change", async (event) => { const file = event.target.files?.[0]; if (!file) return; setSourceMessage(`正在上传并解析备用文件：${file.name}`); try { let result = await AppApi.uploadReportFile?.(file, "auto", "manual_upload"); if (!result && /\.(csv|json)$/i.test(file.name || "")) { const rows = await parseUploadFile(file); if (!rows.length) throw new Error("没有读取到有效数据行。"); result = await AppApi.confirmReportImport("auto", rows, {}, "manual_upload"); } if (!result) throw new Error("后端导入接口不可用，或文件格式暂未被当前服务支持。"); await AppApi.refreshAfterDataImport(result); lastImportSync = result?.v104ImportTaskSync || window.AppApi?.status?.lastImportSync || null; setSourceMessage(uploadSummary(result, file)); AppRouter.schedule("v149-manual-upload"); } catch (error) { setSourceMessage(`备用上传失败：${error.message || error}`); } finally { event.target.value = ""; } });
       ctx.delegate("[data-open-line]", "click", () => AppRouter.navigate("system-status"));
       ctx.delegate("[data-open-tasks]", "click", () => AppRouter.navigate("business-actions"));
       ctx.delegate("[data-report-task]", "click", () => AppRouter.navigate("business-actions"));
