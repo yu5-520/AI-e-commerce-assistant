@@ -1,17 +1,12 @@
 {
-  "manifestVersion": "16.12",
-  "baseline": "V16.12 approval mock-workflow removal / V16 MVP runtime",
-  "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
+  "manifestVersion": "16.13",
+  "baseline": "V16.13 FastAPI entrypoint syntax repair / V16 MVP runtime",
+  "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless explicitly reviewed.",
   "rules": [
-    "Git history is the history archive; current working tree only serves the MVP.",
-    "V16_KEEP files are current MVP mainline files.",
-    "V16_SUPPORT files are runtime support files required by current MVP files.",
-    "V16_FRONTEND prefixes are the current web demo entry files.",
-    "V16_BACKEND_PREFIX files are active backend route packages required by the current frontend shell.",
-    "V16_DOC files are the only current documentation files.",
-    "check_v16_manifest.py must run a FastAPI active import gate before more source cleanup.",
-    "Approval must read current task_status projection and must not use mock workflow fallback.",
-    "Legacy compatibility routes, old station aliases, worker scaffold routes, stale V12 checkers and unmarked legacy files are removed from active runtime."
+    "Git history is the archive; current working tree only serves the MVP.",
+    "FastAPI active import must pass before more source cleanup.",
+    "main.py must mount frontend_views.router directly.",
+    "Approval reads current task_status projection and does not use old workflow fallback."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -80,12 +75,8 @@
     "scripts/deploy_fast.sh",
     "scripts/deploy_atomic.sh"
   ],
-  "v16_frontend_prefixes": [
-    "web_demo/"
-  ],
-  "v16_backend_prefixes": [
-    "src/api/routes/modules/"
-  ],
+  "v16_frontend_prefixes": ["web_demo/"],
+  "v16_backend_prefixes": ["src/api/routes/modules/"],
   "v16_docs": [
     "README.md",
     "VERSION.md",
@@ -93,95 +84,11 @@
     "MVP_V16_FILE_MANIFEST.md",
     "config/v16_mvp_file_manifest.json"
   ],
-  "v16_tools": [
-    "scripts/check_v16_manifest.py"
-  ],
-  "purged_in_v16_7": [
-    "src/api/routes/deprecated_stations.py",
-    "src/api/routes/v9_readiness.py",
-    "src/api/routes/v10_product.py",
-    "src/api/routes/architecture.py",
-    "src/api/routes/data_source_compat.py",
-    "src/api/routes/station_handoffs.py",
-    "src/api/routes/report_task_sync.py",
-    "src/api/routes/trends.py"
-  ],
-  "purged_in_v16_8": [
-    ".github/",
-    "docs/",
-    "examples/",
-    "evals/",
-    "frontend/",
-    "backend/",
-    "data/",
-    "alembic/",
-    "workflows/",
-    "knowledge_base/",
-    "logs/",
-    "modules/",
-    "deploy/",
-    "prompts/",
-    "runtime/",
-    "src/stations/",
-    "src/traffic_test/",
-    "src/workers/",
-    "src/workflow/",
-    "src/api/routes/worker_jobs.py",
-    "src/services/worker_queue_service.py",
-    "src/services/worker_runtime_config_service.py",
-    "src/services/worker_task_handlers_service.py"
-  ],
-  "purged_in_v16_9": [
-    "scripts/verify_release.py",
-    "scripts/check_repo_hygiene.py"
-  ],
-  "purged_in_v16_10": [
-    "schemas/",
-    "src/core/",
-    "src/data_loader/",
-    "src/db/",
-    "src/deprecated_stations/",
-    "src/diagnosis/",
-    "src/listing/",
-    "src/middleware/",
-    "src/operating_loop/",
-    "src/operating_unit/",
-    "src/rag/",
-    "src/reports/",
-    "src/rpa_tasks/",
-    "src/scheduler/",
-    "scripts/check_backend_flow_consistency.py",
-    "scripts/check_frontend_module_consistency.py",
-    "scripts/check_rag_namespace_isolation.py",
-    "scripts/check_rag_write_memory_consistency.py",
-    "scripts/check_repository_consistency.py",
-    "scripts/check_tier_isolation_consistency.py",
-    "src/services/v7-v14 legacy service fragments"
-  ],
-  "fixed_in_v16_11": [
-    "src/api/routes/accounts.py removed src.core.context dependency",
-    "src/api/main.py bumped to API_VERSION 16.11",
-    "scripts/check_v16_manifest.py added active FastAPI import gate"
-  ],
-  "fixed_in_v16_12": [
-    "src/services/approval_service.py removed src.workflow.mock_workflow dependency",
-    "approval get_task reads current SQLite task_status projection",
-    "missing task approval returns 404 instead of mock fallback",
-    "src/api/main.py bumped to API_VERSION 16.12"
-  ],
-  "legacy_aliases_removed_in_v16_7": [
-    "import_station",
-    "report_parse_station",
-    "metric_fact_station",
-    "operating_object_station",
-    "operating_snapshot_station",
-    "system_product_snapshot_station",
-    "product_signal_snapshot_station",
-    "task_signal_station",
-    "rag_context_station",
-    "agent_judgment_station",
-    "task_snapshot_station",
-    "task_pool_station"
+  "v16_tools": ["scripts/check_v16_manifest.py"],
+  "fixed_in_v16_13": [
+    "src/api/main.py syntax repaired",
+    "src/api/main.py mounts frontend_views.router directly",
+    "src/api/main.py API_VERSION is 16.13"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
