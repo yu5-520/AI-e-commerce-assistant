@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.11 Active Import Gate / V16 MVP runtime**.
+Current baseline: **V16.12 Approval Mock-Workflow Removal / V16 MVP runtime**.
 
-V16.11 keeps the cleaned MVP repository and adds an active FastAPI import gate to the current checker. The account route no longer depends on the old `src.core.context` module.
+V16.12 keeps the active FastAPI import gate and removes the approval route dependency on the old deleted mock workflow scaffold.
 
 ## Mainline
 
@@ -29,10 +29,18 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
-The checker now includes:
+The checker includes:
 
 ```python
 from src.api.main import app, STATION_MAINLINE
+```
+
+## V16.12 approval rule
+
+```text
+Approval reads the current SQLite task_status projection.
+Approval does not fabricate tasks from mock workflow data.
+Missing task status returns 404.
 ```
 
 ## Manifest files
