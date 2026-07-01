@@ -1,6 +1,6 @@
 {
-  "manifestVersion": "16.6",
-  "baseline": "V16.5 Station Alignment",
+  "manifestVersion": "16.7",
+  "baseline": "V16.7 MVP legacy route purge / V16.5 Station Alignment runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
   "rules": [
     "Git history is the history archive; current working tree only serves the MVP.",
@@ -8,7 +8,7 @@
     "V16_SUPPORT files are runtime support files required by current MVP files.",
     "V16_FRONTEND prefixes are the current web demo entry files.",
     "V16_DOC files are the only current documentation files.",
-    "Legacy compatibility routes, old version readiness files, old station aliases and demo fallback files are purge candidates unless promoted into this manifest."
+    "Legacy compatibility routes and old station aliases are removed from active runtime."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -62,6 +62,9 @@
     "src/api/routes/audit.py",
     "src/api/routes/ops.py",
     "src/api/routes/worker_jobs.py",
+    "src/api/routes/modules.py",
+    "src/api/routes/pipeline.py",
+    "src/api/routes/llm.py",
     "requirements.txt",
     "scripts/deploy_fast.sh",
     "scripts/deploy_atomic.sh"
@@ -79,7 +82,7 @@
   "v16_tools": [
     "scripts/check_v16_manifest.py"
   ],
-  "purge_candidates_after_import_check": [
+  "purged_in_v16_7": [
     "src/api/routes/deprecated_stations.py",
     "src/api/routes/v9_readiness.py",
     "src/api/routes/v10_product.py",
@@ -89,7 +92,7 @@
     "src/api/routes/report_task_sync.py",
     "src/api/routes/trends.py"
   ],
-  "known_legacy_aliases_to_remove": [
+  "legacy_aliases_removed_in_v16_7": [
     "import_station",
     "report_parse_station",
     "metric_fact_station",
@@ -103,5 +106,5 @@
     "task_snapshot_station",
     "task_pool_station"
   ],
-  "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. Review unmarked files, remove old route imports from src/api/main.py, then delete unmarked purge candidates."
+  "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. Remaining unmarked files are second-wave MVP purge candidates."
 }
