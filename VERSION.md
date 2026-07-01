@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.23
+16.24
 ```
 
-## V16.23
+## V16.24
 
-System route context cleanup.
+Task repository context cleanup.
 
-`src/api/routes/system.py` no longer imports the deleted `src.core.context` module. MVP keeps database status and explicit runtime cleanup routes; old production diagnostics return lightweight disabled projections until reintroduced through V16 contracts.
+`src/repositories/task_repository.py` and `src/repositories/scoped_repository.py` no longer import the deleted `src.core.context` module. The task lifecycle mainline remains active and uses a V16 lightweight `UserContext` value object at the repository boundary.
 
 ## Verify
 
