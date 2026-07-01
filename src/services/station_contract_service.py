@@ -1,4 +1,4 @@
-"""V14.7 standard station contract service."""
+"""V16.5 split station contract service."""
 
 from __future__ import annotations
 
@@ -9,21 +9,23 @@ from src.services.pipeline_gate_service import record_stage_gate, stage_summary
 from src.services.station_adapter_service import STATION_ADAPTER_VERSION, run_station_adapter
 from src.services.station_registry_service import STATION_REGISTRY_VERSION, get_station, list_stations
 
-STATION_CONTRACT_VERSION = "14.7.0"
+STATION_CONTRACT_VERSION = "16.5"
 
 DEFAULT_INPUTS = {
-    "import_station": ["source", "dataVersion"],
-    "report_parse_station": ["dataVersion", "rawReportRef"],
-    "metric_fact_station": ["dataVersion", "parsedRowsRef"],
-    "operating_object_station": ["dataVersion", "metricFactRef"],
-    "operating_snapshot_station": ["dataVersion", "operatingObjectRef"],
-    "system_product_snapshot_station": ["dataVersion"],
-    "product_signal_snapshot_station": ["dataVersion", "productSnapshotRef"],
-    "task_signal_station": ["dataVersion", "productSignalSnapshotRef"],
-    "rag_context_station": ["dataVersion", "taskSignalRef"],
-    "agent_judgment_station": ["dataVersion", "ragContextRef"],
-    "task_snapshot_station": ["dataVersion"],
-    "task_pool_station": ["dataVersion"],
+    "report_receive_station": ["dataVersion"],
+    "report_schema_station": ["dataVersion", "rawReportRef"],
+    "report_fact_station": ["dataVersion", "reportSchemaMappingRef"],
+    "product_master_station": ["dataVersion", "factRef"],
+    "product_metric_snapshot_station": ["dataVersion", "productMasterRef"],
+    "full_product_bundle_station": ["dataVersion", "productMetricSnapshotRef"],
+    "bundle_validation_station": ["dataVersion", "fullProductBundleRef"],
+    "product_judgment_agent_station": ["dataVersion", "validatedBundleRef"],
+    "product_judgment_package_station": ["dataVersion", "agentJudgmentRef"],
+    "rag_permission_context_station": ["dataVersion", "productJudgmentPackageRef"],
+    "task_mapping_agent_station": ["dataVersion", "ragPermissionContextRef"],
+    "task_pool_admission_station": ["dataVersion", "taskGenerationDecisionRef"],
+    "frontend_read_model_station": ["dataVersion", "taskPoolRef"],
+    "task_pool_acceptance_station": ["dataVersion", "frontendReadModelRef"],
     "task_acceptance_station": ["taskId"],
     "task_assignment_station": ["taskId", "assigneeId"],
     "task_submission_station": ["taskId", "evidence"],
@@ -34,18 +36,20 @@ DEFAULT_INPUTS = {
 }
 
 DEFAULT_OUTPUTS = {
-    "import_station": ["dataVersion", "outputRef"],
-    "report_parse_station": ["rowCount", "outputRef"],
-    "metric_fact_station": ["factCount", "outputRef"],
-    "operating_object_station": ["storeCount", "productCount", "outputRef"],
-    "operating_snapshot_station": ["snapshotKey", "storeRows", "outputRef"],
-    "system_product_snapshot_station": ["productSnapshotCount", "productSnapshotRef", "outputRef"],
-    "product_signal_snapshot_station": ["productSignalPackageCount", "productSignalSnapshotRef", "outputRef"],
-    "task_signal_station": ["signalCount", "taskSignalRef", "outputRef"],
-    "rag_context_station": ["matchedContextCount", "ragContextRef", "outputRef"],
-    "agent_judgment_station": ["decision", "confidence", "judgmentCount", "outputRef"],
-    "task_snapshot_station": ["taskSnapshotCount", "decision", "status", "outputRef"],
-    "task_pool_station": ["createdTaskCount", "outputRef"],
+    "report_receive_station": ["dataVersion", "rowCount", "rawReportRef", "outputRef"],
+    "report_schema_station": ["headerCount", "dateFields", "reportSchemaMappingRef", "outputRef"],
+    "report_fact_station": ["productFactCount", "trafficSourceFactCount", "factNamespaceStatus", "factRef", "outputRef"],
+    "product_master_station": ["productMasterCount", "productMasterRef", "outputRef"],
+    "product_metric_snapshot_station": ["productMetricSnapshotCount", "productMetricSnapshotRef", "outputRef"],
+    "full_product_bundle_station": ["productSignalPackageCount", "fullProductBundleRef", "outputRef"],
+    "bundle_validation_station": ["bundleCount", "validationStatus", "validatedBundleRef", "outputRef"],
+    "product_judgment_agent_station": ["inputBundleCount", "agentJudgmentCount", "coverageRate", "coverageStatus", "agentJudgmentRef", "outputRef"],
+    "product_judgment_package_station": ["productJudgmentPackageCount", "candidatePackageCount", "coverageRate", "coverageStatus", "productJudgmentPackageRef", "outputRef"],
+    "rag_permission_context_station": ["matchedContextCount", "ragContextRef", "outputRef"],
+    "task_mapping_agent_station": ["candidatePackageCount", "taskDecisionCount", "taskGenerationDecisionRef", "outputRef"],
+    "task_pool_admission_station": ["taskDecisionCount", "createdTaskCount", "taskPoolRef", "outputRef"],
+    "frontend_read_model_station": ["frontendReadModelStatus", "frontendReadModelRef", "outputRef"],
+    "task_pool_acceptance_station": ["acceptanceStatus", "mismatchCount", "taskPoolAcceptanceRef", "outputRef"],
     "task_acceptance_station": ["taskId", "action", "outputRef"],
     "task_assignment_station": ["taskId", "action", "outputRef"],
     "task_submission_station": ["taskId", "transition", "outputRef"],
@@ -55,7 +59,7 @@ DEFAULT_OUTPUTS = {
     "rag_feedback_station": ["taskId", "candidateCount", "outputRef"],
 }
 
-REAL_ADAPTERS = {"operating_snapshot_station", "system_product_snapshot_station", "product_signal_snapshot_station", "task_signal_station", "rag_context_station", "agent_judgment_station", "task_snapshot_station", "task_pool_station"}
+REAL_ADAPTERS = set(DEFAULT_OUTPUTS.keys())
 
 
 def _is_blank(value: Any) -> bool:
@@ -67,19 +71,21 @@ def station_contract(station_id: str) -> Dict[str, Any]:
     if not station:
         return {"version": STATION_CONTRACT_VERSION, "ok": False, "error": "station_not_found", "stationId": station_id}
     sid = station["stationId"]
-    return {"version": STATION_CONTRACT_VERSION, "registryVersion": STATION_REGISTRY_VERSION, "adapterVersion": STATION_ADAPTER_VERSION, "ok": True, "stationId": sid, "stage": station["stage"], "title": station["title"], "stationLine": station.get("stationLine"), "stationDomain": station.get("stationDomain"), "input": {"required": DEFAULT_INPUTS.get(sid, ["dataVersion"])}, "output": {"required": DEFAULT_OUTPUTS.get(sid, ["outputRef"])}, "nextStation": station.get("nextStation"), "replayable": bool(station.get("replayable")), "diagnosticSupported": bool(station.get("diagnosticSupported")), "backendModule": station.get("backendModule"), "frontendModule": station.get("frontendModule"), "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"}, "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "dedicatedLifecycleRoute": sid in {"task_acceptance_station", "task_assignment_station", "task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}, "diagnosticUsesSimulation": True}, "rule": "V14.7：商品三层数据先收敛为fullProductBundle；RAG给波动边界；Agent软路由；正式任务仍按V11.8 SOP契约输出。"}
+    return {"version": STATION_CONTRACT_VERSION, "registryVersion": STATION_REGISTRY_VERSION, "adapterVersion": STATION_ADAPTER_VERSION, "ok": True, "stationId": sid, "requestedStationId": station_id, "stage": station["stage"], "title": station["title"], "stationLine": station.get("stationLine"), "stationDomain": station.get("stationDomain"), "acceptance": station.get("acceptance"), "input": {"required": DEFAULT_INPUTS.get(sid, ["dataVersion"])}, "output": {"required": DEFAULT_OUTPUTS.get(sid, ["outputRef"])}, "nextStation": station.get("nextStation"), "replayable": bool(station.get("replayable")), "diagnosticSupported": bool(station.get("diagnosticSupported")), "backendModule": station.get("backendModule"), "frontendModule": station.get("frontendModule"), "standardInterface": {"contract": f"/api/stations/{sid}/contract", "health": f"/api/stations/{sid}/health", "run": f"/api/stations/{sid}/run", "replay": f"/api/stations/{sid}/replay", "gates": f"/api/stations/{sid}/gates"}, "adapter": {"realAdapterSupported": sid in REAL_ADAPTERS, "diagnosticUsesSimulation": True}, "rule": "V16.5：一个站点只允许一个核心职责；Agent站不入池，系统站负责合包、入池、读模型和验收。"}
 
 
 def list_station_contracts() -> Dict[str, Any]:
-    return {"version": STATION_CONTRACT_VERSION, "contracts": [station_contract(station["stationId"]) for station in list_stations()], "rule": "前后端统一读取 Station Contract，不直接依赖站点内部实现。"}
+    return {"version": STATION_CONTRACT_VERSION, "contracts": [station_contract(station["stationId"]) for station in list_stations()], "rule": "V16.5 Station Contract 是前后端、队列和适配器的统一接口契约。"}
 
 
 def validate_contract_payload(station_id: str, payload: Dict[str, Any] | None, *, direction: str = "input") -> Dict[str, Any]:
     payload = payload or {}
     contract = station_contract(station_id)
     required = list(((contract.get(direction) or {}).get("required") or []))
+    if direction == "input" and "dataVersion" in required and payload.get("allowMissingDataVersion"):
+        required = [item for item in required if item != "dataVersion"]
     missing = [key for key in required if key not in payload or _is_blank(payload.get(key))]
-    return {"version": STATION_CONTRACT_VERSION, "stationId": station_id, "direction": direction, "status": "passed" if not missing else "warning", "missing": missing, "required": required, "payloadKeys": sorted(payload.keys())}
+    return {"version": STATION_CONTRACT_VERSION, "stationId": contract.get("stationId") or station_id, "direction": direction, "status": "passed" if not missing else "warning", "missing": missing, "required": required, "payloadKeys": sorted(payload.keys())}
 
 
 def station_health(station_id: str) -> Dict[str, Any]:
@@ -94,7 +100,7 @@ def station_health(station_id: str) -> Dict[str, Any]:
     except Exception as exc:
         error = str(exc)
     gates = stage_summary(None, limit=20)
-    return {"version": STATION_CONTRACT_VERSION, "stationId": station["stationId"], "stage": station["stage"], "title": station["title"], "status": "healthy" if module_ok else "degraded", "backendModule": station.get("backendModule"), "moduleImportOk": module_ok, "errorMessage": error, "gateTableOk": gates.get("gateCount") is not None, "contract": station_contract(station["stationId"]), "rule": "Health 只检查标准站点接口和模块可达性，不执行业务数据流。"}
+    return {"version": STATION_CONTRACT_VERSION, "stationId": station["stationId"], "stage": station["stage"], "title": station["title"], "status": "healthy" if module_ok else "degraded", "backendModule": station.get("backendModule"), "moduleImportOk": module_ok, "errorMessage": error, "gateTableOk": gates.get("gateCount") is not None, "contract": station_contract(station["stationId"]), "rule": "V16.5 Health checks station module reachability and contract only; it does not run business data."}
 
 
 def station_gates(station_id: str, data_version: str | None = None, limit: int = 40, *, include_diagnostic: bool = False) -> Dict[str, Any]:
@@ -125,11 +131,11 @@ def run_station_contract(station_id: str, body: Dict[str, Any] | None = None, *,
         adapter_output = run_station_adapter(station, body, diagnostic=diagnostic)
     except Exception as exc:
         adapter_error = str(exc)
-        adapter_output = {"adapterMode": "real_adapter_failed_fallback_contract", "adapterError": adapter_error}
-    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V14.7" if diagnostic else None)
+        adapter_output = {"adapterMode": "real_adapter_failed_contract_visible", "adapterError": adapter_error}
+    data_version = adapter_output.get("dataVersion") or body.get("dataVersion") or body.get("data_version") or ("DIAG-V16.5" if diagnostic else None)
     output_ref = adapter_output.get("outputRef") or f"{station.get('outputRefPrefix')}:{data_version or body.get('taskId') or body.get('task_id') or 'latest'}"
     output = _complete_output_for_contract(station["stationId"], {**adapter_output, "dataVersion": data_version, "outputRef": output_ref, "stationId": station["stationId"], "isDiagnostic": diagnostic})
     output_check = validate_contract_payload(station["stationId"], output, direction="output")
     status = "failed" if adapter_error else "completed"
     gate = record_stage_gate(data_version=data_version, stage=station["stage"], status=status, input_payload={**body, "isDiagnostic": diagnostic, "stationId": station["stationId"]}, output_payload=output, user_id=body.get("userId") or body.get("user_id") or ("OPS" if diagnostic else None), upstream_stage=body.get("upstreamStage"), output_ref=output_ref, error_message=adapter_error, run_type="diagnostic" if diagnostic else "business", is_diagnostic=diagnostic)
-    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V14.7：fullProductBundle进入Agent软路由，正式任务按SOP输出，观察/证据/数据缺口不入正式任务池。"}
+    return {"version": STATION_CONTRACT_VERSION, "ok": status == "completed", "status": status, "stationId": station["stationId"], "requestedStationId": station_id, "stage": station["stage"], "inputContract": input_check, "outputContract": output_check, "output": output, "gate": gate, "adapterVersion": STATION_ADAPTER_VERSION, "adapterError": adapter_error, "nextStation": station.get("nextStation"), "rule": "V16.5：Station Contract records every split station boundary; failures are visible and no station silently performs another station's work."}
