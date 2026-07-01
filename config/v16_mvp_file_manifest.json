@@ -1,13 +1,13 @@
 {
-  "manifestVersion": "16.24",
-  "baseline": "V16.24 task repository context cleanup / V16 MVP runtime",
+  "manifestVersion": "16.25",
+  "baseline": "V16.25 UID utility restore / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless explicitly reviewed.",
   "rules": [
     "Git history is the archive; current working tree only serves the MVP.",
     "FastAPI active import must pass before more source cleanup.",
     "Task lifecycle routes remain active V16 runtime and must not be deleted.",
-    "TaskRepository and ScopedRepository must not import src.core.context.",
-    "Repository scope uses the V16 lightweight UserContext value object."
+    "Task evidence persistence uses src/services/uid.py for runtime IDs.",
+    "src/services/uid.py is a V16 support utility, not a restored legacy workflow module."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -61,6 +61,7 @@
     "src/repositories/sqlite_repository.py",
     "src/repositories/scoped_repository.py",
     "src/repositories/task_repository.py",
+    "src/services/uid.py",
     "src/services/system_service.py",
     "src/services/account_service.py",
     "src/services/approval_service.py",
@@ -87,11 +88,10 @@
     "config/v16_mvp_file_manifest.json"
   ],
   "v16_tools": ["scripts/check_v16_manifest.py"],
-  "fixed_in_v16_24": [
-    "src/repositories/scoped_repository.py removed src.core.context import",
-    "src/repositories/scoped_repository.py provides V16 lightweight UserContext",
-    "src/repositories/task_repository.py imports UserContext from scoped_repository",
-    "src/api/main.py API_VERSION is 16.24"
+  "fixed_in_v16_25": [
+    "src/services/uid.py added",
+    "src/services/uid.py provides make_id, make_run_id, make_event_id, make_record_id",
+    "src/api/main.py API_VERSION is 16.25"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
