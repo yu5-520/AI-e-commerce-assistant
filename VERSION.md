@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.17
+16.18
 ```
 
-## V16.17
+## V16.18
 
-Legacy ImportJob route removal.
+Legacy LLM debug route removal.
 
-`src/api/routes/import_jobs.py` and its old ImportJob worker services were removed from the active MVP runtime. Data import now uses the V16 `data_import.py` route only; task generation remains owned by station queue and Agent mainline.
+`src/api/routes/llm.py` was removed from active MVP runtime. Real Agent model calls remain in the V16 product judgment and task mapping mainline.
 
 ## Verify
 
