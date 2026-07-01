@@ -1,13 +1,13 @@
 {
-  "manifestVersion": "16.21",
-  "baseline": "V16.21 module todo route prune / V16 MVP runtime",
+  "manifestVersion": "16.22",
+  "baseline": "V16.22 legacy pipeline route removal / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless explicitly reviewed.",
   "rules": [
     "Git history is the archive; current working tree only serves the MVP.",
     "FastAPI active import must pass before more source cleanup.",
-    "Legacy module todo route is removed from active modules router.",
-    "Task list, detail and lifecycle actions are owned by V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.",
-    "Task generation is owned by the V16 station queue and Agent mainline."
+    "Legacy V14 pipeline route is removed from active app.",
+    "Task generation is owned by V16 data_import, station_queue, Agent mainline and task_pool routes.",
+    "Do not restore v142/v143 task mainline services."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -71,7 +71,6 @@
     "src/api/routes/approvals.py",
     "src/api/routes/audit.py",
     "src/api/routes/ops.py",
-    "src/api/routes/pipeline.py",
     "requirements.txt",
     "scripts/deploy_fast.sh",
     "scripts/deploy_atomic.sh"
@@ -86,11 +85,11 @@
     "config/v16_mvp_file_manifest.json"
   ],
   "v16_tools": ["scripts/check_v16_manifest.py"],
-  "fixed_in_v16_21": [
-    "src/api/routes/modules/__init__.py removed todo import",
-    "src/api/routes/modules/__init__.py removed router.include_router(todo.router)",
-    "src/api/routes/modules/todo.py deleted",
-    "src/api/main.py API_VERSION is 16.21"
+  "fixed_in_v16_22": [
+    "src/api/main.py removed pipeline route import",
+    "src/api/main.py removed app.include_router(pipeline.router)",
+    "src/api/routes/pipeline.py deleted",
+    "src/api/main.py API_VERSION is 16.22"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
