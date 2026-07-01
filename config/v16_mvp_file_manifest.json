@@ -1,6 +1,6 @@
 {
-  "manifestVersion": "16.7",
-  "baseline": "V16.7 MVP legacy route purge / V16.5 Station Alignment runtime",
+  "manifestVersion": "16.8",
+  "baseline": "V16.8 MVP purged runtime only / V16.5 Station Alignment runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
   "rules": [
     "Git history is the history archive; current working tree only serves the MVP.",
@@ -8,7 +8,7 @@
     "V16_SUPPORT files are runtime support files required by current MVP files.",
     "V16_FRONTEND prefixes are the current web demo entry files.",
     "V16_DOC files are the only current documentation files.",
-    "Legacy compatibility routes and old station aliases are removed from active runtime."
+    "Legacy compatibility routes, old station aliases, worker scaffold routes and unmarked legacy files are removed from active runtime."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -61,7 +61,6 @@
     "src/api/routes/approvals.py",
     "src/api/routes/audit.py",
     "src/api/routes/ops.py",
-    "src/api/routes/worker_jobs.py",
     "src/api/routes/modules.py",
     "src/api/routes/pipeline.py",
     "src/api/routes/llm.py",
@@ -92,6 +91,31 @@
     "src/api/routes/report_task_sync.py",
     "src/api/routes/trends.py"
   ],
+  "purged_in_v16_8": [
+    ".github/",
+    "docs/",
+    "examples/",
+    "evals/",
+    "frontend/",
+    "backend/",
+    "data/",
+    "alembic/",
+    "workflows/",
+    "knowledge_base/",
+    "logs/",
+    "modules/",
+    "deploy/",
+    "prompts/",
+    "runtime/",
+    "src/stations/",
+    "src/traffic_test/",
+    "src/workers/",
+    "src/workflow/",
+    "src/api/routes/worker_jobs.py",
+    "src/services/worker_queue_service.py",
+    "src/services/worker_runtime_config_service.py",
+    "src/services/worker_task_handlers_service.py"
+  ],
   "legacy_aliases_removed_in_v16_7": [
     "import_station",
     "report_parse_station",
@@ -106,5 +130,5 @@
     "task_snapshot_station",
     "task_pool_station"
   ],
-  "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. Remaining unmarked files are second-wave MVP purge candidates."
+  "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. Remaining unmarked files are final review candidates."
 }
