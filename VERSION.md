@@ -1,35 +1,34 @@
 # Current Version
 
 ```text
-16.3
+16.4
 ```
 
-## V16.3 Meaning
+## V16.4 Meaning
 
-V16.3 is the current-run real task-pool acceptance release.
+V16.4 is the real-report fact-layer repair release.
 
-It keeps the V16.2 real product judgment Agent and real RAG task mapping Agent, then adds the MVP验收闸门:
+It keeps the V16.2 real product judgment Agent, V16.2 real RAG task mapping Agent and V16.3 task-pool acceptance gate, then repairs the upstream data facts before Agent judgment:
 
 ```text
-latest taskGenerationRun
-  -> latestRun.dataVersion
-  -> latestRun.taskPoolCreatedCount
-  -> task_pool_entries WHERE data_version = latestRun.dataVersion
-  -> frontend_task_view WHERE data_version = latestRun.dataVersion
-  -> frontend_task_detail_view WHERE data_version = latestRun.dataVersion
-  -> acceptance pass / fail
+real report rows
+  -> product/store/traffic fact namespace isolation
+  -> metric_date from report rows
+  -> product master dedupe by platform + store + productId + skuId
+  -> fullProductBundle fact-layer validation
+  -> real product judgment Agent
+  -> real task mapping Agent
 ```
 
 Core rules:
 
-- `/api/view/task-pool-acceptance` is read-only and never generates tasks.
-- Data-line `formalTaskCount` must equal the latest run `taskPoolCreatedCount`.
-- Latest run `taskPoolCreatedCount` must equal current `task_pool_entries` count.
-- Current `task_pool_entries` count must equal current `frontend_task_view` count.
-- Every visible current task must have a matching `frontend_task_detail_view` row.
-- `frontend_task_view` must not keep old dataVersion rows.
-- Historical `task_pool_entries` may remain in storage, but must not enter the current execution queue.
-- If counts do not align, `/api/view/data-line` enters attention and surfaces the acceptance mismatches.
-- No mismatch is repaired by fake tasks or local template fallback.
+- 商品经营明细 creates product master rows and product-scope metric facts.
+- 流量来源明细 creates child `trafficSourceFacts`; it never creates product master rows.
+- 商品 ROI, 店铺 ROI and 流量来源 ROI are separate namespaces.
+- Product detail ROI reads `product_metric_facts.roi` only; traffic ROI=0 cannot overwrite product ROI.
+- `metricDate/reportDate/dataDate` priority is `统计日期 -> 更新时间 -> filename/dataVersion`; upload/current date is not a business metric date.
+- Product master key is `platform + storeId/storeName + productId + skuId`.
+- fullProductBundle now carries `factLayerValidation`, product metric fact count, traffic source fact count, metricDate and ROI source.
+- Agent judgment must consume the validated fullProductBundle, not mixed raw rows.
 
-一句话：V16.3 不是继续生成任务，而是证明“数据页任务数 = 任务池本轮任务数 = 任务页执行任务数 = 详情页任务数”；对不上就暴露断点，不再用刷新或垫底内容遮住问题。
+一句话：V16.4 先把真实报表事实层打干净：ROI 不串层、日期不串今日、流量行不建商品、商品不重复建档，然后再让真实 Agent 判断。
