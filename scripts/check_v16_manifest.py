@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Check current repository files against the V16 MVP manifest.
 
-V16.8 adds purge planning. By default this script only prints the current V16
-whitelist and unmarked files. With --write-plan it writes a reviewable purge
-plan to /tmp/v16_purge_plan.sh. With --purge it removes unmarked files from the
-local working tree. It never commits changes.
+This is the only current repository hygiene checker. Old V12/V13 checkers were
+removed because they enforced obsolete version and route rules.
 """
 
 from __future__ import annotations
@@ -20,8 +18,8 @@ from typing import Dict, Iterable, List, Set, Tuple
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "config" / "v16_mvp_file_manifest.json"
 DEFAULT_PLAN_PATH = Path("/tmp/v16_purge_plan.sh")
-PROTECTED_PREFIXES = {".git/", "web_demo/"}
-PROTECTED_EXACT = {".gitignore", ".env.example"}
+PROTECTED_PREFIXES = {".git/"}
+PROTECTED_EXACT: Set[str] = set()
 
 
 def load_manifest() -> Dict[str, object]:
@@ -56,15 +54,23 @@ def classify(path: str) -> str:
     if path.startswith("alembic/") or path == "alembic.ini":
         return "old_alembic_migration"
     if path.startswith("knowledge_base/"):
-        return "rag_knowledge_base_review"
+        return "old_rag_knowledge_samples"
+    if path.startswith("schemas/"):
+        return "old_schema_contracts"
+    if path.startswith("scripts/check_"):
+        return "old_check_scripts"
     if path.startswith("data/"):
         return "old_runtime_or_sample_data"
     if path.startswith("deploy/"):
-        return "deploy_review"
+        return "old_deploy_docs"
     if path.startswith("backend/"):
         return "old_backend_docs"
     if path.startswith("modules/"):
         return "old_module_archives"
+    if path.startswith("src/services/v"):
+        return "old_versioned_services"
+    if path.startswith("src/"):
+        return "old_source_fragment"
     return "unmarked_review"
 
 
@@ -73,13 +79,17 @@ def split_files(files: List[str], manifest: Dict[str, object]) -> Tuple[List[str
     support = as_set(manifest, "v16_support")
     docs = as_set(manifest, "v16_docs")
     tools = as_set(manifest, "v16_tools")
-    frontend_prefixes = sorted(as_set(manifest, "v16_frontend_prefixes"))
+    prefixes = sorted(
+        as_set(manifest, "v16_frontend_prefixes")
+        | as_set(manifest, "v16_backend_prefixes")
+        | as_set(manifest, "v16_support_prefixes")
+    )
     whitelisted_exact = keep | support | docs | tools
     marked: List[str] = []
     unmarked: List[str] = []
     protected_unmarked: List[str] = []
     for path in files:
-        if path in whitelisted_exact or under_prefix(path, frontend_prefixes):
+        if path in whitelisted_exact or under_prefix(path, prefixes):
             marked.append(path)
         elif path in PROTECTED_EXACT or under_prefix(path, PROTECTED_PREFIXES):
             protected_unmarked.append(path)
@@ -93,7 +103,7 @@ def write_plan(unmarked: List[str], protected_unmarked: List[str], plan_path: Pa
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         "",
-        "echo 'V16.8 purge plan: removing unmarked MVP cleanup candidates'",
+        "echo 'V16.10 purge plan: removing unmarked MVP cleanup candidates'",
         "",
     ]
     for path in sorted(unmarked):
