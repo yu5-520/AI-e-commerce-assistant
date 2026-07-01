@@ -1,12 +1,12 @@
 # Current Version
 
 ```text
-14.9.3
+14.9.4
 ```
 
-## V14.9.3 Meaning
+## V14.9.4 Meaning
 
-V14.9.3 is the Agent1 metric-expansion and product-package compression release.
+V14.9.4 is the Agent1 API/RAG budget guard release.
 
 It keeps the V14.9 dual-Agent mainline:
 
@@ -16,7 +16,7 @@ report import system
   -> system product layered snapshot
   -> fullProductBundle assembly
   -> RAG volatility boundary context
-  -> Agent 1 metric-level analysis expansion
+  -> Agent 1 budget-guarded metric expansion
   -> system real-product package gate
   -> Agent 2 task generation station
   -> system task-pool admission station
@@ -26,13 +26,14 @@ report import system
 
 Fix scope:
 
-- Agent1 no longer emits only one judgment per product signal.
-- A resolved fullProductBundle is expanded into multiple metric-level judgments, such as ROI, refundRate, inventory, conversionRate, grossMargin, adSpend, and paymentAmount.
-- Product identity gaps still stay in Agent1 and cannot enter Agent2.
-- The package integration station still compresses by real `productId`, so many metric judgments become one `product_judgment_package` per product.
-- Agent2 still only consumes the compressed product package and task-pool admission remains capped, product-level, and duplicate-safe.
-- Data-line now records `averageJudgmentsPerBundle` and keeps formal task count on latest run `taskPoolCreatedCount`.
+- Agent1 can still expand one product bundle into many metric judgments.
+- Metric judgment creation is local record expansion and must not trigger one LLM/API call per judgment.
+- Agent1 API call count is product-bundle scoped and must be `<= inputBundleCount`.
+- Current implementation sets Agent1 metric expansion to local deterministic mode: `agent1ApiCallCount = 0`.
+- RAG context is reused by dataVersion/run and records `ragRetrievalCount`.
+- Task generation run now records `agent1ApiCallCount`, `agent1ApiBudget`, `agent1ApiCallsPerBundle`, `ragRetrievalCount`, and `apiBudgetViolation`.
+- Data-line shows API budget status beside judgment count.
 
 Core rule:
 
-`Agent1 判断要细，整合站必须压回商品级，任务数必须看本轮产出。`
+`判断可以多，API调用必须少；一条判断不能等于一次API。`
