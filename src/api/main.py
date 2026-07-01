@@ -1,13 +1,13 @@
-"""V16.24 FastAPI entrypoint.
+"""V16.25 FastAPI entrypoint.
 
 MVP runtime only. Legacy routes, worker scaffold routes, deleted source-core
 modules, old mock workflow dependencies, syntax leftovers, old audit/data-import
 context imports, old V11 report-governance dependencies, legacy ImportJob wrapper
 routes, legacy LLM debug gateway routes, legacy module task-report routes,
 legacy module Agent candidate/playbook routes, legacy module Todo routes, legacy
-V14 pipeline route wrappers, old system-route context imports, and old task
-repository context imports are removed from the active app; Git history remains
-the archive.
+V14 pipeline route wrappers, old system-route context imports, old task repository
+context imports, and missing UID utility gaps are removed from the active app;
+Git history remains the archive.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.24"
+API_VERSION = "16.25"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v1624_task_repository_context_cleanup",
+    "mode": "v1625_uid_utility_restored",
     "mainline": [
         "report_receive_station",
         "report_schema_station",
@@ -47,7 +47,7 @@ STATION_MAINLINE = {
         "frontend_read_model_station",
         "task_pool_acceptance_station",
     ],
-    "rule": "V16.24：task_repository/scoped_repository删除旧src.core.context依赖。任务生命周期主链路保留，仓储层使用V16轻量UserContext。",
+    "rule": "V16.25：补齐src.services.uid轻量ID工具，任务提交证据链路继续保留；这是V16支撑工具，不恢复旧工作流。",
 }
 
 
@@ -70,7 +70,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1624": "task_repository_context_cleanup", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1625": "uid_utility_restored", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
