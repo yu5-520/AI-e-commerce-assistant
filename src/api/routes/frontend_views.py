@@ -1,8 +1,9 @@
-"""V14.8.3 read-only frontend view routes.
+"""V15.1 read-only frontend view routes.
 
 These endpoints are for page rendering only. They read cached read-model tables and
-must not trigger materialize/generate/Agent/worker execution. The data-line view
-is a product-facing metro-line status, not a compute trigger.
+must not trigger materialize/generate/Agent/worker execution. Task/product views
+are current-run isolated by dataVersion so old demo/global task-pool entries do
+not pollute the execution queue.
 """
 
 from __future__ import annotations
@@ -29,35 +30,35 @@ router = APIRouter(prefix="/api/view", tags=["frontend-read-model"])
 @router.get("/dashboard")
 def dashboard_view() -> Dict[str, Any]:
     result = read_dashboard_view()
-    result["routeRule"] = "read_only_frontend_view_no_compute"
+    result["routeRule"] = "read_only_frontend_view_no_compute_current_run_isolated"
     return result
 
 
 @router.get("/products")
-def product_view(storeId: str | None = None, limit: int = Query(default=200, ge=1, le=500)) -> Dict[str, Any]:
-    result = read_product_views(store_id=storeId, limit=limit)
-    result["routeRule"] = "read_only_frontend_view_no_compute"
+def product_view(storeId: str | None = None, dataVersion: str | None = None, limit: int = Query(default=200, ge=1, le=500)) -> Dict[str, Any]:
+    result = read_product_views(store_id=storeId, data_version=dataVersion, limit=limit)
+    result["routeRule"] = "read_only_frontend_view_no_compute_current_run_isolated"
     return result
 
 
 @router.get("/products/{product_id}")
 def product_detail_view(product_id: str, storeId: str | None = None) -> Dict[str, Any]:
     result = read_product_detail(product_id, store_id=storeId)
-    result["routeRule"] = "read_only_frontend_view_no_compute"
+    result["routeRule"] = "read_only_frontend_view_no_compute_current_run_isolated"
     return result
 
 
 @router.get("/tasks")
-def task_view(status: str | None = None, limit: int = Query(default=200, ge=1, le=500)) -> Dict[str, Any]:
-    result = read_task_views(status=status, limit=limit)
-    result["routeRule"] = "read_only_frontend_view_no_compute"
+def task_view(status: str | None = None, dataVersion: str | None = None, limit: int = Query(default=200, ge=1, le=500)) -> Dict[str, Any]:
+    result = read_task_views(status=status, data_version=dataVersion, limit=limit)
+    result["routeRule"] = "read_only_frontend_view_no_compute_current_run_isolated"
     return result
 
 
 @router.get("/tasks/{task_id}")
 def task_detail_view(task_id: str) -> Dict[str, Any]:
     result = read_task_detail(task_id)
-    result["routeRule"] = "read_only_frontend_view_no_compute"
+    result["routeRule"] = "read_only_frontend_view_no_compute_current_run_isolated"
     return result
 
 
@@ -85,11 +86,11 @@ def store_view() -> Dict[str, Any]:
         store["productCount"] += 1
         if item.get("signalStrength") == "high":
             store["highRiskProductCount"] += 1
-    return {"version": FRONTEND_READ_MODEL_VERSION, "ready": bool(stores), "count": len(stores), "items": list(stores.values()), "routeRule": "read_only_frontend_view_no_compute"}
+    return {"version": FRONTEND_READ_MODEL_VERSION, "ready": bool(stores), "count": len(stores), "currentDataVersion": products.get("currentDataVersion"), "items": list(stores.values()), "routeRule": "read_only_frontend_view_no_compute_current_run_isolated"}
 
 
 @router.post("/refresh")
 def refresh_views(dataVersion: str | None = None) -> Dict[str, Any]:
     result = refresh_all_read_models(data_version=dataVersion)
-    result["routeRule"] = "explicit_compute_endpoint_not_used_by_page_switching"
+    result["routeRule"] = "explicit_compute_endpoint_current_run_isolated"
     return result
