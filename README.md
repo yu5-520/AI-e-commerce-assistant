@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.20 Module Agents Route Prune / V16 MVP runtime**.
+Current baseline: **V16.21 Module Todo Route Prune / V16 MVP runtime**.
 
 ## Mainline
 
@@ -27,9 +27,9 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
-## V16.20 rule
+## V16.21 rule
 
-The legacy `modules/agents.py` route is removed from active runtime. Real Agent calls are owned by the V16 product judgment and task mapping services; old candidate/playbook Agent endpoints no longer load V10/V14 task logic.
+The legacy `modules/todo.py` route is removed from active runtime. Task list, task details and lifecycle actions are served by the V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.
 
 ## Entry points
 
