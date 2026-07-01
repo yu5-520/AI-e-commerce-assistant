@@ -1,4 +1,4 @@
-"""Account, role, store responsibility, and permission routes."""
+"""V16.11 account, role, store responsibility, and permission routes."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
-from src.core.context import context_from_headers
 from src.services.account_service import (
     account_summary,
     current_user,
@@ -25,6 +24,7 @@ from src.services.account_service import (
     update_user_role,
     update_user_stores,
     user_has_permission,
+    user_id_from_headers,
 )
 from src.services.backend_isolation_service import demo_account_switch_enabled, production_mode
 
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 
 def request_user_id(request: Request) -> str:
-    return context_from_headers(request.headers).user_id
+    return user_id_from_headers(request.headers)
 
 
 def require_role_manager(request: Request) -> str:
@@ -139,42 +139,3 @@ def change_store_assignment(request: Request, store_id: str, body: Dict[str, Any
     if not migration:
         raise HTTPException(status_code=400, detail="cannot schedule store assignment migration")
     return {"migration": migration, "account": _scrub_account_summary_for_production(account_summary(operator_id))}
-
-
-@router.get("/roles")
-def roles(request: Request) -> List[Dict[str, Any]]:
-    require_role_manager(request)
-    return list_roles()
-
-
-@router.post("/roles/{role_id}/permissions")
-def change_role_permissions(request: Request, role_id: str, body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    operator_id = require_role_manager(request)
-    role = update_role_permissions(role_id, body.get("permissions") or [], operator_id=operator_id)
-    if not role:
-        raise HTTPException(status_code=400, detail="cannot update role permissions")
-    return {"role": role, "account": _scrub_account_summary_for_production(account_summary(operator_id))}
-
-
-@router.get("/permissions")
-def permissions(request: Request) -> List[Dict[str, str]]:
-    require_role_manager(request)
-    return list_permissions()
-
-
-@router.get("/store-groups")
-def store_groups(request: Request) -> List[Dict[str, Any]]:
-    require_role_manager(request)
-    return list_store_groups()
-
-
-@router.get("/stores")
-def stores(request: Request) -> List[Dict[str, Any]]:
-    require_role_manager(request)
-    return list_stores()
-
-
-@router.get("/role-change-logs")
-def role_logs(request: Request) -> List[Dict[str, Any]]:
-    require_role_manager(request)
-    return list_role_change_logs()
