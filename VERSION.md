@@ -1,12 +1,14 @@
 # Current Version
 
 ```text
-16.16
+16.17
 ```
 
-## V16.16
+## V16.17
 
-Report alert service cleanup. Removed the old V11 governance dependency from the active import chain.
+Legacy ImportJob route removal.
+
+`src/api/routes/import_jobs.py` and its old ImportJob worker services were removed from the active MVP runtime. Data import now uses the V16 `data_import.py` route only; task generation remains owned by station queue and Agent mainline.
 
 ## Verify
 
