@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.18
+16.19
 ```
 
-## V16.18
+## V16.19
 
-Legacy LLM debug route removal.
+Module task-report route prune.
 
-`src/api/routes/llm.py` was removed from active MVP runtime. Real Agent model calls remain in the V16 product judgment and task mapping mainline.
+`src/api/routes/modules/task_report.py` was removed from the active modules router. Task details are now owned by the V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.
 
 ## Verify
 
