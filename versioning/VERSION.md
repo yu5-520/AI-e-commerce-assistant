@@ -1,7 +1,7 @@
-Current Version: 16.20
+Current Version: 16.21
 
-V16.20 module agents route prune.
+V16.21 module todo route prune.
 
-The old modules/agents route was removed from active runtime. Real Agent execution is owned by the V16 product judgment and task mapping mainline.
+The old modules/todo route was removed from active runtime. Task list, task details and lifecycle actions are owned by the V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.
 
 Verify with scripts/check_v16_manifest.py
