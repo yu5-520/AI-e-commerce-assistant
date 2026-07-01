@@ -1,20 +1,20 @@
-Current Version: 14.9.4
+Current Version: 15.0
 
-V14.9.4 Agent1 API/RAG Budget Guard
+V15 Full-Chain Agent Budget Ledger + Agent Gateway
 
 Core chain:
 
-`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent1 budget-guarded metric expansion -> real-product package gate -> Agent2 task generation -> task-pool admission -> frontend read model -> data metro line`
+`Report schema Agent -> system cleaning -> fullProductBundle -> product judgment Agent -> product_judgment_package 70% gate -> task mapping Agent with permission/SOP RAG -> task-pool admission -> frontend read model -> data metro line`
 
 Key fix:
 
-- Agent1 can expand one resolved fullProductBundle into multiple metric-level judgments.
-- Metric judgments are local records and must not each call DeepSeek/LLM.
-- Agent1 API call count is product-bundle scoped and must be less than or equal to input bundle count.
-- Current Agent1 metric expansion is deterministic/local: `agent1ApiCallCount = 0`.
-- RAG context is reused by dataVersion/run and records `ragRetrievalCount`.
-- Data-line and task generation run now expose API budget counters.
+- Report Agent only translates headers/sheets into system schema mapping.
+- Product judgment Agent analyzes product bundles, trends, comparison, category and confidence, then system merges judgments into product packages.
+- Product packages only enter task mapping when system-computed package confidence reaches 70%.
+- Task mapping Agent retrieves company permissions, account permissions, approval rules and SOP RAG before creating tasks.
+- All three Agent stages share `agent_budget_ledgers_v15` and `agent_call_events_v15`.
+- API calls must stay within the run budget and must not scale with rows, metrics, or tasks.
 
 Boundary:
 
-Judgment may be detailed and metric-level. API/RAG calls must remain product-bundle or dataVersion scoped. Formal tasks must be product-level and counted by current run, not by global task pool.
+Agent is a budgeted station capability, not a per-row worker. Code owns cleaning, calculations, package merging, task-pool admission and lifecycle state.
