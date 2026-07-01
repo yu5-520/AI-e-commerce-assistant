@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.21
+16.22
 ```
 
-## V16.21
+## V16.22
 
-Module todo route prune.
+Legacy pipeline route removal.
 
-`src/api/routes/modules/todo.py` was removed from the active modules router. Task list, task details and lifecycle actions are now owned by the V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.
+`src/api/routes/pipeline.py` was removed from active runtime. V16 task generation is owned by data_import, station_queue, Agent mainline and task_pool routes. Do not restore v142/v143 task mainline services.
 
 ## Verify
 
