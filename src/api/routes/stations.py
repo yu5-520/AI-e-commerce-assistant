@@ -1,4 +1,4 @@
-"""V12.14.1 standard Station Interface routes."""
+"""V16.5 standard Station Interface routes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.services.station_contract_service import list_station_contracts, run_st
 from src.services.station_registry_service import registry_summary, get_station
 
 router = APIRouter(prefix="/api/stations", tags=["stations"])
-STATION_ROUTE_VERSION = "12.14.1"
+STATION_ROUTE_VERSION = "16.5"
 
 
 def request_user_id(request: Request) -> str:
@@ -22,7 +22,7 @@ def request_user_id(request: Request) -> str:
 def list_station_interfaces() -> Dict[str, Any]:
     registry = registry_summary()
     contracts = list_station_contracts()
-    return {"version": STATION_ROUTE_VERSION, "registry": registry, "contracts": contracts.get("contracts"), "rule": "统一 Station Interface：前后端只认站点接口，不直接调用站点内部实现。"}
+    return {"version": STATION_ROUTE_VERSION, "registry": registry, "contracts": contracts.get("contracts"), "rule": "V16.5统一 Station Interface：Registry / Contract / Queue / Adapter / Data-line 使用同一套拆分站点。"}
 
 
 @router.get("/{station_id}")
@@ -79,5 +79,5 @@ def replay_station_endpoint(request: Request, station_id: str, body: Dict[str, A
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     result["replayMode"] = True
-    result["rule"] = "Replay 只重跑本站标准接口，下一站根据 outputRef 继续接力。"
+    result["rule"] = "Replay only reruns one split station contract; next station continues by outputRef."
     return result
