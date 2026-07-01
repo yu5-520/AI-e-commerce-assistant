@@ -14,15 +14,15 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.9"
+API_VERSION = "14.9.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "dual_agent_product_judgment_package_task_pipeline",
+    "mode": "dual_agent_product_judgment_package_task_pipeline_reset_boundary_fixed",
     "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent1_product_analysis", "product_judgment_package", "agent2_task_generation", "task_pool_admission", "frontend_read_model", "data_metro_line"],
-    "rule": "V14.9：Agent1只做商品/指标分析判断；系统按商品整合判断包；Agent2只对商品判断包生成商品级SOP任务；任务池只接收准入后的商品级任务。",
+    "rule": "V14.9.1：保留双Agent商品判断包链路；清空运行态必须覆盖task_generation_runs_v14与V15双Agent表，避免接入0但判断残留。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "dual_agent_product_judgment_package_task_pipeline", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "dual_agent_product_judgment_package_task_pipeline_reset_boundary_fixed", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
