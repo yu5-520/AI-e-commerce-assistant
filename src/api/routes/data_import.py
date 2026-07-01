@@ -1,16 +1,19 @@
-"""V14.6 Data Hub routes.
+"""V16.15 Data Hub routes.
 
 Import APIs run the import system only, then enqueue the task generation system.
 Agent/RAG/task snapshot/task pool stations are pulled by the station queue worker.
+
+The route no longer imports the deleted src.core.context module. Request context
+is resolved through the current V16 account service.
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, UploadFile
 
-from src.core.context import context_from_headers
 from src.services.account_service import current_user, user_id_from_headers
 from src.services.data_gap_event_service import data_gap_summary, ingest_data_gaps_from_import
 from src.services.data_import_service import DATASET_CONFIGS, import_mock_data, list_import_records, list_import_sources, read_csv, validate_all_imports
@@ -31,12 +34,22 @@ from src.services.station_queue_service import enqueue_task_generation
 router = APIRouter(prefix="/api/data", tags=["data-import"])
 ROLLBACK_ROLE_IDS = {"owner", "manager", "finance"}
 DEFAULT_SYNC_DATASETS = ["inventory", "refunds", "orders", "products"]
-DATA_IMPORT_ROUTE_VERSION = "14.6.0"
+DATA_IMPORT_ROUTE_VERSION = "16.15"
 HEAVY_KEYS = {"rows", "sampleRows", "stationRuns", "outputs", "products", "signals", "productSignalPackages", "agentProductSnapshotPackages", "judgments", "snapshots", "taskPackage", "snapshot", "payload"}
 
 
 def request_user_id(request: Request) -> str:
     return user_id_from_headers(request.headers)
+
+
+def request_context(request: Request) -> SimpleNamespace:
+    user_id = request_user_id(request)
+    user = current_user(user_id)
+    return SimpleNamespace(
+        user_id=user_id,
+        role_id=user.get("roleId") or user.get("role_id") or "operator",
+        tenant_id=user.get("tenantId") or user.get("tenant_id") or "demo_tenant",
+    )
 
 
 def can_rollback(user_id: str) -> bool:
@@ -164,7 +177,7 @@ def _run_dataset_imports_without_legacy_tasks(dataset_names: Iterable[str] | Non
 
 def _attach_operating_object_sync(request: Request, result: Dict[str, Any], rows: Any, *, source: str) -> Dict[str, Any]:
     materialized_rows = _materialize_import_rows(result, rows)
-    ctx = context_from_headers(request.headers)
+    ctx = request_context(request)
     result["operatingObjectSync"] = upsert_operating_objects_from_import(result, materialized_rows, source=source, uploader_user_id=ctx.user_id, uploader_role_id=ctx.role_id)
     result["_rows"] = materialized_rows
     return result
@@ -197,7 +210,7 @@ def _attach_v1213_data_gap_sync(result: Dict[str, Any], rows: Any, *, source: st
 
 
 def _attach_pipeline_station_sync(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
-    ctx = context_from_headers(request.headers)
+    ctx = request_context(request)
     versions = _data_versions_from_result(result) or [None]  # type: ignore[list-item]
     rows = result.get("_rows") or []
     gates = []
@@ -222,7 +235,7 @@ def _attach_import_diagnostics(result: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = True) -> Dict[str, Any]:
+def _attach_import_product_contracts(request: Request, result: Dict[str, Any], rows: Any, *, source: str, upsert_objects: bool = False) -> Dict[str, Any]:
     if upsert_objects:
         result = _attach_operating_object_sync(request, result, rows, source=source)
         result = _attach_v121_metric_fact_sync(result, result.get("_rows"), source=source)
@@ -234,14 +247,14 @@ def _attach_import_product_contracts(request: Request, result: Dict[str, Any], r
 
 
 def _attach_task_mainline(request: Request, result: Dict[str, Any], *, source: str) -> Dict[str, Any]:
-    ctx = context_from_headers(request.headers)
+    ctx = request_context(request)
     versions = _data_versions_from_result(result)
     if not versions and result.get("dataVersion"):
         versions = [str(result["dataVersion"])]
     queued = []
     for version in versions:
         queued.append(enqueue_task_generation(version, actor_user_id=ctx.user_id, input_ref=f"operating_unit_snapshot:{version or 'latest'}", source=source, force=True))
-    result["taskMainlineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "queued_async_task_generation", "runCount": len(queued), "queuedCount": sum(1 for item in queued if item.get("queued") or item.get("idempotentHit")), "jobs": queued, "createdTaskCount": 0, "rule": "V14.6：上传只投递任务生成队列，不同步执行RAG/Agent/任务快照/任务池。"}
+    result["taskMainlineSync"] = {"version": DATA_IMPORT_ROUTE_VERSION, "mode": "queued_async_task_generation", "runCount": len(queued), "queuedCount": sum(1 for item in queued if item.get("queued") or item.get("idempotentHit")), "jobs": queued, "createdTaskCount": 0, "rule": "V16.15：上传只投递任务生成队列，不同步执行RAG/Agent/任务快照/任务池。"}
     result["v142TaskMainlineSync"] = result["taskMainlineSync"]
     result["createdTaskCount"] = 0
     return result
