@@ -1,37 +1,26 @@
 # Current Version
 
 ```text
-16.8
+16.9
 ```
 
-## V16.8 Meaning
+## V16.9 Meaning
 
-V16.8 is the MVP purge-planner release.
+V16.9 is the stale verifier purge release.
 
-The first wave has already removed active legacy route imports, old route files and old station aliases. V16.8 upgrades the manifest checker into a safe purge tool so the remaining unmarked files can be removed in one local command after review.
+It keeps the V16.8 MVP-purged runtime and removes old V12 release/hygiene checkers that were still enforcing V12/V12.9 rules against the V16 repository.
 
-## One-command local purge
-
-```bash
-python scripts/check_v16_manifest.py --write-plan
-bash /tmp/v16_purge_plan.sh
-```
-
-Or, without writing a separate plan:
-
-```bash
-python scripts/check_v16_manifest.py --purge
-```
-
-The script uses `git rm` and does not commit automatically.
-
-## Safety rules
+## Deleted
 
 ```text
-V16 manifest files are kept.
-web_demo/ is kept.
-Protected files such as .gitignore and .env.example are not deleted by --purge.
-Unmarked files are deletion candidates unless promoted into config/v16_mvp_file_manifest.json.
+scripts/verify_release.py
+scripts/check_repo_hygiene.py
+```
+
+## Current verification entry
+
+```bash
+python scripts/check_v16_manifest.py
 ```
 
 ## Current V16 mainline
@@ -55,4 +44,4 @@ report_receive_station
 
 ## Rule
 
-Git history is the history archive. The current working tree only serves the MVP. V16.8 provides the safe one-command purge path for remaining unmarked files.
+Git history is the history archive. The current working tree only serves the MVP. Old check scripts cannot enforce old semantic/version/route rules against the V16 MVP repository.
