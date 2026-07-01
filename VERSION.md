@@ -1,12 +1,12 @@
 # Current Version
 
 ```text
-16.15
+16.16
 ```
 
-## V16.15
+## V16.16
 
-Data import route cleanup.
+Report alert service cleanup. Removed the old V11 governance dependency from the active import chain.
 
 ## Verify
 
