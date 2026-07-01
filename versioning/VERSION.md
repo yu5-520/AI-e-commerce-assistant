@@ -1,6 +1,6 @@
-Current Version: 16.12
+Current Version: 16.13
 
-V16.12 Approval Mock-Workflow Removal
+V16.13 FastAPI Entrypoint Syntax Repair
 
 Core chain:
 
@@ -8,11 +8,10 @@ Core chain:
 
 Key fix:
 
-- `src/services/approval_service.py` no longer imports the old deleted `src.workflow.mock_workflow` module.
-- Approval reads the current SQLite `task_status` projection.
-- Missing current task status returns 404 instead of creating mock approval data.
-- `src/api/main.py` now reports `API_VERSION = 16.12` and `mode = v1612_approval_mock_workflow_removed`.
+- `src/api/main.py` no longer contains stray generated text residue.
+- `src/api/main.py` mounts `frontend_views.router` directly.
+- `src/api/main.py` now reports `API_VERSION = 16.13` and `mode = v1613_fastapi_entrypoint_syntax_repaired`.
 
 Boundary:
 
-V16.12 is an import-chain cleanup. More file cleanup should happen only after the active import gate passes.
+V16.13 is a syntax repair for the FastAPI entrypoint. More file cleanup should happen only after the active import gate passes.
