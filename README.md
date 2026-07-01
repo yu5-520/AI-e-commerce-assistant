@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.22 Legacy Pipeline Route Removal / V16 MVP runtime**.
+Current baseline: **V16.23 System Route Context Cleanup / V16 MVP runtime**.
 
 ## Mainline
 
@@ -27,9 +27,9 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
-## V16.22 rule
+## V16.23 rule
 
-The legacy `src/api/routes/pipeline.py` route is removed from active runtime. Task generation is owned by the V16 data_import, station_queue, Agent mainline and task_pool routes. Do not restore v142/v143 task mainline services.
+The `src/api/routes/system.py` route no longer imports deleted `src.core.context`. MVP keeps database status and explicit runtime cleanup routes. Old production diagnostics return lightweight disabled projections until they are reintroduced through V16 contracts.
 
 ## Entry points
 
