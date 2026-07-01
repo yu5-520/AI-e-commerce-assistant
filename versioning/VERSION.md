@@ -1,6 +1,6 @@
-Current Version: 16.8
+Current Version: 16.9
 
-V16.8 MVP Purge
+V16.9 Stale Verifier Purge
 
 Core chain:
 
@@ -8,10 +8,11 @@ Core chain:
 
 Key fix:
 
-- Remaining legacy docs, examples, evals, old frontend, old workflows, sample data, old modules, old deploy docs, old Alembic migration artifacts, and old knowledge-base samples were removed from the active working tree.
-- Git history remains the archive.
-- Current repository files now serve the V16 MVP runtime.
+- Deleted `scripts/verify_release.py`.
+- Deleted `scripts/check_repo_hygiene.py`.
+- Removed V12/V12.9 checker pollution from the active V16 repository.
+- Current verification entry is `python scripts/check_v16_manifest.py`.
 
 Boundary:
 
-V16.8 purges large legacy directories. If a removed artifact is needed later, recover it from Git history and explicitly promote it into the V16 manifest.
+V16.9 deletes stale check scripts only. If stronger V16 runtime verification is needed later, create a new V16-native verifier instead of restoring old V12 checkers.
