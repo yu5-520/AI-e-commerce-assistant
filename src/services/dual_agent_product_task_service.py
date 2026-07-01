@@ -1,9 +1,9 @@
-"""V14.9.2 dual-Agent product task pipeline.
+"""V14.9.3 dual-Agent product task pipeline.
 
-Agent 1 creates metric-level product judgments only. The system then compresses
-judgments into exactly one product_judgment_package per real product. Agent 2
-can only consume resolved product packages and task-pool admission is capped,
-idempotent, and product-level.
+Agent 1 now expands each resolved fullProductBundle into multiple metric-level
+judgments. The system still compresses those judgments into exactly one
+product_judgment_package per real product. Agent 2 only consumes the compressed
+product packages and task-pool admission remains capped and product-level.
 """
 
 from __future__ import annotations
@@ -15,19 +15,20 @@ from typing import Any, Dict, Iterable, List, Tuple
 from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
-from src.services.llm_provider_service import generate_json
 from src.services.rag_context_station_service import build_rag_context_snapshot, latest_rag_context
 from src.services.signal_pool_service import list_signals, update_signal_status
 from src.services.task_generation_run_service import record_task_generation_run
 from src.services.task_pool_station_service import enter_task_pool_from_snapshot
 from src.services.task_snapshot_station_service import create_task_snapshot
 
-DUAL_AGENT_PIPELINE_VERSION = "14.9.2"
+DUAL_AGENT_PIPELINE_VERSION = "14.9.3"
 FORMAL_DECISIONS = {"create_task_snapshot", "manager_review_required"}
 SEVERITY_RANK = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 MAX_TASKS_PER_RUN = 8
+MAX_METRIC_JUDGMENTS_PER_SIGNAL = 8
 BLANK_VALUES = {None, "", "—", "未识别", "UNKNOWN", "PRODUCT"}
 CORE_METRICS = ["paymentAmount", "roi", "roas", "adSpend", "refundRate", "inventory", "conversionRate", "grossMargin", "clickRate"]
+HIGH_IMPACT_METRICS = {"roi", "roas", "refundRate", "inventory", "conversionRate", "grossMargin", "paymentAmount"}
 ENGINEERING_ID_PREFIXES = ("PSIG-", "TS-", "LINK-", "SPU-", "SKU-", "STORE-", "AJ-", "PJP-", "TGD-")
 PRODUCT_ID_PATTERN = re.compile(r"^(P\d+|PROD[-_A-Z0-9]+|PRODUCT[-_A-Z0-9]+)$", re.IGNORECASE)
 
@@ -159,6 +160,41 @@ def _known(value: Any) -> bool:
     return value not in BLANK_VALUES
 
 
+def _metric_value(metric: Dict[str, Any], metric_code: str) -> Any:
+    return metric.get(metric_code)
+
+
+def _signal_primary_metric(bundle: Dict[str, Any]) -> str:
+    value = bundle.get("metricCode") or bundle.get("primaryRisk")
+    return str(value or "all_metrics")
+
+
+def _extract_metric_codes(bundle: Dict[str, Any]) -> List[str]:
+    metric = _metric_layer(bundle)
+    primary = _signal_primary_metric(bundle)
+    ordered: List[str] = []
+    if primary and primary != "all_metrics":
+        ordered.append(primary)
+    for key in CORE_METRICS:
+        if key in metric and _known(metric.get(key)):
+            ordered.append(key)
+    for key in CORE_METRICS:
+        if key in metric and key not in ordered:
+            ordered.append(key)
+    if not ordered:
+        ordered.append(primary or "all_metrics")
+    seen = set()
+    result: List[str] = []
+    for key in ordered:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(str(key))
+        if len(result) >= MAX_METRIC_JUDGMENTS_PER_SIGNAL:
+            break
+    return result
+
+
 def _score_signal(bundle: Dict[str, Any]) -> Dict[str, Any]:
     strength = str(bundle.get("signalStrength") or "normal")
     cross = bundle.get("crossValidation") if isinstance(bundle.get("crossValidation"), dict) else {}
@@ -166,48 +202,75 @@ def _score_signal(bundle: Dict[str, Any]) -> Dict[str, Any]:
     changed = int(cross.get("changedMetricCount") or 0)
     source_count = int(cross.get("sourceVersionCount") or cross.get("sourceDatasetCount") or 0)
     metric = _metric_layer(bundle)
-    metric_code = bundle.get("metricCode") or bundle.get("primaryRisk") or "all_metrics"
     missing = [key for key in CORE_METRICS if key in metric and not _known(metric.get(key))]
     base = {"high": 0.76, "medium": 0.56, "low": 0.32, "normal": 0.18}.get(strength, 0.18)
     score = base + min(0.16, abnormal * 0.05) + min(0.08, changed * 0.02) + min(0.08, source_count * 0.015)
     critical_gap = any(key in missing for key in ["paymentAmount", "inventory", "refundRate"]) or {"roi", "roas"}.issubset(set(missing))
-    if critical_gap:
-        severity = "medium" if strength in {"normal", "low"} else "high"
+    return {"strength": strength, "score": round(max(0.35, min(0.92, score)), 4), "abnormal": abnormal, "changed": changed, "sourceCount": source_count, "missingFields": missing, "criticalGap": critical_gap}
+
+
+def _score_metric(bundle: Dict[str, Any], metric_code: str, signal_score: Dict[str, Any]) -> Dict[str, Any]:
+    metric = _metric_layer(bundle)
+    primary = _signal_primary_metric(bundle)
+    strength = str(signal_score.get("strength") or "normal")
+    base_score = float(signal_score.get("score") or 0.45)
+    value = _metric_value(metric, metric_code)
+    is_primary = metric_code == primary or primary == "all_metrics"
+    is_high_impact = metric_code in HIGH_IMPACT_METRICS
+    missing = not _known(value) and metric_code in CORE_METRICS
+    if missing and metric_code in {"paymentAmount", "inventory", "refundRate", "roi", "roas"}:
+        severity = "medium"
         hint = "data_gap_candidate"
-    elif strength == "high" or score >= 0.82:
+        score = max(base_score, 0.62)
+    elif is_primary and strength == "high":
         severity = "high"
         hint = "risk_candidate"
-    elif strength == "medium" or (abnormal and score >= 0.62):
+        score = max(base_score, 0.82)
+    elif is_primary and strength == "medium":
         severity = "medium"
         hint = "risk_candidate"
-    elif strength == "low" or changed:
+        score = max(base_score, 0.66)
+    elif is_high_impact and strength == "high":
+        severity = "medium"
+        hint = "related_risk"
+        score = max(base_score - 0.08, 0.68)
+    elif is_high_impact and (strength == "medium" or int(signal_score.get("changed") or 0) > 0):
         severity = "low"
-        hint = "observe_only"
+        hint = "related_observation"
+        score = max(base_score - 0.12, 0.52)
+    elif _known(value):
+        severity = "low" if int(signal_score.get("changed") or 0) > 0 else "normal"
+        hint = "metric_observation"
+        score = max(base_score - 0.18, 0.42)
     else:
         severity = "normal"
-        hint = "observe_only"
-    return {"metricCode": metric_code, "severity": severity, "decisionHint": hint, "confidence": round(max(0.35, min(0.92, score)), 4), "score": round(score, 4), "abnormal": abnormal, "changed": changed, "sourceCount": source_count, "missingFields": missing, "criticalGap": critical_gap}
+        hint = "metric_observation"
+        score = max(base_score - 0.2, 0.35)
+    return {"metricCode": metric_code, "severity": severity, "decisionHint": hint, "confidence": round(max(0.35, min(0.92, score)), 4), "metricValue": value, "isPrimaryMetric": is_primary, "isHighImpactMetric": is_high_impact, "missing": missing, **signal_score}
 
 
-def _agent1_analyze_signal(signal: Dict[str, Any], rag_context: Dict[str, Any]) -> Dict[str, Any]:
+def _agent1_analyze_signal(signal: Dict[str, Any], rag_context: Dict[str, Any]) -> List[Dict[str, Any]]:
     store_id = _store_id(signal)
     product_id = _strict_product_id(signal)
     identity_resolved = bool(product_id)
     product_key = product_id or "UNRESOLVED_PRODUCT"
-    scored = _score_signal(signal)
-    fallback = {"metricCode": scored["metricCode"], "severity": scored["severity"], "decisionHint": scored["decisionHint"], "confidence": scored["confidence"], "finding": f"{product_key} 的 {scored['metricCode']} 处于 {scored['severity']} 判断层级。", "evidence": {"score": scored["score"], "abnormal": scored["abnormal"], "changed": scored["changed"], "sourceCount": scored["sourceCount"], "missingFields": scored["missingFields"]}}
-    try:
-        llm_result = generate_json(prompt_name="v1492_agent1_product_analysis", payload={"fullProductBundle": signal, "ragContext": rag_context, "fallback": fallback, "hardRule": "Agent1只做指标级分析判断，不允许生成任务标题、SOP或入池动作；没有真实productId只能输出身份缺口，不能进入任务生成。"}, expected_keys=["metricCode", "severity", "decisionHint", "confidence", "finding", "evidence"], agent_name="V14.9.2 Agent1 Product Analysis", schema_name="v1492_agent1_product_analysis")
-        output = llm_result.get("output") or {}
-    except Exception as exc:
-        llm_result = {"status": "fallback", "error": str(exc)}
-        output = {}
-    severity = str(output.get("severity") or fallback["severity"])
-    if severity not in SEVERITY_RANK:
-        severity = fallback["severity"]
+    signal_score = _score_signal(signal)
     if not identity_resolved:
-        severity = "low"
-    return {"version": DUAL_AGENT_PIPELINE_VERSION, "judgmentId": make_id("APJ"), "dataVersion": signal.get("dataVersion"), "storeId": store_id, "productId": product_key, "productIdentityResolved": identity_resolved, "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "metricCode": output.get("metricCode") or fallback["metricCode"], "severity": severity, "decisionHint": "identity_gap" if not identity_resolved else output.get("decisionHint") or fallback["decisionHint"], "confidence": float(output.get("confidence") or fallback["confidence"]), "finding": output.get("finding") or fallback["finding"], "evidence": output.get("evidence") or fallback["evidence"], "signal": signal, "softScore": scored, "llm": {"provider": llm_result.get("provider"), "model": llm_result.get("model"), "status": llm_result.get("status"), "error": llm_result.get("error")}, "rule": "Agent1 output is judgment only, never a task. Product identity must be resolved before package generation."}
+        scored = {**signal_score, "metricCode": _signal_primary_metric(signal), "severity": "low", "decisionHint": "identity_gap", "confidence": 0.45, "metricValue": None, "missing": True}
+        return [{"version": DUAL_AGENT_PIPELINE_VERSION, "judgmentId": make_id("APJ"), "dataVersion": signal.get("dataVersion"), "storeId": store_id, "productId": product_key, "productIdentityResolved": False, "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "metricCode": scored["metricCode"], "severity": "low", "decisionHint": "identity_gap", "confidence": scored["confidence"], "finding": f"{product_key} 缺少真实商品ID，不能进入商品判断包整合。", "evidence": {"missingProductId": True, "sourceSignalId": signal.get("signalId"), "sourceBundleId": signal.get("bundleId")}, "signal": signal, "softScore": scored, "metricGranularity": "identity_gap", "rule": "Agent1 identity gap stays in judgment layer and never enters Agent2."}]
+    judgments: List[Dict[str, Any]] = []
+    for metric_code in _extract_metric_codes(signal):
+        scored = _score_metric(signal, metric_code, signal_score)
+        severity = str(scored.get("severity") or "normal")
+        if severity not in SEVERITY_RANK:
+            severity = "normal"
+        value = scored.get("metricValue")
+        value_text = "未识别" if value in BLANK_VALUES else value
+        finding = f"{product_key} 的 {metric_code} 指标判断为 {severity}；当前值 {value_text}。"
+        if scored.get("isPrimaryMetric"):
+            finding = f"{product_key} 主风险指标 {metric_code} 判断为 {severity}；当前值 {value_text}。"
+        judgments.append({"version": DUAL_AGENT_PIPELINE_VERSION, "judgmentId": make_id("APJ"), "dataVersion": signal.get("dataVersion"), "storeId": store_id, "productId": product_key, "productIdentityResolved": True, "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "metricCode": metric_code, "severity": severity, "decisionHint": scored.get("decisionHint"), "confidence": float(scored.get("confidence") or 0), "finding": finding, "evidence": {"metricValue": value, "isPrimaryMetric": scored.get("isPrimaryMetric"), "isHighImpactMetric": scored.get("isHighImpactMetric"), "signalStrength": scored.get("strength"), "abnormal": scored.get("abnormal"), "changed": scored.get("changed"), "sourceCount": scored.get("sourceCount"), "missingFields": scored.get("missingFields")}, "signal": signal, "softScore": scored, "metricGranularity": "metric_level", "rule": "V14.9.3 Agent1 expands a resolved product bundle into multiple metric-level judgments; never creates tasks."})
+    return judgments
 
 
 def _clear_version_rows(data_version: str | None) -> None:
@@ -251,12 +314,12 @@ def _severity_max(items: Iterable[Dict[str, Any]]) -> str:
     return max_item
 
 
-def _package_candidate_allowed(*, max_severity: str, risk_counts: Counter, has_data_gap: bool, judgment_count: int, confidence: float) -> bool:
+def _package_candidate_allowed(*, max_severity: str, risk_counts: Counter, has_data_gap: bool, judgment_count: int, confidence: float, risk_candidate_count: int) -> bool:
     if has_data_gap:
         return True
     if SEVERITY_RANK.get(max_severity, 0) >= 3:
         return True
-    if max_severity == "medium" and (len(risk_counts) >= 2 or judgment_count >= 2) and confidence >= 0.62:
+    if max_severity == "medium" and risk_candidate_count >= 2 and len(risk_counts) >= 2 and confidence >= 0.70:
         return True
     return False
 
@@ -269,19 +332,21 @@ def _package_product_judgments(data_version: str | None) -> tuple[List[Dict[str,
         if not item.get("productIdentityResolved") or not _candidate_text(item.get("productId")):
             identity_gaps.append(item)
             continue
-        grouped[(str(item.get("storeId") or "GLOBAL"), str(item.get("productId")))] .append(item)
+        grouped[(str(item.get("storeId") or "GLOBAL"), str(item.get("productId")))].append(item)
     packages: List[Dict[str, Any]] = []
     for (store_id, product_id), items in grouped.items():
         max_severity = _severity_max(items)
-        risk_counts = Counter(str(item.get("metricCode") or "all_metrics") for item in items if SEVERITY_RANK.get(str(item.get("severity") or "normal"), 0) >= 1)
+        risk_items = [item for item in items if SEVERITY_RANK.get(str(item.get("severity") or "normal"), 0) >= 1]
+        risk_counts = Counter(str(item.get("metricCode") or "all_metrics") for item in risk_items)
         primary_risk = risk_counts.most_common(1)[0][0] if risk_counts else "all_metrics"
         secondary = [risk for risk, _ in risk_counts.most_common(5) if risk != primary_risk]
         confidence = round(max([float(item.get("confidence") or 0) for item in items], default=0.45), 4)
         has_data_gap = any((item.get("softScore") or {}).get("criticalGap") for item in items)
-        allowed = _package_candidate_allowed(max_severity=max_severity, risk_counts=risk_counts, has_data_gap=has_data_gap, judgment_count=len(items), confidence=confidence)
+        risk_candidate_count = sum(1 for item in items if item.get("decisionHint") in {"risk_candidate", "related_risk", "data_gap_candidate"})
+        allowed = _package_candidate_allowed(max_severity=max_severity, risk_counts=risk_counts, has_data_gap=has_data_gap, judgment_count=len(items), confidence=confidence, risk_candidate_count=risk_candidate_count)
         overall = "task_candidate" if allowed else "observe_only"
         evidence_pack = [{"metricCode": item.get("metricCode"), "severity": item.get("severity"), "finding": item.get("finding"), "evidence": item.get("evidence")} for item in sorted(items, key=lambda x: SEVERITY_RANK.get(str(x.get("severity") or "normal"), 0), reverse=True)[:8]]
-        package = {"version": DUAL_AGENT_PIPELINE_VERSION, "packageId": make_id("PJP"), "dataVersion": data_version or (items[0].get("dataVersion") if items else None), "storeId": store_id, "productId": product_id, "judgmentCount": len(items), "primaryRisk": primary_risk, "secondaryRisks": secondary, "maxSeverity": max_severity, "overallDecision": overall, "taskCandidateAllowed": bool(allowed), "confidence": confidence, "summary": f"{product_id} 汇总 {len(items)} 条判断，主风险为 {primary_risk}，最高等级 {max_severity}。", "evidencePack": evidence_pack, "rawJudgmentIds": [item.get("judgmentId") for item in items], "identityStatus": "resolved", "rule": "V14.9.2 system compression: only real productId can become one product-level package."}
+        package = {"version": DUAL_AGENT_PIPELINE_VERSION, "packageId": make_id("PJP"), "dataVersion": data_version or (items[0].get("dataVersion") if items else None), "storeId": store_id, "productId": product_id, "judgmentCount": len(items), "primaryRisk": primary_risk, "secondaryRisks": secondary, "maxSeverity": max_severity, "overallDecision": overall, "taskCandidateAllowed": bool(allowed), "confidence": confidence, "riskCandidateCount": risk_candidate_count, "metricJudgmentCount": len(items), "summary": f"{product_id} 汇总 {len(items)} 条指标判断，主风险为 {primary_risk}，最高等级 {max_severity}。", "evidencePack": evidence_pack, "rawJudgmentIds": [item.get("judgmentId") for item in items], "identityStatus": "resolved", "rule": "V14.9.3 system compression: many metric judgments must collapse into one real-product package."}
         packages.append(package)
     _save_packages(packages)
     return packages, identity_gaps
@@ -358,7 +423,7 @@ def _stream_decision_to_task_pool(decision: Dict[str, Any], created_by: str | No
         return {"ok": False, "skipped": True, "reason": "same_product_task_already_in_pool", "decisionId": decision.get("decisionId"), "createdTaskCount": 0}
     plan = decision.get("taskPlan") or {}
     package = decision.get("productJudgmentPackage") or {}
-    snapshot = create_task_snapshot({"dataVersion": decision.get("dataVersion"), "decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "entityType": "product", "entityId": decision.get("productId"), "productId": decision.get("productId"), "storeId": decision.get("storeId"), "signalRef": decision.get("packageId"), "bundleRef": decision.get("packageId"), "ragContext": {"source": "product_judgment_package", "version": DUAL_AGENT_PIPELINE_VERSION}, "agentJudgment": {"decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "reason": decision.get("reason"), "status": "task_generated_from_product_judgment_package"}, "taskPlan": plan, "operationBudget": plan.get("operationBudget") or {}, "evidenceRequirements": plan.get("evidenceRequirements") or [], "systemFacts": {"productJudgmentPackage": package, "taskGenerationDecision": decision}, "source": "v1492_dual_agent_task_generation"}, created_by=created_by)
+    snapshot = create_task_snapshot({"dataVersion": decision.get("dataVersion"), "decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "entityType": "product", "entityId": decision.get("productId"), "productId": decision.get("productId"), "storeId": decision.get("storeId"), "signalRef": decision.get("packageId"), "bundleRef": decision.get("packageId"), "ragContext": {"source": "product_judgment_package", "version": DUAL_AGENT_PIPELINE_VERSION}, "agentJudgment": {"decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "reason": decision.get("reason"), "status": "task_generated_from_product_judgment_package"}, "taskPlan": plan, "operationBudget": plan.get("operationBudget") or {}, "evidenceRequirements": plan.get("evidenceRequirements") or [], "systemFacts": {"productJudgmentPackage": package, "taskGenerationDecision": decision}, "source": "v1493_dual_agent_task_generation"}, created_by=created_by)
     pool = enter_task_pool_from_snapshot(str(snapshot.get("taskSnapshotId")), created_by=created_by, force=False)
     return {"ok": True, "snapshot": snapshot, "poolResult": pool, "createdTaskCount": int((pool or {}).get("createdTaskCount") or 0)}
 
@@ -368,12 +433,14 @@ def run_dual_agent_product_task_pipeline(data_version: str | None = None, *, rag
     _clear_version_rows(data_version)
     rag_context = latest_rag_context(data_version) or build_rag_context_snapshot(data_version=data_version)
     signals = (list_signals(data_version=data_version, status="pending_rag_agent", limit=max_signals).get("signals") or [])[:max_signals]
-    raw_judgments = [_agent1_analyze_signal(signal, rag_context) for signal in signals]
+    raw_judgments: List[Dict[str, Any]] = []
+    for signal in signals:
+        raw_judgments.extend(_agent1_analyze_signal(signal, rag_context))
     _save_raw_judgments(raw_judgments)
     for signal in signals:
-        update_signal_status(signal.get("signalId"), "product_analysis_judged", {"version": DUAL_AGENT_PIPELINE_VERSION})
+        update_signal_status(signal.get("signalId"), "product_analysis_judged", {"version": DUAL_AGENT_PIPELINE_VERSION, "metricJudgmentMode": "expanded"})
     packages, identity_gaps = _package_product_judgments(data_version)
-    sorted_packages = sorted(packages, key=lambda item: (1 if item.get("taskCandidateAllowed") else 0, SEVERITY_RANK.get(str(item.get("maxSeverity") or "normal"), 0), float(item.get("confidence") or 0), int(item.get("judgmentCount") or 0)), reverse=True)
+    sorted_packages = sorted(packages, key=lambda item: (1 if item.get("taskCandidateAllowed") else 0, SEVERITY_RANK.get(str(item.get("maxSeverity") or "normal"), 0), float(item.get("confidence") or 0), int(item.get("riskCandidateCount") or 0)), reverse=True)
     decisions: List[Dict[str, Any]] = []
     streamed: List[Dict[str, Any]] = []
     candidate_index = 0
@@ -389,7 +456,7 @@ def run_dual_agent_product_task_pipeline(data_version: str | None = None, *, rag
     by_decision = Counter(str(item.get("decision")) for item in decisions)
     task_pool_created = sum(int(item.get("createdTaskCount") or 0) for item in streamed)
     formal_decision_count = int(by_decision.get("create_task_snapshot", 0) or 0) + int(by_decision.get("manager_review_required", 0) or 0)
-    generation_run = record_task_generation_run(data_version=data_version, input_bundle_count=len(signals), agent_judgment_count=len(raw_judgments), product_judgment_package_count=len(packages), task_decision_count=len(decisions), by_decision=dict(by_decision), streamed_task_snapshot_count=sum(1 for item in streamed if item.get("ok")), task_pool_created_count=task_pool_created, skipped_formal_count=sum(1 for item in streamed if item.get("skipped")), zero_task_reasons=[item.get("reason") for item in decisions if item.get("decision") == "no_task"][:20], source="v1492_dual_agent_product_task_pipeline")
+    generation_run = record_task_generation_run(data_version=data_version, input_bundle_count=len(signals), agent_judgment_count=len(raw_judgments), product_judgment_package_count=len(packages), identity_gap_count=len(identity_gaps), task_decision_count=len(decisions), by_decision=dict(by_decision), streamed_task_snapshot_count=sum(1 for item in streamed if item.get("ok")), task_pool_created_count=task_pool_created, skipped_formal_count=sum(1 for item in streamed if item.get("skipped")), zero_task_reasons=[item.get("reason") for item in decisions if item.get("decision") == "no_task"][:20], source="v1493_dual_agent_product_task_pipeline")
     try:
         from src.services.frontend_read_model_service import refresh_dashboard_view, refresh_task_views
         if task_pool_created:
@@ -399,4 +466,4 @@ def run_dual_agent_product_task_pipeline(data_version: str | None = None, *, rag
     except Exception:
         pass
     ref = f"dual_agent_product_task:{data_version or 'latest'}"
-    return {"version": DUAL_AGENT_PIPELINE_VERSION, "mode": "v1492_dual_agent_real_product_package_task_pipeline", "dataVersion": data_version, "outputRef": ref, "agentJudgmentRef": ref, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "signalCount": len(signals), "judgmentCount": len(raw_judgments), "rawJudgmentCount": len(raw_judgments), "productJudgmentPackageCount": len(packages), "identityGapCount": len(identity_gaps), "taskDecisionCount": len(decisions), "formalDecisionCount": formal_decision_count, "streamedTaskSnapshotCount": sum(1 for item in streamed if item.get("ok")), "streamedTaskPoolCount": task_pool_created, "byDecision": dict(by_decision), "taskGenerationRun": generation_run, "packages": packages[:50], "identityGaps": identity_gaps[:50], "decisions": decisions[:50], "streamed": streamed[:50], "rule": "V14.9.2: Agent1 may be metric-level; system package compression requires real productId; Agent2 generates capped product-level SOP tasks only."}
+    return {"version": DUAL_AGENT_PIPELINE_VERSION, "mode": "v1493_agent1_metric_expansion_product_package_pipeline", "dataVersion": data_version, "outputRef": ref, "agentJudgmentRef": ref, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "signalCount": len(signals), "judgmentCount": len(raw_judgments), "rawJudgmentCount": len(raw_judgments), "metricJudgmentMode": "expanded", "averageJudgmentsPerSignal": round(len(raw_judgments) / len(signals), 2) if signals else 0, "productJudgmentPackageCount": len(packages), "identityGapCount": len(identity_gaps), "taskDecisionCount": len(decisions), "formalDecisionCount": formal_decision_count, "streamedTaskSnapshotCount": sum(1 for item in streamed if item.get("ok")), "streamedTaskPoolCount": task_pool_created, "byDecision": dict(by_decision), "taskGenerationRun": generation_run, "packages": packages[:50], "identityGaps": identity_gaps[:50], "decisions": decisions[:50], "streamed": streamed[:50], "rule": "V14.9.3: Agent1 expands each real product bundle into multiple metric-level judgments; system compresses them back into product packages; Agent2 generates capped product-level tasks only."}
