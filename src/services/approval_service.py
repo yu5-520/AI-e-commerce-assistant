@@ -1,7 +1,8 @@
-"""Approval service for task approval state in MVP.
+"""V16.12 approval service.
 
-Current storage uses JSONL for audit and SQLite for queryable task status.
-The service never executes real RPA actions; it only records approval state.
+Approval now reads and writes the current SQLite task-status projection. It does
+not call old mock workflow builders and it does not recreate deleted workflow
+scaffold data.
 """
 
 from __future__ import annotations
@@ -21,8 +22,8 @@ from src.repositories.sqlite_repository import (
     upsert_task_status,
 )
 from src.services.log_service import create_execution_log, create_workflow_run, finish_workflow_run
-from src.workflow.mock_workflow import build_mock_workflow_result
 
+APPROVAL_SERVICE_VERSION = "16.12"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 LOG_DIR = ROOT_DIR / "logs"
 APPROVAL_LOG_PATH = LOG_DIR / "approval_records.jsonl"
@@ -41,10 +42,18 @@ def append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
 
 
 def get_task(task_id: str) -> Optional[Dict[str, Any]]:
-    """Return one current approval action by task_id."""
-    result = build_mock_workflow_result(write_outputs=False, record_logs=False)
-    tasks = result.get("approval_required_tasks") or result.get("rpa_tasks", [])
-    return next((item for item in tasks if item.get("task_id") == task_id), None)
+    """Return one current task from V16 task-status projection.
+
+    The previous implementation read from src.workflow.mock_workflow. That old
+    mock workflow scaffold was deleted during the MVP cleanup and must not be
+    restored. If a task has not entered the current task_status projection, the
+    approval route returns 404 instead of fabricating a mock task.
+    """
+    persisted = get_task_status_map()
+    task = TASK_STATUS.get(task_id) or persisted.get(task_id)
+    if not task:
+        return None
+    return {**task, "task_id": task.get("task_id") or task_id}
 
 
 def update_task_status(task_id: str, status: str, operator: str = "demo_user") -> Dict[str, Any]:
@@ -57,7 +66,7 @@ def update_task_status(task_id: str, status: str, operator: str = "demo_user") -
     try:
         task = get_task(task_id)
         if task is None:
-            raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+            raise HTTPException(status_code=404, detail=f"Task not found in current V16 task status projection: {task_id}")
 
         if status not in {"approved", "rejected"}:
             raise HTTPException(status_code=400, detail="Invalid task status")
@@ -70,7 +79,7 @@ def update_task_status(task_id: str, status: str, operator: str = "demo_user") -
             "status": status,
             "operator": operator,
             "updated_at": now_iso(),
-            "execution_note": "MVP only records approval state; it does not execute real RPA actions.",
+            "execution_note": "V16.12 records approval state against the current task_status projection; no mock workflow fallback is used.",
         }
         TASK_STATUS[task_id] = updated
         append_jsonl(APPROVAL_LOG_PATH, updated)
