@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-当前基线：**V14.9.4 Agent1 API/RAG 预算闸门版**。
+当前基线：**V15 全链路 Agent 预算账本 + Agent 网关版**。
 
-V14.9.4 保留双 Agent 站点拆分、真实商品判断包硬闸和 Agent1 指标级展开，但新增调用预算边界：Agent1 可以把一个商品包展开成多条指标判断，**但指标判断只是本地记录，不允许一条判断触发一次 DeepSeek/LLM API**。RAG 上下文按 dataVersion/run 复用，任务生成运行快照会记录 `agent1ApiCallCount`、`agent1ApiBudget`、`ragRetrievalCount` 和 `apiBudgetViolation`。
+V15 把 Agent 从“到处调用 API 的功能点”升级为“有职责、有预算、有缓存、有降级、有权限边界的站点能力”。系统正式拆成三类 Agent：报表 Agent 只做 schema mapping，商品判断 Agent 只做商品全量包判断和置信值，任务映射 Agent 只做公司权限、账号权限、审批规则、SOP RAG 的任务映射。所有 Agent/API/RAG 调用必须登记到 `agent_budget_ledgers_v15` 和 `agent_call_events_v15`。
 
 ## 当前执行入口
 
@@ -18,36 +18,35 @@ V14.9.4 保留双 Agent 站点拆分、真实商品判断包硬闸和 Agent1 指
 
 ```text
 报表 / 接口数据导入
+→ 报表 Agent：只识别文件名、sheet、表头、样例值，输出 report_schema_mapping
+→ 系统代码清洗：按 schema mapping 清洗全部行并写入事实表
 → system_product_snapshot_station 生成商品分层快照
 → product_signal_snapshot_station 生成商品全量包 fullProductBundle
-→ task_signal_station 将全量包进入队列
-→ rag_context_station 给出波动边界，按 dataVersion/run 复用
-→ Agent1 预算闸门指标判断站：一个商品包展开为多条 agent_product_judgments_v15，但不按判断调用API
-→ 系统真实商品判断包硬闸：按真实 productId 压缩写入 product_judgment_packages_v15
-→ Agent2 任务生成站：只消费真实商品判断包，写入 task_generation_decisions_v15
-→ 系统任务池准入站：同商品同轮去重，单轮任务数受控
+→ 商品判断 Agent：分析垂直类目、数据变化、趋势、环比/同比/连比、RAG基准和置信值
+→ 系统商品判断包：按真实 productId 合并判断，计算 packageConfidence
+→ 70% 置信阀门：packageConfidence >= 0.70 才能进入任务映射
+→ 任务映射 Agent：检索公司权限、账号权限、审批规则、SOP RAG，生成权限约束任务
+→ 系统任务池准入：同商品同轮去重，单轮任务数受控
 → frontend_read_model_service 重建可见任务读模型，并统一 id = taskId
-→ /api/view/data-line 输出本轮地铁线路状态和 Agent1 API 预算状态
+→ /api/view/data-line 输出本轮地铁线路状态和全链路 Agent 预算状态
 → /api/view/tasks 与 /api/modules/todo 读取任务池 / 生命周期投影
 ```
 
-## V14.9.4 硬规则
+## V15 硬规则
 
 ```text
-Agent1 不允许生成任务、SOP 或入池动作。
-Agent1 必须把真实商品全量包展开成多条指标级判断。
-指标级判断不能触发逐条 DeepSeek/LLM API 调用。
-Agent1 API 调用必须按商品包预算控制，agent1ApiCallCount <= inputBundleCount。
-当前 Agent1 指标展开为本地确定性模式，agent1ApiCallCount = 0。
-RAG 检索按 dataVersion/run 复用，不能按每条指标判断重复检索。
-系统整合站必须绑定真实 productId。
-缺少真实 productId 的判断只记录身份缺口，不进入 Agent2。
-禁止使用 entityId / bundleId / signalId / SKU / SPU / LINK 作为商品判断包 ID。
-同一真实商品的多条指标判断必须压缩成一个 product_judgment_package。
-Agent2 只接收真实 product_judgment_package。
-任务池准入前检查同 dataVersion + storeId + productId 是否已有任务。
-数据页“正式任务”显示本轮 taskPoolCreatedCount，不显示全局 task_pool_entries 总数。
-判断数量可以多，API 调用必须少。
+报表 Agent 只做 schema mapping，不清洗行、不判断商品、不生成任务。
+报表 schema 识别必须支持 schema_fingerprint 和 report_schema_mapping_cache。
+商品判断 Agent 只做商品全量包判断、趋势判断、类目/权重/RAG基准判断和置信值。
+商品判断 Agent 不生成任务、不写 SOP、不决定任务池。
+系统按真实 productId 合并同商品判断，并计算 packageConfidence。
+packageConfidence < 0.70 只能进入观察池，不能进入任务映射 Agent。
+任务映射 Agent 只处理 70%+ 商品判断包。
+任务映射 Agent 必须检索公司权限、账号权限、审批规则和 SOP RAG。
+任务映射输出必须包含执行角色、审批角色、禁止动作、时限、证据要求和复盘指标。
+所有 Agent 调用必须通过 V15 Agent Budget Ledger / Gateway。
+API 调用不能按报表行、指标判断、商品判断包或任务条数线性增长。
+默认单轮预算：报表 Agent 0-3 次，商品判断 Agent 0-3 次，任务映射 Agent 0-2 次，总 Agent 调用 <= 8 次。
 ```
 
 ## 当前主 API
@@ -70,10 +69,13 @@ Agent2 只接收真实 product_judgment_package。
 ## 运行态表
 
 ```text
-task_generation_runs_v14          任务生成运行快照，包含 API/RAG 预算计数
-agent_product_judgments_v15       Agent1 指标级原始判断
-product_judgment_packages_v15     系统商品判断包
-task_generation_decisions_v15     Agent2 任务生成决策
+task_generation_runs_v14              任务生成运行快照，包含 V15 Agent 预算摘要
+agent_product_judgments_v15           商品判断 Agent 指标级原始判断
+product_judgment_packages_v15         系统商品判断包，包含 packageConfidence
+task_generation_decisions_v15         任务映射决策
+agent_budget_ledgers_v15              全链路 Agent 预算账本
+agent_call_events_v15                 Agent/API/RAG 调用事件
+report_schema_mapping_cache_v15       报表 schema 指纹与字段映射缓存
 ```
 
 ## 部署入口
