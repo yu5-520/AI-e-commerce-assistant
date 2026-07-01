@@ -1,10 +1,14 @@
-"""V16.4 station adapter service."""
+"""V16.5 split station adapter service.
+
+The adapter now routes each Station ID to one narrow station function. It keeps a
+small legacy fallback, but the V16.5 registry/queue use the split station IDs.
+"""
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
-STATION_ADAPTER_VERSION = "16.4"
+STATION_ADAPTER_VERSION = "16.5"
 DEFAULT_AGENT_BATCH_SIZE = 160
 
 
@@ -21,19 +25,52 @@ def _count(value: Any) -> int:
     return 0
 
 
+def _call_alignment(function_name: str, *, data_version: str | None, user_id: str | None, body: Dict[str, Any]) -> Dict[str, Any]:
+    import src.services.station_alignment_v165_service as alignment
+    fn: Callable[..., Dict[str, Any]] = getattr(alignment, function_name)
+    kwargs = dict(body or {})
+    kwargs.pop("dataVersion", None)
+    kwargs.pop("data_version", None)
+    kwargs.pop("userId", None)
+    kwargs.pop("user_id", None)
+    if "maxSignals" in kwargs and "max_signals" not in kwargs:
+        kwargs["max_signals"] = kwargs.pop("maxSignals")
+    return fn(data_version=data_version, user_id=user_id, **kwargs)
+
+
 def _refresh_read_model(station_id: str, data_version: str | None, output: Dict[str, Any]) -> Dict[str, Any] | None:
-    try:
-        from src.services.frontend_read_model_service import refresh_after_station
-        return refresh_after_station(station_id=station_id, data_version=data_version, output=output)
-    except Exception as exc:
-        return {"status": "read_model_refresh_failed", "error": str(exc), "rule": "Read model refresh failure must not fail station compute."}
+    if station_id in {"product_signal_snapshot_station", "full_product_bundle_station", "task_pool_admission_station", "frontend_read_model_station"}:
+        try:
+            from src.services.frontend_read_model_service import refresh_after_station
+            return refresh_after_station(station_id=station_id, data_version=data_version, output=output)
+        except Exception as exc:
+            return {"status": "read_model_refresh_failed", "error": str(exc), "rule": "Read model refresh failure must not fail station compute."}
+    return None
 
 
 def simulated_station_output(station: Dict[str, Any], body: Dict[str, Any] | None = None, *, diagnostic: bool = False) -> Dict[str, Any]:
     body = body or {}
-    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V16.4" if diagnostic else None)
+    data_version = body.get("dataVersion") or body.get("data_version") or ("DIAG-V16.5" if diagnostic else None)
     output_ref = f"{station.get('outputRefPrefix')}:{data_version or 'latest'}"
     return {"version": STATION_ADAPTER_VERSION, "adapterMode": "diagnostic_simulated" if diagnostic else "contract_only", "stationId": station.get("stationId"), "stage": station.get("stage"), "dataVersion": data_version, "outputRef": output_ref, "isDiagnostic": diagnostic, "count": 1, "rule": "standard station output"}
+
+
+ALIGNMENT_FUNCTIONS = {
+    "report_receive_station": "report_receive_station",
+    "report_schema_station": "report_schema_station",
+    "report_fact_station": "report_fact_station",
+    "product_master_station": "product_master_station",
+    "product_metric_snapshot_station": "product_metric_snapshot_station",
+    "full_product_bundle_station": "full_product_bundle_station",
+    "bundle_validation_station": "bundle_validation_station",
+    "product_judgment_agent_station": "product_judgment_agent_station",
+    "product_judgment_package_station": "product_judgment_package_station",
+    "rag_permission_context_station": "rag_permission_context_station",
+    "task_mapping_agent_station": "task_mapping_agent_station",
+    "task_pool_admission_station": "task_pool_admission_station",
+    "frontend_read_model_station": "frontend_read_model_station",
+    "task_pool_acceptance_station": "task_pool_acceptance_station",
+}
 
 
 def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = None, *, diagnostic: bool = False) -> Dict[str, Any]:
@@ -44,67 +81,36 @@ def run_station_adapter(station: Dict[str, Any], body: Dict[str, Any] | None = N
 
     data_version = body.get("dataVersion") or body.get("data_version")
     user_id = body.get("userId") or body.get("user_id")
-    batch_size = int(body.get("maxSignals") or body.get("agentBatchSize") or DEFAULT_AGENT_BATCH_SIZE)
 
-    if station_id == "operating_snapshot_station":
-        from src.services.operating_unit_snapshot_service import materialize_operating_unit_snapshot
-        snapshot = materialize_operating_unit_snapshot(user_id=user_id, data_version=data_version, force=bool(body.get("force", True)))
-        return {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_operating_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version or (snapshot.get("syncState") or {}).get("latestDataVersion"), "snapshotKey": snapshot.get("snapshotKey"), "storeRows": len(snapshot.get("storeRows") or []), "outputRef": snapshot.get("snapshotKey") or f"operating_unit_snapshot:{data_version or 'latest'}", "snapshot": snapshot, "isDiagnostic": False}
+    if station_id in ALIGNMENT_FUNCTIONS:
+        result = _call_alignment(ALIGNMENT_FUNCTIONS[station_id], data_version=data_version, user_id=user_id, body=body)
+        result.setdefault("version", STATION_ADAPTER_VERSION)
+        result["adapterMode"] = f"real_v165_split_{station_id}"
+        result.setdefault("stationId", station_id)
+        result.setdefault("stage", station.get("stage"))
+        result.setdefault("dataVersion", data_version)
+        result.setdefault("outputRef", f"{station.get('outputRefPrefix')}:{data_version or 'latest'}")
+        refresh = _refresh_read_model(station_id, data_version, result)
+        if refresh is not None:
+            result["readModelRefresh"] = refresh
+        return result
 
-    if station_id == "system_product_snapshot_station":
-        from src.services.system_product_snapshot_service import materialize_system_product_snapshot
-        result = materialize_system_product_snapshot(data_version=data_version, user_id=user_id, force=bool(body.get("force", True)))
-        return {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_v164_fact_namespaced_product_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productCount", 0), "productSnapshotRef": result.get("productSnapshotRef"), "outputRef": result.get("outputRef") or f"system_product_snapshot:{data_version or 'latest'}", "productSnapshot": result, "factContract": result.get("factContract"), "isDiagnostic": False, "rule": "V16.4 freezes product-scope facts, report dates and child traffic facts before Agent."}
+    if station_id == "task_acceptance_station":
+        from src.services.task_acceptance_assignment_station_service import accept_task
+        task_id = body.get("taskId") or body.get("task_id")
+        return accept_task(str(task_id), user_id=user_id) if task_id else simulated_station_output(station, body)
 
-    if station_id == "product_signal_snapshot_station":
-        from src.services.product_signal_snapshot_v164_service import materialize_product_signal_snapshot
-        result = materialize_product_signal_snapshot(data_version=data_version, user_id=user_id, force=bool(body.get("force", True)))
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_v164_full_product_bundle_fact_validation", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productSnapshotCount", 0), "productSignalPackageCount": result.get("productSignalPackageCount", result.get("productSignalCount", 0)), "productSignalCount": result.get("productSignalCount", 0), "productSignalSnapshotRef": result.get("productSignalSnapshotRef"), "outputRef": result.get("outputRef") or f"product_signal_snapshot:{data_version or 'latest'}", "productSignalSnapshot": result, "isDiagnostic": False, "rule": "V16.4 outputs fullProductBundle only after product/traffic/date fact-layer validation."}
-        output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
-        return output
+    if station_id == "task_assignment_station":
+        from src.services.task_acceptance_assignment_station_service import assign_task
+        task_id = body.get("taskId") or body.get("task_id")
+        assignee_id = body.get("assigneeId") or body.get("assignee_id")
+        return assign_task(str(task_id), str(assignee_id), user_id=user_id) if task_id and assignee_id else simulated_station_output(station, body)
 
-    if station_id == "task_signal_station":
-        from src.services.signal_pool_service import generate_signal_pool
-        result = generate_signal_pool(data_version=data_version, max_signals=batch_size, user_id=user_id)
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_v164_full_product_bundle_pool_no_task_creation", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "productSnapshotCount": result.get("productSnapshotCount", 0), "productSignalPackageCount": result.get("productSignalPackageCount", result.get("productSignalCount", 0)), "productSignalCount": result.get("productSignalCount", 0), "signalCount": result.get("signalCount", 0), "taskSignalRef": result.get("taskSignalRef"), "createdTaskCount": 0, "outputRef": result.get("outputRef") or f"signal_pool:{data_version or 'latest'}", "signalPool": result, "isDiagnostic": False, "rule": "V16.4 queues current-run fullProductBundle packages with fact-layer validation."}
-        output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
-        return output
-
-    if station_id == "rag_context_station":
-        from src.services.rag_context_station_service import build_rag_context_snapshot
-        result = build_rag_context_snapshot(data_version=data_version, signal_ref=body.get("taskSignalRef") or body.get("signalRef"), limit=int(body.get("limit") or batch_size))
-        return {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_rag_permission_task_context", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "matchedContextCount": result.get("matchedContextCount", 0), "ragContextRef": result.get("ragContextRef"), "outputRef": result.get("outputRef") or f"rag_context:{data_version or 'latest'}", "ragContext": result, "isDiagnostic": False, "rule": "RAG supplies product judgment and permission/SOP task mapping context; retrieval count is budget-ledger counted."}
-
-    if station_id == "agent_judgment_station":
-        from src.services.real_task_mapping_agent_v162_service import run_dual_agent_product_task_pipeline
-        result = run_dual_agent_product_task_pipeline(data_version=data_version, rag_context_ref=body.get("ragContextRef"), max_signals=batch_size, created_by=user_id)
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_v164_product_and_task_agents_after_fact_validation", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "decision": "mixed" if result.get("judgmentCount") else "real_agent_no_valid_judgments", "confidence": 0.72 if result.get("productJudgmentPackageCount") else 0, "judgmentCount": result.get("judgmentCount", 0), "rawJudgmentCount": result.get("rawJudgmentCount", 0), "averageJudgmentsPerSignal": result.get("averageJudgmentsPerSignal", 0), "metricJudgmentMode": result.get("metricJudgmentMode"), "agent1ApiMode": result.get("agent1ApiMode"), "agent1ApiCallCount": result.get("agent1ApiCallCount", 0), "productAgentProviderStatus": result.get("productAgentProviderStatus"), "productAgentProvider": result.get("productAgentProvider"), "taskMappingApiMode": result.get("taskMappingApiMode"), "taskMappingApiCallCount": result.get("taskMappingApiCallCount", 0), "taskMappingProviderStatus": result.get("taskMappingProviderStatus"), "taskMappingProvider": result.get("taskMappingProvider"), "totalAgentCallCount": result.get("totalAgentCallCount", 0), "totalAgentBudget": result.get("totalAgentBudget", 8), "apiBudgetViolation": result.get("apiBudgetViolation", False), "agentBudgetLedger": result.get("agentBudgetLedger"), "ragRetrievalCount": result.get("ragRetrievalCount", 0), "productJudgmentPackageCount": result.get("productJudgmentPackageCount", 0), "identityGapCount": result.get("identityGapCount", 0), "taskDecisionCount": result.get("taskDecisionCount", 0), "formalDecisionCount": result.get("formalDecisionCount", 0), "streamedTaskSnapshotCount": result.get("streamedTaskSnapshotCount", 0), "streamedTaskPoolCount": result.get("streamedTaskPoolCount", 0), "taskGenerationRun": result.get("taskGenerationRun"), "agentJudgmentRef": result.get("agentJudgmentRef"), "taskMappingRef": result.get("taskMappingRef"), "outputRef": result.get("outputRef") or f"real_task_mapping_agent:{data_version or 'latest'}", "agentJudgment": result, "isDiagnostic": False, "rule": "V16.4：真实商品/任务Agent只吃事实层验收后的fullProductBundle；不回退模板任务。"}
-        output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
-        return output
-
-    if station_id == "task_snapshot_station":
-        from src.services.agent_judgment_station_service import materialize_task_snapshots_from_judgments
-        from src.services.task_snapshot_station_service import create_task_snapshot
-        if body.get("agentJudgment") or body.get("taskPlan"):
-            snapshot = create_task_snapshot(body, created_by=user_id)
-            result = {"taskSnapshotCount": 1, "snapshots": [snapshot], "outputRef": f"task_snapshot:{snapshot.get('taskSnapshotId')}"}
-        else:
-            result = materialize_task_snapshots_from_judgments(data_version=data_version, created_by=user_id, limit=int(body.get("limit") or batch_size))
-        latest_snapshot = (result.get("snapshots") or [{}])[0]
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_soft_routed_sop_task_snapshot", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version, "taskSnapshotId": latest_snapshot.get("taskSnapshotId"), "decision": latest_snapshot.get("decision") or "none", "status": latest_snapshot.get("status") or "empty", "taskSnapshotCount": result.get("taskSnapshotCount", 0), "budgetLedgers": result.get("budgetLedgers") or [], "outputRef": result.get("outputRef") or f"task_snapshot:{data_version or 'latest'}", "taskSnapshot": result, "isDiagnostic": False}
-        output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
-        return output
-
-    if station_id == "task_pool_station":
-        from src.services.task_pool_station_service import enter_task_pool_from_snapshot, sync_ready_task_snapshots
-        task_snapshot_id = body.get("taskSnapshotId") or body.get("task_snapshot_id")
-        if task_snapshot_id:
-            result = enter_task_pool_from_snapshot(str(task_snapshot_id), created_by=user_id, force=bool(body.get("force")))
-        else:
-            result = sync_ready_task_snapshots(data_version=data_version, limit=int(body.get("limit") or batch_size), created_by=user_id)
-        latest_entry = (result.get("poolEntry") or {}) if isinstance(result.get("poolEntry"), dict) else ((result.get("results") or [{}])[0].get("poolEntry") if result.get("results") else {})
-        output = {"version": STATION_ADAPTER_VERSION, "adapterMode": "real_task_pool_from_soft_routed_sop_snapshots", "stationId": station_id, "stage": station.get("stage"), "dataVersion": data_version or result.get("dataVersion"), "poolEntryId": latest_entry.get("poolEntryId"), "taskId": latest_entry.get("taskId"), "createdTaskCount": result.get("createdTaskCount", 0), "outputRef": f"task_pool:{latest_entry.get('poolEntryId') or data_version or 'latest'}", "taskPool": result, "isDiagnostic": False, "rule": "task pool consumes real Agent task snapshots and refreshes current-run read model"}
-        output["readModelRefresh"] = _refresh_read_model(station_id, data_version, output)
+    if station_id in {"task_submission_station", "task_review_station", "recap_schedule_station", "recap_complete_station", "rag_feedback_station"}:
+        output = simulated_station_output(station, body, diagnostic=False)
+        output["adapterMode"] = "lifecycle_station_contract_placeholder"
+        output["rule"] = "Lifecycle stations remain isolated from task-generation station alignment."
+        output["count"] = _count(body)
         return output
 
     output = simulated_station_output(station, body, diagnostic=False)
