@@ -1,22 +1,21 @@
 # Current Version
 
 ```text
-16.12
+16.13
 ```
 
-## V16.12 Meaning
+## V16.13 Meaning
 
-V16.12 is the approval mock-workflow removal release.
+V16.13 is the FastAPI entrypoint syntax repair release.
 
-It keeps the V16.11 active import gate and fixes the next import break: `approval_service.py` no longer imports the deleted `src.workflow.mock_workflow` module.
+It keeps the V16.12 approval mock-workflow removal and fixes the syntax residue left in `src/api/main.py`.
 
 ## Fixed
 
 ```text
-src/services/approval_service.py no longer imports src.workflow.mock_workflow.
-Approval get_task() now reads from the current SQLite task_status projection.
-If a task is not in the current V16 task_status projection, approval returns 404 instead of fabricating mock data.
-src/api/main.py API_VERSION is now 16.12.
+src/api/main.py no longer contains the stray string `.replace(...)` residue.
+src/api/main.py now mounts frontend_views.router directly.
+src/api/main.py API_VERSION is now 16.13.
 ```
 
 ## Current verification entry
