@@ -1,6 +1,6 @@
 {
-  "manifestVersion": "16.10",
-  "baseline": "V16.10 final unmarked purge / V16 MVP runtime",
+  "manifestVersion": "16.11",
+  "baseline": "V16.11 active import gate / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
   "rules": [
     "Git history is the history archive; current working tree only serves the MVP.",
@@ -9,6 +9,7 @@
     "V16_FRONTEND prefixes are the current web demo entry files.",
     "V16_BACKEND_PREFIX files are active backend route packages required by the current frontend shell.",
     "V16_DOC files are the only current documentation files.",
+    "V16.11 check_v16_manifest.py must run a FastAPI active import gate before more source cleanup.",
     "Legacy compatibility routes, old station aliases, worker scaffold routes, stale V12 checkers and unmarked legacy files are removed from active runtime."
   ],
   "v16_keep": [
@@ -154,6 +155,11 @@
     "scripts/check_tier_isolation_consistency.py",
     "src/services/v7-v14 legacy service fragments"
   ],
+  "fixed_in_v16_11": [
+    "src/api/routes/accounts.py removed src.core.context dependency",
+    "src/api/main.py bumped to API_VERSION 16.11",
+    "scripts/check_v16_manifest.py added active FastAPI import gate"
+  ],
   "legacy_aliases_removed_in_v16_7": [
     "import_station",
     "report_parse_station",
@@ -169,5 +175,6 @@
     "task_pool_station"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
-  "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. Remaining unmarked files are final review candidates."
+  "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
+  "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. If active import fails, fix that import chain before deleting more unmarked source files."
 }
