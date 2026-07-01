@@ -1,19 +1,20 @@
-Current Version: 14.9.1
+Current Version: 14.9.2
 
-V14.9.1 Dual-Agent Runtime Reset Boundary Fix
+V14.9.2 Real Product Package Gate + Current-Run Count
 
-Core chain remains:
+Core chain:
 
-`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent1 analysis -> product_judgment_package -> Agent2 task generation -> task-pool admission -> frontend read model -> data metro line`
+`Import -> product projection -> fullProductBundle -> RAG boundary -> Agent1 analysis -> real-product package gate -> Agent2 task generation -> task-pool admission -> frontend read model -> data metro line`
 
 Key fix:
 
-- Demo reset now clears `task_generation_runs_v14`.
-- Demo reset now clears `agent_product_judgments_v15`, `product_judgment_packages_v15`, and `task_generation_decisions_v15`.
-- DB diagnostics now check V14/V15 residual runtime tables together.
-- Data-line status ignores stale generation-run rows when upstream data is empty.
-- Empty runtime should not show residual judgment counts.
+- Product package integration must use real `productId` only.
+- `entityId`, `bundleId`, `signalId`, `SKU`, `SPU`, `LINK`, and other engineering IDs cannot become product package IDs.
+- Missing product identity is recorded as a judgment gap and cannot enter Agent2 task generation.
+- Agent2 only consumes resolved `product_judgment_package` rows.
+- Same product in the same data version is checked before task-pool admission to prevent duplicate product tasks.
+- Data-line formal task count now shows latest run `taskPoolCreatedCount`, while global task-pool total is reported separately.
 
 Boundary:
 
-Reset must clear all generated runtime artifacts while preserving accounts, roles, permissions, and base configuration. After reset, `fact source = 0` and V14/V15 runtime tables must also be 0.
+Judgment may remain metric-level and detailed. Integration must compress by real product. Formal tasks must be product-level and counted by current run, not by global task pool.
