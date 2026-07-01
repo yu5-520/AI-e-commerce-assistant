@@ -14,13 +14,13 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "15.0"
+API_VERSION = "15.1"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v15_agent_budget_ledger_llm_gateway_three_agent_mainline",
+    "mode": "v151_current_run_isolation_no_demo_pollution",
     "mainline": [
         "report_schema_agent_mapping_cache",
         "system_cleaning_import",
@@ -28,11 +28,11 @@ STATION_MAINLINE = {
         "product_judgment_agent_budgeted_batch",
         "product_judgment_package_confidence_gate_70",
         "task_mapping_agent_permission_rag_budgeted_batch",
-        "task_pool_admission",
-        "frontend_read_model",
+        "task_pool_admission_current_data_version",
+        "frontend_read_model_current_run_only",
         "data_metro_line_agent_budget_status",
     ],
-    "rule": "V15：报表Agent只做schema mapping；商品判断Agent只做全量包判断和置信值；任务映射Agent只做RAG权限/SOP映射；三类Agent统一走预算账本和网关，禁止按行、按指标、按任务散打API。",
+    "rule": "V15.1：保留V15三阶段Agent预算账本，并新增本轮dataVersion强隔离；任务页只读latestRun.dataVersion任务，旧demo/seed/global任务不得污染当前执行队列。",
 }
 
 
@@ -55,7 +55,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v15": "agent_budget_ledger_llm_gateway_three_agent_mainline", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v151": "current_run_isolation_no_demo_pollution", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
