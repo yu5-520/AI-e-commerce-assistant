@@ -14,15 +14,15 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.9.2"
+API_VERSION = "14.9.3"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "dual_agent_real_product_package_hard_gate_current_run_count",
-    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent1_product_analysis", "real_product_id_package_gate", "agent2_task_generation", "task_pool_admission", "current_run_data_metro_line"],
-    "rule": "V14.9.2：整合站必须绑定真实productId；不能退到entityId/bundleId生成判断包；Agent2只消费真实商品判断包；数据页任务数显示本轮taskPoolCreatedCount而非全局任务池总数。",
+    "mode": "agent1_metric_expansion_product_package_compression_current_run_count",
+    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent1_metric_expansion", "real_product_id_package_gate", "agent2_task_generation", "task_pool_admission", "current_run_data_metro_line"],
+    "rule": "V14.9.3：Agent1把一个真实商品全量包展开为多条指标判断；整合站按真实productId压回一个商品判断包；Agent2只消费商品判断包；任务数仍显示本轮taskPoolCreatedCount。",
 }
 
 
@@ -45,7 +45,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "dual_agent_real_product_package_hard_gate_current_run_count", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "agent1_metric_expansion_product_package_compression_current_run_count", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
