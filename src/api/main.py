@@ -1,7 +1,7 @@
-"""V16.7 FastAPI entrypoint.
+"""V16.8 FastAPI entrypoint.
 
-MVP runtime only. Legacy version routes are removed from the active app; Git
-history remains the archive for old versions.
+MVP runtime only. Legacy version routes and worker scaffold routes are removed
+from the active app; Git history remains the archive for old versions.
 """
 
 from __future__ import annotations
@@ -13,18 +13,18 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import accounts, approvals, audit, data_import, frontend_views, health, import_jobs, llm, modules, ops, pipeline, stations, system, task_lifecycle_stations, task_persistence, task_pool, task_snapshots, worker_jobs
+from src.api.routes import accounts, approvals, audit, data_import, frontend_views, health, import_jobs, llm, modules, ops, pipeline, stations, system, task_lifecycle_stations, task_persistence, task_pool, task_snapshots
 from src.services.station_queue_worker_service import start_station_queue_worker, stop_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.7"
+API_VERSION = "16.8"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v167_mvp_legacy_routes_purged",
+    "mode": "v168_mvp_purged_runtime_only",
     "mainline": [
         "report_receive_station",
         "report_schema_station",
@@ -41,7 +41,7 @@ STATION_MAINLINE = {
         "frontend_read_model_station",
         "task_pool_acceptance_station",
     ],
-    "rule": "V16.7：当前工作树只服务MVP。FastAPI入口解绑V9/V10/V12/V13/V14旧路由，站点注册删除旧别名；旧版本证据只保留在Git历史中。",
+    "rule": "V16.8：当前工作树只服务MVP。旧路由、旧站点别名、旧worker scaffold与未标识旧文件已从active runtime移除；旧版本证据只保留在Git历史中。",
 }
 
 
@@ -64,7 +64,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v167": "mvp_legacy_routes_purged", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v168": "mvp_purged_runtime_only", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
@@ -83,5 +83,4 @@ app.include_router(import_jobs.router)
 app.include_router(approvals.router)
 app.include_router(system.router)
 app.include_router(task_persistence.router)
-app.include_router(worker_jobs.router)
 app.include_router(audit.router)
