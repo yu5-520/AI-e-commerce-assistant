@@ -10,7 +10,12 @@ from src.services.module_task_service import reset_tasks
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 LOG_DIR = ROOT_DIR / "logs"
-JSONL_LOG_FILES = [LOG_DIR / "workflow_runs.jsonl", LOG_DIR / "execution_logs.jsonl", LOG_DIR / "data_import_records.jsonl", LOG_DIR / "approval_records.jsonl"]
+JSONL_LOG_FILES = [
+    LOG_DIR / "workflow_runs.jsonl",
+    LOG_DIR / "execution_logs.jsonl",
+    LOG_DIR / "data_import_records.jsonl",
+    LOG_DIR / "approval_records.jsonl",
+]
 
 V5_RUNTIME_RESET_MARKER = "v5_0_3_runtime_empty_state_applied"
 V1114_RUNTIME_RESET_MARKER = "v11_14_runtime_full_demo_reset_applied"
@@ -25,7 +30,8 @@ V134_RUNTIME_RESET_MARKER = "v13_4_task_pool_runtime_reset_applied"
 V1442_RUNTIME_RESET_MARKER = "v14_4_2_full_runtime_reset_applied"
 V146_RUNTIME_RESET_MARKER = "v14_6_station_queue_runtime_reset_applied"
 V148_RUNTIME_RESET_MARKER = "v14_8_frontend_read_model_runtime_reset_applied"
-SYSTEM_SERVICE_VERSION = "14.8.0"
+V1491_RUNTIME_RESET_MARKER = "v14_9_1_dual_agent_runtime_reset_applied"
+SYSTEM_SERVICE_VERSION = "14.9.1"
 
 TABLES = [
     {"table_name": "workflow_runs", "time_expression": "COALESCE(MAX(finished_at), MAX(started_at))"},
@@ -61,6 +67,10 @@ TABLES = [
     {"table_name": "station_handoffs", "time_expression": "MAX(updated_at)"},
     {"table_name": "task_snapshots", "time_expression": "MAX(updated_at)"},
     {"table_name": "task_pool_entries", "time_expression": "MAX(updated_at)"},
+    {"table_name": "task_generation_runs_v14", "time_expression": "MAX(updated_at)"},
+    {"table_name": "agent_product_judgments_v15", "time_expression": "MAX(created_at)"},
+    {"table_name": "product_judgment_packages_v15", "time_expression": "MAX(created_at)"},
+    {"table_name": "task_generation_decisions_v15", "time_expression": "MAX(created_at)"},
     {"table_name": "frontend_dashboard_view", "time_expression": "MAX(updated_at)"},
     {"table_name": "frontend_product_view", "time_expression": "MAX(updated_at)"},
     {"table_name": "frontend_task_view", "time_expression": "MAX(updated_at)"},
@@ -72,12 +82,35 @@ TABLES = [
 ]
 
 RUNTIME_TABLES = [
-    "task_reviews", "task_submissions", "task_assignments", "approval_records", "task_status", "alert_events", "business_signals_v6", "operating_cadence_signals", "metric_snapshots", "product_metric_facts", "store_metric_facts", "traffic_source_facts", "data_gap_events", "data_snapshots", "imported_report_rows", "report_records", "import_records", "execution_logs", "workflow_runs", "operating_products", "operating_stores", "operating_unit_snapshots", "system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14", "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_jobs", "station_queue", "pipeline_stage_gates", "station_handoffs", "task_snapshots", "task_pool_entries", "frontend_dashboard_view", "frontend_product_view", "frontend_task_view", "frontend_task_detail_view", "frontend_store_view", "frontend_system_status_view", "ops_station_checks", "ops_diagnostic_runs",
+    "task_reviews", "task_submissions", "task_assignments", "approval_records", "task_status",
+    "alert_events", "business_signals_v6", "operating_cadence_signals", "metric_snapshots",
+    "product_metric_facts", "store_metric_facts", "traffic_source_facts", "data_gap_events",
+    "data_snapshots", "imported_report_rows", "report_records", "import_records", "execution_logs",
+    "workflow_runs", "operating_products", "operating_stores", "operating_unit_snapshots",
+    "system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14",
+    "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_jobs", "station_queue",
+    "pipeline_stage_gates", "station_handoffs", "task_snapshots", "task_pool_entries",
+    "task_generation_runs_v14", "agent_product_judgments_v15", "product_judgment_packages_v15",
+    "task_generation_decisions_v15", "frontend_dashboard_view", "frontend_product_view",
+    "frontend_task_view", "frontend_task_detail_view", "frontend_store_view", "frontend_system_status_view",
+    "ops_station_checks", "ops_diagnostic_runs",
 ]
-V14_RUNTIME_TABLES = ["system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14", "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_jobs", "station_queue", "frontend_dashboard_view", "frontend_product_view", "frontend_task_view", "frontend_task_detail_view", "frontend_system_status_view"]
+V14_V15_RUNTIME_TABLES = [
+    "system_product_snapshots_v14", "product_signal_snapshots_v14", "signal_pool_v14",
+    "agent_judgments_v14", "operation_budget_ledger_v14", "pipeline_jobs", "station_queue",
+    "task_generation_runs_v14", "agent_product_judgments_v15", "product_judgment_packages_v15",
+    "task_generation_decisions_v15", "frontend_dashboard_view", "frontend_product_view",
+    "frontend_task_view", "frontend_task_detail_view", "frontend_system_status_view",
+]
 FACT_SOURCE_TABLES = ["imported_report_rows", "operating_products", "operating_stores", "product_metric_facts", "store_metric_facts"]
-RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、经营对象、指标事实、经营快照、V14快照、信号池、Agent判断、预算账本、站点队列、任务快照、任务池、前端读模型、pipeline阀门和运行日志；账号、角色、权限和基础店铺配置保留。"
-RESET_MARKERS = [V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER, V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER, V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER, V134_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER, V146_RUNTIME_RESET_MARKER, V148_RUNTIME_RESET_MARKER]
+RUNTIME_BOUNDARY_NOTE = "清空演示环境会删除报表导入、经营对象、指标事实、经营快照、V14/V15快照、信号池、双Agent判断、商品判断包、任务生成决策、任务生成运行快照、预算账本、站点队列、任务快照、任务池、前端读模型、pipeline阀门和运行日志；账号、角色、权限和基础店铺配置保留。"
+RESET_MARKERS = [
+    V5_RUNTIME_RESET_MARKER, V1114_RUNTIME_RESET_MARKER, V121_RUNTIME_RESET_MARKER,
+    V1213_RUNTIME_RESET_MARKER, V124_RUNTIME_RESET_MARKER, V12131_RUNTIME_RESET_MARKER,
+    V12140_RUNTIME_RESET_MARKER, V131_RUNTIME_RESET_MARKER, V133_RUNTIME_RESET_MARKER,
+    V134_RUNTIME_RESET_MARKER, V1442_RUNTIME_RESET_MARKER, V146_RUNTIME_RESET_MARKER,
+    V148_RUNTIME_RESET_MARKER, V1491_RUNTIME_RESET_MARKER,
+]
 
 
 def _table_exists(conn, table_name: str) -> bool:
@@ -119,6 +152,24 @@ def _delete_runtime_tables(conn) -> Dict[str, int]:
     return deleted
 
 
+def _ensure_runtime_tables() -> None:
+    try:
+        from src.services.frontend_read_model_service import ensure_frontend_read_model_tables
+        ensure_frontend_read_model_tables()
+    except Exception:
+        pass
+    try:
+        from src.services.task_generation_run_service import ensure_task_generation_run_tables
+        ensure_task_generation_run_tables()
+    except Exception:
+        pass
+    try:
+        from src.services.dual_agent_product_task_service import ensure_dual_agent_tables
+        ensure_dual_agent_tables()
+    except Exception:
+        pass
+
+
 def get_table_status(table_name: str, time_expression: str) -> Dict[str, Any]:
     with connect() as conn:
         if not _table_exists(conn, table_name):
@@ -134,18 +185,22 @@ def get_table_status(table_name: str, time_expression: str) -> Dict[str, Any]:
 def _runtime_dirty_diagnostics(table_status: List[Dict[str, Any]]) -> Dict[str, Any]:
     counts = {item["table_name"]: int(item.get("record_count") or 0) for item in table_status}
     fact_count = sum(counts.get(name, 0) for name in FACT_SOURCE_TABLES)
-    v14_count = sum(counts.get(name, 0) for name in V14_RUNTIME_TABLES)
-    dirty = fact_count == 0 and v14_count > 0
-    return {"version": SYSTEM_SERVICE_VERSION, "status": "failed" if dirty else "passed", "runtimeDirty": dirty, "factSourceCount": fact_count, "v14ResidualCount": v14_count, "v14ResidualTables": {name: counts.get(name, 0) for name in V14_RUNTIME_TABLES}, "rule": "If fact sources are empty, V14 snapshots/signals/judgments/queue/read-models must also be empty."}
+    residual_count = sum(counts.get(name, 0) for name in V14_V15_RUNTIME_TABLES)
+    dirty = fact_count == 0 and residual_count > 0
+    return {
+        "version": SYSTEM_SERVICE_VERSION,
+        "status": "failed" if dirty else "passed",
+        "runtimeDirty": dirty,
+        "factSourceCount": fact_count,
+        "v14V15ResidualCount": residual_count,
+        "v14V15ResidualTables": {name: counts.get(name, 0) for name in V14_V15_RUNTIME_TABLES},
+        "rule": "If fact sources are empty, V14/V15 snapshots/signals/judgments/packages/runs/queue/read-models must also be empty.",
+    }
 
 
 def get_db_status() -> Dict[str, Any]:
     init_db()
-    try:
-        from src.services.frontend_read_model_service import ensure_frontend_read_model_tables
-        ensure_frontend_read_model_tables()
-    except Exception:
-        pass
+    _ensure_runtime_tables()
     db_path = Path(DB_PATH)
     table_status = [get_table_status(item["table_name"], item["time_expression"]) for item in TABLES]
     total_records = sum(item["record_count"] for item in table_status)
@@ -153,16 +208,21 @@ def get_db_status() -> Dict[str, Any]:
     dirty = _runtime_dirty_diagnostics(table_status)
     with connect() as conn:
         marker_states = {marker: _meta_get(conn, marker) == "done" for marker in RESET_MARKERS}
-    return {"ok": not dirty.get("runtimeDirty"), "version": SYSTEM_SERVICE_VERSION, "database": {"type": "sqlite", "path": str(db_path), "exists": db_path.exists(), "size_bytes": db_path.stat().st_size if db_path.exists() else 0, "walEnabled": True, "busyTimeoutMs": 3000}, "tables": table_status, "summary": {"table_count": len(table_status), "total_records": total_records, "latest_at": max(latest_times) if latest_times else None}, "runtimeDirtyDiagnostics": dirty, "runtime_boundary": {"real_erp_connected": False, "real_crm_connected": False, "real_shop_backend_connected": False, "auto_high_risk_execution": False, "frontend_read_model_isolated": True, "note": RUNTIME_BOUNDARY_NOTE}, "resetMarkers": marker_states}
+    return {
+        "ok": not dirty.get("runtimeDirty"),
+        "version": SYSTEM_SERVICE_VERSION,
+        "database": {"type": "sqlite", "path": str(db_path), "exists": db_path.exists(), "size_bytes": db_path.stat().st_size if db_path.exists() else 0, "walEnabled": True, "busyTimeoutMs": 3000},
+        "tables": table_status,
+        "summary": {"table_count": len(table_status), "total_records": total_records, "latest_at": max(latest_times) if latest_times else None},
+        "runtimeDirtyDiagnostics": dirty,
+        "runtime_boundary": {"real_erp_connected": False, "real_crm_connected": False, "real_shop_backend_connected": False, "auto_high_risk_execution": False, "frontend_read_model_isolated": True, "note": RUNTIME_BOUNDARY_NOTE},
+        "resetMarkers": marker_states,
+    }
 
 
 def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual_reset") -> Dict[str, Any]:
     init_db()
-    try:
-        from src.services.frontend_read_model_service import ensure_frontend_read_model_tables
-        ensure_frontend_read_model_tables()
-    except Exception:
-        pass
+    _ensure_runtime_tables()
     removed_files: List[str] = []
     with connect() as conn:
         deleted_tables = _delete_runtime_tables(conn)
@@ -176,7 +236,17 @@ def clear_runtime_data(include_audit_logs: bool = True, *, reason: str = "manual
             if path.exists():
                 path.unlink()
                 removed_files.append(str(path))
-    return {"ok": True, "version": SYSTEM_SERVICE_VERSION, "message": "演示运行态已全链路清空：导入行、经营对象、指标事实、V14快照、信号池、Agent判断、预算账本、站点队列、任务快照、任务池、前端读模型、日志均回到空状态。", "reason": reason, "deletedTables": deleted_tables, "removedFiles": removed_files, "includeAuditLogs": include_audit_logs, "boundary": RUNTIME_BOUNDARY_NOTE, "db_status": get_db_status()}
+    return {
+        "ok": True,
+        "version": SYSTEM_SERVICE_VERSION,
+        "message": "演示运行态已全链路清空：导入行、经营对象、指标事实、V14/V15快照、信号池、双Agent判断、商品判断包、任务生成决策、任务生成运行快照、预算账本、站点队列、任务快照、任务池、前端读模型、日志均回到空状态。",
+        "reason": reason,
+        "deletedTables": deleted_tables,
+        "removedFiles": removed_files,
+        "includeAuditLogs": include_audit_logs,
+        "boundary": RUNTIME_BOUNDARY_NOTE,
+        "db_status": get_db_status(),
+    }
 
 
 def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
@@ -185,9 +255,10 @@ def clear_demo_data(include_audit_logs: bool = True) -> Dict[str, Any]:
 
 def reset_legacy_runtime_once() -> Dict[str, Any]:
     init_db()
+    _ensure_runtime_tables()
     with connect() as conn:
         if any(_meta_get(conn, marker) == "done" for marker in RESET_MARKERS):
-            return {"ok": True, "skipped": True, "marker": V148_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
+            return {"ok": True, "skipped": True, "marker": V1491_RUNTIME_RESET_MARKER, "message": "Runtime cleanup already applied."}
         stale_count = sum(_table_count(conn, table_name) for table_name in RUNTIME_TABLES)
     if stale_count <= 0:
         with connect() as conn:
@@ -196,8 +267,8 @@ def reset_legacy_runtime_once() -> Dict[str, Any]:
                 _meta_set(conn, f"{marker}_reason", "empty_runtime_noop")
             conn.commit()
         reset_tasks()
-        return {"ok": True, "skipped": True, "marker": V148_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
-    result = clear_runtime_data(include_audit_logs=False, reason="v148_startup_one_time_frontend_read_model_cleanup")
+        return {"ok": True, "skipped": True, "marker": V1491_RUNTIME_RESET_MARKER, "staleRecordCount": 0, "message": "Runtime already empty; cleanup marker recorded."}
+    result = clear_runtime_data(include_audit_logs=False, reason="v1491_startup_one_time_dual_agent_runtime_cleanup")
     result["staleRecordCount"] = stale_count
-    result["marker"] = V148_RUNTIME_RESET_MARKER
+    result["marker"] = V1491_RUNTIME_RESET_MARKER
     return result
