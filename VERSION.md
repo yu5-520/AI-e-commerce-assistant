@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-14.9.1
+14.9.2
 ```
 
-## V14.9.1 Meaning
+## V14.9.2 Meaning
 
-V14.9.1 is the runtime reset boundary fix for the V14.9 dual-Agent pipeline.
+V14.9.2 is the real-product package hard gate and current-run task count fix.
 
-It keeps the V14.9 mainline:
+It keeps the V14.9 dual-Agent mainline:
 
 ```text
 report import system
@@ -17,21 +17,22 @@ report import system
   -> fullProductBundle assembly
   -> RAG volatility boundary context
   -> Agent 1 product analysis station
-  -> system product_judgment_package integration station
+  -> system real-product package gate
   -> Agent 2 task generation station
   -> system task-pool admission station
   -> frontend read model refresh
-  -> data page renders metro-line chain status
+  -> data page renders current-run metro-line chain status
 ```
 
 Fix scope:
 
-- `reset-runtime-data` now clears `task_generation_runs_v14`.
-- `reset-runtime-data` now clears V14.9 dual-Agent tables: `agent_product_judgments_v15`, `product_judgment_packages_v15`, and `task_generation_decisions_v15`.
-- System diagnostics now include V14/V15 residual checks.
-- Data-line view ignores stale generation-run rows when upstream data is empty.
-- Empty runtime must show: 接入等待、建档等待、全量包等待、判断等待、整合等待、任务等待、展示等待.
+- Package integration can no longer fall back to `entityId`, `bundleId`, `signalId`, `SKU`, `SPU`, `LINK`, or other engineering IDs.
+- Only a resolved real `productId` can become a `product_judgment_package`.
+- Product identity gaps stay as Agent1 judgments and cannot enter Agent2 task generation.
+- Package admission is stricter: medium risk needs multiple signals or stronger evidence; high/critical risk still enters.
+- Agent2 task generation is capped per run and checks same-product task-pool duplicates before creating a new task.
+- Data-line formal task count now uses the latest run's `taskPoolCreatedCount`, not the global `task_pool_entries` total.
 
 Core rule:
 
-`fact source = 0` means V14/V15 snapshots, judgments, judgment packages, task decisions, task generation runs, task pool, and frontend read models must also be 0.
+`判断可以细，整合必须按真实商品压缩，任务数必须看本轮产出。`
