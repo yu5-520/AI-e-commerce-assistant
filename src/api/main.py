@@ -1,11 +1,11 @@
-"""V16.20 FastAPI entrypoint.
+"""V16.21 FastAPI entrypoint.
 
 MVP runtime only. Legacy routes, worker scaffold routes, deleted source-core
 modules, old mock workflow dependencies, syntax leftovers, old audit/data-import
 context imports, old V11 report-governance dependencies, legacy ImportJob wrapper
-routes, legacy LLM debug gateway routes, legacy module task-report routes, and
-legacy module Agent candidate/playbook routes are removed from the active app;
-Git history remains the archive.
+routes, legacy LLM debug gateway routes, legacy module task-report routes,
+legacy module Agent candidate/playbook routes, and legacy module Todo routes are
+removed from the active app; Git history remains the archive.
 """
 
 from __future__ import annotations
@@ -22,13 +22,13 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.20"
+API_VERSION = "16.21"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v1620_module_agents_route_pruned",
+    "mode": "v1621_module_todo_route_pruned",
     "mainline": [
         "report_receive_station",
         "report_schema_station",
@@ -45,7 +45,7 @@ STATION_MAINLINE = {
         "frontend_read_model_station",
         "task_pool_acceptance_station",
     ],
-    "rule": "V16.20：modules内部旧agents子路由从active app移除。真实Agent调用只保留在V16商品判断/任务映射主链路，候选/playbook旧入口不再挂载。",
+    "rule": "V16.21：modules内部旧todo子路由从active app移除。任务列表、详情和生命周期动作由V16 task_pool/task_persistence/task_lifecycle/frontend read model主链路承接。",
 }
 
 
@@ -68,7 +68,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1620": "module_agents_route_pruned", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1621": "module_todo_route_pruned", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
