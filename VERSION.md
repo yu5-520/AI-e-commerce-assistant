@@ -1,52 +1,37 @@
 # Current Version
 
 ```text
-16.7
+16.8
 ```
 
-## V16.7 Meaning
+## V16.8 Meaning
 
-V16.7 is the MVP legacy route purge release.
+V16.8 is the MVP purge-planner release.
 
-It keeps the V16.5 Station Alignment runtime and the V16.6 file manifest, then removes the first wave of old route pollution from the active repository.
+The first wave has already removed active legacy route imports, old route files and old station aliases. V16.8 upgrades the manifest checker into a safe purge tool so the remaining unmarked files can be removed in one local command after review.
 
-## Changed
+## One-command local purge
 
-```text
-FastAPI main.py now imports and mounts only V16 MVP runtime routes.
-V9/V10/V12/V13/V14 legacy compatibility route files were deleted.
-station_registry_service removed LEGACY_STATION_ALIASES.
-config/v16_mvp_file_manifest.json now records purged files and removed aliases.
+```bash
+python scripts/check_v16_manifest.py --write-plan
+bash /tmp/v16_purge_plan.sh
 ```
 
-## Purged route files
+Or, without writing a separate plan:
 
-```text
-src/api/routes/deprecated_stations.py
-src/api/routes/v9_readiness.py
-src/api/routes/v10_product.py
-src/api/routes/architecture.py
-src/api/routes/data_source_compat.py
-src/api/routes/station_handoffs.py
-src/api/routes/report_task_sync.py
-src/api/routes/trends.py
+```bash
+python scripts/check_v16_manifest.py --purge
 ```
 
-## Removed old station aliases
+The script uses `git rm` and does not commit automatically.
+
+## Safety rules
 
 ```text
-import_station
-report_parse_station
-metric_fact_station
-operating_object_station
-operating_snapshot_station
-system_product_snapshot_station
-product_signal_snapshot_station
-task_signal_station
-rag_context_station
-agent_judgment_station
-task_snapshot_station
-task_pool_station
+V16 manifest files are kept.
+web_demo/ is kept.
+Protected files such as .gitignore and .env.example are not deleted by --purge.
+Unmarked files are deletion candidates unless promoted into config/v16_mvp_file_manifest.json.
 ```
 
 ## Current V16 mainline
@@ -70,4 +55,4 @@ report_receive_station
 
 ## Rule
 
-Git history is the history archive. The current working tree only serves the MVP. Old version routes and old station aliases cannot enter the active runtime.
+Git history is the history archive. The current working tree only serves the MVP. V16.8 provides the safe one-command purge path for remaining unmarked files.
