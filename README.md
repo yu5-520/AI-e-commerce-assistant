@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.13 FastAPI Entrypoint Syntax Repair / V16 MVP runtime**.
+Current baseline: **V16.14 Audit Route Context Cleanup / V16 MVP runtime**.
 
-V16.13 keeps the active FastAPI import gate and fixes the syntax residue left in `src/api/main.py` after the approval workflow cleanup.
+V16.14 keeps the active FastAPI import gate and removes the audit route dependency on the old deleted `src.core.context` module and old trace/tech-log service fragments.
 
 ## Mainline
 
@@ -35,12 +35,12 @@ The checker includes:
 from src.api.main import app, STATION_MAINLINE
 ```
 
-## V16.13 entrypoint rule
+## V16.14 audit rule
 
 ```text
-main.py must mount frontend_views.router directly.
-main.py must not contain string replacement residue or generated text fragments.
-Active FastAPI import must pass before more source cleanup.
+Audit routes must not import src.core.context.
+Audit routes must not restore deleted trace/tech-log service fragments.
+Audit returns a lightweight V16-safe projection while MVP runtime cleanup continues.
 ```
 
 ## Manifest files
