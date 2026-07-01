@@ -1,29 +1,28 @@
-"""P0 TaskRepository backed by the SQLite task persistence mirror.
+"""V16.24 TaskRepository backed by the SQLite task persistence mirror.
 
-This repository is the bridge from the current in-memory task runtime to a SaaS
-source-of-truth task store. It enforces tenant / org / soft-delete / data-scope
-reads at the repository boundary and keeps writes idempotent for demo-stage
-retries.
+TaskRepository remains part of the active V16 task lifecycle path, but it no
+longer imports the deleted ``src.core.context`` module. Scope is normalized by
+``src.repositories.scoped_repository.UserContext``.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable
 
-from src.core.context import UserContext
-from src.repositories.scoped_repository import ScopedRepositoryBase, item_visible_to_context
+from src.repositories.scoped_repository import ScopedRepositoryBase, UserContext, item_visible_to_context
 from src.repositories.sqlite_repository import connect, dumps, init_db, loads
 from src.services.task_state_machine_service import ensure_task_persistence_tables, mirror_task
 
 
+TASK_REPOSITORY_VERSION = "16.24"
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
 
 
 class TaskRepository(ScopedRepositoryBase):
     resource_name = "task_status"
 
-    def __init__(self, ctx: UserContext) -> None:
-        super().__init__(ctx)
+    def __init__(self, ctx: Any | None = None) -> None:
+        super().__init__(UserContext.from_any(ctx))
         ensure_task_persistence_tables()
 
     def _row_to_task(self, row: Any) -> Dict[str, Any]:
@@ -41,6 +40,7 @@ class TaskRepository(ScopedRepositoryBase):
         payload.setdefault("dedupeKey", row["dedupe_key"])
         payload.setdefault("updatedAt", row["updated_at"])
         payload.setdefault("createdAt", row["created_at"])
+        payload.setdefault("repositoryVersion", TASK_REPOSITORY_VERSION)
         return payload
 
     def list(self, *, active_only: bool = False, assignee_id: str | None = None, limit: int = 200) -> list[Dict[str, Any]]:
@@ -133,6 +133,7 @@ class TaskRepository(ScopedRepositoryBase):
         active = [task for task in visible if task.get("status") not in DONE_STATUS]
         return {
             "source": "TaskRepository(SQLite mirror)",
+            "version": TASK_REPOSITORY_VERSION,
             "tenantId": self.ctx.tenant_id,
             "orgId": self.ctx.org_id,
             "visibleTasks": len(visible),
