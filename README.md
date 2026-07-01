@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.15 Data Import Route Cleanup / V16 MVP runtime**.
+Current baseline: **V16.16 Report Alert Cleanup / V16 MVP runtime**.
 
 ## Mainline
 
@@ -26,6 +26,10 @@ report_receive_station
 ```bash
 python scripts/check_v16_manifest.py
 ```
+
+## V16.16 rule
+
+Report alerts only keep observation evidence. They do not import deleted V11 governance services and do not create tasks directly.
 
 ## Entry points
 
