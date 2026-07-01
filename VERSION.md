@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.22
+16.23
 ```
 
-## V16.22
+## V16.23
 
-Legacy pipeline route removal.
+System route context cleanup.
 
-`src/api/routes/pipeline.py` was removed from active runtime. V16 task generation is owned by data_import, station_queue, Agent mainline and task_pool routes. Do not restore v142/v143 task mainline services.
+`src/api/routes/system.py` no longer imports the deleted `src.core.context` module. MVP keeps database status and explicit runtime cleanup routes; old production diagnostics return lightweight disabled projections until reintroduced through V16 contracts.
 
 ## Verify
 
