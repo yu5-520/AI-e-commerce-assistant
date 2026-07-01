@@ -1,13 +1,13 @@
 {
-  "manifestVersion": "16.23",
-  "baseline": "V16.23 system route context cleanup / V16 MVP runtime",
+  "manifestVersion": "16.24",
+  "baseline": "V16.24 task repository context cleanup / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless explicitly reviewed.",
   "rules": [
     "Git history is the archive; current working tree only serves the MVP.",
     "FastAPI active import must pass before more source cleanup.",
-    "System routes must not import src.core.context.",
-    "MVP system routes keep db-status and explicit runtime cleanup.",
-    "Old production diagnostics are disabled lightweight projections until reintroduced through V16 contracts."
+    "Task lifecycle routes remain active V16 runtime and must not be deleted.",
+    "TaskRepository and ScopedRepository must not import src.core.context.",
+    "Repository scope uses the V16 lightweight UserContext value object."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -59,6 +59,8 @@
     "src/services/__init__.py",
     "src/repositories/__init__.py",
     "src/repositories/sqlite_repository.py",
+    "src/repositories/scoped_repository.py",
+    "src/repositories/task_repository.py",
     "src/services/system_service.py",
     "src/services/account_service.py",
     "src/services/approval_service.py",
@@ -85,11 +87,11 @@
     "config/v16_mvp_file_manifest.json"
   ],
   "v16_tools": ["scripts/check_v16_manifest.py"],
-  "fixed_in_v16_23": [
-    "src/api/routes/system.py removed src.core.context import",
-    "src/api/routes/system.py keeps db-status and runtime cleanup routes",
-    "src/api/routes/system.py returns lightweight placeholders for old diagnostics",
-    "src/api/main.py API_VERSION is 16.23"
+  "fixed_in_v16_24": [
+    "src/repositories/scoped_repository.py removed src.core.context import",
+    "src/repositories/scoped_repository.py provides V16 lightweight UserContext",
+    "src/repositories/task_repository.py imports UserContext from scoped_repository",
+    "src/api/main.py API_VERSION is 16.24"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
