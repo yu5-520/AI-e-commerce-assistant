@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.19
+16.20
 ```
 
-## V16.19
+## V16.20
 
-Module task-report route prune.
+Module agents route prune.
 
-`src/api/routes/modules/task_report.py` was removed from the active modules router. Task details are now owned by the V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.
+`src/api/routes/modules/agents.py` was removed from the active modules router. Old V10/V14 candidate/playbook task-agent logic is no longer imported by FastAPI. Real Agent execution remains inside the V16 product judgment and task mapping mainline.
 
 ## Verify
 
