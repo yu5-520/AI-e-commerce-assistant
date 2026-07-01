@@ -1,6 +1,6 @@
 {
-  "manifestVersion": "16.11",
-  "baseline": "V16.11 active import gate / V16 MVP runtime",
+  "manifestVersion": "16.12",
+  "baseline": "V16.12 approval mock-workflow removal / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
   "rules": [
     "Git history is the history archive; current working tree only serves the MVP.",
@@ -9,7 +9,8 @@
     "V16_FRONTEND prefixes are the current web demo entry files.",
     "V16_BACKEND_PREFIX files are active backend route packages required by the current frontend shell.",
     "V16_DOC files are the only current documentation files.",
-    "V16.11 check_v16_manifest.py must run a FastAPI active import gate before more source cleanup.",
+    "check_v16_manifest.py must run a FastAPI active import gate before more source cleanup.",
+    "Approval must read current task_status projection and must not use mock workflow fallback.",
     "Legacy compatibility routes, old station aliases, worker scaffold routes, stale V12 checkers and unmarked legacy files are removed from active runtime."
   ],
   "v16_keep": [
@@ -63,6 +64,8 @@
     "src/repositories/sqlite_repository.py",
     "src/services/system_service.py",
     "src/services/account_service.py",
+    "src/services/approval_service.py",
+    "src/services/log_service.py",
     "src/services/backend_isolation_service.py",
     "src/services/permission_stamp_service.py",
     "src/api/routes/system.py",
@@ -159,6 +162,12 @@
     "src/api/routes/accounts.py removed src.core.context dependency",
     "src/api/main.py bumped to API_VERSION 16.11",
     "scripts/check_v16_manifest.py added active FastAPI import gate"
+  ],
+  "fixed_in_v16_12": [
+    "src/services/approval_service.py removed src.workflow.mock_workflow dependency",
+    "approval get_task reads current SQLite task_status projection",
+    "missing task approval returns 404 instead of mock fallback",
+    "src/api/main.py bumped to API_VERSION 16.12"
   ],
   "legacy_aliases_removed_in_v16_7": [
     "import_station",
