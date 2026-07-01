@@ -1,12 +1,14 @@
-"""V14.9 dual-Agent product task pipeline.
+"""V14.9.2 dual-Agent product task pipeline.
 
 Agent 1 creates metric-level product judgments only. The system then compresses
-judgments into one product_judgment_package per product. Agent 2 consumes the
-product package and creates at most one actionable SOP task per product.
+judgments into exactly one product_judgment_package per real product. Agent 2
+can only consume resolved product packages and task-pool admission is capped,
+idempotent, and product-level.
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Tuple
@@ -20,12 +22,14 @@ from src.services.task_generation_run_service import record_task_generation_run
 from src.services.task_pool_station_service import enter_task_pool_from_snapshot
 from src.services.task_snapshot_station_service import create_task_snapshot
 
-DUAL_AGENT_PIPELINE_VERSION = "14.9"
+DUAL_AGENT_PIPELINE_VERSION = "14.9.2"
 FORMAL_DECISIONS = {"create_task_snapshot", "manager_review_required"}
 SEVERITY_RANK = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-MAX_TASKS_PER_RUN = 10
-BLANK_VALUES = {None, "", "—", "未识别"}
+MAX_TASKS_PER_RUN = 8
+BLANK_VALUES = {None, "", "—", "未识别", "UNKNOWN", "PRODUCT"}
 CORE_METRICS = ["paymentAmount", "roi", "roas", "adSpend", "refundRate", "inventory", "conversionRate", "grossMargin", "clickRate"]
+ENGINEERING_ID_PREFIXES = ("PSIG-", "TS-", "LINK-", "SPU-", "SKU-", "STORE-", "AJ-", "PJP-", "TGD-")
+PRODUCT_ID_PATTERN = re.compile(r"^(P\d+|PROD[-_A-Z0-9]+|PRODUCT[-_A-Z0-9]+)$", re.IGNORECASE)
 
 
 def now_iso() -> str:
@@ -114,11 +118,41 @@ def _profile_layer(bundle: Dict[str, Any]) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _product_key(bundle: Dict[str, Any]) -> Tuple[str, str]:
+def _candidate_text(value: Any) -> str | None:
+    if value in BLANK_VALUES:
+        return None
+    text = str(value).strip()
+    if not text or text in BLANK_VALUES:
+        return None
+    upper = text.upper()
+    if upper.startswith(ENGINEERING_ID_PREFIXES):
+        return None
+    if ":" in text or "|" in text:
+        return None
+    return text
+
+
+def _strict_product_id(bundle: Dict[str, Any]) -> str | None:
     profile = _profile_layer(bundle)
-    store_id = str(bundle.get("storeId") or profile.get("storeId") or "GLOBAL")
-    product_id = str(bundle.get("productId") or profile.get("productId") or bundle.get("entityId") or bundle.get("bundleId") or "PRODUCT")
-    return store_id, product_id
+    candidates = [
+        bundle.get("productId"), bundle.get("product_id"), bundle.get("productCode"), bundle.get("product_code"),
+        profile.get("productId"), profile.get("product_id"), profile.get("productCode"), profile.get("product_code"),
+        (bundle.get("product") or {}).get("productId") if isinstance(bundle.get("product"), dict) else None,
+        (bundle.get("product") or {}).get("id") if isinstance(bundle.get("product"), dict) else None,
+    ]
+    for value in candidates:
+        text = _candidate_text(value)
+        if not text:
+            continue
+        if PRODUCT_ID_PATTERN.match(text) or str(value) == str(bundle.get("productId") or profile.get("productId")):
+            return text
+    return None
+
+
+def _store_id(bundle: Dict[str, Any]) -> str:
+    profile = _profile_layer(bundle)
+    store_id = bundle.get("storeId") or bundle.get("store_id") or profile.get("storeId") or profile.get("store_id") or "GLOBAL"
+    return str(store_id)
 
 
 def _known(value: Any) -> bool:
@@ -156,11 +190,14 @@ def _score_signal(bundle: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _agent1_analyze_signal(signal: Dict[str, Any], rag_context: Dict[str, Any]) -> Dict[str, Any]:
-    store_id, product_id = _product_key(signal)
+    store_id = _store_id(signal)
+    product_id = _strict_product_id(signal)
+    identity_resolved = bool(product_id)
+    product_key = product_id or "UNRESOLVED_PRODUCT"
     scored = _score_signal(signal)
-    fallback = {"metricCode": scored["metricCode"], "severity": scored["severity"], "decisionHint": scored["decisionHint"], "confidence": scored["confidence"], "finding": f"{product_id} 的 {scored['metricCode']} 处于 {scored['severity']} 判断层级。", "evidence": {"score": scored["score"], "abnormal": scored["abnormal"], "changed": scored["changed"], "sourceCount": scored["sourceCount"], "missingFields": scored["missingFields"]}}
+    fallback = {"metricCode": scored["metricCode"], "severity": scored["severity"], "decisionHint": scored["decisionHint"], "confidence": scored["confidence"], "finding": f"{product_key} 的 {scored['metricCode']} 处于 {scored['severity']} 判断层级。", "evidence": {"score": scored["score"], "abnormal": scored["abnormal"], "changed": scored["changed"], "sourceCount": scored["sourceCount"], "missingFields": scored["missingFields"]}}
     try:
-        llm_result = generate_json(prompt_name="v149_agent1_product_analysis", payload={"fullProductBundle": signal, "ragContext": rag_context, "fallback": fallback, "hardRule": "Agent1只做指标级分析判断，不允许生成任务标题、SOP或入池动作。"}, expected_keys=["metricCode", "severity", "decisionHint", "confidence", "finding", "evidence"], agent_name="V14.9 Agent1 Product Analysis", schema_name="v149_agent1_product_analysis")
+        llm_result = generate_json(prompt_name="v1492_agent1_product_analysis", payload={"fullProductBundle": signal, "ragContext": rag_context, "fallback": fallback, "hardRule": "Agent1只做指标级分析判断，不允许生成任务标题、SOP或入池动作；没有真实productId只能输出身份缺口，不能进入任务生成。"}, expected_keys=["metricCode", "severity", "decisionHint", "confidence", "finding", "evidence"], agent_name="V14.9.2 Agent1 Product Analysis", schema_name="v1492_agent1_product_analysis")
         output = llm_result.get("output") or {}
     except Exception as exc:
         llm_result = {"status": "fallback", "error": str(exc)}
@@ -168,7 +205,9 @@ def _agent1_analyze_signal(signal: Dict[str, Any], rag_context: Dict[str, Any]) 
     severity = str(output.get("severity") or fallback["severity"])
     if severity not in SEVERITY_RANK:
         severity = fallback["severity"]
-    return {"version": DUAL_AGENT_PIPELINE_VERSION, "judgmentId": make_id("APJ"), "dataVersion": signal.get("dataVersion"), "storeId": store_id, "productId": product_id, "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "metricCode": output.get("metricCode") or fallback["metricCode"], "severity": severity, "decisionHint": output.get("decisionHint") or fallback["decisionHint"], "confidence": float(output.get("confidence") or fallback["confidence"]), "finding": output.get("finding") or fallback["finding"], "evidence": output.get("evidence") or fallback["evidence"], "signal": signal, "softScore": scored, "llm": {"provider": llm_result.get("provider"), "model": llm_result.get("model"), "status": llm_result.get("status"), "error": llm_result.get("error")}, "rule": "Agent1 output is judgment only, never a task."}
+    if not identity_resolved:
+        severity = "low"
+    return {"version": DUAL_AGENT_PIPELINE_VERSION, "judgmentId": make_id("APJ"), "dataVersion": signal.get("dataVersion"), "storeId": store_id, "productId": product_key, "productIdentityResolved": identity_resolved, "signalId": signal.get("signalId"), "bundleId": signal.get("bundleId"), "metricCode": output.get("metricCode") or fallback["metricCode"], "severity": severity, "decisionHint": "identity_gap" if not identity_resolved else output.get("decisionHint") or fallback["decisionHint"], "confidence": float(output.get("confidence") or fallback["confidence"]), "finding": output.get("finding") or fallback["finding"], "evidence": output.get("evidence") or fallback["evidence"], "signal": signal, "softScore": scored, "llm": {"provider": llm_result.get("provider"), "model": llm_result.get("model"), "status": llm_result.get("status"), "error": llm_result.get("error")}, "rule": "Agent1 output is judgment only, never a task. Product identity must be resolved before package generation."}
 
 
 def _clear_version_rows(data_version: str | None) -> None:
@@ -212,11 +251,25 @@ def _severity_max(items: Iterable[Dict[str, Any]]) -> str:
     return max_item
 
 
-def _package_product_judgments(data_version: str | None) -> List[Dict[str, Any]]:
+def _package_candidate_allowed(*, max_severity: str, risk_counts: Counter, has_data_gap: bool, judgment_count: int, confidence: float) -> bool:
+    if has_data_gap:
+        return True
+    if SEVERITY_RANK.get(max_severity, 0) >= 3:
+        return True
+    if max_severity == "medium" and (len(risk_counts) >= 2 or judgment_count >= 2) and confidence >= 0.62:
+        return True
+    return False
+
+
+def _package_product_judgments(data_version: str | None) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     raw = _load_raw_judgments(data_version)
     grouped: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    identity_gaps: List[Dict[str, Any]] = []
     for item in raw:
-        grouped[(str(item.get("storeId") or "GLOBAL"), str(item.get("productId") or "PRODUCT"))].append(item)
+        if not item.get("productIdentityResolved") or not _candidate_text(item.get("productId")):
+            identity_gaps.append(item)
+            continue
+        grouped[(str(item.get("storeId") or "GLOBAL"), str(item.get("productId")))] .append(item)
     packages: List[Dict[str, Any]] = []
     for (store_id, product_id), items in grouped.items():
         max_severity = _severity_max(items)
@@ -225,13 +278,13 @@ def _package_product_judgments(data_version: str | None) -> List[Dict[str, Any]]
         secondary = [risk for risk, _ in risk_counts.most_common(5) if risk != primary_risk]
         confidence = round(max([float(item.get("confidence") or 0) for item in items], default=0.45), 4)
         has_data_gap = any((item.get("softScore") or {}).get("criticalGap") for item in items)
-        allowed = SEVERITY_RANK.get(max_severity, 0) >= 2 or has_data_gap
+        allowed = _package_candidate_allowed(max_severity=max_severity, risk_counts=risk_counts, has_data_gap=has_data_gap, judgment_count=len(items), confidence=confidence)
         overall = "task_candidate" if allowed else "observe_only"
         evidence_pack = [{"metricCode": item.get("metricCode"), "severity": item.get("severity"), "finding": item.get("finding"), "evidence": item.get("evidence")} for item in sorted(items, key=lambda x: SEVERITY_RANK.get(str(x.get("severity") or "normal"), 0), reverse=True)[:8]]
-        package = {"version": DUAL_AGENT_PIPELINE_VERSION, "packageId": make_id("PJP"), "dataVersion": data_version or (items[0].get("dataVersion") if items else None), "storeId": store_id, "productId": product_id, "judgmentCount": len(items), "primaryRisk": primary_risk, "secondaryRisks": secondary, "maxSeverity": max_severity, "overallDecision": overall, "taskCandidateAllowed": bool(allowed), "confidence": confidence, "summary": f"{product_id} 汇总 {len(items)} 条判断，主风险为 {primary_risk}，最高等级 {max_severity}。", "evidencePack": evidence_pack, "rawJudgmentIds": [item.get("judgmentId") for item in items], "rule": "System compression: metric-level judgments are merged into one product-level package."}
+        package = {"version": DUAL_AGENT_PIPELINE_VERSION, "packageId": make_id("PJP"), "dataVersion": data_version or (items[0].get("dataVersion") if items else None), "storeId": store_id, "productId": product_id, "judgmentCount": len(items), "primaryRisk": primary_risk, "secondaryRisks": secondary, "maxSeverity": max_severity, "overallDecision": overall, "taskCandidateAllowed": bool(allowed), "confidence": confidence, "summary": f"{product_id} 汇总 {len(items)} 条判断，主风险为 {primary_risk}，最高等级 {max_severity}。", "evidencePack": evidence_pack, "rawJudgmentIds": [item.get("judgmentId") for item in items], "identityStatus": "resolved", "rule": "V14.9.2 system compression: only real productId can become one product-level package."}
         packages.append(package)
     _save_packages(packages)
-    return packages
+    return packages, identity_gaps
 
 
 def _save_packages(packages: List[Dict[str, Any]]) -> None:
@@ -266,7 +319,7 @@ def _agent2_task_decision(package: Dict[str, Any], rank_index: int) -> Dict[str,
         task_title = f"商品经营复核｜{product_id}｜{primary}联动异常"
         reason = f"商品判断包汇总 {package.get('judgmentCount')} 条指标判断，主风险 {primary}，最高等级 {max_sev}。"
         task_plan = {"title": task_title, "subtitle": "商品判断包生成任务", "entityType": "product", "entityId": product_id, "productId": product_id, "storeId": package.get("storeId"), "taskType": "product_operation_review", "actionType": "product_package_sop", "priority": priority, "riskLevel": "high" if priority == "高" else "medium", "deadline": deadline, "riskDomain": primary, "operationBudget": {"taskType": "product_operation_review", "riskLevel": "high" if priority == "高" else "medium", "budgetUpperBound": 0, "operatorBudgetApplies": False, "requiresApproval": decision == "manager_review_required"}, "sopSteps": [f"{deadline}核查 {product_id} 的 {primary} 相关后台数据，先确认本轮商品判断包中的主风险与证据。", "合并核查退款、库存、转化、投放和毛利中与主风险相关的截图，避免按单指标重复处理。", "输出一个商品级处理结论：继续观察、调整页面/投放/库存、或提交主管复核。", "提交处理截图、数据口径和下一次复盘指标。"], "evidenceRequirements": ["商品判断包截图", "主风险后台数据截图", "相关指标联动截图", "处理结论与复盘指标"], "reviewMetrics": ["支付金额", "ROAS/ROI", "点击率", "转化率", "退款率", "毛利率", "库存"], "needManagerReview": decision == "manager_review_required", "reason": reason}
-    return {"version": DUAL_AGENT_PIPELINE_VERSION, "decisionId": make_id("TGD"), "packageId": package.get("packageId"), "dataVersion": package.get("dataVersion"), "storeId": package.get("storeId"), "productId": product_id, "decision": decision, "taskTitle": task_plan.get("title"), "priority": task_plan.get("priority"), "reason": task_plan.get("reason"), "taskPlan": task_plan, "productJudgmentPackage": package, "rule": "Agent2 consumes product_judgment_package and may create at most one product-level task."}
+    return {"version": DUAL_AGENT_PIPELINE_VERSION, "decisionId": make_id("TGD"), "packageId": package.get("packageId"), "dataVersion": package.get("dataVersion"), "storeId": package.get("storeId"), "productId": product_id, "decision": decision, "taskTitle": task_plan.get("title"), "priority": task_plan.get("priority"), "reason": task_plan.get("reason"), "taskPlan": task_plan, "productJudgmentPackage": package, "rule": "Agent2 consumes resolved product_judgment_package and may create at most one product-level task."}
 
 
 def _save_decision(decision: Dict[str, Any]) -> None:
@@ -279,12 +332,33 @@ def _save_decision(decision: Dict[str, Any]) -> None:
         conn.commit()
 
 
+def _existing_product_pool_task(data_version: str | None, store_id: str | None, product_id: str | None) -> Dict[str, Any] | None:
+    if not product_id:
+        return None
+    with connect() as conn:
+        if not _table_exists(conn, "task_pool_entries"):
+            return None
+        rows = conn.execute("SELECT payload FROM task_pool_entries WHERE data_version = ? ORDER BY created_at DESC", (data_version,)).fetchall() if data_version else conn.execute("SELECT payload FROM task_pool_entries ORDER BY created_at DESC").fetchall()
+    for row in rows:
+        payload = _safe_load(row["payload"])
+        task = payload.get("task") if isinstance(payload, dict) else {}
+        snapshot = payload.get("snapshot") if isinstance(payload, dict) else {}
+        plan = snapshot.get("taskPlan") if isinstance(snapshot, dict) else {}
+        task_product = task.get("productId") or plan.get("productId") or snapshot.get("productId")
+        task_store = (task.get("storeIds") or [None])[0] if isinstance(task.get("storeIds"), list) else plan.get("storeId") or snapshot.get("storeId")
+        if str(task_product) == str(product_id) and (not store_id or not task_store or str(task_store) == str(store_id)):
+            return payload
+    return None
+
+
 def _stream_decision_to_task_pool(decision: Dict[str, Any], created_by: str | None = None) -> Dict[str, Any]:
     if decision.get("decision") not in FORMAL_DECISIONS:
         return {"ok": False, "skipped": True, "reason": "decision_not_formal_task", "decisionId": decision.get("decisionId")}
+    if _existing_product_pool_task(decision.get("dataVersion"), decision.get("storeId"), decision.get("productId")):
+        return {"ok": False, "skipped": True, "reason": "same_product_task_already_in_pool", "decisionId": decision.get("decisionId"), "createdTaskCount": 0}
     plan = decision.get("taskPlan") or {}
     package = decision.get("productJudgmentPackage") or {}
-    snapshot = create_task_snapshot({"dataVersion": decision.get("dataVersion"), "decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "entityType": "product", "entityId": decision.get("productId"), "productId": decision.get("productId"), "storeId": decision.get("storeId"), "signalRef": decision.get("packageId"), "bundleRef": decision.get("packageId"), "ragContext": {"source": "product_judgment_package", "version": DUAL_AGENT_PIPELINE_VERSION}, "agentJudgment": {"decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "reason": decision.get("reason"), "status": "task_generated_from_product_judgment_package"}, "taskPlan": plan, "operationBudget": plan.get("operationBudget") or {}, "evidenceRequirements": plan.get("evidenceRequirements") or [], "systemFacts": {"productJudgmentPackage": package, "taskGenerationDecision": decision}, "source": "v149_dual_agent_task_generation"}, created_by=created_by)
+    snapshot = create_task_snapshot({"dataVersion": decision.get("dataVersion"), "decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "entityType": "product", "entityId": decision.get("productId"), "productId": decision.get("productId"), "storeId": decision.get("storeId"), "signalRef": decision.get("packageId"), "bundleRef": decision.get("packageId"), "ragContext": {"source": "product_judgment_package", "version": DUAL_AGENT_PIPELINE_VERSION}, "agentJudgment": {"decision": decision.get("decision"), "confidence": package.get("confidence") or 0.72, "reason": decision.get("reason"), "status": "task_generated_from_product_judgment_package"}, "taskPlan": plan, "operationBudget": plan.get("operationBudget") or {}, "evidenceRequirements": plan.get("evidenceRequirements") or [], "systemFacts": {"productJudgmentPackage": package, "taskGenerationDecision": decision}, "source": "v1492_dual_agent_task_generation"}, created_by=created_by)
     pool = enter_task_pool_from_snapshot(str(snapshot.get("taskSnapshotId")), created_by=created_by, force=False)
     return {"ok": True, "snapshot": snapshot, "poolResult": pool, "createdTaskCount": int((pool or {}).get("createdTaskCount") or 0)}
 
@@ -298,8 +372,8 @@ def run_dual_agent_product_task_pipeline(data_version: str | None = None, *, rag
     _save_raw_judgments(raw_judgments)
     for signal in signals:
         update_signal_status(signal.get("signalId"), "product_analysis_judged", {"version": DUAL_AGENT_PIPELINE_VERSION})
-    packages = _package_product_judgments(data_version)
-    sorted_packages = sorted(packages, key=lambda item: (SEVERITY_RANK.get(str(item.get("maxSeverity") or "normal"), 0), float(item.get("confidence") or 0), int(item.get("judgmentCount") or 0)), reverse=True)
+    packages, identity_gaps = _package_product_judgments(data_version)
+    sorted_packages = sorted(packages, key=lambda item: (1 if item.get("taskCandidateAllowed") else 0, SEVERITY_RANK.get(str(item.get("maxSeverity") or "normal"), 0), float(item.get("confidence") or 0), int(item.get("judgmentCount") or 0)), reverse=True)
     decisions: List[Dict[str, Any]] = []
     streamed: List[Dict[str, Any]] = []
     candidate_index = 0
@@ -315,7 +389,7 @@ def run_dual_agent_product_task_pipeline(data_version: str | None = None, *, rag
     by_decision = Counter(str(item.get("decision")) for item in decisions)
     task_pool_created = sum(int(item.get("createdTaskCount") or 0) for item in streamed)
     formal_decision_count = int(by_decision.get("create_task_snapshot", 0) or 0) + int(by_decision.get("manager_review_required", 0) or 0)
-    generation_run = record_task_generation_run(data_version=data_version, input_bundle_count=len(signals), agent_judgment_count=len(raw_judgments), product_judgment_package_count=len(packages), task_decision_count=len(decisions), by_decision=dict(by_decision), streamed_task_snapshot_count=sum(1 for item in streamed if item.get("ok")), task_pool_created_count=task_pool_created, skipped_formal_count=sum(1 for item in streamed if item.get("skipped")), zero_task_reasons=[item.get("reason") for item in decisions if item.get("decision") == "no_task"][:20], source="v149_dual_agent_product_task_pipeline")
+    generation_run = record_task_generation_run(data_version=data_version, input_bundle_count=len(signals), agent_judgment_count=len(raw_judgments), product_judgment_package_count=len(packages), task_decision_count=len(decisions), by_decision=dict(by_decision), streamed_task_snapshot_count=sum(1 for item in streamed if item.get("ok")), task_pool_created_count=task_pool_created, skipped_formal_count=sum(1 for item in streamed if item.get("skipped")), zero_task_reasons=[item.get("reason") for item in decisions if item.get("decision") == "no_task"][:20], source="v1492_dual_agent_product_task_pipeline")
     try:
         from src.services.frontend_read_model_service import refresh_dashboard_view, refresh_task_views
         if task_pool_created:
@@ -325,4 +399,4 @@ def run_dual_agent_product_task_pipeline(data_version: str | None = None, *, rag
     except Exception:
         pass
     ref = f"dual_agent_product_task:{data_version or 'latest'}"
-    return {"version": DUAL_AGENT_PIPELINE_VERSION, "mode": "v149_dual_agent_product_judgment_package_task_pipeline", "dataVersion": data_version, "outputRef": ref, "agentJudgmentRef": ref, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "signalCount": len(signals), "judgmentCount": len(raw_judgments), "rawJudgmentCount": len(raw_judgments), "productJudgmentPackageCount": len(packages), "taskDecisionCount": len(decisions), "formalDecisionCount": formal_decision_count, "streamedTaskSnapshotCount": sum(1 for item in streamed if item.get("ok")), "streamedTaskPoolCount": task_pool_created, "byDecision": dict(by_decision), "taskGenerationRun": generation_run, "packages": packages[:50], "decisions": decisions[:50], "streamed": streamed[:50], "rule": "V14.9: Agent1 judges metrics, system compresses by product, Agent2 generates product-level SOP tasks, task pool admits only product-level decisions."}
+    return {"version": DUAL_AGENT_PIPELINE_VERSION, "mode": "v1492_dual_agent_real_product_package_task_pipeline", "dataVersion": data_version, "outputRef": ref, "agentJudgmentRef": ref, "ragContextRef": rag_context_ref or rag_context.get("ragContextRef") or rag_context.get("outputRef"), "signalCount": len(signals), "judgmentCount": len(raw_judgments), "rawJudgmentCount": len(raw_judgments), "productJudgmentPackageCount": len(packages), "identityGapCount": len(identity_gaps), "taskDecisionCount": len(decisions), "formalDecisionCount": formal_decision_count, "streamedTaskSnapshotCount": sum(1 for item in streamed if item.get("ok")), "streamedTaskPoolCount": task_pool_created, "byDecision": dict(by_decision), "taskGenerationRun": generation_run, "packages": packages[:50], "identityGaps": identity_gaps[:50], "decisions": decisions[:50], "streamed": streamed[:50], "rule": "V14.9.2: Agent1 may be metric-level; system package compression requires real productId; Agent2 generates capped product-level SOP tasks only."}
