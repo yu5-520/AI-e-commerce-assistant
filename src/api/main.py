@@ -1,7 +1,8 @@
-"""V16.11 FastAPI entrypoint.
+"""V16.12 FastAPI entrypoint.
 
-MVP runtime only. Legacy routes, worker scaffold routes, and deleted source-core
-dependencies are removed from the active app; Git history remains the archive.
+MVP runtime only. Legacy routes, worker scaffold routes, deleted source-core
+modules, and old mock workflow dependencies are removed from the active app;
+Git history remains the archive.
 """
 
 from __future__ import annotations
@@ -18,13 +19,13 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.11"
+API_VERSION = "16.12"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v1611_active_import_gate",
+    "mode": "v1612_approval_mock_workflow_removed",
     "mainline": [
         "report_receive_station",
         "report_schema_station",
@@ -41,7 +42,7 @@ STATION_MAINLINE = {
         "frontend_read_model_station",
         "task_pool_acceptance_station",
     ],
-    "rule": "V16.11：当前工作树只服务MVP。修复清仓后active import断点，并把FastAPI完整导入检查纳入V16 manifest守门。",
+    "rule": "V16.12：当前工作树只服务MVP。审批链路删除旧mock workflow依赖，审批只读取当前V16任务状态投影；FastAPI完整导入继续作为清理守门。",
 }
 
 
@@ -64,7 +65,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1611": "active_import_gate", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1612": "approval_mock_workflow_removed", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
@@ -73,7 +74,7 @@ app.include_router(stations.router)
 app.include_router(task_snapshots.router)
 app.include_router(task_pool.router)
 app.include_router(task_lifecycle_stations.router)
-app.include_router(frontend_views.router)
+app.include_router(frontend_read_model.router)
 app.include_router(ops.router)
 app.include_router(accounts.router)
 app.include_router(health.router)
@@ -84,3 +85,4 @@ app.include_router(approvals.router)
 app.include_router(system.router)
 app.include_router(task_persistence.router)
 app.include_router(audit.router)
+".replace("frontend_read_model.router
