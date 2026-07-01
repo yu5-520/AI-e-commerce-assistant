@@ -1,45 +1,36 @@
 # Current Version
 
 ```text
-16.1
+16.2
 ```
 
-## V16.1 Meaning
+## V16.2 Meaning
 
-V16.1 is the MVP-real product judgment Agent release.
+V16.2 is the MVP-real task mapping Agent + RAG release.
 
-It keeps the V15/V15.1 guardrails:
-
-```text
-- three-Agent budget ledger
-- current-run dataVersion isolation
-- no demo/seed task pollution
-- product_judgment_package 70% confidence gate
-```
-
-Then it changes the product judgment stage from local/system rule expansion to a real batched Agent call:
+It keeps the V16.1 real product judgment Agent, then opens the next real stage:
 
 ```text
-fullProductBundle batch
+fullProductBundle
   -> real product judgment Agent API call
   -> strict JSON judgments
+  -> product_judgment_package + 70% confidence gate
+  -> real task mapping Agent API call with RAG permission/SOP context
+  -> strict JSON tasks
   -> system validation
-  -> agent_product_judgments_v15
-  -> product_judgment_packages_v15
-  -> 70% package confidence gate
+  -> task snapshots / task pool / current-run read model
 ```
 
 Core rules:
 
-- Product judgment Agent must analyze batched fullProductBundle records through a real provider call.
-- Default call unit is a product batch, not a row, metric, or task.
-- Default batch size is 30 products and max product judgment calls per run is 3.
-- API key is read from `PRODUCT_JUDGMENT_AGENT_API_KEY`, `DEEPSEEK_API_KEY`, or `LLM_API_KEY`.
-- Provider URL/model can be configured with `PRODUCT_JUDGMENT_AGENT_BASE_URL` and `PRODUCT_JUDGMENT_AGENT_MODEL`.
-- The Agent must return strict JSON with a top-level `judgments` array.
-- The system validates returned `productId`, `storeId`, `metricCode`, `severity`, `confidence`, `decisionHint`, `finding`, and `evidence` before writing judgments.
-- If API key is missing, provider call fails, JSON is invalid, or no valid judgments are returned, the pipeline records the failure and does not generate fake judgments or fake tasks.
-- System code still owns package compression, 70% package confidence gate, task-pool admission, lifecycle state, and current-run frontend read model.
-- Task mapping remains template/RAG-placeholder until V16.2; V16.1 only opens real product judgment Agent.
+- Product judgment Agent remains real and batched.
+- Task mapping Agent only receives `product_judgment_package` rows whose `packageConfidence >= 0.70`.
+- Task mapping Agent must use RAG context: company permissions, account permissions, approval rules, SOP, evidence requirements and review metrics.
+- Task mapping output must be strict JSON with a top-level `tasks` array.
+- Each formal task must include `packageId`, `productId`, `storeId`, `decision`, `taskTitle`, `priority`, `deadline`, `assigneeRole`, `approvalRequired`, `forbiddenActions`, `sopSteps`, `evidenceRequirements`, `reviewMetrics`, and `reason`.
+- A formal task must have at least 3 SOP steps and at least 2 evidence requirements.
+- System validates every task against the current candidate package before writing `task_generation_decisions_v15`.
+- Missing API key, provider failure, invalid JSON, or zero valid task output creates no fake task and no local SOP-template fallback.
+- System code still owns task-pool admission, same-product dedupe, lifecycle state and current-run frontend read model.
 
-一句话：V16.1 让“商品有没有问题、问题有多可信”进入真实 Agent 判断阶段；失败宁可空链路，也不再用本地垫底判断冒充真实 Agent。
+一句话：V16.2 让“该让谁做、按什么权限做、提交什么证据、如何复盘”进入真实 RAG 任务映射 Agent；失败宁可无任务，也不再用模板任务冒充真实 Agent。
