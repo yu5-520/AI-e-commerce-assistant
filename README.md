@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.16 Report Alert Cleanup / V16 MVP runtime**.
+Current baseline: **V16.17 Legacy ImportJob Route Removal / V16 MVP runtime**.
 
 ## Mainline
 
@@ -27,9 +27,9 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
-## V16.16 rule
+## V16.17 rule
 
-Report alerts only keep observation evidence. They do not import deleted V11 governance services and do not create tasks directly.
+Data import uses the V16 `src/api/routes/data_import.py` route only. The old ImportJob / ProjectionJob wrapper route and worker services are removed from active runtime.
 
 ## Entry points
 
