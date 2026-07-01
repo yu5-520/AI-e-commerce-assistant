@@ -1,21 +1,22 @@
-Current Version: 16.4
+Current Version: 16.5
 
-V16.4 Real Report Fact-Layer Repair
+V16.5 Station Alignment
 
 Core chain:
 
-`Report schema Agent -> system cleaning -> product/store/traffic fact namespace isolation -> report metricDate -> product master dedupe -> validated fullProductBundle -> real product judgment Agent -> product_judgment_package 70% gate -> real task mapping Agent with RAG permissions/SOP -> current-run task-pool acceptance`
+`report_receive_station -> report_schema_station -> report_fact_station -> product_master_station -> product_metric_snapshot_station -> full_product_bundle_station -> bundle_validation_station -> product_judgment_agent_station -> product_judgment_package_station -> rag_permission_context_station -> task_mapping_agent_station -> task_pool_admission_station -> frontend_read_model_station -> task_pool_acceptance_station`
 
 Key fix:
 
-- Product master rows now come only from product metric/detail rows.
-- Traffic-source rows become child `trafficSourceFacts`; they do not create product master rows.
-- Product ROI, store ROI and traffic-source ROI are isolated namespaces.
-- Product detail ROI can only be overwritten by product-scope metrics, not traffic-source ROI=0.
-- Business metric date comes from `统计日期` / `更新时间` / filename or dataVersion, not the current upload date.
-- Product dedupe key is `platform + store + productId + skuId`.
-- fullProductBundle carries fact-layer validation before real Agent judgment.
+- Registry, Contract, Queue, Adapter and Data-line use the same V16.5 station chain.
+- The old giant Agent station is split back into product judgment, package merge, RAG context, task mapping, task admission and read-model stations.
+- Product judgment Agent only outputs judgments and coverage.
+- Product judgment package station owns package merge and 70% gate.
+- Coverage below 90% stops task mapping.
+- Task mapping Agent only outputs decisions.
+- Task pool admission station writes task pool rows.
+- Final acceptance station validates current-run alignment.
 
 Boundary:
 
-V16.4 does not fake missing facts. If ROI/date/product facts are missing, the bundle exposes the gap to the Agent instead of hiding it with current date, traffic ROI, or duplicated product rows.
+V16.5 is not a new feature layer. It is station governance: one station, one responsibility, one output, one acceptance metric.
