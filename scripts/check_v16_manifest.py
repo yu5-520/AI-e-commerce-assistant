@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Check current repository files against the V16 MVP manifest.
 
-This is the only current repository hygiene checker. Old V12/V13 checkers were
-removed because they enforced obsolete version and route rules.
+This is the only current repository hygiene checker. V16.11 adds an active
+FastAPI import gate so cleanup does not silently delete files still used by the
+active runtime.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
@@ -57,7 +59,7 @@ def classify(path: str) -> str:
         return "old_rag_knowledge_samples"
     if path.startswith("schemas/"):
         return "old_schema_contracts"
-    if path.startswith("scripts/check_"):
+    if path.startswith("scripts/check_") and path != "scripts/check_v16_manifest.py":
         return "old_check_scripts"
     if path.startswith("data/"):
         return "old_runtime_or_sample_data"
@@ -103,7 +105,7 @@ def write_plan(unmarked: List[str], protected_unmarked: List[str], plan_path: Pa
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         "",
-        "echo 'V16.10 purge plan: removing unmarked MVP cleanup candidates'",
+        "echo 'V16.11 purge plan: removing unmarked MVP cleanup candidates'",
         "",
     ]
     for path in sorted(unmarked):
@@ -122,11 +124,29 @@ def purge_local(unmarked: List[str]) -> None:
     subprocess.run(["git", "rm", "--", *unmarked], cwd=ROOT, check=True)
 
 
+def active_import_check() -> Dict[str, object]:
+    code = (
+        "from src.api.main import app, STATION_MAINLINE\n"
+        "print(app.version)\n"
+        "print(STATION_MAINLINE.get('mode'))\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
+    stdout_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return {
+        "ok": result.returncode == 0,
+        "returnCode": result.returncode,
+        "appVersion": stdout_lines[0] if stdout_lines else None,
+        "mode": stdout_lines[1] if len(stdout_lines) > 1 else None,
+        "stderr": result.stderr.strip(),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check or purge files outside the V16 MVP manifest.")
     parser.add_argument("--write-plan", action="store_true", help="write /tmp/v16_purge_plan.sh")
     parser.add_argument("--purge", action="store_true", help="git rm unmarked files locally; does not commit")
     parser.add_argument("--json", action="store_true", help="print JSON summary")
+    parser.add_argument("--skip-active-import", action="store_true", help="skip importing src.api.main")
     args = parser.parse_args()
 
     manifest = load_manifest()
@@ -140,6 +160,9 @@ def main() -> int:
 
     purge_candidates = as_set(manifest, "purge_candidates_after_import_check")
     purge_present = [path for path in files if path in purge_candidates]
+    active_import = {"ok": None, "skipped": True}
+    if not args.skip_active_import:
+        active_import = active_import_check()
 
     if args.write_plan:
         write_plan(unmarked, protected_unmarked)
@@ -153,6 +176,7 @@ def main() -> int:
         "unmarkedFiles": len(unmarked),
         "protectedUnmarkedFiles": len(protected_unmarked),
         "firstPurgeCandidatesStillPresent": len(purge_present),
+        "activeImport": active_import,
         "categories": categories,
         "planPath": str(DEFAULT_PLAN_PATH) if args.write_plan else None,
         "purgedLocally": bool(args.purge),
@@ -160,7 +184,7 @@ def main() -> int:
 
     if args.json:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
-        return 0
+        return 0 if active_import.get("ok") in {True, None} else 2
 
     print(f"Manifest version: {summary['manifestVersion']}")
     print(f"Baseline: {summary['baseline']}")
@@ -168,6 +192,15 @@ def main() -> int:
     print(f"Unmarked files: {summary['unmarkedFiles']}")
     print(f"Protected unmarked files: {summary['protectedUnmarkedFiles']}")
     print(f"First purge candidates still present: {summary['firstPurgeCandidatesStillPresent']}")
+
+    print("\n[ACTIVE IMPORT GATE]")
+    if active_import.get("skipped"):
+        print("skipped")
+    elif active_import.get("ok"):
+        print(f"FastAPI import OK · appVersion={active_import.get('appVersion')} · mode={active_import.get('mode')}")
+    else:
+        print("FastAPI import FAILED")
+        print(active_import.get("stderr") or "<empty stderr>")
 
     if categories:
         print("\n[UNMARKED CATEGORIES]")
@@ -195,8 +228,8 @@ def main() -> int:
     if args.purge:
         print("\nPurged unmarked files locally. Review with: git status --short")
 
-    print("\nRule: unmarked files are deletion candidates unless promoted into config/v16_mvp_file_manifest.json.")
-    return 0
+    print("\nRule: active import must pass before deleting more source files.")
+    return 0 if active_import.get("ok") in {True, None} else 2
 
 
 if __name__ == "__main__":
