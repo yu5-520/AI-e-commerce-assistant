@@ -1,14 +1,12 @@
 {
-  "manifestVersion": "16.15",
-  "baseline": "V16.15 data import route cleanup / V16 MVP runtime",
+  "manifestVersion": "16.16",
+  "baseline": "V16.16 report alert service cleanup / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless explicitly reviewed.",
   "rules": [
     "Git history is the archive; current working tree only serves the MVP.",
     "FastAPI active import must pass before more source cleanup.",
-    "main.py must mount frontend_views.router directly.",
-    "Audit routes use the V16 account service.",
-    "Data import routes use the V16 account service.",
-    "Approval reads current task_status projection and does not use old workflow fallback."
+    "Report alerts keep observation evidence only and do not create tasks directly.",
+    "Task generation is owned by the V16 station queue and Agent mainline."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -48,7 +46,9 @@
     "src/services/frontend_read_model_service.py",
     "src/services/task_acceptance_assignment_station_service.py",
     "src/services/task_submission_review_station_service.py",
-    "src/services/task_recap_rag_station_service.py"
+    "src/services/task_recap_rag_station_service.py",
+    "src/services/report_alert_service.py",
+    "src/services/data_gap_event_service.py"
   ],
   "v16_support": [
     ".gitignore",
@@ -87,10 +87,10 @@
     "config/v16_mvp_file_manifest.json"
   ],
   "v16_tools": ["scripts/check_v16_manifest.py"],
-  "fixed_in_v16_15": [
-    "src/api/routes/data_import.py uses account_service.user_id_from_headers",
-    "src/api/routes/data_import.py builds lightweight request context",
-    "src/api/main.py API_VERSION is 16.15"
+  "fixed_in_v16_16": [
+    "src/services/report_alert_service.py removed old report governance dependency",
+    "report alert layer no longer creates tasks directly",
+    "src/api/main.py API_VERSION is 16.16"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
