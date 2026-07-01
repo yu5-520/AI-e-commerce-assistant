@@ -1,9 +1,5 @@
-Current Version: 16.15
+Current Version: 16.16
 
-V16.15
+V16.16 report alert service cleanup.
 
-Data import route cleanup.
-
-Verify:
-
-`python scripts/check_v16_manifest.py`
+Verify with scripts/check_v16_manifest.py
