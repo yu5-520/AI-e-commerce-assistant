@@ -1,12 +1,13 @@
 {
-  "manifestVersion": "16.9",
-  "baseline": "V16.9 stale verifier purge / V16.8 MVP-purged runtime",
+  "manifestVersion": "16.10",
+  "baseline": "V16.10 final unmarked purge / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
   "rules": [
     "Git history is the history archive; current working tree only serves the MVP.",
     "V16_KEEP files are current MVP mainline files.",
     "V16_SUPPORT files are runtime support files required by current MVP files.",
     "V16_FRONTEND prefixes are the current web demo entry files.",
+    "V16_BACKEND_PREFIX files are active backend route packages required by the current frontend shell.",
     "V16_DOC files are the only current documentation files.",
     "Legacy compatibility routes, old station aliases, worker scaffold routes, stale V12 checkers and unmarked legacy files are removed from active runtime."
   ],
@@ -42,6 +43,7 @@
     "src/services/dual_agent_product_task_service.py",
     "src/services/agent_budget_ledger_service.py",
     "src/services/rag_context_station_service.py",
+    "src/services/indicator_rag_service.py",
     "src/services/task_pool_station_service.py",
     "src/services/task_pool_acceptance_v163_service.py",
     "src/services/frontend_read_model_service.py",
@@ -50,6 +52,13 @@
     "src/services/task_recap_rag_station_service.py"
   ],
   "v16_support": [
+    ".gitignore",
+    ".env.example",
+    "src/__init__.py",
+    "src/api/__init__.py",
+    "src/api/routes/__init__.py",
+    "src/services/__init__.py",
+    "src/repositories/__init__.py",
     "src/repositories/sqlite_repository.py",
     "src/services/system_service.py",
     "src/services/account_service.py",
@@ -61,7 +70,6 @@
     "src/api/routes/approvals.py",
     "src/api/routes/audit.py",
     "src/api/routes/ops.py",
-    "src/api/routes/modules.py",
     "src/api/routes/pipeline.py",
     "src/api/routes/llm.py",
     "requirements.txt",
@@ -70,6 +78,9 @@
   ],
   "v16_frontend_prefixes": [
     "web_demo/"
+  ],
+  "v16_backend_prefixes": [
+    "src/api/routes/modules/"
   ],
   "v16_docs": [
     "README.md",
@@ -119,6 +130,29 @@
   "purged_in_v16_9": [
     "scripts/verify_release.py",
     "scripts/check_repo_hygiene.py"
+  ],
+  "purged_in_v16_10": [
+    "schemas/",
+    "src/core/",
+    "src/data_loader/",
+    "src/db/",
+    "src/deprecated_stations/",
+    "src/diagnosis/",
+    "src/listing/",
+    "src/middleware/",
+    "src/operating_loop/",
+    "src/operating_unit/",
+    "src/rag/",
+    "src/reports/",
+    "src/rpa_tasks/",
+    "src/scheduler/",
+    "scripts/check_backend_flow_consistency.py",
+    "scripts/check_frontend_module_consistency.py",
+    "scripts/check_rag_namespace_isolation.py",
+    "scripts/check_rag_write_memory_consistency.py",
+    "scripts/check_repository_consistency.py",
+    "scripts/check_tier_isolation_consistency.py",
+    "src/services/v7-v14 legacy service fragments"
   ],
   "legacy_aliases_removed_in_v16_7": [
     "import_station",
