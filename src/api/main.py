@@ -1,10 +1,10 @@
-"""V16.18 FastAPI entrypoint.
+"""V16.19 FastAPI entrypoint.
 
 MVP runtime only. Legacy routes, worker scaffold routes, deleted source-core
 modules, old mock workflow dependencies, syntax leftovers, old audit/data-import
 context imports, old V11 report-governance dependencies, legacy ImportJob wrapper
-routes, and legacy LLM debug gateway routes are removed from the active app; Git
-history remains the archive.
+routes, legacy LLM debug gateway routes, and legacy module task-report routes are
+removed from the active app; Git history remains the archive.
 """
 
 from __future__ import annotations
@@ -21,13 +21,13 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.18"
+API_VERSION = "16.19"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v1618_legacy_llm_debug_route_removed",
+    "mode": "v1619_module_task_report_route_pruned",
     "mainline": [
         "report_receive_station",
         "report_schema_station",
@@ -44,7 +44,7 @@ STATION_MAINLINE = {
         "frontend_read_model_station",
         "task_pool_acceptance_station",
     ],
-    "rule": "V16.18：旧LLM调试网关路由从active app移除。真实Agent调用保留在V16商品判断/任务映射主链路，FastAPI完整导入继续作为清理守门。",
+    "rule": "V16.19：modules内部旧task_report子路由从active app移除。任务详情由V16 task_pool/task_persistence/task_lifecycle/frontend read model主链路承接。",
 }
 
 
@@ -67,7 +67,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1618": "legacy_llm_debug_route_removed", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1619": "module_task_report_route_pruned", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
