@@ -1,7 +1,7 @@
-"""V16.8 FastAPI entrypoint.
+"""V16.11 FastAPI entrypoint.
 
-MVP runtime only. Legacy version routes and worker scaffold routes are removed
-from the active app; Git history remains the archive for old versions.
+MVP runtime only. Legacy routes, worker scaffold routes, and deleted source-core
+dependencies are removed from the active app; Git history remains the archive.
 """
 
 from __future__ import annotations
@@ -18,13 +18,13 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.8"
+API_VERSION = "16.11"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v168_mvp_purged_runtime_only",
+    "mode": "v1611_active_import_gate",
     "mainline": [
         "report_receive_station",
         "report_schema_station",
@@ -41,7 +41,7 @@ STATION_MAINLINE = {
         "frontend_read_model_station",
         "task_pool_acceptance_station",
     ],
-    "rule": "V16.8：当前工作树只服务MVP。旧路由、旧站点别名、旧worker scaffold与未标识旧文件已从active runtime移除；旧版本证据只保留在Git历史中。",
+    "rule": "V16.11：当前工作树只服务MVP。修复清仓后active import断点，并把FastAPI完整导入检查纳入V16 manifest守门。",
 }
 
 
@@ -64,7 +64,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v168": "mvp_purged_runtime_only", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v1611": "active_import_gate", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
