@@ -14,25 +14,25 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.1"
+API_VERSION = "16.2"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v161_real_product_judgment_agent_mvp",
+    "mode": "v162_real_product_and_task_agents_mvp",
     "mainline": [
         "report_schema_agent_mapping_cache",
         "system_cleaning_import",
         "full_product_bundle",
         "real_product_judgment_agent_batch_json",
         "product_judgment_package_confidence_gate_70",
-        "task_mapping_template_until_v16_2",
+        "real_task_mapping_agent_rag_permission_json",
         "task_pool_admission_current_data_version",
         "frontend_read_model_current_run_only",
         "data_metro_line_real_agent_status",
     ],
-    "rule": "V16.1：商品判断阶段切到真实批量Agent JSON。没有PRODUCT_JUDGMENT_AGENT_API_KEY/DEEPSEEK_API_KEY、模型返回无效JSON或证据不足时，不回退假判断、不生成假任务；任务映射真实RAG Agent留到V16.2。",
+    "rule": "V16.2：商品判断与任务映射都切到真实批量Agent JSON。任务映射Agent只处理70%+商品判断包，并结合RAG权限/SOP/审批规则生成任务；API未配置、JSON无效或无有效任务时，不回退模板任务、不生成假任务。",
 }
 
 
@@ -55,7 +55,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v161": "real_product_judgment_agent_mvp", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v162": "real_product_and_task_agents_mvp", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
