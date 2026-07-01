@@ -1,6 +1,6 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.17 Legacy ImportJob Route Removal / V16 MVP runtime**.
+Current baseline: **V16.18 Legacy LLM Debug Route Removal / V16 MVP runtime**.
 
 ## Mainline
 
@@ -27,9 +27,9 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
-## V16.17 rule
+## V16.18 rule
 
-Data import uses the V16 `src/api/routes/data_import.py` route only. The old ImportJob / ProjectionJob wrapper route and worker services are removed from active runtime.
+The legacy `/api/llm/*` debug route is removed from active runtime. Real Agent model calls remain inside the V16 product judgment and task mapping services.
 
 ## Entry points
 
