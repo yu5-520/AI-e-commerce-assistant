@@ -1,12 +1,12 @@
 # Current Version
 
 ```text
-14.9.2
+14.9.3
 ```
 
-## V14.9.2 Meaning
+## V14.9.3 Meaning
 
-V14.9.2 is the real-product package hard gate and current-run task count fix.
+V14.9.3 is the Agent1 metric-expansion and product-package compression release.
 
 It keeps the V14.9 dual-Agent mainline:
 
@@ -16,7 +16,7 @@ report import system
   -> system product layered snapshot
   -> fullProductBundle assembly
   -> RAG volatility boundary context
-  -> Agent 1 product analysis station
+  -> Agent 1 metric-level analysis expansion
   -> system real-product package gate
   -> Agent 2 task generation station
   -> system task-pool admission station
@@ -26,13 +26,13 @@ report import system
 
 Fix scope:
 
-- Package integration can no longer fall back to `entityId`, `bundleId`, `signalId`, `SKU`, `SPU`, `LINK`, or other engineering IDs.
-- Only a resolved real `productId` can become a `product_judgment_package`.
-- Product identity gaps stay as Agent1 judgments and cannot enter Agent2 task generation.
-- Package admission is stricter: medium risk needs multiple signals or stronger evidence; high/critical risk still enters.
-- Agent2 task generation is capped per run and checks same-product task-pool duplicates before creating a new task.
-- Data-line formal task count now uses the latest run's `taskPoolCreatedCount`, not the global `task_pool_entries` total.
+- Agent1 no longer emits only one judgment per product signal.
+- A resolved fullProductBundle is expanded into multiple metric-level judgments, such as ROI, refundRate, inventory, conversionRate, grossMargin, adSpend, and paymentAmount.
+- Product identity gaps still stay in Agent1 and cannot enter Agent2.
+- The package integration station still compresses by real `productId`, so many metric judgments become one `product_judgment_package` per product.
+- Agent2 still only consumes the compressed product package and task-pool admission remains capped, product-level, and duplicate-safe.
+- Data-line now records `averageJudgmentsPerBundle` and keeps formal task count on latest run `taskPoolCreatedCount`.
 
 Core rule:
 
-`判断可以细，整合必须按真实商品压缩，任务数必须看本轮产出。`
+`Agent1 判断要细，整合站必须压回商品级，任务数必须看本轮产出。`
