@@ -14,17 +14,20 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "16.3"
+API_VERSION = "16.4"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "v163_current_run_real_task_pool_acceptance",
+    "mode": "v164_real_report_fact_layer_before_agent",
     "mainline": [
         "report_schema_agent_mapping_cache",
         "system_cleaning_import",
-        "full_product_bundle",
+        "real_report_fact_namespace_product_store_traffic",
+        "report_date_metric_date_priority",
+        "product_master_dedupe_platform_store_product_sku",
+        "full_product_bundle_fact_layer_validation",
         "real_product_judgment_agent_batch_json",
         "product_judgment_package_confidence_gate_70",
         "real_task_mapping_agent_rag_permission_json",
@@ -32,7 +35,7 @@ STATION_MAINLINE = {
         "frontend_read_model_current_run_only",
         "task_pool_acceptance_data_line_equals_pool_equals_frontend",
     ],
-    "rule": "V16.3：保留V16.2真实商品/任务Agent，并新增本轮真实任务池验收闸门。data-line formalTaskCount、当前dataVersion task_pool_entries、frontend_task_view、frontend_task_detail_view必须对齐；不对齐时只报断点，不自动补假任务。",
+    "rule": "V16.4：先修真实报表事实层，再给Agent判断。商品经营明细建商品主档，流量来源只作为子事实；商品ROI、店铺ROI、流量ROI分命名空间；指标日期优先读统计日期/更新时间，不用今日时间；商品主键按平台+店铺+商品ID+SKU去重。",
 }
 
 
@@ -55,7 +58,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v163": "current_run_real_task_pool_acceptance", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v164": "real_report_fact_layer_before_agent", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
