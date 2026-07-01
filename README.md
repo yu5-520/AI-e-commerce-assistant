@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.10 Final Unmarked Purge / V16 MVP runtime**.
+Current baseline: **V16.11 Active Import Gate / V16 MVP runtime**.
 
-V16.10 removes the final broad group of unmarked legacy files from active repository state. Git history is the archive; current files serve the V16 MVP only.
+V16.11 keeps the cleaned MVP repository and adds an active FastAPI import gate to the current checker. The account route no longer depends on the old `src.core.context` module.
 
 ## Mainline
 
@@ -29,6 +29,12 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
+The checker now includes:
+
+```python
+from src.api.main import app, STATION_MAINLINE
+```
+
 ## Manifest files
 
 ```text
@@ -44,7 +50,7 @@ One station = one input contract + one output artifact + one acceptance metric.
 Agent stations only produce Agent outputs.
 System stations own package merge, admission, read models, and acceptance.
 Low product-judgment coverage pauses task mapping.
-Files outside the V16 manifest are deletion candidates for MVP cleanup.
+Active FastAPI import must pass before more source cleanup.
 ```
 
 ## Entry points
