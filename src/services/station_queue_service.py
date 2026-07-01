@@ -1,10 +1,9 @@
-"""V14.8 station queue runtime.
+"""V16.5 station queue runtime.
 
-The queue is a backend compute pipeline. Frontend pages read cached read models and
-must not consume queue jobs or trigger station execution. Mature Agent judgments
-stream into SOP task snapshots/task pool inside the Agent station; the queue only
-continues to task_snapshot_station when there are explicit pending snapshots to
-materialize.
+The queue now follows the split MVP-real station chain. Frontend pages read cached
+read models and never trigger station execution. Agent stations do not stream
+into task pool; system stations own package merge, admission, read model and
+acceptance.
 """
 
 from __future__ import annotations
@@ -17,19 +16,26 @@ from src.repositories.sqlite_repository import connect, dumps, ensure_columns, l
 from src.services.pipeline_gate_service import record_stage_gate
 from src.services.station_contract_service import run_station_contract
 
-STATION_QUEUE_VERSION = "14.8.0"
+STATION_QUEUE_VERSION = "16.5"
 TASK_GENERATION_SEQUENCE = [
-    ("system_product_snapshot_station", "system_product_snapshot_ready"),
-    ("product_signal_snapshot_station", "full_product_bundle_ready"),
-    ("task_signal_station", "full_product_bundle_queued"),
-    ("rag_context_station", "rag_volatility_context_ready"),
-    ("agent_judgment_station", "agent_soft_routing_streamed"),
-    ("task_snapshot_station", "task_snapshot_ready"),
-    ("task_pool_station", "task_pool_ready"),
+    ("report_receive_station", "report_received"),
+    ("report_schema_station", "report_schema_mapped"),
+    ("report_fact_station", "report_facts_ready"),
+    ("product_master_station", "product_master_ready"),
+    ("product_metric_snapshot_station", "product_metric_snapshot_ready"),
+    ("full_product_bundle_station", "full_product_bundle_ready"),
+    ("bundle_validation_station", "bundle_validation_ready"),
+    ("product_judgment_agent_station", "product_judgment_ready"),
+    ("product_judgment_package_station", "product_judgment_package_ready"),
+    ("rag_permission_context_station", "rag_permission_context_ready"),
+    ("task_mapping_agent_station", "task_mapping_ready"),
+    ("task_pool_admission_station", "task_pool_admitted"),
+    ("frontend_read_model_station", "frontend_read_model_ready"),
+    ("task_pool_acceptance_station", "task_pool_acceptance_ready"),
 ]
 STATION_INDEX = {station: index for index, (station, _stage) in enumerate(TASK_GENERATION_SEQUENCE)}
-STATION_PRIORITY = {"task_pool_station": 1, "task_snapshot_station": 5, "agent_judgment_station": 30, "rag_context_station": 40, "task_signal_station": 50, "product_signal_snapshot_station": 60, "system_product_snapshot_station": 70}
-FAST_LANE_STATIONS = {"task_snapshot_station", "task_pool_station"}
+STATION_PRIORITY = {station: index * 10 + 10 for index, (station, _stage) in enumerate(TASK_GENERATION_SEQUENCE)}
+FAST_LANE_STATIONS = {"task_pool_admission_station", "frontend_read_model_station", "task_pool_acceptance_station"}
 
 
 def now_iso() -> str:
@@ -121,7 +127,7 @@ def _insert_station_job(conn: Any, *, parent_job_id: str, system_type: str, stat
     return station_job_id
 
 
-def enqueue_task_generation(data_version: str | None, *, actor_user_id: str | None = None, input_ref: str | None = None, source: str = "import_completed", force: bool = True, priority: int = 70) -> Dict[str, Any]:
+def enqueue_task_generation(data_version: str | None, *, actor_user_id: str | None = None, input_ref: str | None = None, source: str = "import_completed", force: bool = True, priority: int = 10) -> Dict[str, Any]:
     ensure_queue_tables()
     now = now_iso()
     with connect() as conn:
@@ -136,16 +142,16 @@ def enqueue_task_generation(data_version: str | None, *, actor_user_id: str | No
             return {"version": STATION_QUEUE_VERSION, "queued": False, "idempotentHit": True, "job": _row_to_job(existing), "rule": "Task generation job already queued or running for this data version."}
         job_id = _job_id("JOB-TASKGEN")
         first_station, first_stage = TASK_GENERATION_SEQUENCE[0]
-        payload = {"version": STATION_QUEUE_VERSION, "source": source, "force": force, "dataVersion": data_version, "actorUserId": actor_user_id, "sequence": [station for station, _ in TASK_GENERATION_SEQUENCE], "boundary": "import system completed; task generation continues asynchronously", "frontendReadModelIsolated": True, "agentStreamsMatureTasks": True}
+        payload = {"version": STATION_QUEUE_VERSION, "source": source, "force": force, "dataVersion": data_version, "actorUserId": actor_user_id, "sequence": [station for station, _ in TASK_GENERATION_SEQUENCE], "boundary": "V16.5 split station chain", "frontendReadModelIsolated": True, "agentDoesNotStreamTaskPool": True}
         conn.execute("""
             INSERT INTO pipeline_jobs (job_id, system_type, actor_user_id, data_version, status, current_station, input_ref, payload, created_at, updated_at)
             VALUES (?, 'task_generation', ?, ?, 'queued', ?, ?, ?, ?, ?)
-        """, (job_id, actor_user_id, data_version, first_station, input_ref or f"operating_unit_snapshot:{data_version or 'latest'}", dumps(payload), now, now))
-        station_job_id = _insert_station_job(conn, parent_job_id=job_id, system_type="task_generation", station_id=first_station, stage=first_stage, data_version=data_version, actor_user_id=actor_user_id, input_ref=input_ref or f"operating_unit_snapshot:{data_version or 'latest'}", payload={"dataVersion": data_version, "userId": actor_user_id, "force": force, "source": source, "agentBatchSize": 20, "maxSignals": 20}, priority=priority)
+        """, (job_id, actor_user_id, data_version, first_station, input_ref or f"raw_report:{data_version or 'latest'}", dumps(payload), now, now))
+        station_job_id = _insert_station_job(conn, parent_job_id=job_id, system_type="task_generation", station_id=first_station, stage=first_stage, data_version=data_version, actor_user_id=actor_user_id, input_ref=input_ref or f"raw_report:{data_version or 'latest'}", payload={"dataVersion": data_version, "userId": actor_user_id, "force": force, "source": source, "agentBatchSize": 160, "maxSignals": 160}, priority=priority)
         conn.commit()
         job = conn.execute("SELECT * FROM pipeline_jobs WHERE job_id = ?", (job_id,)).fetchone()
-    record_stage_gate(data_version=data_version, stage="task_generation_queued", status="queued", input_payload={"source": source, "inputRef": input_ref}, output_payload={"jobId": job_id, "stationJobId": station_job_id, "frontendReadModelIsolated": True}, user_id=actor_user_id, upstream_stage="operating_unit_snapshot_ready", output_ref=f"pipeline_job:{job_id}")
-    return {"version": STATION_QUEUE_VERSION, "queued": True, "job": _row_to_job(job), "stationJobId": station_job_id, "status": "queued", "rule": "V14.8：导入请求返回后由worker异步生成；前端页面只读read model。"}
+    record_stage_gate(data_version=data_version, stage="task_generation_queued", status="queued", input_payload={"source": source, "inputRef": input_ref}, output_payload={"jobId": job_id, "stationJobId": station_job_id, "frontendReadModelIsolated": True, "splitStationChain": True}, user_id=actor_user_id, upstream_stage="report_received", output_ref=f"pipeline_job:{job_id}")
+    return {"version": STATION_QUEUE_VERSION, "queued": True, "job": _row_to_job(job), "stationJobId": station_job_id, "status": "queued", "rule": "V16.5：导入后进入完整拆分站点链路；前端只读read model。"}
 
 
 def _claim_next_station(system_type: str = "task_generation", *, worker_id: str = "manual-worker") -> Dict[str, Any] | None:
@@ -183,40 +189,47 @@ def _body_for_station(job: Dict[str, Any], station_job: Dict[str, Any]) -> Dict[
     payload.setdefault("userId", job.get("actorUserId"))
     payload.setdefault("force", True)
     payload.setdefault("source", "station_queue_fast_lane" if station_job.get("fastLane") else "station_queue")
-    payload.setdefault("maxSignals", 20)
-    payload.setdefault("agentBatchSize", 20)
-    payload.setdefault("limit", 20 if station_job.get("fastLane") else payload.get("limit", 20))
+    payload.setdefault("maxSignals", 160)
+    payload.setdefault("agentBatchSize", 160)
+    payload.setdefault("limit", 160)
     input_ref = station_job.get("inputRef")
     station_id = station_job.get("stationId")
-    if station_id == "product_signal_snapshot_station":
-        payload.setdefault("productSnapshotRef", input_ref)
-    elif station_id == "task_signal_station":
-        payload.setdefault("productSignalSnapshotRef", input_ref)
-    elif station_id == "rag_context_station":
-        payload.setdefault("taskSignalRef", input_ref)
-    elif station_id == "agent_judgment_station":
-        payload.setdefault("ragContextRef", input_ref)
-    elif station_id == "task_snapshot_station":
-        payload.setdefault("agentJudgmentRef", input_ref)
-    elif station_id == "task_pool_station":
-        payload.setdefault("taskSnapshotRef", input_ref)
+    ref_key = {
+        "report_schema_station": "rawReportRef",
+        "report_fact_station": "reportSchemaMappingRef",
+        "product_master_station": "factRef",
+        "product_metric_snapshot_station": "productMasterRef",
+        "full_product_bundle_station": "productMetricSnapshotRef",
+        "bundle_validation_station": "fullProductBundleRef",
+        "product_judgment_agent_station": "validatedBundleRef",
+        "product_judgment_package_station": "agentJudgmentRef",
+        "rag_permission_context_station": "productJudgmentPackageRef",
+        "task_mapping_agent_station": "ragPermissionContextRef",
+        "task_pool_admission_station": "taskGenerationDecisionRef",
+        "frontend_read_model_station": "taskPoolRef",
+        "task_pool_acceptance_station": "frontendReadModelRef",
+    }.get(station_id)
+    if ref_key:
+        payload.setdefault(ref_key, input_ref)
     return payload
 
 
 def _output_ref(output: Dict[str, Any], station_id: str, data_version: str | None) -> str:
-    return output.get("outputRef") or output.get("productSnapshotRef") or output.get("productSignalSnapshotRef") or output.get("taskSignalRef") or output.get("ragContextRef") or output.get("agentJudgmentRef") or f"{station_id}:{data_version or 'latest'}"
+    return output.get("outputRef") or output.get("rawReportRef") or output.get("reportSchemaMappingRef") or output.get("factRef") or output.get("productMasterRef") or output.get("productMetricSnapshotRef") or output.get("fullProductBundleRef") or output.get("validatedBundleRef") or output.get("agentJudgmentRef") or output.get("productJudgmentPackageRef") or output.get("ragContextRef") or output.get("taskGenerationDecisionRef") or output.get("taskPoolRef") or output.get("frontendReadModelRef") or output.get("taskPoolAcceptanceRef") or f"{station_id}:{data_version or 'latest'}"
 
 
 def _should_stream_to_next(station_id: str, output: Dict[str, Any]) -> bool:
-    if station_id == "agent_judgment_station":
-        return int(output.get("pendingTaskSnapshotCount") or 0) > 0 and int(output.get("streamedTaskSnapshotCount") or 0) <= 0
-    if station_id == "task_snapshot_station":
-        return int(output.get("taskSnapshotCount") or 0) > 0
+    if station_id == "bundle_validation_station":
+        return int(output.get("bundleCount") or 0) > 0
+    if station_id == "product_judgment_agent_station":
+        return int(output.get("agentJudgmentCount") or 0) > 0
+    if station_id == "product_judgment_package_station":
+        return output.get("coverageStatus") != "failed" and int(output.get("productJudgmentPackageCount") or 0) > 0
     return True
 
 
 def _compact_output(output: Dict[str, Any]) -> Dict[str, Any]:
-    keys = ["version", "mode", "dataVersion", "productCount", "productSnapshotCount", "productSignalPackageCount", "productSignalCount", "signalCount", "matchedContextCount", "judgmentCount", "pendingTaskSnapshotCount", "streamedTaskSnapshotCount", "streamedTaskPoolCount", "taskSnapshotCount", "createdTaskCount", "outputRef", "productSnapshotRef", "productSignalSnapshotRef", "taskSignalRef", "ragContextRef", "agentJudgmentRef"]
+    keys = ["version", "stationId", "mode", "dataVersion", "rowCount", "headerCount", "productFactCount", "trafficSourceFactCount", "productMasterCount", "productMetricSnapshotCount", "productSignalPackageCount", "productSignalCount", "bundleCount", "validationStatus", "inputBundleCount", "resolvedProductCount", "agentJudgmentCount", "judgedProductCount", "coverageRate", "coverageStatus", "productJudgmentPackageCount", "candidatePackageCount", "matchedContextCount", "taskDecisionCount", "createdTaskCount", "streamedTaskPoolCount", "frontendReadModelStatus", "acceptanceStatus", "mismatchCount", "agent1ApiCallCount", "taskMappingApiCallCount", "outputRef", "rawReportRef", "reportSchemaMappingRef", "factRef", "productMasterRef", "productMetricSnapshotRef", "fullProductBundleRef", "validatedBundleRef", "agentJudgmentRef", "productJudgmentPackageRef", "ragContextRef", "taskGenerationDecisionRef", "taskPoolRef", "frontendReadModelRef", "taskPoolAcceptanceRef"]
     return {key: output.get(key) for key in keys if key in output and output.get(key) is not None}
 
 
@@ -241,7 +254,7 @@ def run_next_station_job(*, worker_id: str = "manual-worker", system_type: str =
             conn.execute("UPDATE station_queue SET status = 'completed', output_ref = ?, payload = ?, locked_until = NULL, error_message = NULL, updated_at = ? WHERE station_job_id = ?", (output_ref, dumps({"body": body, "stationRun": {"stationId": station_id, "status": run.get("status"), "outputRef": output_ref, "outputSummary": _compact_output(output)}, "fastLane": station_job.get("fastLane")}), now, station_job["stationJobId"]))
             if next_station and _should_stream_to_next(station_id, output):
                 next_id, next_stage = next_station
-                inserted_next_id = _insert_station_job(conn, parent_job_id=job["jobId"], system_type=job["systemType"], station_id=next_id, stage=next_stage, data_version=job.get("dataVersion"), actor_user_id=job.get("actorUserId"), input_ref=output_ref, payload={"dataVersion": job.get("dataVersion"), "userId": job.get("actorUserId"), "force": True, "source": "station_queue_fast_lane" if next_id in FAST_LANE_STATIONS else "station_queue", "maxSignals": 20, "agentBatchSize": 20, "fastLane": next_id in FAST_LANE_STATIONS}, priority=_priority_for(next_id))
+                inserted_next_id = _insert_station_job(conn, parent_job_id=job["jobId"], system_type=job["systemType"], station_id=next_id, stage=next_stage, data_version=job.get("dataVersion"), actor_user_id=job.get("actorUserId"), input_ref=output_ref, payload={"dataVersion": job.get("dataVersion"), "userId": job.get("actorUserId"), "force": True, "source": "station_queue_fast_lane" if next_id in FAST_LANE_STATIONS else "station_queue", "maxSignals": 160, "agentBatchSize": 160, "fastLane": next_id in FAST_LANE_STATIONS}, priority=_priority_for(next_id))
                 conn.execute("UPDATE pipeline_jobs SET status = 'running', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (next_id, output_ref, now, job["jobId"]))
             elif next_station:
                 conn.execute("UPDATE pipeline_jobs SET status = 'completed', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (station_id, output_ref, now, job["jobId"]))
@@ -249,7 +262,7 @@ def run_next_station_job(*, worker_id: str = "manual-worker", system_type: str =
                 conn.execute("UPDATE pipeline_jobs SET status = 'completed', current_station = ?, output_ref = ?, updated_at = ? WHERE job_id = ?", (station_id, output_ref, now, job["jobId"]))
             conn.commit()
         record_stage_gate(data_version=job.get("dataVersion"), stage=station_job.get("stage") or station_id, status="completed", input_payload={"stationJobId": station_job["stationJobId"], "inputRef": station_job.get("inputRef"), "fastLane": station_job.get("fastLane")}, output_payload=_compact_output(output), user_id=job.get("actorUserId"), upstream_stage=None, output_ref=output_ref)
-        return {"version": STATION_QUEUE_VERSION, "ran": True, "status": "completed", "stationJobId": station_job["stationJobId"], "stationId": station_id, "fastLane": station_job.get("fastLane"), "dataVersion": job.get("dataVersion"), "outputRef": output_ref, "nextStation": next_station[0] if next_station and inserted_next_id else None, "insertedNextStationJobId": inserted_next_id, "output": _compact_output(output), "rule": "V14.8 runs one worker station; Agent mature tasks stream into SOP task pool and frontend read model refreshes separately."}
+        return {"version": STATION_QUEUE_VERSION, "ran": True, "status": "completed", "stationJobId": station_job["stationJobId"], "stationId": station_id, "fastLane": station_job.get("fastLane"), "dataVersion": job.get("dataVersion"), "outputRef": output_ref, "nextStation": next_station[0] if next_station and inserted_next_id else None, "insertedNextStationJobId": inserted_next_id, "output": _compact_output(output), "rule": "V16.5 runs one split station; no giant Agent station or hidden task-pool stream."}
     except Exception as exc:
         now = now_iso()
         status = "failed"
@@ -283,4 +296,4 @@ def queue_summary(data_version: str | None = None, *, limit: int = 50) -> Dict[s
         by_station_status[f"{row['station_id']}:{row['status']}"] = by_station_status.get(f"{row['station_id']}:{row['status']}", 0) + 1
         if row["station_id"] in FAST_LANE_STATIONS or int(row["priority"] or 50) <= 5:
             fast_lane_count += 1
-    return {"version": STATION_QUEUE_VERSION, "mode": "v14_8_frontend_isolated_streaming_worker", "jobCount": len(jobs), "stationJobCount": len(stations), "fastLaneCount": fast_lane_count, "stationByStatus": by_status, "stationByStationStatus": by_station_status, "priorities": STATION_PRIORITY, "jobs": [_row_to_job(row) for row in jobs], "stationJobs": [_row_to_station(row) for row in stations], "rule": "V14.8：队列只负责后台计算；前端只读read model；Agent成熟任务已在Agent站内流式入池。"}
+    return {"version": STATION_QUEUE_VERSION, "mode": "v16_5_split_station_chain", "jobCount": len(jobs), "stationJobCount": len(stations), "fastLaneCount": fast_lane_count, "stationByStatus": by_status, "stationByStationStatus": by_station_status, "priorities": STATION_PRIORITY, "sequence": [station for station, _ in TASK_GENERATION_SEQUENCE], "jobs": [_row_to_job(row) for row in jobs], "stationJobs": [_row_to_station(row) for row in stations], "rule": "V16.5：完整拆分站点链路；Agent站不再包办任务映射、入池和读模型刷新。"}
