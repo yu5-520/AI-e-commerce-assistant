@@ -1,22 +1,22 @@
 # Current Version
 
 ```text
-16.11
+16.12
 ```
 
-## V16.11 Meaning
+## V16.12 Meaning
 
-V16.11 is the active import gate release.
+V16.12 is the approval mock-workflow removal release.
 
-It keeps the V16.10 cleaned MVP repository, fixes the first active import break caused by the old source-core cleanup, and upgrades the V16 manifest checker so it runs a full FastAPI import before more source changes.
+It keeps the V16.11 active import gate and fixes the next import break: `approval_service.py` no longer imports the deleted `src.workflow.mock_workflow` module.
 
 ## Fixed
 
 ```text
-src/api/routes/accounts.py no longer imports src.core.context.
-src/api/routes/accounts.py now uses src.services.account_service.user_id_from_headers.
-src/api/main.py API_VERSION is now 16.11.
-scripts/check_v16_manifest.py now includes an ACTIVE IMPORT GATE.
+src/services/approval_service.py no longer imports src.workflow.mock_workflow.
+Approval get_task() now reads from the current SQLite task_status projection.
+If a task is not in the current V16 task_status projection, approval returns 404 instead of fabricating mock data.
+src/api/main.py API_VERSION is now 16.12.
 ```
 
 ## Current verification entry
@@ -25,7 +25,7 @@ scripts/check_v16_manifest.py now includes an ACTIVE IMPORT GATE.
 python scripts/check_v16_manifest.py
 ```
 
-The checker now runs:
+The checker runs:
 
 ```python
 from src.api.main import app, STATION_MAINLINE
@@ -52,4 +52,4 @@ report_receive_station
 
 ## Rule
 
-Git history is the archive. The current working tree only serves the MVP. Active FastAPI import must pass before more source cleanup.
+Git history is the archive. The current working tree only serves the MVP. Active FastAPI import must pass before deleting more unmarked source files.
