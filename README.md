@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.8 MVP Purge Planner / V16.5 Station Alignment runtime**.
+Current baseline: **V16.9 Stale Verifier Purge / V16.8 MVP-purged runtime**.
 
-V16.8 keeps the V16.7 legacy route purge and upgrades the V16 manifest checker into a safe one-command purge tool for remaining unmarked files. Git history is the archive; current files serve the MVP.
+V16.9 removes old V12 release and hygiene checkers from the active repository. Git history is the archive; current files serve the V16 MVP only.
 
 ## Mainline
 
@@ -23,23 +23,18 @@ report_receive_station
 -> task_pool_acceptance_station
 ```
 
-## Purge remaining unmarked files
-
-Review plan first:
+## Current verification entry
 
 ```bash
-python scripts/check_v16_manifest.py --write-plan
-cat /tmp/v16_purge_plan.sh
-bash /tmp/v16_purge_plan.sh
+python scripts/check_v16_manifest.py
 ```
 
-Direct local purge:
+Deleted stale checkers:
 
-```bash
-python scripts/check_v16_manifest.py --purge
+```text
+scripts/verify_release.py
+scripts/check_repo_hygiene.py
 ```
-
-The purge script uses `git rm` and does not commit automatically.
 
 ## Manifest files
 
@@ -57,6 +52,7 @@ Agent stations only produce Agent outputs.
 System stations own package merge, admission, read models, and acceptance.
 Low product-judgment coverage pauses task mapping.
 Files outside the V16 manifest are deletion candidates for MVP cleanup.
+Old V12/V12.9 checkers cannot block V16 MVP verification.
 ```
 
 ## Entry points
