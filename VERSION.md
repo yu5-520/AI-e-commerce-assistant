@@ -1,19 +1,34 @@
 # Current Version
 
 ```text
-16.10
+16.11
 ```
 
-## V16.10 Meaning
+## V16.11 Meaning
 
-V16.10 is the final unmarked-file purge release.
+V16.11 is the active import gate release.
 
-It keeps the V16 MVP runtime and deletes the last broad group of unmarked legacy files: old schemas, old consistency scripts, old source subpackages, and old versioned service fragments.
+It keeps the V16.10 cleaned MVP repository, fixes the first active import break caused by the old source-core cleanup, and upgrades the V16 manifest checker so it runs a full FastAPI import before more source changes.
+
+## Fixed
+
+```text
+src/api/routes/accounts.py no longer imports src.core.context.
+src/api/routes/accounts.py now uses src.services.account_service.user_id_from_headers.
+src/api/main.py API_VERSION is now 16.11.
+scripts/check_v16_manifest.py now includes an ACTIVE IMPORT GATE.
+```
 
 ## Current verification entry
 
 ```bash
 python scripts/check_v16_manifest.py
+```
+
+The checker now runs:
+
+```python
+from src.api.main import app, STATION_MAINLINE
 ```
 
 ## Current V16 mainline
@@ -37,4 +52,4 @@ report_receive_station
 
 ## Rule
 
-Git history is the archive. The current working tree only serves the MVP. Remaining non-V16 artifacts must be explicitly promoted into the V16 manifest before they can stay.
+Git history is the archive. The current working tree only serves the MVP. Active FastAPI import must pass before more source cleanup.
