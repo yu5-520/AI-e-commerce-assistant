@@ -1,35 +1,55 @@
 # Current Version
 
 ```text
-16.6
+16.7
 ```
 
-## V16.6 Meaning
+## V16.7 Meaning
 
-V16.6 is the MVP file marking release.
+V16.7 is the MVP legacy route purge release.
 
-It keeps the V16.5 Station Alignment runtime and adds a V16 manifest layer so the repository can be cleaned for MVP use.
+It keeps the V16.5 Station Alignment runtime and the V16.6 file manifest, then removes the first wave of old route pollution from the active repository.
 
-## Manifest
+## Changed
 
 ```text
-MVP_V16_FILE_MANIFEST.md
-config/v16_mvp_file_manifest.json
-scripts/check_v16_manifest.py
+FastAPI main.py now imports and mounts only V16 MVP runtime routes.
+V9/V10/V12/V13/V14 legacy compatibility route files were deleted.
+station_registry_service removed LEGACY_STATION_ALIASES.
+config/v16_mvp_file_manifest.json now records purged files and removed aliases.
 ```
 
-## Marker rules
+## Purged route files
 
 ```text
-V16_KEEP      Current MVP mainline files.
-V16_SUPPORT   Runtime support required by current MVP files.
-V16_FRONTEND  Current web demo entry and modules.
-V16_DOC       Current documentation only.
-V16_TOOL      Current repository governance scripts.
-UNMARKED      Deletion candidate after import check.
+src/api/routes/deprecated_stations.py
+src/api/routes/v9_readiness.py
+src/api/routes/v10_product.py
+src/api/routes/architecture.py
+src/api/routes/data_source_compat.py
+src/api/routes/station_handoffs.py
+src/api/routes/report_task_sync.py
+src/api/routes/trends.py
 ```
 
-## Mainline remains V16.5 runtime
+## Removed old station aliases
+
+```text
+import_station
+report_parse_station
+metric_fact_station
+operating_object_station
+operating_snapshot_station
+system_product_snapshot_station
+product_signal_snapshot_station
+task_signal_station
+rag_context_station
+agent_judgment_station
+task_snapshot_station
+task_pool_station
+```
+
+## Current V16 mainline
 
 ```text
 report_receive_station
@@ -50,4 +70,4 @@ report_receive_station
 
 ## Rule
 
-Git history is the history archive. The current working tree only serves the MVP. Files outside the V16 manifest are deletion candidates after import checks and route cleanup.
+Git history is the history archive. The current working tree only serves the MVP. Old version routes and old station aliases cannot enter the active runtime.
