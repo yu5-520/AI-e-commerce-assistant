@@ -1,12 +1,13 @@
 {
-  "manifestVersion": "16.14",
-  "baseline": "V16.14 audit route context cleanup / V16 MVP runtime",
+  "manifestVersion": "16.15",
+  "baseline": "V16.15 data import route cleanup / V16 MVP runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless explicitly reviewed.",
   "rules": [
     "Git history is the archive; current working tree only serves the MVP.",
     "FastAPI active import must pass before more source cleanup.",
     "main.py must mount frontend_views.router directly.",
-    "Audit routes must not import src.core.context.",
+    "Audit routes use the V16 account service.",
+    "Data import routes use the V16 account service.",
     "Approval reads current task_status projection and does not use old workflow fallback."
   ],
   "v16_keep": [
@@ -86,10 +87,10 @@
     "config/v16_mvp_file_manifest.json"
   ],
   "v16_tools": ["scripts/check_v16_manifest.py"],
-  "fixed_in_v16_14": [
-    "src/api/routes/audit.py removed src.core.context dependency",
-    "src/api/routes/audit.py uses account_service.user_id_from_headers",
-    "src/api/main.py API_VERSION is 16.14"
+  "fixed_in_v16_15": [
+    "src/api/routes/data_import.py uses account_service.user_id_from_headers",
+    "src/api/routes/data_import.py builds lightweight request context",
+    "src/api/main.py API_VERSION is 16.15"
   ],
   "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "activeImportGate": "from src.api.main import app, STATION_MAINLINE",
