@@ -1,14 +1,14 @@
-"""V16.5 split station registry.
+"""V16.7 split station registry.
 
-Registry is now the source of truth for the MVP-real chain. Each station has one
-core responsibility, one output contract and one acceptance boundary.
+MVP runtime only. Legacy station aliases are removed so old station names cannot
+silently enter the current V16 chain.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-STATION_REGISTRY_VERSION = "16.5"
+STATION_REGISTRY_VERSION = "16.7"
 
 
 def station(station_id: str, stage: str, title: str, backend: str, prefix: str, next_station: str | None, line: str, domain: str, *, replayable: bool = True, acceptance: str = "count") -> Dict[str, Any]:
@@ -39,34 +39,15 @@ STATIONS: List[Dict[str, Any]] = [
     station("rag_feedback_station", "rag_candidate_ready", "RAG回流站", "src.services.task_recap_rag_station_service", "rag_candidate", None, "internal_task_lifecycle_line", "rag_feedback", acceptance="feedback candidate"),
 ]
 
-LEGACY_STATION_ALIASES = {
-    "import_station": "report_receive_station",
-    "report_parse_station": "report_schema_station",
-    "metric_fact_station": "report_fact_station",
-    "operating_object_station": "product_master_station",
-    "operating_snapshot_station": "product_metric_snapshot_station",
-    "system_product_snapshot_station": "product_metric_snapshot_station",
-    "product_signal_snapshot_station": "full_product_bundle_station",
-    "task_signal_station": "full_product_bundle_station",
-    "rag_context_station": "rag_permission_context_station",
-    "agent_judgment_station": "product_judgment_agent_station",
-    "task_snapshot_station": "task_mapping_agent_station",
-    "task_pool_station": "task_pool_admission_station",
-}
-
 
 def list_stations() -> List[Dict[str, Any]]:
     return [{**item, "interface": f"/api/stations/{item['stationId']}"} for item in STATIONS]
 
 
 def get_station(station_id: str) -> Dict[str, Any] | None:
-    resolved = LEGACY_STATION_ALIASES.get(station_id, station_id)
     for item in STATIONS:
-        if item["stationId"] == resolved or item["stage"] == resolved:
-            result = {**item, "interface": f"/api/stations/{item['stationId']}"}
-            if resolved != station_id:
-                result["legacyAliasFor"] = station_id
-            return result
+        if item["stationId"] == station_id or item["stage"] == station_id:
+            return {**item, "interface": f"/api/stations/{item['stationId']}"}
     return None
 
 
@@ -82,4 +63,4 @@ def station_order() -> List[str]:
 
 
 def registry_summary() -> Dict[str, Any]:
-    return {"version": STATION_REGISTRY_VERSION, "stationCount": len(STATIONS), "stations": list_stations(), "legacyAliases": LEGACY_STATION_ALIASES, "lines": {"realReportFactLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "real_report_fact_line"], "snapshotBundleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "snapshot_bundle_line"], "agentJudgmentLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "agent_judgment_line"], "taskMappingLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "task_mapping_line"], "taskDeliveryLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "task_delivery_line"], "internalTaskLifecycleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "internal_task_lifecycle_line"]}, "mainlinePurity": "v16_5_one_station_one_responsibility", "rule": "V16.5：Registry/Contract/Queue/Adapter/Data-line统一；Agent站只做Agent，系统站负责事实、合包、入池、读模型和验收。"}
+    return {"version": STATION_REGISTRY_VERSION, "stationCount": len(STATIONS), "stations": list_stations(), "legacyAliases": {}, "legacyAliasesPurged": True, "lines": {"realReportFactLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "real_report_fact_line"], "snapshotBundleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "snapshot_bundle_line"], "agentJudgmentLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "agent_judgment_line"], "taskMappingLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "task_mapping_line"], "taskDeliveryLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "task_delivery_line"], "internalTaskLifecycleLine": [item["stationId"] for item in STATIONS if item.get("stationLine") == "internal_task_lifecycle_line"]}, "mainlinePurity": "v16_7_mvp_no_legacy_station_aliases", "rule": "V16.7：旧站点别名已删除；只有V16站点ID能进入当前MVP链路。"}
