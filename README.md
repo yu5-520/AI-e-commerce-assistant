@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.9 Stale Verifier Purge / V16.8 MVP-purged runtime**.
+Current baseline: **V16.10 Final Unmarked Purge / V16 MVP runtime**.
 
-V16.9 removes old V12 release and hygiene checkers from the active repository. Git history is the archive; current files serve the V16 MVP only.
+V16.10 removes the final broad group of unmarked legacy files from active repository state. Git history is the archive; current files serve the V16 MVP only.
 
 ## Mainline
 
@@ -29,13 +29,6 @@ report_receive_station
 python scripts/check_v16_manifest.py
 ```
 
-Deleted stale checkers:
-
-```text
-scripts/verify_release.py
-scripts/check_repo_hygiene.py
-```
-
 ## Manifest files
 
 ```text
@@ -52,7 +45,6 @@ Agent stations only produce Agent outputs.
 System stations own package merge, admission, read models, and acceptance.
 Low product-judgment coverage pauses task mapping.
 Files outside the V16 manifest are deletion candidates for MVP cleanup.
-Old V12/V12.9 checkers cannot block V16 MVP verification.
 ```
 
 ## Entry points

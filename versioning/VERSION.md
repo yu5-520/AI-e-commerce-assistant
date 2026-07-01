@@ -1,6 +1,6 @@
-Current Version: 16.9
+Current Version: 16.10
 
-V16.9 Stale Verifier Purge
+V16.10 Final Unmarked Purge
 
 Core chain:
 
@@ -8,11 +8,12 @@ Core chain:
 
 Key fix:
 
-- Deleted `scripts/verify_release.py`.
-- Deleted `scripts/check_repo_hygiene.py`.
-- Removed V12/V12.9 checker pollution from the active V16 repository.
-- Current verification entry is `python scripts/check_v16_manifest.py`.
+- Deleted old schema contracts.
+- Deleted old consistency/check scripts except the V16 manifest checker.
+- Deleted old source subpackages outside the V16 MVP runtime.
+- Deleted old versioned service fragments that were not in the V16 manifest.
+- Added `.gitignore` and `.env.example` to V16 support.
 
 Boundary:
 
-V16.9 deletes stale check scripts only. If stronger V16 runtime verification is needed later, create a new V16-native verifier instead of restoring old V12 checkers.
+V16.10 is cleanup only. If a removed artifact is needed later, recover it from Git history and explicitly promote it into the V16 manifest.

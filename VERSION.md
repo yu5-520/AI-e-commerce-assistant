@@ -1,21 +1,14 @@
 # Current Version
 
 ```text
-16.9
+16.10
 ```
 
-## V16.9 Meaning
+## V16.10 Meaning
 
-V16.9 is the stale verifier purge release.
+V16.10 is the final unmarked-file purge release.
 
-It keeps the V16.8 MVP-purged runtime and removes old V12 release/hygiene checkers that were still enforcing V12/V12.9 rules against the V16 repository.
-
-## Deleted
-
-```text
-scripts/verify_release.py
-scripts/check_repo_hygiene.py
-```
+It keeps the V16 MVP runtime and deletes the last broad group of unmarked legacy files: old schemas, old consistency scripts, old source subpackages, and old versioned service fragments.
 
 ## Current verification entry
 
@@ -44,4 +37,4 @@ report_receive_station
 
 ## Rule
 
-Git history is the history archive. The current working tree only serves the MVP. Old check scripts cannot enforce old semantic/version/route rules against the V16 MVP repository.
+Git history is the archive. The current working tree only serves the MVP. Remaining non-V16 artifacts must be explicitly promoted into the V16 manifest before they can stay.
