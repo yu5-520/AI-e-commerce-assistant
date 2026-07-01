@@ -47,7 +47,7 @@
     return map[gate.decision] || (task.taskLayer === "manager_approval" ? "主管审批" : "运营执行");
   }
   function metrics(activeTasks, visibleTasks) {
-    return [["执行任务", visibleTasks.length, "按时间排序"], ["今日到期", visibleTasks.filter((t) => deadlineRank(t) <= 4).length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "总管任务"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "进入提交页"], ["待复盘", activeTasks.filter((t) => t.workflowStatus === "等待自动复盘" || t.lifecycleStage === "recap_scheduled").length, "系统自动复盘"]];
+    return [["执行任务", visibleTasks.length, "本轮队列"], ["今日到期", visibleTasks.filter((t) => deadlineRank(t) <= 4).length, "优先处理"], ["主管确认", visibleTasks.filter((t) => t.taskLayer === "manager_approval").length, "总管任务"], ["处理中", activeTasks.filter((t) => t.status === "处理中").length, "进入提交页"], ["待复盘", activeTasks.filter((t) => t.workflowStatus === "等待自动复盘" || t.lifecycleStage === "recap_scheduled").length, "系统自动复盘"]];
   }
   function openTaskReport(taskId) { AppRouter.navigate("task-report", { taskId }); }
   function openTaskSubmit(taskId) { AppRouter.navigate("task-submit", { taskId }); }
@@ -100,12 +100,14 @@
     title: "待办",
     async render(ctx) {
       const focusTaskId = ctx?.state?.focusTaskId || "";
-      try { await AppApi.refreshTaskState(); } catch (error) { console.error("[todo] refresh task state failed", error); }
+      let taskState = null;
+      try { taskState = await AppApi.refreshTaskState(); } catch (error) { console.error("[todo] refresh task state failed", error); }
       const active = AppTaskStore.listActiveTasks();
       const tasks = sortTasks(visibleTaskQueue(active));
       const user = AppApi.currentUser?.() || {};
-      const empty = "当前账号没有需要立即处理的执行任务。候选任务、趋势信号和观察项进入日报/周报素材。";
-      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V12.11.1</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看后端真实任务队列。任务自动接收后进入提交页，提交材料后进入复核或系统自动复盘。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个队列任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
+      const currentDataVersion = taskState?.payload?.currentDataVersion || taskState?.currentDataVersion || "本轮数据";
+      const empty = "当前账号没有需要立即处理的本轮执行任务。候选任务、趋势信号和观察项进入日报/周报素材。";
+      return `<section class="todo-toolbar"><div><p class="eyebrow">TASK CENTER · V15.1</p><h2>任务处理</h2><p>当前以 ${s(user.roleName || "默认账号")} 查看本轮任务队列。任务页只读取当前 dataVersion：${s(currentDataVersion)}，旧DEMO/历史任务不进入当前执行队列。</p></div></section>${notice ? AppShell.notice("操作结果", notice) : ""}<section class="kpi-grid todo-metrics">${metrics(active, tasks).map(([x,y,z]) => AppShell.metricCard(x,y,z)).join("")}</section><section class="page-section todo-list-section"><div class="section-header"><h3>执行队列</h3><span class="status-badge">${tasks.length} 个本轮任务</span></div><div class="todo-queue-list">${tasks.length ? tasks.map((task, index) => row(task, index, focusTaskId)).join("") : `<div class="todo-empty">${s(empty)}</div>`}</div></section>`;
     },
     mount(ctx) {
       focusTask(ctx.state?.focusTaskId);
