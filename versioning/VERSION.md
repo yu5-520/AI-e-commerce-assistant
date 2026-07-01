@@ -1,7 +1,7 @@
-Current Version: 16.17
+Current Version: 16.18
 
-V16.17 legacy ImportJob route removal.
+V16.18 legacy LLM debug route removal.
 
-Data import uses src/api/routes/data_import.py only. The old ImportJob wrapper route and worker services were removed from active runtime.
+The old /api/llm debug gateway route was removed from active runtime. Real Agent calls remain in the V16 product judgment and task mapping mainline.
 
 Verify with scripts/check_v16_manifest.py
