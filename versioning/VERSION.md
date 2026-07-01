@@ -1,6 +1,6 @@
-Current Version: 16.5
+Current Version: 16.7
 
-V16.5 Station Alignment
+V16.7 MVP Legacy Route Purge
 
 Core chain:
 
@@ -8,15 +8,12 @@ Core chain:
 
 Key fix:
 
-- Registry, Contract, Queue, Adapter and Data-line use the same V16.5 station chain.
-- The old giant Agent station is split back into product judgment, package merge, RAG context, task mapping, task admission and read-model stations.
-- Product judgment Agent only outputs judgments and coverage.
-- Product judgment package station owns package merge and 70% gate.
-- Coverage below 90% stops task mapping.
-- Task mapping Agent only outputs decisions.
-- Task pool admission station writes task pool rows.
-- Final acceptance station validates current-run alignment.
+- FastAPI active runtime now imports only V16 MVP routes.
+- V9/V10/V12/V13/V14 legacy compatibility routes were deleted.
+- station_registry_service no longer accepts legacy station aliases.
+- Git history remains the archive; current working tree serves the MVP.
+- Remaining unmarked files should be reviewed by scripts/check_v16_manifest.py before second-wave purge.
 
 Boundary:
 
-V16.5 is not a new feature layer. It is station governance: one station, one responsibility, one output, one acceptance metric.
+V16.7 removes old runtime entry points and old station aliases. It does not delete every unmarked file yet; the second wave should be based on the manifest checker output after deployment import checks.
