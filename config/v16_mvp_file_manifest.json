@@ -1,6 +1,6 @@
 {
-  "manifestVersion": "16.8",
-  "baseline": "V16.8 MVP purged runtime only / V16.5 Station Alignment runtime",
+  "manifestVersion": "16.9",
+  "baseline": "V16.9 stale verifier purge / V16.8 MVP-purged runtime",
   "purpose": "V16 MVP whitelist. Files and prefixes in this manifest are the current MVP working set. Files outside this manifest are deletion candidates unless newly added and explicitly reviewed.",
   "rules": [
     "Git history is the history archive; current working tree only serves the MVP.",
@@ -8,7 +8,7 @@
     "V16_SUPPORT files are runtime support files required by current MVP files.",
     "V16_FRONTEND prefixes are the current web demo entry files.",
     "V16_DOC files are the only current documentation files.",
-    "Legacy compatibility routes, old station aliases, worker scaffold routes and unmarked legacy files are removed from active runtime."
+    "Legacy compatibility routes, old station aliases, worker scaffold routes, stale V12 checkers and unmarked legacy files are removed from active runtime."
   ],
   "v16_keep": [
     "src/api/main.py",
@@ -116,6 +116,10 @@
     "src/services/worker_runtime_config_service.py",
     "src/services/worker_task_handlers_service.py"
   ],
+  "purged_in_v16_9": [
+    "scripts/verify_release.py",
+    "scripts/check_repo_hygiene.py"
+  ],
   "legacy_aliases_removed_in_v16_7": [
     "import_station",
     "report_parse_station",
@@ -130,5 +134,6 @@
     "task_snapshot_station",
     "task_pool_station"
   ],
+  "currentVerificationEntry": "python scripts/check_v16_manifest.py",
   "nextStep": "Run scripts/check_v16_manifest.py on ECS after git pull. Remaining unmarked files are final review candidates."
 }
