@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.24
+16.25
 ```
 
-## V16.24
+## V16.25
 
-Task repository context cleanup.
+UID utility restore.
 
-`src/repositories/task_repository.py` and `src/repositories/scoped_repository.py` no longer import the deleted `src.core.context` module. The task lifecycle mainline remains active and uses a V16 lightweight `UserContext` value object at the repository boundary.
+`src/services/uid.py` was added as a thin V16 support utility for task evidence and lifecycle audit IDs. This keeps the V16 task submission evidence chain active without restoring old workflow modules.
 
 ## Verify
 
