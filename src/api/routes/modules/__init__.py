@@ -1,8 +1,8 @@
-"""V16.20 modular product API router package.
+"""V16.21 modular product API router package.
 
-Legacy module Agent route is removed from the active module router. Current V16
-Agent execution is owned by the product judgment and task mapping mainline, not
-by old module-level candidate/playbook endpoints.
+Legacy module Todo route is removed from the active module router. Current V16
+task list, task details and lifecycle actions are owned by task_pool,
+task_persistence, task_lifecycle and frontend read-model routes.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from src.api.routes.modules import aftersales
 from src.api.routes.modules import report_v5 as report
 from src.api.routes.modules import rag_memory
 from src.api.routes.modules import feedback_flywheel
-from src.api.routes.modules import todo
 from src.api.routes.modules import log
 
 router = APIRouter(prefix="/api/modules", tags=["modules"])
@@ -35,5 +34,4 @@ router.include_router(aftersales.router)
 router.include_router(report.router)
 router.include_router(rag_memory.router)
 router.include_router(feedback_flywheel.router)
-router.include_router(todo.router)
 router.include_router(log.router)
