@@ -1,9 +1,9 @@
-"""V15.1 read-only frontend view routes.
+"""V16.3 read-only frontend view routes.
 
-These endpoints are for page rendering only. They read cached read-model tables and
-must not trigger materialize/generate/Agent/worker execution. Task/product views
-are current-run isolated by dataVersion so old demo/global task-pool entries do
-not pollute the execution queue.
+These endpoints are for page rendering and验收 only. They read cached read-model
+tables and must not trigger materialize/generate/Agent/worker execution. Task
+views are current-run isolated by dataVersion, and /task-pool-acceptance proves
+that data-line, task_pool and frontend task views align.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from src.services.frontend_read_model_service import (
     refresh_all_read_models,
 )
 from src.services.task_generation_run_service import read_data_line_status
+from src.services.task_pool_acceptance_v163_service import read_task_pool_acceptance
 
 router = APIRouter(prefix="/api/view", tags=["frontend-read-model"])
 
@@ -72,7 +73,19 @@ def system_status_view() -> Dict[str, Any]:
 @router.get("/data-line")
 def data_line_view() -> Dict[str, Any]:
     result = read_data_line_status()
-    result["routeRule"] = "read_only_frontend_view_no_compute"
+    acceptance = read_task_pool_acceptance(data_version=result.get("dataVersion")) if result.get("dataVersion") else read_task_pool_acceptance()
+    result["taskPoolAcceptance"] = acceptance
+    if acceptance.get("status") == "failed" and result.get("lineStatus") == "completed":
+        result["lineStatus"] = "attention"
+        result["headline"] = f"本轮任务池验收未通过：{len(acceptance.get('mismatches') or [])} 个断点"
+    result["routeRule"] = "read_only_frontend_view_no_compute_with_v163_task_pool_acceptance"
+    return result
+
+
+@router.get("/task-pool-acceptance")
+def task_pool_acceptance_view(dataVersion: str | None = None) -> Dict[str, Any]:
+    result = read_task_pool_acceptance(data_version=dataVersion)
+    result["routeRule"] = "read_only_acceptance_no_compute_no_agent"
     return result
 
 
@@ -92,5 +105,6 @@ def store_view() -> Dict[str, Any]:
 @router.post("/refresh")
 def refresh_views(dataVersion: str | None = None) -> Dict[str, Any]:
     result = refresh_all_read_models(data_version=dataVersion)
-    result["routeRule"] = "explicit_compute_endpoint_current_run_isolated"
+    result["taskPoolAcceptance"] = read_task_pool_acceptance(data_version=dataVersion)
+    result["routeRule"] = "explicit_compute_endpoint_current_run_isolated_then_acceptance"
     return result
