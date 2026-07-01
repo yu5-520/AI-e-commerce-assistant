@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-14.9
+14.9.1
 ```
 
-## V14.9 Meaning
+## V14.9.1 Meaning
 
-V14.9 is the dual-Agent station split and product judgment package compression release.
+V14.9.1 is the runtime reset boundary fix for the V14.9 dual-Agent pipeline.
 
-Mainline:
+It keeps the V14.9 mainline:
 
 ```text
 report import system
@@ -24,13 +24,14 @@ report import system
   -> data page renders metro-line chain status
 ```
 
-Core rules:
+Fix scope:
 
-- Agent 1 only creates metric-level/product-level analysis judgments. It cannot create tasks, SOPs, or task-pool entries.
-- The system compresses judgments by `dataVersion + storeId + productId` into `product_judgment_packages_v15`.
-- Agent 2 only consumes `product_judgment_package` and creates product-level SOP task decisions.
-- Task pool only accepts system-admitted product-level decisions.
-- One product package creates at most one formal operating task in a run; extra indicators must be merged into the same product-level SOP.
-- Data page metro line is now: 接入 / 建档 / 全量包 / 判断 / 整合 / 任务 / 展示.
-- Judgment count can be high; task count must be controlled.
-- V14.8.3 chain contract remains: zero formal tasks can still be a completed chain result.
+- `reset-runtime-data` now clears `task_generation_runs_v14`.
+- `reset-runtime-data` now clears V14.9 dual-Agent tables: `agent_product_judgments_v15`, `product_judgment_packages_v15`, and `task_generation_decisions_v15`.
+- System diagnostics now include V14/V15 residual checks.
+- Data-line view ignores stale generation-run rows when upstream data is empty.
+- Empty runtime must show: 接入等待、建档等待、全量包等待、判断等待、整合等待、任务等待、展示等待.
+
+Core rule:
+
+`fact source = 0` means V14/V15 snapshots, judgments, judgment packages, task decisions, task generation runs, task pool, and frontend read models must also be 0.
