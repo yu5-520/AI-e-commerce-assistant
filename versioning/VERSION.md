@@ -1,6 +1,6 @@
-Current Version: 16.11
+Current Version: 16.12
 
-V16.11 Active Import Gate
+V16.12 Approval Mock-Workflow Removal
 
 Core chain:
 
@@ -8,11 +8,11 @@ Core chain:
 
 Key fix:
 
-- `src/api/routes/accounts.py` no longer imports the old `src.core.context` module.
-- Account route user identity now uses `src.services.account_service.user_id_from_headers`.
-- `src/api/main.py` now reports `API_VERSION = 16.11` and `mode = v1611_active_import_gate`.
-- `scripts/check_v16_manifest.py` now runs a FastAPI active import gate.
+- `src/services/approval_service.py` no longer imports the old deleted `src.workflow.mock_workflow` module.
+- Approval reads the current SQLite `task_status` projection.
+- Missing current task status returns 404 instead of creating mock approval data.
+- `src/api/main.py` now reports `API_VERSION = 16.12` and `mode = v1612_approval_mock_workflow_removed`.
 
 Boundary:
 
-V16.11 is an import-chain guardrail. More file cleanup should happen only after the active import gate passes.
+V16.12 is an import-chain cleanup. More file cleanup should happen only after the active import gate passes.
