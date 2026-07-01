@@ -1,21 +1,22 @@
 # Current Version
 
 ```text
-16.13
+16.14
 ```
 
-## V16.13 Meaning
+## V16.14 Meaning
 
-V16.13 is the FastAPI entrypoint syntax repair release.
+V16.14 is the audit route context cleanup release.
 
-It keeps the V16.12 approval mock-workflow removal and fixes the syntax residue left in `src/api/main.py`.
+It keeps the V16.13 FastAPI entrypoint repair and fixes the next active import break: `src/api/routes/audit.py` no longer imports the deleted `src.core.context` module or old trace/tech-log service fragments.
 
 ## Fixed
 
 ```text
-src/api/main.py no longer contains the stray string `.replace(...)` residue.
-src/api/main.py now mounts frontend_views.router directly.
-src/api/main.py API_VERSION is now 16.13.
+src/api/routes/audit.py no longer imports src.core.context.
+src/api/routes/audit.py no longer imports deleted trace_audit_service / tech_log_service fragments.
+Audit endpoints now expose a lightweight V16-safe projection without legacy context fallback.
+src/api/main.py API_VERSION is now 16.14.
 ```
 
 ## Current verification entry
