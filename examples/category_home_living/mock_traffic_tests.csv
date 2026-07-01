@@ -1,5 +1,0 @@
-experiment_id,product_id,category,title_version,image_version,sku_version,test_price,traffic_source,impressions,clicks,orders,conversion_rate,refund_count,roi,test_status,next_action
-THL001,P001,家居生活商品,title_umbrella_v1,image_sunshade_v1,sku_umbrella_3color,29.9,自然搜索,15000,510,35,0.0686,2,1.7,running,继续观察点击与转化
-THL002,P002,家居生活商品,title_storage_v1,image_kitchen_v1,sku_storage_3size,39.9,推荐流量,9200,220,9,0.0409,1,0.95,finished,ROI偏低，复核主图和安装承接
-THL003,P003,家居生活商品,title_cushion_v1,image_office_v1,sku_cushion_2size,59,付费测试,6800,180,6,0.0333,2,0.72,finished,转化低且退款偏高，进入体验和尺寸归因
-THL004,P002,家居生活商品,title_storage_v2,image_before_after_v1,sku_storage_bundle,49.9,活动流量,12000,480,31,0.0646,5,1.2,finished,成交可测但退款偏高，检查尺寸和安装说明

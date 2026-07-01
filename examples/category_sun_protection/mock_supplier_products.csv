@@ -1,5 +1,0 @@
-supplier_product_id,category,product_name,cost,suggested_price,stock,shipping_cost,lead_time_days,material,colors,sizes,selling_points,risk_flags
-SP001,防晒服,冰丝轻薄防晒衣,23,59,500,4,2,冰丝复合面料,白|灰|粉|蓝,M|L|XL|2XL,轻薄|透气|夏季|通勤,尺码退换
-SP002,防晒服,户外骑行防晒外套,35,89,300,5,3,速干面料,黑|灰|蓝|紫,M|L|XL|2XL|3XL,骑行|户外|速干|男女同款,物流周期
-SP003,防晒服,低价基础防晒服,14,39,900,3,2,聚酯纤维,白|黑|粉|绿,M|L|XL,低价|多色|清货,品质预期
-SP004,防晒服,UPF通勤防晒外套,58,139,180,5,4,高密防晒面料,白|灰|蓝,M|L|XL|2XL,UPF|通勤|质感|轻薄,功效表达

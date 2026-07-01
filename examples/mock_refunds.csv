@@ -1,3 +1,0 @@
-refund_id,order_id,product_id,refund_amount,refund_reason,refund_time,after_sale_note
-R001,O20260614003,P002,10,尺寸不符,2026-06-15 10:00,用户反馈安装位置不合适
-R002,O20260614004,P003,49,效果不符合预期,2026-06-15 11:30,健康类表达需谨慎，避免功效承诺

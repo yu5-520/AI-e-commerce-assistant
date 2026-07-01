@@ -1,6 +1,6 @@
-Current Version: 16.7
+Current Version: 16.8
 
-V16.7 MVP Legacy Route Purge
+V16.8 MVP Purge
 
 Core chain:
 
@@ -8,12 +8,10 @@ Core chain:
 
 Key fix:
 
-- FastAPI active runtime now imports only V16 MVP routes.
-- V9/V10/V12/V13/V14 legacy compatibility routes were deleted.
-- station_registry_service no longer accepts legacy station aliases.
-- Git history remains the archive; current working tree serves the MVP.
-- Remaining unmarked files should be reviewed by scripts/check_v16_manifest.py before second-wave purge.
+- Remaining legacy docs, examples, evals, old frontend, old workflows, sample data, old modules, old deploy docs, old Alembic migration artifacts, and old knowledge-base samples were removed from the active working tree.
+- Git history remains the archive.
+- Current repository files now serve the V16 MVP runtime.
 
 Boundary:
 
-V16.7 removes old runtime entry points and old station aliases. It does not delete every unmarked file yet; the second wave should be based on the manifest checker output after deployment import checks.
+V16.8 purges large legacy directories. If a removed artifact is needed later, recover it from Git history and explicitly promote it into the V16 manifest.

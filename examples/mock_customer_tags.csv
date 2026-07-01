@@ -1,7 +1,0 @@
-tag_id,customer_id,tag_name,tag_source,confidence,created_at
-TAG001,C001,高价值客户,rfm_analysis,0.95,2026-06-14
-TAG002,C001,复购潜力,order_history,0.88,2026-06-14
-TAG003,C002,新客,first_order,0.92,2026-06-14
-TAG004,C003,沉睡客户,recency_analysis,0.91,2026-06-14
-TAG005,C004,售后敏感客户,refund_analysis,0.89,2026-06-14
-TAG006,C004,流失风险,after_sales_signal,0.76,2026-06-14

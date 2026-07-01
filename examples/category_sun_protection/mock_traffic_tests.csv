@@ -1,5 +1,0 @@
-experiment_id,product_id,category,title_version,image_version,sku_version,test_price,traffic_source,impressions,clicks,orders,conversion_rate,refund_count,roi,test_status,next_action
-TSP001,P001,防晒服,title_lightweight_v1,image_price_v1,sku_basic_4color,49,自然搜索,12000,420,26,0.0619,2,1.8,running,继续观察点击与转化
-TSP002,P002,防晒服,title_outdoor_v1,image_scene_v1,sku_unisex_4color,69,推荐流量,8500,210,8,0.0381,1,0.9,finished,检查主图场景和价格带
-TSP003,P003,防晒服,title_lowprice_v1,image_clearance_v1,sku_lowprice_8color,29,活动流量,18000,900,74,0.0822,9,2.1,finished,成交高但退款偏高，进入尺码和面料售后归因
-TSP004,P004,防晒服,title_upf_v1,image_quality_v1,sku_upgrade_5color,99,付费测试,6200,130,5,0.0385,0,0.6,finished,ROI低，暂停放量并比对竞品价格和卖点
