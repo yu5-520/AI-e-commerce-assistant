@@ -1,6 +1,6 @@
-Current Version: 16.10
+Current Version: 16.11
 
-V16.10 Final Unmarked Purge
+V16.11 Active Import Gate
 
 Core chain:
 
@@ -8,12 +8,11 @@ Core chain:
 
 Key fix:
 
-- Deleted old schema contracts.
-- Deleted old consistency/check scripts except the V16 manifest checker.
-- Deleted old source subpackages outside the V16 MVP runtime.
-- Deleted old versioned service fragments that were not in the V16 manifest.
-- Added `.gitignore` and `.env.example` to V16 support.
+- `src/api/routes/accounts.py` no longer imports the old `src.core.context` module.
+- Account route user identity now uses `src.services.account_service.user_id_from_headers`.
+- `src/api/main.py` now reports `API_VERSION = 16.11` and `mode = v1611_active_import_gate`.
+- `scripts/check_v16_manifest.py` now runs a FastAPI active import gate.
 
 Boundary:
 
-V16.10 is cleanup only. If a removed artifact is needed later, recover it from Git history and explicitly promote it into the V16 manifest.
+V16.11 is an import-chain guardrail. More file cleanup should happen only after the active import gate passes.
