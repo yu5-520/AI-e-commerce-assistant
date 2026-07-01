@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.12 Approval Mock-Workflow Removal / V16 MVP runtime**.
+Current baseline: **V16.13 FastAPI Entrypoint Syntax Repair / V16 MVP runtime**.
 
-V16.12 keeps the active FastAPI import gate and removes the approval route dependency on the old deleted mock workflow scaffold.
+V16.13 keeps the active FastAPI import gate and fixes the syntax residue left in `src/api/main.py` after the approval workflow cleanup.
 
 ## Mainline
 
@@ -35,12 +35,12 @@ The checker includes:
 from src.api.main import app, STATION_MAINLINE
 ```
 
-## V16.12 approval rule
+## V16.13 entrypoint rule
 
 ```text
-Approval reads the current SQLite task_status projection.
-Approval does not fabricate tasks from mock workflow data.
-Missing task status returns 404.
+main.py must mount frontend_views.router directly.
+main.py must not contain string replacement residue or generated text fragments.
+Active FastAPI import must pass before more source cleanup.
 ```
 
 ## Manifest files
