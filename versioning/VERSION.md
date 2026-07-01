@@ -1,21 +1,19 @@
-Current Version: 14.9
+Current Version: 14.9.1
 
-V14.9 Dual-Agent Product Judgment Package Pipeline
+V14.9.1 Dual-Agent Runtime Reset Boundary Fix
 
-Core chain:
+Core chain remains:
 
 `Import -> product projection -> fullProductBundle -> RAG boundary -> Agent1 analysis -> product_judgment_package -> Agent2 task generation -> task-pool admission -> frontend read model -> data metro line`
 
-Key updates:
+Key fix:
 
-- Agent1 analyzes fullProductBundle and writes raw metric/product judgments only.
-- System integration compresses raw judgments into one product_judgment_package per product.
-- Agent2 generates task decisions only from product_judgment_package.
-- Task pool receives only admitted product-level SOP tasks.
-- New runtime tables: `agent_product_judgments_v15`, `product_judgment_packages_v15`, `task_generation_decisions_v15`.
-- Metro line now includes the integration station: 接入、建档、全量包、判断、整合、任务、展示.
-- Judgment can be metric-level and detailed; tasks must be product-level and compressed.
+- Demo reset now clears `task_generation_runs_v14`.
+- Demo reset now clears `agent_product_judgments_v15`, `product_judgment_packages_v15`, and `task_generation_decisions_v15`.
+- DB diagnostics now check V14/V15 residual runtime tables together.
+- Data-line status ignores stale generation-run rows when upstream data is empty.
+- Empty runtime should not show residual judgment counts.
 
 Boundary:
 
-Fixing Agent1 judgment quality must not affect task generation chain integrity. Fixing Agent2 SOP quality must not change raw product analysis. System package compression is the stable contract between them.
+Reset must clear all generated runtime artifacts while preserving accounts, roles, permissions, and base configuration. After reset, `fact source = 0` and V14/V15 runtime tables must also be 0.
