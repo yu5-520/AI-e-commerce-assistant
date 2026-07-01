@@ -14,15 +14,25 @@ from src.services.station_queue_worker_service import start_station_queue_worker
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 WEB_DEMO_DIR = ROOT_DIR / "web_demo"
-API_VERSION = "14.9.4"
+API_VERSION = "15.0"
 
 app = FastAPI(title="AI ERP Operating Advisor API", version=API_VERSION)
 STATION_MAINLINE = {
     "version": API_VERSION,
     "legacyStartupHooks": [],
-    "mode": "agent1_api_budget_guard_metric_expansion",
-    "mainline": ["import_system", "background_worker_compute", "full_product_bundle", "rag_volatility_boundary", "agent1_budget_guard_metric_expansion", "real_product_id_package_gate", "agent2_task_generation", "task_pool_admission", "current_run_data_metro_line"],
-    "rule": "V14.9.4：Agent1判断可展开为多条指标记录，但API/RAG调用按商品包或dataVersion预算复用；禁止一条判断一次API。",
+    "mode": "v15_agent_budget_ledger_llm_gateway_three_agent_mainline",
+    "mainline": [
+        "report_schema_agent_mapping_cache",
+        "system_cleaning_import",
+        "full_product_bundle",
+        "product_judgment_agent_budgeted_batch",
+        "product_judgment_package_confidence_gate_70",
+        "task_mapping_agent_permission_rag_budgeted_batch",
+        "task_pool_admission",
+        "frontend_read_model",
+        "data_metro_line_agent_budget_status",
+    ],
+    "rule": "V15：报表Agent只做schema mapping；商品判断Agent只做全量包判断和置信值；任务映射Agent只做RAG权限/SOP映射；三类Agent统一走预算账本和网关，禁止按行、按指标、按任务散打API。",
 }
 
 
@@ -45,7 +55,7 @@ def index() -> Any:
     index_path = WEB_DEMO_DIR / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v14": "agent1_api_budget_guard_metric_expansion", "stationMainline": STATION_MAINLINE}
+    return {"message": "AI ERP Operating Advisor API is running.", "version": API_VERSION, "v15": "agent_budget_ledger_llm_gateway_three_agent_mainline", "stationMainline": STATION_MAINLINE}
 
 
 app.include_router(modules.router)
