@@ -1,51 +1,45 @@
 # Current Version
 
 ```text
-15.1
+16.1
 ```
 
-## V15.1 Meaning
+## V16.1 Meaning
 
-V15.1 is the current-run isolation and no-demo-pollution release.
+V16.1 is the MVP-real product judgment Agent release.
 
-It keeps the V15 three-Agent budget ledger, then adds two hard gates:
+It keeps the V15/V15.1 guardrails:
 
 ```text
-1. Product judgments are data-change driven.
-   Agent1 no longer pads every product to a fixed 8-metric judgment set.
-   Judgment count follows fullProductBundle.fieldSignals, abnormal metrics and critical data gaps.
-
-2. Frontend task queue is current-run isolated.
-   Task page reads only latestRun.dataVersion.
-   Old demo / seed / global task_pool entries cannot pollute the current execution queue.
+- three-Agent budget ledger
+- current-run dataVersion isolation
+- no demo/seed task pollution
+- product_judgment_package 70% confidence gate
 ```
 
-Mainline:
+Then it changes the product judgment stage from local/system rule expansion to a real batched Agent call:
 
 ```text
-report upload / API import
-  -> report schema Agent: headers / sheets / schema mapping only
-  -> system code cleaning and fact ingestion
-  -> fullProductBundle assembly
-  -> product judgment Agent: only changed/abnormal/data-gap metrics become judgments
-  -> system product_judgment_package compression and 70% confidence gate
-  -> task mapping Agent: company RAG / permission RAG / SOP RAG mapping only
-  -> system task-pool admission
-  -> frontend read model refresh by latestRun.dataVersion
-  -> data page and task page show the same current-run task count
+fullProductBundle batch
+  -> real product judgment Agent API call
+  -> strict JSON judgments
+  -> system validation
+  -> agent_product_judgments_v15
+  -> product_judgment_packages_v15
+  -> 70% package confidence gate
 ```
 
 Core rules:
 
-- Report Agent only creates `report_schema_mapping`; it never cleans rows, judges products, or creates tasks.
-- Product judgment Agent only analyzes fullProductBundle, category, data changes, trend, comparison, baseline and confidence; it never creates tasks.
-- Agent1 metric judgments must be driven by changed/abnormal metrics or data gaps, not by a fixed metric list.
-- System compresses product judgments by real `productId` into `product_judgment_package` and allows task mapping only when package confidence reaches 70%.
-- Task mapping Agent only maps 70%+ judgment packages into permission-aware tasks using company permissions, account permissions, SOP and approval RAG.
-- `/api/view/tasks` reads the latest run dataVersion by default.
-- `frontend_task_view` is rebuilt from `task_pool_entries WHERE data_version = latestRun.dataVersion`.
-- Old demo, seed, fallback, and history tasks can remain in storage but must not enter the current execution queue.
-- All Agent/API/RAG usage is recorded in `agent_budget_ledgers_v15` and `agent_call_events_v15`.
-- API calls must not scale with report rows, metric judgments, or task count.
+- Product judgment Agent must analyze batched fullProductBundle records through a real provider call.
+- Default call unit is a product batch, not a row, metric, or task.
+- Default batch size is 30 products and max product judgment calls per run is 3.
+- API key is read from `PRODUCT_JUDGMENT_AGENT_API_KEY`, `DEEPSEEK_API_KEY`, or `LLM_API_KEY`.
+- Provider URL/model can be configured with `PRODUCT_JUDGMENT_AGENT_BASE_URL` and `PRODUCT_JUDGMENT_AGENT_MODEL`.
+- The Agent must return strict JSON with a top-level `judgments` array.
+- The system validates returned `productId`, `storeId`, `metricCode`, `severity`, `confidence`, `decisionHint`, `finding`, and `evidence` before writing judgments.
+- If API key is missing, provider call fails, JSON is invalid, or no valid judgments are returned, the pipeline records the failure and does not generate fake judgments or fake tasks.
+- System code still owns package compression, 70% package confidence gate, task-pool admission, lifecycle state, and current-run frontend read model.
+- Task mapping remains template/RAG-placeholder until V16.2; V16.1 only opens real product judgment Agent.
 
-一句话：V15.1 把“数据真实参与”和“本轮任务隔离”补上，避免系统规则垫底和旧 DEMO 任务把真实导入链路搅乱。
+一句话：V16.1 让“商品有没有问题、问题有多可信”进入真实 Agent 判断阶段；失败宁可空链路，也不再用本地垫底判断冒充真实 Agent。
