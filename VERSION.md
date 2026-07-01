@@ -1,16 +1,35 @@
 # Current Version
 
 ```text
-16.5
+16.6
 ```
 
-## V16.5 Meaning
+## V16.6 Meaning
 
-V16.5 is the Station Alignment release.
+V16.6 is the MVP file marking release.
 
-It keeps the real report fact layer, real product judgment Agent, real RAG task mapping Agent, and current-run task-pool acceptance. The key change is that the station system is aligned again across Registry, Contract, Queue, Adapter, and Data-line.
+It keeps the V16.5 Station Alignment runtime and adds a V16 manifest layer so the repository can be cleaned for MVP use.
 
-## Mainline
+## Manifest
+
+```text
+MVP_V16_FILE_MANIFEST.md
+config/v16_mvp_file_manifest.json
+scripts/check_v16_manifest.py
+```
+
+## Marker rules
+
+```text
+V16_KEEP      Current MVP mainline files.
+V16_SUPPORT   Runtime support required by current MVP files.
+V16_FRONTEND  Current web demo entry and modules.
+V16_DOC       Current documentation only.
+V16_TOOL      Current repository governance scripts.
+UNMARKED      Deletion candidate after import check.
+```
+
+## Mainline remains V16.5 runtime
 
 ```text
 report_receive_station
@@ -29,15 +48,6 @@ report_receive_station
 -> task_pool_acceptance_station
 ```
 
-## Rules
+## Rule
 
-- One station has one responsibility, one input contract, one output artifact, and one acceptance metric.
-- Product judgment Agent station only outputs product judgments.
-- Product judgment package station owns same-product merge, confidence merge, and 70% candidate gate.
-- Product judgment coverage must reach 90%; low coverage pauses task mapping.
-- Task mapping Agent station only outputs task generation decisions.
-- Task pool admission station owns dedupe, limit, and task pool writes.
-- Frontend read model station owns current-run projections.
-- Task pool acceptance station owns final count alignment.
-
-一句话：V16.5 把被压进巨型 Agent 站里的流程拆回来，让每个断点都能被单独运行、单独验收、单独定位。
+Git history is the history archive. The current working tree only serves the MVP. Files outside the V16 manifest are deletion candidates after import checks and route cleanup.
