@@ -1,8 +1,8 @@
 # AI ERP 企业级电商经营 SaaS 底座
 
-Current baseline: **V16.7 MVP Legacy Route Purge / V16.5 Station Alignment runtime**.
+Current baseline: **V16.8 MVP Purge Planner / V16.5 Station Alignment runtime**.
 
-V16.7 keeps the V16 MVP file manifest and removes the first wave of old route pollution from active runtime. Git history is the archive; current files serve the MVP.
+V16.8 keeps the V16.7 legacy route purge and upgrades the V16 manifest checker into a safe one-command purge tool for remaining unmarked files. Git history is the archive; current files serve the MVP.
 
 ## Mainline
 
@@ -23,20 +23,23 @@ report_receive_station
 -> task_pool_acceptance_station
 ```
 
-## Purged in V16.7
+## Purge remaining unmarked files
 
-```text
-src/api/routes/deprecated_stations.py
-src/api/routes/v9_readiness.py
-src/api/routes/v10_product.py
-src/api/routes/architecture.py
-src/api/routes/data_source_compat.py
-src/api/routes/station_handoffs.py
-src/api/routes/report_task_sync.py
-src/api/routes/trends.py
+Review plan first:
+
+```bash
+python scripts/check_v16_manifest.py --write-plan
+cat /tmp/v16_purge_plan.sh
+bash /tmp/v16_purge_plan.sh
 ```
 
-Old station aliases were removed from `station_registry_service.py`. Only V16 station IDs can enter the current chain.
+Direct local purge:
+
+```bash
+python scripts/check_v16_manifest.py --purge
+```
+
+The purge script uses `git rm` and does not commit automatically.
 
 ## Manifest files
 
@@ -44,12 +47,6 @@ Old station aliases were removed from `station_registry_service.py`. Only V16 st
 MVP_V16_FILE_MANIFEST.md
 config/v16_mvp_file_manifest.json
 scripts/check_v16_manifest.py
-```
-
-## Check remaining unmarked files
-
-```bash
-python scripts/check_v16_manifest.py
 ```
 
 ## Rule
