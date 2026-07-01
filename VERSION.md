@@ -1,14 +1,14 @@
 # Current Version
 
 ```text
-16.20
+16.21
 ```
 
-## V16.20
+## V16.21
 
-Module agents route prune.
+Module todo route prune.
 
-`src/api/routes/modules/agents.py` was removed from the active modules router. Old V10/V14 candidate/playbook task-agent logic is no longer imported by FastAPI. Real Agent execution remains inside the V16 product judgment and task mapping mainline.
+`src/api/routes/modules/todo.py` was removed from the active modules router. Task list, task details and lifecycle actions are now owned by the V16 task_pool, task_persistence, task_lifecycle and frontend read-model routes.
 
 ## Verify
 
