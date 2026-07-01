@@ -1,8 +1,8 @@
-"""V14.9.2 task generation run and data metro-line status service.
+"""V14.9.3 task generation run and data metro-line status service.
 
 The data line reports the current task-generation run, not the global task-pool
-size. This keeps 判断 / 整合 / 任务 from being inflated by old pool entries or
-retry duplicates.
+size. V14.9.3 adds Agent1 metric expansion metadata so 判断 can be much larger
+than 整合 while 整合 remains one package per product.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from src.repositories.sqlite_repository import connect, dumps, ensure_columns, loads
 
-TASK_GENERATION_RUN_VERSION = "14.9.2"
+TASK_GENERATION_RUN_VERSION = "14.9.3"
 DONE_STATUS = {"已完成", "已拒绝", "已确认", "已归档", "已通过", "已写入复盘"}
 
 
@@ -72,7 +72,7 @@ def ensure_task_generation_run_tables() -> None:
         conn.commit()
 
 
-def record_task_generation_run(*, data_version: str | None, input_bundle_count: int = 0, agent_judgment_count: int = 0, product_judgment_package_count: int = 0, task_decision_count: int = 0, by_decision: Dict[str, int] | None = None, streamed_task_snapshot_count: int = 0, task_pool_created_count: int = 0, skipped_formal_count: int = 0, zero_task_reasons: List[str] | None = None, source: str = "agent_judgment_station") -> Dict[str, Any]:
+def record_task_generation_run(*, data_version: str | None, input_bundle_count: int = 0, agent_judgment_count: int = 0, product_judgment_package_count: int = 0, identity_gap_count: int = 0, task_decision_count: int = 0, by_decision: Dict[str, int] | None = None, streamed_task_snapshot_count: int = 0, task_pool_created_count: int = 0, skipped_formal_count: int = 0, zero_task_reasons: List[str] | None = None, source: str = "agent_judgment_station") -> Dict[str, Any]:
     ensure_task_generation_run_tables()
     by_decision = by_decision or {}
     formal_task_count = int(by_decision.get("create_task_snapshot", 0) or 0) + int(by_decision.get("manager_review_required", 0) or 0)
@@ -81,18 +81,19 @@ def record_task_generation_run(*, data_version: str | None, input_bundle_count: 
     data_gap_task_count = int(by_decision.get("data_gap_task", 0) or 0)
     if task_pool_created_count:
         status = "completed_with_product_tasks"
-        reason = f"双 Agent 链路已完成，{product_judgment_package_count} 个商品判断包生成 {task_pool_created_count} 个正式任务。"
+        reason = f"双 Agent 链路已完成，{agent_judgment_count} 条指标判断整合成 {product_judgment_package_count} 个商品判断包，生成 {task_pool_created_count} 个正式任务。"
     elif formal_task_count:
         status = "completed_no_pool_entries"
         reason = "Agent2 已有正式任务决策，但未成功进入任务池，需要检查 task_snapshot/task_pool。"
     else:
         status = "completed_no_formal_task"
-        reason = "双 Agent 链路已完成，本轮无正式执行任务。"
+        reason = f"双 Agent 链路已完成，{agent_judgment_count} 条指标判断整合成 {product_judgment_package_count} 个商品判断包，本轮无正式执行任务。"
     if zero_task_reasons and not task_pool_created_count:
         reason = str(zero_task_reasons[0] or reason)
     now = now_iso()
     run_id = make_run_id()
-    payload = {"version": TASK_GENERATION_RUN_VERSION, "runId": run_id, "dataVersion": data_version, "status": status, "source": source, "inputBundleCount": int(input_bundle_count or 0), "agentJudgmentCount": int(agent_judgment_count or 0), "productJudgmentPackageCount": int(product_judgment_package_count or 0), "taskDecisionCount": int(task_decision_count or 0), "formalTaskCount": int(formal_task_count or 0), "observeOnlyCount": int(observe_only_count or 0), "dataGapTaskCount": int(data_gap_task_count or 0), "managerReviewCount": int(manager_review_count or 0), "streamedTaskSnapshotCount": int(streamed_task_snapshot_count or 0), "taskPoolCreatedCount": int(task_pool_created_count or 0), "skippedFormalCount": int(skipped_formal_count or 0), "byDecision": by_decision, "reason": reason, "zeroTaskReasons": zero_task_reasons or [], "createdAt": now, "updatedAt": now, "rule": "V14.9.2: data-line shows current-run taskPoolCreatedCount; global task_pool_entries cannot inflate this run."}
+    avg = round(agent_judgment_count / input_bundle_count, 2) if input_bundle_count else 0
+    payload = {"version": TASK_GENERATION_RUN_VERSION, "runId": run_id, "dataVersion": data_version, "status": status, "source": source, "inputBundleCount": int(input_bundle_count or 0), "agentJudgmentCount": int(agent_judgment_count or 0), "averageJudgmentsPerBundle": avg, "metricJudgmentMode": "expanded", "productJudgmentPackageCount": int(product_judgment_package_count or 0), "identityGapCount": int(identity_gap_count or 0), "taskDecisionCount": int(task_decision_count or 0), "formalTaskCount": int(formal_task_count or 0), "observeOnlyCount": int(observe_only_count or 0), "dataGapTaskCount": int(data_gap_task_count or 0), "managerReviewCount": int(manager_review_count or 0), "streamedTaskSnapshotCount": int(streamed_task_snapshot_count or 0), "taskPoolCreatedCount": int(task_pool_created_count or 0), "skippedFormalCount": int(skipped_formal_count or 0), "byDecision": by_decision, "reason": reason, "zeroTaskReasons": zero_task_reasons or [], "createdAt": now, "updatedAt": now, "rule": "V14.9.3: Agent1 expands one product bundle into many metric judgments; data-line shows current-run taskPoolCreatedCount, not global task_pool_entries."}
     with connect() as conn:
         frontend_task_count = _count(conn, "frontend_task_view")
         payload["frontendTaskViewCount"] = frontend_task_count
@@ -144,8 +145,8 @@ def _headline(*, bundle_count: int, raw_count: int, package_count: int, run_task
     if package_count <= 0:
         return "Agent 判断完成，等待商品判断包整合"
     if run_task_count <= 0:
-        return f"判断已整合为 {package_count} 个商品判断包，暂无正式任务"
-    return f"数据链路已完成，本轮生成 {run_task_count} 个正式任务"
+        return f"{raw_count} 条判断已整合为 {package_count} 个商品判断包，暂无正式任务"
+    return f"{raw_count} 条判断已整合为 {package_count} 个商品判断包，本轮生成 {run_task_count} 个正式任务"
 
 
 def _station(id_: str, label: str, status: str, note: str = "") -> Dict[str, str]:
@@ -169,6 +170,8 @@ def read_data_line_status() -> Dict[str, Any]:
         formal_decision_count = int(decision_counts.get("create_task_snapshot", 0) or 0) + int(decision_counts.get("manager_review_required", 0) or 0)
         observe_count = int(decision_counts.get("observe_only", 0) or 0) + int(decision_counts.get("no_task", 0) or 0)
         run_task_count = pool_total_count
+        identity_gap_count = 0
+        average_judgments_per_bundle = 0
         if latest_run:
             raw_judgment_count = int(latest_run.get("agentJudgmentCount") or raw_judgment_count)
             package_count = int(latest_run.get("productJudgmentPackageCount") or package_count)
@@ -176,6 +179,8 @@ def read_data_line_status() -> Dict[str, Any]:
             observe_count = int(latest_run.get("observeOnlyCount") or observe_count)
             formal_decision_count = int(latest_run.get("formalTaskCount") or formal_decision_count)
             run_task_count = int(latest_run.get("taskPoolCreatedCount") or 0)
+            identity_gap_count = int(latest_run.get("identityGapCount") or 0)
+            average_judgments_per_bundle = latest_run.get("averageJudgmentsPerBundle") or 0
         upstream_empty = bundle_count == 0 and frontend_product_count == 0 and pool_total_count == 0 and task_decision_count == 0 and package_count == 0
         stale_run_only = bool(upstream_empty and latest_run and raw_judgment_count == 0)
         residual = bool(upstream_empty and (raw_judgment_count > 0 or package_count > 0 or task_decision_count > 0 or pool_total_count > 0))
@@ -188,6 +193,8 @@ def read_data_line_status() -> Dict[str, Any]:
             observe_count = 0
             formal_decision_count = 0
             run_task_count = 0
+            identity_gap_count = 0
+            average_judgments_per_bundle = 0
         import_status = "passed" if bundle_count or frontend_product_count else "waiting"
         profile_status = "passed" if frontend_product_count or bundle_count else "waiting"
         bundle_status = "passed" if bundle_count else ("current" if import_status == "passed" else "waiting")
@@ -209,4 +216,4 @@ def read_data_line_status() -> Dict[str, Any]:
             line_status = "attention"
         headline = _headline(bundle_count=bundle_count, raw_count=raw_judgment_count, package_count=package_count, run_task_count=run_task_count, residual=residual)
         stations = [_station("import", "接入", import_status, "数据入库"), _station("profile", "建档", profile_status, f"商品 {frontend_product_count or bundle_count}"), _station("bundle", "全量包", bundle_status, f"{bundle_count} 个包"), _station("judgment", "判断", judgment_status, f"{raw_judgment_count} 条" if raw_judgment_count else "等待"), _station("package", "整合", package_status, f"{package_count} 个包" if package_count else "等待"), _station("task", "任务", task_status, f"本轮 {run_task_count}" if run_task_count else "无正式任务" if task_status == "empty" else "待清空" if residual else "等待"), _station("view", "展示", view_status, "已刷新" if view_status == "passed" else "等待")]
-        return {"version": TASK_GENERATION_RUN_VERSION, "ready": bool(bundle_count or raw_judgment_count or latest_run), "lineStatus": line_status, "headline": headline, "dataVersion": data_version, "formalTaskCount": int(run_task_count or 0), "taskPoolTotalCount": int(pool_total_count or 0), "formalJudgmentCount": int(formal_decision_count or 0), "observeOnlyCount": int(observe_count or 0), "dataGapTaskCount": int(latest_run.get("dataGapTaskCount") or 0) if latest_run else 0, "agentJudgmentCount": int(raw_judgment_count or 0), "rawJudgmentCount": int(raw_judgment_count or 0), "productJudgmentPackageCount": int(package_count or 0), "taskDecisionCount": int(task_decision_count or 0), "inputBundleCount": int(bundle_count or 0), "frontendTaskViewCount": int(frontend_task_count or 0), "runtimeResidual": residual, "staleRunIgnored": stale_run_only, "stations": stations, "latestRun": latest_run, "decisionCounts": decision_counts, "updatedAt": now_iso(), "rule": "V14.9.2 metro line shows current-run counts: 接入 / 建档 / 全量包 / 判断 / 整合 / 任务 / 展示. Global task_pool_entries is reported separately as taskPoolTotalCount."}
+        return {"version": TASK_GENERATION_RUN_VERSION, "ready": bool(bundle_count or raw_judgment_count or latest_run), "lineStatus": line_status, "headline": headline, "dataVersion": data_version, "formalTaskCount": int(run_task_count or 0), "taskPoolTotalCount": int(pool_total_count or 0), "formalJudgmentCount": int(formal_decision_count or 0), "observeOnlyCount": int(observe_count or 0), "identityGapCount": int(identity_gap_count or 0), "averageJudgmentsPerBundle": average_judgments_per_bundle, "dataGapTaskCount": int(latest_run.get("dataGapTaskCount") or 0) if latest_run else 0, "agentJudgmentCount": int(raw_judgment_count or 0), "rawJudgmentCount": int(raw_judgment_count or 0), "productJudgmentPackageCount": int(package_count or 0), "taskDecisionCount": int(task_decision_count or 0), "inputBundleCount": int(bundle_count or 0), "frontendTaskViewCount": int(frontend_task_count or 0), "runtimeResidual": residual, "staleRunIgnored": stale_run_only, "stations": stations, "latestRun": latest_run, "decisionCounts": decision_counts, "updatedAt": now_iso(), "rule": "V14.9.3 metro line shows current-run counts: Agent1 metric judgments may exceed product packages; task count remains latest run taskPoolCreatedCount."}
