@@ -1,36 +1,35 @@
 # Current Version
 
 ```text
-16.2
+16.3
 ```
 
-## V16.2 Meaning
+## V16.3 Meaning
 
-V16.2 is the MVP-real task mapping Agent + RAG release.
+V16.3 is the current-run real task-pool acceptance release.
 
-It keeps the V16.1 real product judgment Agent, then opens the next real stage:
+It keeps the V16.2 real product judgment Agent and real RAG task mapping Agent, then adds the MVP验收闸门:
 
 ```text
-fullProductBundle
-  -> real product judgment Agent API call
-  -> strict JSON judgments
-  -> product_judgment_package + 70% confidence gate
-  -> real task mapping Agent API call with RAG permission/SOP context
-  -> strict JSON tasks
-  -> system validation
-  -> task snapshots / task pool / current-run read model
+latest taskGenerationRun
+  -> latestRun.dataVersion
+  -> latestRun.taskPoolCreatedCount
+  -> task_pool_entries WHERE data_version = latestRun.dataVersion
+  -> frontend_task_view WHERE data_version = latestRun.dataVersion
+  -> frontend_task_detail_view WHERE data_version = latestRun.dataVersion
+  -> acceptance pass / fail
 ```
 
 Core rules:
 
-- Product judgment Agent remains real and batched.
-- Task mapping Agent only receives `product_judgment_package` rows whose `packageConfidence >= 0.70`.
-- Task mapping Agent must use RAG context: company permissions, account permissions, approval rules, SOP, evidence requirements and review metrics.
-- Task mapping output must be strict JSON with a top-level `tasks` array.
-- Each formal task must include `packageId`, `productId`, `storeId`, `decision`, `taskTitle`, `priority`, `deadline`, `assigneeRole`, `approvalRequired`, `forbiddenActions`, `sopSteps`, `evidenceRequirements`, `reviewMetrics`, and `reason`.
-- A formal task must have at least 3 SOP steps and at least 2 evidence requirements.
-- System validates every task against the current candidate package before writing `task_generation_decisions_v15`.
-- Missing API key, provider failure, invalid JSON, or zero valid task output creates no fake task and no local SOP-template fallback.
-- System code still owns task-pool admission, same-product dedupe, lifecycle state and current-run frontend read model.
+- `/api/view/task-pool-acceptance` is read-only and never generates tasks.
+- Data-line `formalTaskCount` must equal the latest run `taskPoolCreatedCount`.
+- Latest run `taskPoolCreatedCount` must equal current `task_pool_entries` count.
+- Current `task_pool_entries` count must equal current `frontend_task_view` count.
+- Every visible current task must have a matching `frontend_task_detail_view` row.
+- `frontend_task_view` must not keep old dataVersion rows.
+- Historical `task_pool_entries` may remain in storage, but must not enter the current execution queue.
+- If counts do not align, `/api/view/data-line` enters attention and surfaces the acceptance mismatches.
+- No mismatch is repaired by fake tasks or local template fallback.
 
-一句话：V16.2 让“该让谁做、按什么权限做、提交什么证据、如何复盘”进入真实 RAG 任务映射 Agent；失败宁可无任务，也不再用模板任务冒充真实 Agent。
+一句话：V16.3 不是继续生成任务，而是证明“数据页任务数 = 任务池本轮任务数 = 任务页执行任务数 = 详情页任务数”；对不上就暴露断点，不再用刷新或垫底内容遮住问题。
